@@ -2,8 +2,17 @@
   "name": "@pivota-api/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
   "private": true,
+  "scripts": {
+    "build:auth": "nx build auth-service",
+    "start:auth": "node dist/apps/auth-service/main.js",
+    "build:user": "nx build user-service",
+    "start:user": "node dist/apps/user-service/main.js",
+    "build:gateway": "nx build api-gateway",
+    "start:gateway": "node dist/apps/api-gateway/main.js",
+    "build:all": "nx build auth-service && nx build user-service && nx build api-gateway",
+    "start:all": "node dist/apps/auth-service/main.js & node dist/apps/user-service/main.js & node dist/apps/api-gateway/main.js"
+  },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
