@@ -11,7 +11,7 @@ export class AuthController {
 
   @Version('1')
   @Get('login')
-  login() {
+  loginv1() {
     return { message: 'Login endpoint (v1)' };
   }
 
