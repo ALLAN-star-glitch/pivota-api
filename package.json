@@ -4,17 +4,59 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "build:auth": "nx build auth-service",
-    "start:auth": "node dist/apps/auth-service/main.js",
-    "build:user": "nx build user-service",
-    "start:user": "node dist/apps/user-service/main.js",
-    "build:gateway": "nx build api-gateway",
-    "start:gateway": "node dist/apps/api-gateway/main.js",
-    "build:all": "nx build auth-service && nx build user-service && nx build api-gateway",
-    "start:all": "node dist/apps/auth-service/main.js & node dist/apps/user-service/main.js & node dist/apps/api-gateway/main.js"
+  
+   
+  "start:dev:auth": "cross-env NODE_ENV=dev nx serve auth-service",
+  "start:dev:user": "cross-env NODE_ENV=dev nx serve user-service",
+  "start:dev:gateway": "cross-env NODE_ENV=dev nx serve api-gateway",
+
+  
+  "build:sit:auth": "cross-env NODE_ENV=sit nx build auth-service",
+  "start:sit:auth": "cross-env NODE_ENV=sit node dist/apps/auth-service/main.js",
+  "build:sit:user": "cross-env NODE_ENV=sit nx build user-service",
+  "start:sit:user": "cross-env NODE_ENV=sit node dist/apps/user-service/main.js",
+  "build:sit:gateway": "cross-env NODE_ENV=sit nx build api-gateway",
+  "start:sit:gateway": "cross-env NODE_ENV=sit node dist/apps/api-gateway/main.js",
+
+  
+  "build:uat:auth": "cross-env NODE_ENV=uat nx build auth-service",
+  "start:uat:auth": "cross-env NODE_ENV=uat node dist/apps/auth-service/main.js",
+  "build:uat:user": "cross-env NODE_ENV=uat nx build user-service",
+  "start:uat:user": "cross-env NODE_ENV=uat node dist/apps/user-service/main.js",
+  "build:uat:gateway": "cross-env NODE_ENV=uat nx build api-gateway",
+  "start:uat:gateway": "cross-env NODE_ENV=uat node dist/apps/api-gateway/main.js",
+
+  
+  "build:pilot:auth": "cross-env NODE_ENV=pilot nx build auth-service",
+  "start:pilot:auth": "cross-env NODE_ENV=pilot node dist/apps/auth-service/main.js",
+  "build:pilot:user": "cross-env NODE_ENV=pilot nx build user-service",
+  "start:pilot:user": "cross-env NODE_ENV=pilot node dist/apps/user-service/main.js",
+  "build:pilot:gateway": "cross-env NODE_ENV=pilot nx build api-gateway",
+  "start:pilot:gateway": "cross-env NODE_ENV=pilot node dist/apps/api-gateway/main.js",
+
+  
+  "build:prod:auth": "cross-env NODE_ENV=production nx build auth-service",
+  "start:prod:auth": "cross-env NODE_ENV=production node dist/apps/auth-service/main.js",
+  "build:prod:user": "cross-env NODE_ENV=production nx build user-service",
+  "start:prod:user": "cross-env NODE_ENV=production node dist/apps/user-service/main.js",
+  "build:prod:gateway": "cross-env NODE_ENV=production nx build api-gateway",
+  "start:prod:gateway": "cross-env NODE_ENV=production node dist/apps/api-gateway/main.js",
+
+  
+  "build:all:dev": "npm run build:dev:auth && npm run build:dev:user && npm run build:dev:gateway",
+  "start:all:dev": "npm run start:dev:auth & npm run start:dev:user & npm run start:dev:gateway",
+  "build:all:sit": "npm run build:sit:auth && npm run build:sit:user && npm run build:sit:gateway",
+  "start:all:sit": "npm run start:sit:auth & npm run start:sit:user & npm run start:sit:gateway",
+  "build:all:uat": "npm run build:uat:auth && npm run build:uat:user && npm run build:uat:gateway",
+  "start:all:uat": "npm run start:uat:auth & npm run start:uat:user & npm run start:uat:gateway",
+  "build:all:pilot": "npm run build:pilot:auth && npm run build:pilot:user && npm run build:pilot:gateway",
+  "start:all:pilot": "npm run start:pilot:auth & npm run start:pilot:user & npm run start:pilot:gateway",
+  "build:all:prod": "npm run build:prod:auth && npm run build:prod:user && npm run build:prod:gateway",
+  "start:all:prod": "npm run start:prod:auth & npm run start:prod:user & npm run start:prod:gateway"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.0",
     "@nestjs/microservices": "^11.1.5",
     "@nestjs/platform-express": "^11.0.0",
@@ -42,6 +84,7 @@
     "@swc/helpers": "~0.5.11",
     "@types/jest": "^30.0.0",
     "@types/node": "~18.16.9",
+    "cross-env": "^10.0.0",
     "eslint": "^9.8.0",
     "eslint-config-prettier": "^10.0.0",
     "jest": "^30.0.2",
