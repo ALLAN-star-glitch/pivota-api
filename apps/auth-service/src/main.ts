@@ -9,13 +9,14 @@ import { AppModule } from './app/app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  //Seting Global prefix
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);
 
   // 🔹 Enable URI-based versioning
   app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: '1', // default = v1
+    type: VersioningType.URI
   });
 
   const port = process.env.PORT || 3001;
