@@ -11,7 +11,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   //Seting Global prefix
-  const globalPrefix = 'api';
+  const globalPrefix = 'auth-service';
   app.setGlobalPrefix(globalPrefix);
 
   // 🔹 Enable URI-based versioning
