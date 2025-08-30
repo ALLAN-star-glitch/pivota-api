@@ -14,7 +14,7 @@
     ],
     "sharedGlobals": ["{workspaceRoot}/.github/workflows/ci.yml"]
   },
-  "nxCloudId": "688f54555af06205f0e9191c",
+  "nxCloudId": "68b3471da0cec86944bec2c6",
   "plugins": [
     {
       "plugin": "@nx/webpack/plugin",
@@ -26,17 +26,10 @@
         "watchDepsTargetName": "watch-deps"
       }
     },
-    {
-      "plugin": "@nx/eslint/plugin",
-      "options": {
-        "targetName": "lint"
-      }
-    },
+    { "plugin": "@nx/eslint/plugin", "options": { "targetName": "lint" } },
     {
       "plugin": "@nx/jest/plugin",
-      "options": {
-        "targetName": "test"
-      },
+      "options": { "targetName": "test" },
       "exclude": [
         "apps/api-gateway-e2e/**/*",
         "apps/auth-service-e2e/**/*",
