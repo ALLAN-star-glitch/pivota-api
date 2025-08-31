@@ -1,0 +1,20 @@
+{
+  "name": "shared-dtos",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "shared-dtos/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/shared-dtos",
+        "tsConfig": "shared-dtos/tsconfig.lib.json",
+        "packageJson": "shared-dtos/package.json",
+        "main": "shared-dtos/src/index.ts",
+        "assets": ["shared-dtos/*.md"]
+      }
+    }
+  }
+}
