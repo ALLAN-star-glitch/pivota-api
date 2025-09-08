@@ -1,105 +1,117 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, Inject, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ClientKafka, MessagePattern, Payload } from '@nestjs/microservices';
-import { SignupDto, LoginDto, UserDto } from '@pivota-api/shared-dtos';
-import * as bcrypt from 'bcrypt';
+import { 
+  GetUserByIdDto, 
+  SignupRequestDto, 
+  SignupResponseDto, 
+  UserResponseDto,
+  AuthUserDto,
+} from '@pivota-api/shared-dtos';
+import { User } from '../../generated/prisma';
+import { ClientKafka } from '@nestjs/microservices';
 
 @Injectable()
-export class UserService implements OnModuleInit {
+export class UserService {
   private readonly logger = new Logger(UserService.name);
 
-  constructor(private readonly prisma: PrismaService,
-    @Inject('KAFKA_SERVICE')
-    private readonly kafkaclient: ClientKafka
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject('AUTH_SERVICE') private readonly kafkaClient: ClientKafka, // ✅ inject producer
   ) {}
 
+  /** Create a new user (signup) */
+  async createUser(signupDto: SignupRequestDto): Promise<SignupResponseDto | null> {
+    this.logger.debug('SignupDto received', signupDto);
 
-  async onModuleInit() {
-    this.logger.log('Initializing UserService...');
-
-    // 1️⃣ Check database connection
-    try {
-      await this.prisma.$queryRaw`SELECT 1`;
-      this.logger.log('✅ Database connection OK');
-    } catch (error) {
-      this.logger.error('❌ Database connection failed', error);
-    }
-
-    // 2️⃣ Log topic subscriptions
-    this.logger.log(
-      'Listening to Kafka topics: user.signup, auth.login, auth.getUserById',
-    );
-
-    this.logger.log('UserService ready to handle Kafka messages ✅');
+    const existing = await this.prisma.user.findUnique({
+      where: { email: signupDto.email },
+    });
+    if (existing) {
+    throw new ConflictException('Email already registered');
   }
 
-  // 🔹 Handle signup messages
-  @MessagePattern('user.signup')
-  async handleSignup(@Payload() signupDto: SignupDto): Promise<UserDto | null> {
-    console.log('Received signup request:', signupDto);
+    const user = await this.prisma.user.create({
+      data: {
+        email: signupDto.email,
+        password: signupDto.password, // Already hashed from AuthService
+        firstName: signupDto.firstName,
+        lastName: signupDto.lastName,
+        ...(signupDto.phone ? { phone: signupDto.phone } : {}), // only add if provided
+      },
+    });
+
+    const response = this.toSignupResponse(user);
+
+    // ------------------ Emit user.created event ------------------
     try {
-      const existingUser = await this.prisma.user.findUnique({
-        where: { email: signupDto.email },
-      });
-      if (existingUser) return null;
-
-      const user = await this.prisma.user.create({
-        data: {
-          email: signupDto.email,
-          password: signupDto.password, // Already hashed by AuthService
-          name: signupDto.name,
-        },
-      });
-
-      return { id: user.id, email: user.email, name: user.name };
-    } catch (error) {
-      this.logger.error('Error creating user', error);
-      return null;
-    }
+    await this.kafkaClient.emit('user.created', {
+      message: `Signup successful. ${user.firstName}, please proceed to login!`,
+    });
+    this.logger.debug(`user.created event emitted for user ${user.email}`);
+  } catch (error) {
+    this.logger.error('Failed to emit user.created event', error);
   }
 
-  // 🔹 Handle login messages
-  @MessagePattern('auth.login')
-  async handleLogin(@Payload() loginDto: LoginDto): Promise<UserDto | null> {
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: { email: loginDto.email },
-      });
-      if (!user) return null;
 
-      const passwordValid = await bcrypt.compare(loginDto.password, user.password);
-      if (!passwordValid) return null;
-
-      return { id: user.id, email: user.email, name: user.name };
-    } catch (error) {
-      this.logger.error('Error logging in user', error);
-      return null;
-    }
+    return response;
   }
 
-  // 🔹 Fetch user by ID (for refresh token)
-  @MessagePattern('auth.getUserById')
-  async getUserById(@Payload() payload: { id: number }): Promise<UserDto | null> {
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.id },
-      });
-      if (!user) return null;
-
-      return { id: user.id, email: user.email, name: user.name };
-    } catch (error) {
-      this.logger.error('Error fetching user by ID', error);
-      return null;
-    }
+  /** Get user by ID (safe response) */
+  async getUserById(dto: GetUserByIdDto): Promise<UserResponseDto | null> {
+    const user = await this.prisma.user.findUnique({ where: { id: dto.id } });
+    if (!user) return null;
+    return this.toUserResponse(user);
   }
 
-  //Fetch all users
+  /** Get user by Email (internal, includes password for auth-service) */
+  async getUserByEmail(email: string): Promise<AuthUserDto | null> {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) return null;
+    return this.toAuthUserDto(user);
+  }
 
-// Inside UserService
+  /** Get all users (safe response) */
+  async getAllUsers(): Promise<UserResponseDto[]> {
+    const users = await this.prisma.user.findMany();
+    return users.map(u => this.toUserResponse(u));
+  }
 
-async getAllUsers(): Promise<UserDto[]> {
-  const users = await this.prisma.user.findMany();
-  return users.map((user: { id: number; email: string; name: string }) => ({ id: user.id, email: user.email, name: user.name }));
-}
+  // ------------------ Mappers ------------------
 
+  private toSignupResponse(user: User): SignupResponseDto {
+    return {
+      id: user.id.toString(),
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
+  private toUserResponse(user: User): UserResponseDto {
+    return {
+      id: user.id.toString(),
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
+  private toAuthUserDto(user: User): AuthUserDto {
+    return {
+      id: user.id.toString(),
+      email: user.email,
+      password: user.password,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
 }

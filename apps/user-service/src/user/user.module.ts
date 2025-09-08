@@ -5,21 +5,19 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 
 @Module({
-  imports: 
-  [
+  imports: [
     PrismaModule,
+    // Producer client for sending events to Auth Service
     ClientsModule.register([
       {
-        name: 'KAFKA_SERVICE', 
+        name: 'AUTH_SERVICE', // clear: this client talks to Auth
         transport: Transport.KAFKA,
         options: {
           client: {
-            clientId: "user-service", //unique identifier for this service
+            clientId: 'user-service-producer', // unique per producer
             brokers: process.env.KAFKA_BROKERS?.split(',') || ['localhost:9092'],
           },
-          consumer: {
-            groupId: 'user-service-consumer', // unique per service
-          },
+          producerOnlyMode: true, // only sends messages
         },
       },
     ]),
@@ -29,7 +27,9 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 })
 export class UserModule {
   constructor() {
-    console.log('KAFKA BROKERS: ', process.env.KAFKA_BROKERS);
+    console.log(
+      '✅ UserModule initialized with KAFKA_BROKERS:',
+      process.env.KAFKA_BROKERS,
+    );
   }
 }
-

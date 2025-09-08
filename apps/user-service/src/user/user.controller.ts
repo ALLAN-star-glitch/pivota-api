@@ -1,21 +1,39 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import { UserService } from './user.service';
-import { UserDto } from '@pivota-api/shared-dtos';
+import { SignupRequestDto, SignupResponseDto, UserResponseDto, GetUserByIdDto, AuthUserDto } from '@pivota-api/shared-dtos';
 
-@Controller('users')
+@Controller()
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  // Optional REST endpoint: fetch a user by ID
-  @Get(':id')
-  async getUserById(@Param('id') id: string): Promise<UserDto | null> {
-    return this.userService.getUserById({ id: Number(id) });
+  // ------------------ Signup / Create User ------------------
+  @MessagePattern('user.create')
+  async handleCreateUser(@Payload() signupDto: SignupRequestDto): Promise<SignupResponseDto | null> {
+    return this.userService.createUser(signupDto);
   }
 
-  // Optional: list all users (admin/testing)
-  @Get()
-  async getAllUsers(): Promise<UserDto[]> {
-    // This requires creating a prisma query inside UserService
+  // ------------------ Get User by ID ------------------
+  @MessagePattern('auth.getUserById')
+  async handleGetUserById(@Payload() dto: GetUserByIdDto): Promise<UserResponseDto | null> {
+    return this.userService.getUserById(dto);
+  }
+
+  // ------------------ Get User by Email (for Auth Service only) ------------------
+  @MessagePattern('user.getByEmail')
+  async handleGetByEmail(@Payload() data: { email: string }): Promise<AuthUserDto | null> {
+    return this.userService.getUserByEmail(data.email);
+  }
+
+  // ------------------ Get All Users ------------------
+  @MessagePattern('user.getAll')
+  async handleGetAllUsers(): Promise<UserResponseDto[]> {
     return this.userService.getAllUsers();
+  }
+
+  // ------------------ Health Check ------------------
+  @MessagePattern('health.check')
+  async handleHealthCheck() {
+    return { status: 'Status is Good' };
   }
 }

@@ -16,16 +16,22 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
     }),
     ClientsModule.register([
       {
-        name: 'KAFKA_SERVICE', // This is the provider name
+        name: 'USER_SERVICE',
         transport: Transport.KAFKA,
         options: {
           client: {
-            clientId: "auth-service" //unique identifier for this service
-            ,
+            clientId: 'auth-service-client', // unique per microservice
             brokers: process.env.KAFKA_BROKERS?.split(',') || ['localhost:9092'],
           },
           consumer: {
-            groupId: 'auth-service-consumer', // unique per service
+            groupId: 'auth-service-consumer', // unique group ID per service role
+            allowAutoTopicCreation: true, // auto-create topics if missing
+            heartbeatInterval: 3000, // default 3000ms
+            sessionTimeout: 10000,  // default 10000ms, gives enough time to join group
+            retry: {
+              retries: 5, // retry connecting to broker
+              initialRetryTime: 1000,
+            },
           },
         },
       },
@@ -36,8 +42,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
   exports: [AuthService],
 })
 export class AuthModule {
-
   constructor() {
-    console.log('KAFKA_BROKERS =', process.env.KAFKA_BROKERS);
+    console.log('✅ AuthModule initialized with KAFKA_BROKERS =', process.env.KAFKA_BROKERS);
   }
 }

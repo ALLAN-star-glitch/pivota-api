@@ -1,40 +1,29 @@
-/**
- * This is not a production server yet!
- * This is only a minimal backend to get started.
- */
-
 import { Logger, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app/app.module';
 import { ConfigService } from '@nestjs/config';
+import * as dotenv from 'dotenv';
+import { AppModule } from './app/app.module';
 
+// Load environment
+dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
-  //config service 
-  const configService = app.get(ConfigService)
+  // ✅ URL-based versioning
+  app.enableVersioning({ type: VersioningType.URI });
 
-  //Setting up the global prefix via the config service
-  const globalPrefix = configService.get<string>('GLOBAL_PREFIX');
-  if(globalPrefix){
-    app.setGlobalPrefix(globalPrefix)
-  }
+  const configService = app.get(ConfigService);
 
-  //Enabling versioning
-  app.enableVersioning({
-    type: VersioningType.URI
-  }
-   )
+  // ✅ Use "api" as prefix
+  const globalPrefix = configService.get<string>('GLOBAL_PREFIX_API_GATEWAY') || 'api';
+  app.setGlobalPrefix(globalPrefix);
 
-  const port = configService.get<number>('PORT') || 3000;
+  const port = configService.get<number>('API_GATEWAY_PORT') || 3000;
   await app.listen(port);
-  Logger.log(
-    `🚀 Application is running on: http://localhost:${port}/${globalPrefix}`
-  );
+
+  logger.log(`🚀 API Gateway running at http://localhost:${port}/${globalPrefix}`);
 }
 
 bootstrap();
-
-
-

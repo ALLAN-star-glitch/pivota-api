@@ -1,63 +1,49 @@
 /**
- * This is not a production server yet!
- * This is only a minimal backend to get started.
+ * User Microservice (Kafka only)
  */
 
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app/app.module';
 import { ConfigService } from '@nestjs/config';
 import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import * as dotenv from 'dotenv';
+import { AppModule } from './app/app.module';
 
-dotenv.config({path: `.env.${process.env.NODE_ENV || 'dev'}`})
+// Load environment explicitly
+dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
 
 async function bootstrap() {
-
-  //Log env file before app creation
   Logger.log(`NODE_ENV = ${process.env.NODE_ENV}`);
   Logger.log(`KAFKA_BROKERS = ${process.env.KAFKA_BROKERS}`);
- 
 
-
-
-
-  const app = await NestFactory.create(AppModule);
-
-
-  //config service 
-  const configService = app.get(ConfigService)
-
-  //log values via config service
-  Logger.log(`NODE_ENV (via configService) = ${configService.get<string>('NODE_ENV')}`);
-  Logger.log(`KAFKA_BROKERS  =  ${configService.get<string>('KAFKA_BROKERS')}`);
-  Logger.log(`DATABASE_URL  =  ${configService.get<string>('USER_SERVICE_DATABSE_URL')}`); // ✅ log DB URL
-
-
-  //Setting up the global prefix via the config service
-  const globalPrefix = configService.get<string>('GLOBAL_PREFIX_USER_SERVICE');
-  if(globalPrefix){
-    app.setGlobalPrefix(globalPrefix)
-  }
-
-    // Kafka microservice setup
-  const kafkaBrokers = configService.get<string>('KAFKA_BROKERS')?.split(',') || ['localhost:9092'];
-
-  app.connectMicroservice<MicroserviceOptions>({
+  // Create Kafka microservice
+  const app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
     transport: Transport.KAFKA,
     options: {
-      client: { brokers: kafkaBrokers },
-      consumer: { groupId: 'user-service-consumer' },
+      client: {
+        brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+      },
+      consumer: {
+        groupId: 'user-service-consumer-v2',
+      },
+      subscribe: { fromBeginning: false},
     },
   });
 
-  await app.startAllMicroservices();
-  
-  const port = configService.get<number>('USER_SERVICE_PORT') || 3000;
-  await app.listen(port);
-  Logger.log(
-    `🚀 Application is running on: http://localhost:${port}/${globalPrefix}`
-  );
+  const configService = app.get(ConfigService);
+
+  // Log values via ConfigService
+  Logger.log(`NODE_ENV (via ConfigService) = ${configService.get<string>('NODE_ENV')}`);
+  Logger.log(`KAFKA_BROKERS (via ConfigService) = ${configService.get<string>('KAFKA_BROKERS')}`);
+  Logger.log(`DATABASE_URL (via ConfigService) = ${configService.get<string>('USER_SERVICE_DATABASE_URL')}`);
+  Logger.log(`JWT_SECRET (via ConfigService) = ${configService.get<string>('JWT_SECRET')}`);
+
+
+ 
+
+  await app.listen();
+
+  Logger.log(`🚀 User service (Kafka) is running...`);
 }
 
 bootstrap();

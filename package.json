@@ -5,14 +5,15 @@
   "private": true,
   "scripts": {
     "user:prisma:generate:dev": "cross-env NODE_ENV=dev prisma generate --schema=apps/user-service/prisma/schema.prisma",
-    "user:prisma:generate:sit": "cross-env NODE_ENV=sit prisma generate --schema=apps/user-service/prisma/schema.prisma",
-    "user:prisma:generate:uat": "cross-env NODE_ENV=uat prisma generate --schema=apps/user-service/prisma/schema.prisma",
-    "user:prisma:generate:pilot": "cross-env NODE_ENV=pilot prisma generate --schema=apps/user-service/prisma/schema.prisma",
-    "user:prisma:generate:prod": "cross-env NODE_ENV=prod prisma generate --schema=apps/user-service/prisma/schema.prisma",
+    "user:prisma:generate:sit": "cross-env NODE_ENV=sit prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
+    "user:prisma:generate:uat": "cross-env NODE_ENV=uat prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
+    "user:prisma:generate:pilot": "cross-env NODE_ENV=pilot prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
+    "user:prisma:generate:prod": "cross-env NODE_ENV=prod prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
 
     "start:dev:auth": "cross-env NODE_ENV=dev nx serve auth-service",
     "start:dev:user": "cross-env NODE_ENV=dev nx serve user-service",
     "start:dev:gateway": "cross-env NODE_ENV=dev nx serve api-gateway",
+    "start:dev:all": "concurrently \"npm run start:dev:auth\" \"npm run start:dev:user\" \"npm run start:dev:gateway\"",
 
     "start:sit:auth": "node dist/apps/auth-service/main.js",
     "start:sit:user": "npm run user:prisma:generate:sit && node dist/apps/user-service/main.js",
