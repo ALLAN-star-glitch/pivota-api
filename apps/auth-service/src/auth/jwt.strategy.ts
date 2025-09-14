@@ -5,14 +5,10 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { jwtConstants } from './constants';
 
 export interface JwtPayload {
-  sub: number;          // user ID
+  sub: number;          // user ID (from DB, usually Prisma number)
   email: string;
-  role: string;         // e.g. 'user', 'admin'
-  plan: string;         // e.g. 'free', 'premium'
-  planExpiry?: number;  // Unix timestamp
   isActive?: boolean;
 }
-
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -25,14 +21,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-  return {
-    userId: payload.sub,
-    email: payload.email,
-    role: payload.role,
-    plan: payload.plan,
-    planExpiry: payload.planExpiry,
-    isActive: payload.isActive,
-  };
-}
-
+    return {
+      userId: payload.sub,
+      email: payload.email,
+      isActive: payload.isActive,
+    };
+  }
 }

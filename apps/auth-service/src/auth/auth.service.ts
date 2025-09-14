@@ -1,4 +1,9 @@
-import { Inject, Injectable, OnModuleInit, UnauthorizedException, Logger } from '@nestjs/common';
+import { 
+  Inject, 
+  Injectable,  
+  UnauthorizedException, 
+  Logger, 
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ClientKafka } from '@nestjs/microservices';
 import * as bcrypt from 'bcrypt';
@@ -6,14 +11,14 @@ import { firstValueFrom, timeout, catchError, of } from 'rxjs';
 import { JwtPayload } from './jwt.strategy';
 import { 
   SignupRequestDto, 
-  SignupResponseDto, 
-  LoginRequestDto, 
+  SignupResponseDto,  
   LoginResponseDto,
-  AuthUserDto
-} from '@pivota-api/shared-dtos';
+  AuthUserDto,
+  LoginRequestDto
+} from '@pivota-api/dtos';
 
 @Injectable()
-export class AuthService implements OnModuleInit {
+export class AuthService{
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
@@ -22,43 +27,25 @@ export class AuthService implements OnModuleInit {
     private readonly jwtService: JwtService,
   ) {}
 
-  async onModuleInit() {
-    try {
-      this.kafkaClient.subscribeToResponseOf('auth.signup');
-      this.kafkaClient.subscribeToResponseOf('user.getByEmail');
-      this.kafkaClient.subscribeToResponseOf('auth.getUserById');
-      this.kafkaClient.subscribeToResponseOf('health.check');
-      this.kafkaClient.subscribeToResponseOf('user.create');
-
-      await this.kafkaClient.connect();
-      this.logger.log('✅ Kafka client connected successfully');
-
-      const testResponse = await firstValueFrom(
-        this.kafkaClient.send('health.check', { message: 'ping' }).pipe(
-          timeout(5000),
-          catchError(err => of({ status: 'error', message: err.message })),
-        ),
-      );
-
-      this.logger.log('Test message response:', testResponse);
-    } catch (err) {
-      this.logger.error('❌ Kafka client connection failed', err);
-    }
-  }
+ 
 
   private async generateTokens(user: Pick<AuthUserDto, 'id' | 'email'>) {
-    const payload = { email: user.email, sub: user.id.toString() };
-    const access_token = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
-    const refresh_token = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
-    return { access_token, refresh_token };
-  }
+  const payload = { email: user.email, sub: user.id.toString() };
+  const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
+  const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
+  return { accessToken, refreshToken }; // ✅ matches proto definition
+}
+
 
   // ------------------ Signup ------------------
-  async signup(signupPayload: SignupRequestDto): Promise<SignupResponseDto> {
-    const hashedPassword = await bcrypt.hash(signupPayload.password, 10);
+  async signup(signupDto: SignupRequestDto): Promise<SignupResponseDto> {
+    const hashedPassword = await bcrypt.hash(signupDto.password, 10);
 
     const user = await firstValueFrom(
-      this.kafkaClient.send<AuthUserDto>('user.create', { ...signupPayload, password: hashedPassword }).pipe(
+      this.kafkaClient.send<AuthUserDto>('user.create', { 
+        ...signupDto, 
+        password: hashedPassword 
+      }).pipe(
         timeout(10000),
         catchError(err => {
           this.logger.error('Kafka signup error', err);
@@ -80,10 +67,9 @@ export class AuthService implements OnModuleInit {
     };
   }
 
-  async handleUserCreated(payload: { message: string }) {
-  // Example: log, send welcome email, or other post-signup actions
-    this.logger.log('Processing user.created notification:', payload.message);
-  }
+  async handleUserCreated(payload: { message: string }) { // Example: log, send welcome email, or other post-signup actions 
+  this.logger.log('Processing user.created notification:', payload.message); }
+
   // ------------------ Login ------------------
   async login(loginDto: LoginRequestDto): Promise<LoginResponseDto> {
     const user = await firstValueFrom(
@@ -115,35 +101,63 @@ export class AuthService implements OnModuleInit {
     };
   }
 
+  // Used by LocalStrategy
+  async validateUser(email: string, plainPassword: string): Promise<AuthUserDto | null> {
+  const user = await firstValueFrom(
+    this.kafkaClient.send<AuthUserDto>('user.getByEmail', { email }).pipe(
+      timeout(10000),
+      catchError(err => {
+        this.logger.error('Kafka getByEmail error', err);
+        return of(null);
+      }),
+    ),
+  );
+
+  if (!user) return null;
+
+  const isPasswordValid = await bcrypt.compare(plainPassword, user.password);
+  if (!isPasswordValid) return null;
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { password, ...result } = user; // omit password safely
+  return result as AuthUserDto;
+}
+
+
   // ------------------ Refresh Token ------------------
   async refreshToken(refreshToken: string): Promise<LoginResponseDto> {
-    const payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken);
-
-    const user = await firstValueFrom(
-      this.kafkaClient.send<AuthUserDto>('auth.getUserById', { id: payload.sub }).pipe(
-        timeout(5000),
-        catchError(err => {
-          this.logger.error('Kafka getUserById error', err);
-          return of(null);
-        }),
-      ),
-    );
-
-    if (!user) throw new UnauthorizedException('User no longer exists');
-
-    const tokens = await this.generateTokens({ id: user.id, email: user.email });
-
-    return {
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      phone: user.phone,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-      ...tokens,
-    };
+  if (!refreshToken) {
+    throw new UnauthorizedException('Refresh token is required');
   }
+
+  const payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken);
+
+  const user = await firstValueFrom(
+    this.kafkaClient.send<AuthUserDto>('user.getById', { id: payload.sub }).pipe(
+      timeout(5000),
+      catchError(err => {
+        this.logger.error('Kafka getById error', err);
+        return of(null);
+      }),
+    ),
+  );
+
+  if (!user) throw new UnauthorizedException('User no longer exists');
+
+  const tokens = await this.generateTokens({ id: user.id, email: user.email });
+
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    phone: user.phone,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    ...tokens,
+  };
+}
+
 
   // ------------------ Kafka Health Check ------------------
   async kafkaHealthCheck() {

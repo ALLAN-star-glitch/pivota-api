@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ClientKafka } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
-import { GetUserByEmailDto, GetUserByIdDto, UserResponseDto } from '@pivota-api/shared-dtos';
+import { GetUserByEmailDto, GetUserByIdDto, UserResponseDto } from '@pivota-api/dtos';
 
 @Controller('users')
 export class UserController implements OnModuleInit {

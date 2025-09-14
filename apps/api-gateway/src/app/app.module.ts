@@ -9,11 +9,12 @@ import { UserModule } from '../user/user.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      isGlobal: true, //Make config available accross all modules
-      envFilePath: [`.env.${process.env.NODE || 'dev'}`] // Loads .env.dev or .env.prod depending on NODE_ENV
+      isGlobal: true, // Make config available across all modules
+      envFilePath: [`.env.${process.env.NODE || 'dev'}`], // Loads .env.dev or .env.prod depending on NODE_ENV
     }),
+
     AuthModule,
-    UserModule
+    UserModule,
   ],
   controllers: [AppController],
   providers: [AppService],

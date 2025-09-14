@@ -8,25 +8,33 @@ import {
   Post,
   Version,
 } from '@nestjs/common';
-import { ClientKafka } from '@nestjs/microservices';
-import { firstValueFrom } from 'rxjs';
-import { SignupRequestDto, UserResponseDto, LoginRequestDto, LoginResponseDto } from '@pivota-api/shared-dtos';
+import { ClientGrpc } from '@nestjs/microservices';
+import { firstValueFrom, Observable } from 'rxjs';
+import {
+  SignupRequestDto,
+  UserResponseDto,
+  LoginRequestDto,
+  LoginResponseDto,
+} from '@pivota-api/dtos';
+
+// 👇 Interface for gRPC methods (must match proto service)
+interface AuthServiceGrpc {
+  signup(data: SignupRequestDto): Observable<UserResponseDto>;
+  login(data: LoginRequestDto): Observable<LoginResponseDto>;
+  refresh(data: { refreshToken: string }): Observable<LoginResponseDto>;
+  healthCheck(data: { from: string }): Observable<{ status: string; service: string }>;
+}
 
 @Controller('auth')
 export class AuthController implements OnModuleInit {
   private readonly logger = new Logger(AuthController.name);
+  private authService: AuthServiceGrpc;
 
-  constructor(@Inject('AUTH_SERVICE') private readonly authClient: ClientKafka) {}
+  constructor(@Inject('AUTH_PACKAGE') private readonly grpcClient: ClientGrpc) {}
 
-  async onModuleInit() {
-    // Subscribe to response topics exposed by Auth Service
-    this.authClient.subscribeToResponseOf('auth.signup');
-    this.authClient.subscribeToResponseOf('auth.login');
-    this.authClient.subscribeToResponseOf('auth.refresh');
-    this.authClient.subscribeToResponseOf('health.check');
-
-    await this.authClient.connect();
-    this.logger.log('✅ API Gateway connected to Auth Service (Kafka)');
+  onModuleInit() {
+    this.authService = this.grpcClient.getService<AuthServiceGrpc>('AuthService');
+    this.logger.log('✅ API Gateway connected to Auth Service (gRPC)');
   }
 
   // ------------------ Signup ------------------
@@ -34,9 +42,7 @@ export class AuthController implements OnModuleInit {
   @Post('signup')
   async signup(@Body() signupDto: SignupRequestDto): Promise<UserResponseDto> {
     this.logger.log(`📩 Signup request: ${JSON.stringify(signupDto)}`);
-    return firstValueFrom(
-      this.authClient.send<UserResponseDto>('auth.signup', signupDto),
-    );
+    return firstValueFrom(this.authService.signup(signupDto));
   }
 
   // ------------------ Login ------------------
@@ -44,20 +50,15 @@ export class AuthController implements OnModuleInit {
   @Post('login')
   async login(@Body() loginDto: LoginRequestDto): Promise<LoginResponseDto> {
     this.logger.log(`📩 Login request: ${JSON.stringify(loginDto)}`);
-    return firstValueFrom(
-      this.authClient.send<LoginResponseDto>('auth.login', loginDto),
-    );
+    return firstValueFrom(this.authService.login(loginDto));
   }
-
 
   // ------------------ Refresh Token ------------------
   @Version('1')
   @Post('refresh')
-  async refresh(@Body() body: { refresh_token: string }): Promise<LoginResponseDto> {
+  async refresh(@Body() body: { refreshToken: string }): Promise<LoginResponseDto> {
     this.logger.log(`📩 Refresh token request`);
-    return firstValueFrom(
-      this.authClient.send<LoginResponseDto>('auth.refresh', { refresh_token: body.refresh_token }),
-    );
+    return firstValueFrom(this.authService.refresh(body));
   }
 
   // ------------------ Health Check ------------------
@@ -65,8 +66,6 @@ export class AuthController implements OnModuleInit {
   @Get('health')
   async healthCheck() {
     this.logger.log(`📩 Health check request`);
-    return firstValueFrom(
-      this.authClient.send('health.check', { from: 'api-gateway' }),
-    );
+    return firstValueFrom(this.authService.healthCheck({ from: 'api-gateway' }));
   }
 }

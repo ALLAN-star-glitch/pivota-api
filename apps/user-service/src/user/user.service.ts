@@ -6,7 +6,7 @@ import {
   SignupResponseDto, 
   UserResponseDto,
   AuthUserDto,
-} from '@pivota-api/shared-dtos';
+} from '@pivota-api/dtos';
 import { User } from '../../generated/prisma';
 import { ClientKafka } from '@nestjs/microservices';
 

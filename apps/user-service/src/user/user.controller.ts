@@ -1,7 +1,7 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { UserService } from './user.service';
-import { SignupRequestDto, SignupResponseDto, UserResponseDto, GetUserByIdDto, AuthUserDto } from '@pivota-api/shared-dtos';
+import { SignupRequestDto, SignupResponseDto, UserResponseDto, GetUserByIdDto, AuthUserDto } from '@pivota-api/dtos';
 
 @Controller()
 export class UserController {

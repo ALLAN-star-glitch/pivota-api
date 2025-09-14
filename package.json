@@ -9,49 +9,42 @@
     "user:prisma:generate:uat": "cross-env NODE_ENV=uat prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
     "user:prisma:generate:pilot": "cross-env NODE_ENV=pilot prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
     "user:prisma:generate:prod": "cross-env NODE_ENV=prod prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
-
     "start:dev:auth": "cross-env NODE_ENV=dev nx serve auth-service",
     "start:dev:user": "cross-env NODE_ENV=dev nx serve user-service",
     "start:dev:gateway": "cross-env NODE_ENV=dev nx serve api-gateway",
     "start:dev:all": "concurrently \"npm run start:dev:auth\" \"npm run start:dev:user\" \"npm run start:dev:gateway\"",
-
     "start:sit:auth": "node dist/apps/auth-service/main.js",
     "start:sit:user": "npm run user:prisma:generate:sit && node dist/apps/user-service/main.js",
     "start:sit:gateway": "node dist/apps/api-gateway/main.js",
-
     "start:uat:auth": "node dist/apps/auth-service/main.js",
     "start:uat:user": "npm run user:prisma:generate:uat && node dist/apps/user-service/main.js",
     "start:uat:gateway": "node dist/apps/api-gateway/main.js",
-
     "start:pilot:auth": "node dist/apps/auth-service/main.js",
     "start:pilot:user": "npm run user:prisma:generate:pilot && node dist/apps/user-service/main.js",
     "start:pilot:gateway": "node dist/apps/api-gateway/main.js",
-
     "start:prod:auth": "node dist/apps/auth-service/main.js",
     "start:prod:user": "npm run user:prisma:generate:prod && node dist/apps/user-service/main.js",
     "start:prod:gateway": "node dist/apps/api-gateway/main.js",
-
     "build:dev:auth": "nx build auth-service",
     "build:dev:user": "npm run user:prisma:generate:dev && nx build user-service",
     "build:dev:gateway": "nx build api-gateway",
-
     "build:sit:auth": "nx build auth-service",
     "build:sit:user": "npm run user:prisma:generate:sit && nx build user-service",
     "build:sit:gateway": "nx build api-gateway",
-
     "build:uat:auth": "nx build auth-service",
     "build:uat:user": "npm run user:prisma:generate:uat && nx build user-service",
     "build:uat:gateway": "nx build api-gateway",
-
     "build:pilot:auth": "nx build auth-service",
     "build:pilot:user": "npm run user:prisma:generate:pilot && nx build user-service",
     "build:pilot:gateway": "nx build api-gateway",
-
     "build:prod:auth": "nx build auth-service",
     "build:prod:user": "npm run user:prisma:generate:prod && nx build user-service",
     "build:prod:gateway": "nx build api-gateway"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.13.4",
+    "@grpc/proto-loader": "^0.8.0",
+    "@grpc/reflection": "^1.0.4",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.0",
@@ -70,7 +63,7 @@
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
     "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.8.0"
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.8.0",

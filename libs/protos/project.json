@@ -1,0 +1,24 @@
+{
+  "name": "protos",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/protos/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/protos",
+        "tsConfig": "libs/protos/tsconfig.lib.json",
+        "packageJson": "libs/protos/package.json",
+        "main": "libs/protos/src/index.ts",
+        "assets": [
+          "libs/protos/*.md",
+          "libs/protos/src/**/*.proto"  
+        ],
+         "watchAssets": true
+      }
+    }
+  }
+}

@@ -26,14 +26,22 @@
         "watchDepsTargetName": "watch-deps"
       }
     },
-    { "plugin": "@nx/eslint/plugin", "options": { "targetName": "lint" } },
+    {
+      "plugin": "@nx/eslint/plugin",
+      "options": {
+        "targetName": "lint"
+      }
+    },
     {
       "plugin": "@nx/jest/plugin",
-      "options": { "targetName": "test" },
+      "options": {
+        "targetName": "test"
+      },
       "exclude": [
         "apps/api-gateway-e2e/**/*",
         "apps/auth-service-e2e/**/*",
-        "apps/user-service-e2e/**/*"
+        "apps/user-service-e2e/**/*",
+        "apps/admin-service-e2e/**/*"
       ]
     }
   ],

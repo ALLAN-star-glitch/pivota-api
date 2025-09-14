@@ -15,7 +15,9 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@pivota-api/shared-dtos": ["shared-dtos/src/index.ts"]
+      "@pivota-api/dtos": ["libs/dtos/src/index.ts"],
+      "@pivota-api/protos": ["libs/protos/src/index.ts"],
+    
     }
   },
   "exclude": ["node_modules", "tmp"]

@@ -4,6 +4,6 @@ export * from './lib/SignupResponseDto.dto';
 export * from './lib/LoginRequestDto.dto';
 export * from './lib/SignupRequestDto.dto';
 export * from './lib/UserResponseDto.dto';
-export * from './lib/GetUserByIdDto.dto'
+export * from './lib/GetUserByIdDto.dto';
 export * from './lib/AuthUserDto.dto';
 export * from './lib/GetUserByEmailDto.dto';
