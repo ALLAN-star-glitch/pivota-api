@@ -7,17 +7,31 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 @Module({
   imports: [
     PrismaModule,
-    // Producer client for sending events to Auth Service
     ClientsModule.register([
       {
-        name: 'AUTH_SERVICE', // clear: this client talks to Auth
+        // 🔹 Kafka client for user events
+        name: 'USER_KAFKA',
         transport: Transport.KAFKA,
         options: {
           client: {
-            clientId: 'user-service-producer', // unique per producer
+            clientId: 'user-service',
             brokers: process.env.KAFKA_BROKERS?.split(',') || ['localhost:9092'],
           },
-          producerOnlyMode: true, // only sends messages
+          consumer: {
+            groupId: 'user-service-consumer',
+          },
+        },
+      },
+      {
+        // 🔹 RabbitMQ client for notifications/jobs
+        name: 'USER_RMQ',
+        transport: Transport.RMQ,
+        options: {
+          urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672'],
+          queue: 'notifications_queue',
+          queueOptions: {
+            durable: true,
+          },
         },
       },
     ]),
@@ -28,8 +42,11 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 export class UserModule {
   constructor() {
     console.log(
-      '✅ UserModule initialized with KAFKA_BROKERS:',
+      '✅ UserModule initialized with:',
+      '\n- KAFKA_BROKERS:',
       process.env.KAFKA_BROKERS,
+      '\n- RABBITMQ_URL:',
+      process.env.RABBITMQ_URL,
     );
   }
 }

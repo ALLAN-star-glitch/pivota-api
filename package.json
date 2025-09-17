@@ -54,6 +54,8 @@
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/platform-fastify": "^11.1.6",
     "@prisma/client": "^6.15.0",
+    "amqp-connection-manager": "^4.1.14",
+    "amqplib": "^0.10.9",
     "axios": "^1.6.0",
     "bcrypt": "^6.0.0",
     "class-validator": "^0.14.2",

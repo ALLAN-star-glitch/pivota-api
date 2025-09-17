@@ -1,59 +1,103 @@
-import { Injectable, Logger, Inject, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Inject,
+  ConflictException,
+  OnModuleInit,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { 
-  GetUserByIdDto, 
-  SignupRequestDto, 
-  SignupResponseDto, 
+import { Prisma } from '@prisma/client';
+import {
+  GetUserByIdDto,
+  SignupRequestDto,
+  SignupResponseDto,
   UserResponseDto,
   AuthUserDto,
 } from '@pivota-api/dtos';
 import { User } from '../../generated/prisma';
-import { ClientKafka } from '@nestjs/microservices';
+import { ClientKafka, ClientProxy } from '@nestjs/microservices';
 
 @Injectable()
-export class UserService {
+export class UserService implements OnModuleInit {
   private readonly logger = new Logger(UserService.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('AUTH_SERVICE') private readonly kafkaClient: ClientKafka, // ✅ inject producer
+
+    @Inject('USER_KAFKA') private readonly kafkaClient: ClientKafka,
+    @Inject('USER_RMQ') private readonly rabbitClient: ClientProxy,
   ) {}
 
+  async onModuleInit() {
+    try {
+      await this.kafkaClient.connect();
+      this.logger.log('✅ UserService connected to Kafka');
+    } catch (err) {
+      this.logger.error('❌ Failed to connect Kafka client', err);
+    }
+
+    try {
+      await this.rabbitClient.connect();
+      this.logger.log('✅ UserService connected to RabbitMQ');
+    } catch (err) {
+      this.logger.error('❌ Failed to connect RabbitMQ client', err);
+    }
+  }
+
   /** Create a new user (signup) */
-  async createUser(signupDto: SignupRequestDto): Promise<SignupResponseDto | null> {
+  async createUser(signupDto: SignupRequestDto): Promise<SignupResponseDto> {
     this.logger.debug('SignupDto received', signupDto);
 
-    const existing = await this.prisma.user.findUnique({
-      where: { email: signupDto.email },
-    });
-    if (existing) {
-    throw new ConflictException('Email already registered');
-  }
-
-    const user = await this.prisma.user.create({
-      data: {
-        email: signupDto.email,
-        password: signupDto.password, // Already hashed from AuthService
-        firstName: signupDto.firstName,
-        lastName: signupDto.lastName,
-        ...(signupDto.phone ? { phone: signupDto.phone } : {}), // only add if provided
-      },
-    });
-
-    const response = this.toSignupResponse(user);
-
-    // ------------------ Emit user.created event ------------------
     try {
-    await this.kafkaClient.emit('user.created', {
-      message: `Signup successful. ${user.firstName}, please proceed to login!`,
-    });
-    this.logger.debug(`user.created event emitted for user ${user.email}`);
-  } catch (error) {
-    this.logger.error('Failed to emit user.created event', error);
-  }
+      const user = await this.prisma.user.create({
+        data: {
+          email: signupDto.email,
+          password: signupDto.password, // hashed in AuthService
+          firstName: signupDto.firstName,
+          lastName: signupDto.lastName,
+          ...(signupDto.phone ? { phone: signupDto.phone } : {}),
+        },
+      });
 
+      const response = this.toSignupResponse(user);
 
-    return response;
+      // Kafka event (for system-wide consumers)
+      this.kafkaClient.emit('user.created', {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phone: user.phone,
+        createdAt: user.createdAt,
+      });
+
+      // RabbitMQ event (notifications, emails, jobs)
+      this.rabbitClient.emit('user.signup.email', {
+        to: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      });
+
+      return response;
+    } catch (error) {
+      // Handle known Prisma errors
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          const target = (error.meta?.target as string[]) || [];
+          if (target.includes('email')) {
+            throw new ConflictException('Email already registered');
+          }
+          if (target.includes('phone')) {
+            throw new ConflictException('Phone number already registered');
+          }
+          throw new ConflictException('Duplicate field detected');
+        }
+      }
+
+      this.logger.error('❌ Unexpected error during signup', error);
+      throw new InternalServerErrorException('Failed to create user');
+    }
   }
 
   /** Get user by ID (safe response) */
@@ -63,7 +107,7 @@ export class UserService {
     return this.toUserResponse(user);
   }
 
-  /** Get user by Email (internal, includes password for auth-service) */
+  /** Get user by Email (internal, includes password for AuthService) */
   async getUserByEmail(email: string): Promise<AuthUserDto | null> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) return null;
@@ -73,11 +117,10 @@ export class UserService {
   /** Get all users (safe response) */
   async getAllUsers(): Promise<UserResponseDto[]> {
     const users = await this.prisma.user.findMany();
-    return users.map(u => this.toUserResponse(u));
+    return users.map((u) => this.toUserResponse(u));
   }
 
   // ------------------ Mappers ------------------
-
   private toSignupResponse(user: User): SignupResponseDto {
     return {
       id: user.id.toString(),

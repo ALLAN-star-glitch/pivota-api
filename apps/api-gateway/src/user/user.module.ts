@@ -1,29 +1,19 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { UserController } from './user.controller';
+import { USER_PROTO_PATH } from '@pivota-api/protos';
 
 @Module({
   imports: [
     ClientsModule.register([
       {
-        name: 'USER_SERVICE', // Provider name for injection
-        transport: Transport.KAFKA,
+        name: 'USER_PACKAGE', // Provider name for injection
+        transport: Transport.GRPC,
         options: {
-          client: {
-            clientId: 'api-gateway-user-client', // unique per gateway connection
-            brokers: process.env.KAFKA_BROKERS?.split(',') || ['localhost:9092'],
+          url: process.env.GRPC_USER_SERVICE_URL || 'localhost:50052',
+          package: 'user', 
+          protoPath: USER_PROTO_PATH,
           },
-          consumer: {
-            groupId: 'api-gateway-user-consumer', // unique consumer group
-            allowAutoTopicCreation: true,
-            heartbeatInterval: 3000,
-            sessionTimeout: 10000,
-            retry: {
-              retries: 5,
-              initialRetryTime: 1000,
-            },
-          },
-        },
       },
     ]),
   ],

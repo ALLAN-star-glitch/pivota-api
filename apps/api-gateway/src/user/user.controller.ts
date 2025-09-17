@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 import {
   Controller,
   Get,
@@ -7,34 +8,37 @@ import {
   Param,
   Version,
 } from '@nestjs/common';
-import { ClientKafka } from '@nestjs/microservices';
-import { firstValueFrom } from 'rxjs';
+import { ClientGrpc } from '@nestjs/microservices';
+import { firstValueFrom, map, Observable } from 'rxjs';
 import { GetUserByEmailDto, GetUserByIdDto, UserResponseDto } from '@pivota-api/dtos';
+
+interface UserServiceGrpc {
+  GetUserById(data: GetUserByIdDto): Observable<UserResponseDto | null>;
+  GetUserByEmail(data: GetUserByEmailDto): Observable<UserResponseDto | null>;
+  GetAllUsers(data: {}): Observable<{ users: UserResponseDto[] }>;
+
+}
 
 @Controller('users')
 export class UserController implements OnModuleInit {
   private readonly logger = new Logger(UserController.name);
+  private userService: UserServiceGrpc; 
 
-  constructor(@Inject('USER_SERVICE') private readonly userClient: ClientKafka) {}
+  constructor(@Inject('USER_PACKAGE') private readonly grpcClient: ClientGrpc) {}
 
   async onModuleInit() {
-    // Subscribe to response topics from User Service
-    this.userClient.subscribeToResponseOf('auth.getUserById');
-    this.userClient.subscribeToResponseOf('user.getAll');
-    this.userClient.subscribeToResponseOf('health.check');
-
-    await this.userClient.connect();
-    this.logger.log('✅ User Kafka client connected');
+    this.userService = this.grpcClient.getService<UserServiceGrpc>('UserService');
+    this.logger.log(' API Gateway connected to User Service (gRPC)');
   }
 
   @Version('1')
   @Get('id/:id')
   async getUserById(@Param('id') id: string): Promise<UserResponseDto | null> {
-    this.logger.log(`📩 Fetch user by ID: ${id}`);
+    this.logger.log(`Fetch user by ID: ${id}`);
     
     const dto: GetUserByIdDto = { id: Number(id) }; // construct DTO for service
     return firstValueFrom(
-      this.userClient.send<UserResponseDto | null>('auth.getUserById', dto),
+      this.userService.GetUserById(dto)
     );
   }
 
@@ -47,7 +51,7 @@ export class UserController implements OnModuleInit {
     const dto: GetUserByEmailDto = { email }; // construct DTO for service
 
     return firstValueFrom(
-      this.userClient.send<UserResponseDto | null>('user.getByEmail', {dto})
+      this.userService.GetUserByEmail(dto)
     )
   }
 
@@ -59,19 +63,10 @@ export class UserController implements OnModuleInit {
 async getAllUsers(): Promise<UserResponseDto[]> {
   this.logger.log('📩 Fetch all users');
 
-  // Explicit empty payload type
-  const payload = {}; 
   return firstValueFrom(
-    this.userClient.send<UserResponseDto[]>('user.getAll', payload),
+    this.userService.GetAllUsers({}).pipe(
+      map(res => res.users) // ✅ unwrap here
+    )
   );
 }
-
-
-  // 🔹 Health check
-  @Version('1')
-  @Get('health/check')
-  async healthCheck() {
-    this.logger.log('📩 Health check request');
-    return firstValueFrom(this.userClient.send('health.check', { ping: 'pong' }));
-  }
 }

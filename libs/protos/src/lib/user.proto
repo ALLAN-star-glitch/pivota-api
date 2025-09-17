@@ -3,9 +3,18 @@ syntax = "proto3";
 package user;
 
 service UserService {
+  rpc CreateUser(SignupRequest) returns (UserResponse);
   rpc GetUserById(GetUserByIdRequest) returns (UserResponse);
   rpc GetUserByEmail(GetUserByEmailRequest) returns (UserResponse);
   rpc GetAllUsers(Empty) returns (UserListResponse);
+}
+
+message SignupRequest {
+  string firstName = 1;
+  string lastName = 2;
+  string email = 3;
+  string phone = 4;
+  string password = 5;
 }
 
 message GetUserByIdRequest {

@@ -6,6 +6,7 @@ import { PassportModule } from '@nestjs/passport';
 import { jwtConstants } from './constants';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { LocalStrategy } from './local.strategy';
+import { USER_PROTO_PATH } from '@pivota-api/protos';
 
 @Module({
   imports: [
@@ -14,27 +15,19 @@ import { LocalStrategy } from './local.strategy';
       secret: jwtConstants.secret,
       signOptions: { expiresIn: '3600s' }, // 1 hour
     }),
+
+    // Register gRPC + Kafka
     ClientsModule.register([
+      // gRPC (direct calls to UserService)
       {
-        name: 'USER_SERVICE',
-        transport: Transport.KAFKA,
+        name: 'USER_GRPC',
+        transport: Transport.GRPC,
         options: {
-          client: {
-            clientId: 'auth-service-client', // unique per microservice
-            brokers: process.env.KAFKA_BROKERS?.split(',') || ['localhost:9092'],
-          },
-          consumer: {
-            groupId: 'auth-service-consumer', // unique group ID per service role
-            allowAutoTopicCreation: true, // auto-create topics if missing
-            heartbeatInterval: 3000, // default 3000ms
-            sessionTimeout: 10000,  // default 10000ms, gives enough time to join group
-            retry: {
-              retries: 5, // retry connecting to broker
-              initialRetryTime: 1000,
-            },
-          },
+          package: 'user',
+          protoPath: USER_PROTO_PATH,
+          url: process.env.USER_GRPC_URL || 'localhost:50052',
         },
-      },
+      }
     ]),
   ],
   providers: [AuthService, LocalStrategy],
@@ -43,6 +36,10 @@ import { LocalStrategy } from './local.strategy';
 })
 export class AuthModule {
   constructor() {
-    console.log('✅ AuthModule initialized with KAFKA_BROKERS =', process.env.KAFKA_BROKERS);
+    console.log(
+      'AuthModule initialized with gRPC client to UserService',
+      '| USER_GRPC_URL =',
+      process.env.USER_GRPC_URL || 'localhost:50052',
+    );
   }
 }
