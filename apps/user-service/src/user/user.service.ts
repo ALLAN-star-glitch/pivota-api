@@ -7,7 +7,6 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
 import {
   GetUserByIdDto,
   SignupRequestDto,
@@ -17,6 +16,7 @@ import {
 } from '@pivota-api/dtos';
 import { User } from '../../generated/prisma';
 import { ClientKafka, ClientProxy } from '@nestjs/microservices';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 @Injectable()
 export class UserService implements OnModuleInit {
@@ -82,7 +82,7 @@ export class UserService implements OnModuleInit {
       return response;
     } catch (error) {
       // Handle known Prisma errors
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error instanceof PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           const target = (error.meta?.target as string[]) || [];
           if (target.includes('email')) {
@@ -94,6 +94,7 @@ export class UserService implements OnModuleInit {
           throw new ConflictException('Duplicate field detected');
         }
       }
+
 
       this.logger.error('❌ Unexpected error during signup', error);
       throw new InternalServerErrorException('Failed to create user');
@@ -117,7 +118,9 @@ export class UserService implements OnModuleInit {
   /** Get all users (safe response) */
   async getAllUsers(): Promise<UserResponseDto[]> {
     const users = await this.prisma.user.findMany();
-    return users.map((u) => this.toUserResponse(u));
+    const safeUsers =  users.map((u) => this.toUserResponse(u));
+    return safeUsers
+    this.logger.debug('Returned User', safeUsers)
   }
 
   // ------------------ Mappers ------------------

@@ -54,6 +54,9 @@ export class AuthService implements OnModuleInit {
   // ------------------ Signup ------------------
   async signup(signupDto: SignupRequestDto): Promise<SignupResponseDto> {
     try {
+      if (!this.userGrpcService) {
+          this.userGrpcService = this.grpcClient.getService<UserServiceGrpc>('UserService');
+        }
       const hashedPassword = await bcrypt.hash(signupDto.password, 10);
 
       // Call UserService via gRPC
@@ -82,6 +85,10 @@ export class AuthService implements OnModuleInit {
 
   // ------------------ Login ------------------
   async login(loginDto: LoginRequestDto): Promise<LoginResponseDto> {
+
+    if (!this.userGrpcService) {
+          this.userGrpcService = this.grpcClient.getService<UserServiceGrpc>('UserService');
+        }
     const user = await this.userGrpcService.getUserByEmail({ email: loginDto.email });
 
     if (!user) throw new UnauthorizedException('Invalid credentials');
