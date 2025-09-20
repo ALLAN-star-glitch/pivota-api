@@ -1,9 +1,5 @@
-export class SignupResponseDto {
-  id!: string;
-  email!: string;
-  firstName!: string;
-  lastName!: string;
-  phone?: string;
-  createdAt!: Date;
-  updatedAt!: Date;
-}
+// Response after signup (same as UserResponseDto)
+
+import { UserResponseDto } from "./UserResponseDto.dto";
+
+export class SignupResponseDto extends UserResponseDto {}

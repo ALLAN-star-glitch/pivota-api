@@ -5,18 +5,22 @@ import {
   ConflictException,
   OnModuleInit,
   InternalServerErrorException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  GetUserByIdDto,
   SignupRequestDto,
   SignupResponseDto,
   UserResponseDto,
   AuthUserDto,
+  GetUserByEmailDto,
+  LoginRequestDto,
+  UserCredentialsDto,
 } from '@pivota-api/dtos';
 import { User } from '../../generated/prisma';
 import { ClientKafka, ClientProxy } from '@nestjs/microservices';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UserService implements OnModuleInit {
@@ -24,7 +28,6 @@ export class UserService implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-
     @Inject('USER_KAFKA') private readonly kafkaClient: ClientKafka,
     @Inject('USER_RMQ') private readonly rabbitClient: ClientProxy,
   ) {}
@@ -47,13 +50,11 @@ export class UserService implements OnModuleInit {
 
   /** Create a new user (signup) */
   async createUser(signupDto: SignupRequestDto): Promise<SignupResponseDto> {
-    this.logger.debug('SignupDto received', signupDto);
-
     try {
       const user = await this.prisma.user.create({
         data: {
           email: signupDto.email,
-          password: signupDto.password, // hashed in AuthService
+          password: signupDto.password, // already hashed in AuthService
           firstName: signupDto.firstName,
           lastName: signupDto.lastName,
           ...(signupDto.phone ? { phone: signupDto.phone } : {}),
@@ -62,7 +63,7 @@ export class UserService implements OnModuleInit {
 
       const response = this.toSignupResponse(user);
 
-      // Kafka event (for system-wide consumers)
+      // Kafka event
       this.kafkaClient.emit('user.created', {
         id: user.id,
         email: user.email,
@@ -72,7 +73,7 @@ export class UserService implements OnModuleInit {
         createdAt: user.createdAt,
       });
 
-      // RabbitMQ event (notifications, emails, jobs)
+      // RabbitMQ event
       this.rabbitClient.emit('user.signup.email', {
         to: user.email,
         firstName: user.firstName,
@@ -81,46 +82,129 @@ export class UserService implements OnModuleInit {
 
       return response;
     } catch (error) {
-      // Handle known Prisma errors
-      if (error instanceof PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
-          const target = (error.meta?.target as string[]) || [];
-          if (target.includes('email')) {
-            throw new ConflictException('Email already registered');
-          }
-          if (target.includes('phone')) {
-            throw new ConflictException('Phone number already registered');
-          }
-          throw new ConflictException('Duplicate field detected');
-        }
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = (error.meta?.target as string[]) || [];
+        if (target.includes('email')) throw new ConflictException('Email already registered');
+        if (target.includes('phone')) throw new ConflictException('Phone number already registered');
+        throw new ConflictException('Duplicate field detected');
       }
-
-
       this.logger.error('❌ Unexpected error during signup', error);
       throw new InternalServerErrorException('Failed to create user');
     }
   }
 
-  /** Get user by ID (safe response) */
-  async getUserById(dto: GetUserByIdDto): Promise<UserResponseDto | null> {
-    const user = await this.prisma.user.findUnique({ where: { id: dto.id } });
+
+    /** Get user by ID (internal, includes refresh token + password) */
+    async getUserByIdInternal({ id }: { id: string }): Promise<UserCredentialsDto | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: Number(id) },
+      include: { refreshTokens: true },
+    });
     if (!user) return null;
-    return this.toUserResponse(user);
+
+    return {
+      id: user.id.toString(),
+      email: user.email,
+      password: user.password,
+      refreshTokens: user.refreshTokens.map((rt) => ({
+        id: rt.id,
+        tokenId: rt.tokenId,
+        device: rt.device ?? undefined,
+        ipAddress: rt.ipAddress ?? undefined,
+        userAgent: rt.userAgent ?? undefined,
+        createdAt: rt.createdAt,
+        expiresAt: rt.expiresAt,
+        revoked: rt.revoked,
+      })),
+    };
   }
 
-  /** Get user by Email (internal, includes password for AuthService) */
-  async getUserByEmail(email: string): Promise<AuthUserDto | null> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) return null;
-    return this.toAuthUserDto(user);
+  /** Store a new refresh token session */
+    async createRefreshToken(data: {
+    userId: number;
+    hashedToken: string;
+    device?: string;
+    ipAddress?: string;
+    userAgent?: string;
+    expiresAt: Date;
+  }): Promise<void> {
+    await this.prisma.refreshToken.create({
+      data: {
+        hashedToken: data.hashedToken,
+        userId: data.userId,
+        device: data.device,
+        ipAddress: data.ipAddress,
+        userAgent: data.userAgent,
+        expiresAt: data.expiresAt,
+      },
+    });
   }
 
-  /** Get all users (safe response) */
+
+  /** Fetch refresh token row by tokenId */
+  async getRefreshTokenByTokenId(tokenId: string) {
+  return this.prisma.refreshToken.findUnique({
+    where: { tokenId },
+    select: {
+      id: true,
+      tokenId: true,
+      hashedToken: true,   // include hashed token for verification
+      userId: true,
+      device: true,
+      ipAddress: true,
+      userAgent: true,
+      revoked: true,
+      createdAt: true,
+      expiresAt: true,
+    },
+  });
+}
+
+
+  /** Revoke a refresh token (logout from one device) */
+  async revokeRefreshToken(tokenId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { tokenId },
+      data: { revoked: true },
+    });
+  }
+
+  /** List all active sessions for a user */
+  async listUserSessions(userId: string) {
+    return this.prisma.refreshToken.findMany({
+      where: { userId: Number(userId) },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+
+  /** Get user by ID (safe response) - For Public */
+    async getUserById(id: string): Promise<UserResponseDto | null> {
+      const user = await this.prisma.user.findUnique({ where: { id: Number(id) } });
+      return user ? this.toUserResponse(user) : null;
+    }
+
+  /** Get user by Email (safe response) - For Publick */
+  async getUserByEmail(dto: GetUserByEmailDto): Promise<AuthUserDto | null> {
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    return user ? this.toAuthUserDto(user) : null;
+  }
+
+  /** Get all users (safe response) - For Public */
   async getAllUsers(): Promise<UserResponseDto[]> {
     const users = await this.prisma.user.findMany();
-    const safeUsers =  users.map((u) => this.toUserResponse(u));
-    return safeUsers
-    this.logger.debug('Returned User', safeUsers)
+    return users.map((u) => this.toUserResponse(u));
+  }
+
+  /** Validate user credentials (used in AuthService.login) */
+  async validateUserCredentials(dto: LoginRequestDto): Promise<AuthUserDto> {
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (!user) throw new UnauthorizedException('Invalid credentials');
+
+    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+    if (!isPasswordValid) throw new UnauthorizedException('Invalid credentials');
+
+    return this.toAuthUserDto(user);
   }
 
   // ------------------ Mappers ------------------

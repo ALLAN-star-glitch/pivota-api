@@ -10,11 +10,11 @@ import {
 } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom, map, Observable } from 'rxjs';
-import { GetUserByEmailDto, GetUserByIdDto, UserResponseDto } from '@pivota-api/dtos';
+import { AuthUserDto, GetUserByEmailDto, GetUserByIdDto, UserResponseDto } from '@pivota-api/dtos';
 
 interface UserServiceGrpc {
   GetUserById(data: GetUserByIdDto): Observable<UserResponseDto | null>;
-  GetUserByEmail(data: GetUserByEmailDto): Observable<UserResponseDto | null>;
+  GetUserByEmail(data: GetUserByEmailDto): Observable<AuthUserDto | null>;
   GetAllUsers(data: {}): Observable<{ users: UserResponseDto[] }>;
 
 }
@@ -36,7 +36,7 @@ export class UserController implements OnModuleInit {
   async getUserById(@Param('id') id: string): Promise<UserResponseDto | null> {
     this.logger.log(`Fetch user by ID: ${id}`);
     
-    const dto: GetUserByIdDto = { id: Number(id) }; // construct DTO for service
+    const dto: GetUserByIdDto = { id }; // construct DTO for service
     return firstValueFrom(
       this.userService.GetUserById(dto)
     );
@@ -45,7 +45,7 @@ export class UserController implements OnModuleInit {
   //Get user by email
   @Version('1')
   @Get('email/:email')
-  async getUserByEmail(@Param('email') email: string): Promise<UserResponseDto | null> {
+  async getUserByEmail(@Param('email') email: string): Promise<AuthUserDto | null> {
     this.logger.log(`Fetch user by email: ${email}`);
 
     const dto: GetUserByEmailDto = { email }; // construct DTO for service

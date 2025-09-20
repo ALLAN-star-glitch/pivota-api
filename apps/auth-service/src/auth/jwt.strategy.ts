@@ -5,7 +5,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { jwtConstants } from './constants';
 
 export interface JwtPayload {
-  sub: number;          // user ID (from DB, usually Prisma number)
+  sub: string;          // user ID (from DB, usually Prisma number)
   email: string;
   isActive?: boolean;
 }

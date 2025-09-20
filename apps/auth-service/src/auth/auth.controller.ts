@@ -1,12 +1,13 @@
-import { Controller, Logger, UseGuards } from '@nestjs/common';
+import { Controller, Logger,  } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-import { LocalAuthGuard } from './local-auth.guard';
+//import { LocalAuthGuard } from './local-auth.guard';
 import {
   LoginResponseDto,
   SignupResponseDto,
   SignupRequestDto,
   LoginRequestDto,
+  TokenPairDto,
 } from '@pivota-api/dtos';
 
 @Controller()
@@ -24,7 +25,7 @@ export class AuthController {
   }
 
   // ------------------ Login ------------------
-  @UseGuards(LocalAuthGuard)
+  //@UseGuards(LocalAuthGuard)
   @GrpcMethod('AuthService', 'Login')
   async handleLoginGrpc(
     loginDto: LoginRequestDto,
@@ -34,11 +35,21 @@ export class AuthController {
   }
 
   // ------------------ Refresh Token ------------------
+  // ------------------ Refresh Token ------------------
   @GrpcMethod('AuthService', 'Refresh')
-  async handleRefreshGrpc(
-    data: { refreshToken: string },
-  ): Promise<LoginResponseDto> {
-    return this.authService.refreshToken(data.refreshToken);
+  async handleRefreshGrpc(data: { refreshToken: string }): Promise<TokenPairDto> {
+    if (!data.refreshToken) {
+      this.logger.warn('Refresh token not provided in gRPC request');
+      throw new Error('Refresh token is required');
+    }
+
+    try {
+      const tokens = await this.authService.refreshToken(data.refreshToken);
+      return tokens; // LoginResponseDto includes new accessToken and refreshToken
+    } catch (err) {
+      this.logger.error('gRPC refresh token failed', err);
+      throw new Error(err instanceof Error ? err.message : 'Refresh failed');
+    }
   }
 
 }

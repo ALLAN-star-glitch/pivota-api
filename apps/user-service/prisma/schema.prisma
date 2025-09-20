@@ -1,30 +1,61 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// ---------------- Prisma Schema ----------------
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
+// Client Generator
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
 }
 
+// Database Source
 datasource db {
   provider = "postgresql"
   url      = env("USER_SERVICE_DATABASE_URL")
 }
 
+// ---------------- Models ----------------
+
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  firstName String
-  lastName  String
-  phone     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             Int             @id @default(autoincrement())
+  email          String          @unique                 // unique email for login
+  password       String                                   // hashed password
+  firstName      String
+  lastName       String
+  phone          String?
+  createdAt      DateTime        @default(now())          // registration timestamp
+  updatedAt      DateTime        @updatedAt               // auto-updated timestamp
+
+  // Relations
+  refreshTokens  RefreshToken[]  // one user can have many refresh tokens (multiple sessions/devices)
 }
 
+model RefreshToken {
+  id          Int      @id @default(autoincrement())
 
+  // JWT "jti" (unique token ID), used for revocation lookup
+  tokenId     String   @default(uuid()) @unique   
 
+  // Store only the hashed token (e.g., bcrypt/argon2 hash) — never the raw token
+  hashedToken String   
 
+  // Relation to User
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Optional metadata for session tracking
+  device      String?                              // e.g., "iPhone 14", "Chrome desktop"
+  ipAddress   String?                              // optional IP of login
+  userAgent   String?                              // raw user agent string
+
+  // Token state
+  revoked     Boolean  @default(false)             // actively revoked (e.g., user logs out)
+  deletedAt   DateTime?                            // optional soft delete for cleanup
+
+  // Timestamps
+  createdAt   DateTime @default(now())             // issued at
+  expiresAt   DateTime                             // expiration time
+
+  // Indexes for efficient queries
+  @@index([userId])                                // lookup all sessions for a user
+  @@index([revoked])                               // quickly filter active vs revoked
+  @@index([expiresAt])                             // cleanup expired sessions
+}

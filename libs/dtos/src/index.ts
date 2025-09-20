@@ -7,3 +7,6 @@ export * from './lib/UserResponseDto.dto';
 export * from './lib/GetUserByIdDto.dto';
 export * from './lib/AuthUserDto.dto';
 export * from './lib/GetUserByEmailDto.dto';
+export * from './lib/UserCredentialsDto.dto';
+export * from './lib/TokenPairDto.dto';
+export * from './lib/SessionDto.dto';

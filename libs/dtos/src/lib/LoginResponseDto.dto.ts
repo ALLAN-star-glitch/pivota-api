@@ -1,11 +1,6 @@
-export class LoginResponseDto {
-  id!: string;
-  email!: string;
-  firstName!: string;
-  lastName!: string;
-  phone?: string;
-  createdAt!: Date;
-  updatedAt!: Date;
+import { UserResponseDto } from "./UserResponseDto.dto";
+
+export class LoginResponseDto extends UserResponseDto{
   accessToken!: string;
   refreshToken!: string;
 }
