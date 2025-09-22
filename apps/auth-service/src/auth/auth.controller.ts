@@ -8,31 +8,54 @@ import {
   SignupRequestDto,
   LoginRequestDto,
   TokenPairDto,
+  UserResponseDto,
 } from '@pivota-api/dtos';
 
-@Controller()
-export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  @Controller()
+  export class AuthController {
+    constructor(private readonly authService: AuthService) {}
 
-  private readonly logger = new Logger(AuthController.name);
+    private readonly logger = new Logger(AuthController.name);
 
-  // ------------------ Signup ------------------
-  @GrpcMethod('AuthService', 'Signup')
-  async handleSignupGrpc(
-    signupDto: SignupRequestDto,
-  ): Promise<SignupResponseDto> {
-    return this.authService.signup(signupDto);
-  }
+    // ------------------ Signup ------------------
+    @GrpcMethod('AuthService', 'Signup')
+    async handleSignupGrpc(
+      signupDto: SignupRequestDto,
+    ): Promise<SignupResponseDto> {
+      return this.authService.signup(signupDto);
+    }
 
-  // ------------------ Login ------------------
-  //@UseGuards(LocalAuthGuard)
-  @GrpcMethod('AuthService', 'Login')
+    // ------------------ Login ------------------
+    @GrpcMethod('AuthService', 'Login')
   async handleLoginGrpc(
-    loginDto: LoginRequestDto,
+    loginDto: LoginRequestDto & { 
+      clientInfo?: { 
+        device?: string; 
+        ipAddress?: string;
+        userAgent?: string; 
+        os?: string 
+      } 
+    }
   ): Promise<LoginResponseDto> {
-    // LocalAuthGuard still validates credentials via validateUser()
-    return this.authService.login(loginDto);
+    this.logger.debug(`Login attempt for email: ${loginDto.email}`);
+
+    // Provide default values if clientInfo is missing
+    const clientInfo = loginDto.clientInfo || {
+      device: 'Unknown',
+      ipAddress: 'Unknown',
+      userAgent: 'Unknown',
+      os: 'Unknown',
+    };
+    this.logger.debug(`Client Info: ${JSON.stringify(clientInfo)}`);
+
+    // Pass clientInfo to AuthService.login
+    const result = await this.authService.login(loginDto, clientInfo);
+
+    this.logger.debug(`Login successful for email: ${loginDto.email}`);
+    return result;
   }
+
+
 
   // ------------------ Refresh Token ------------------
   // ------------------ Refresh Token ------------------
@@ -51,5 +74,14 @@ export class AuthController {
       throw new Error(err instanceof Error ? err.message : 'Refresh failed');
     }
   }
+
+
+  @GrpcMethod('AuthService', 'ValidateUser')
+async validateUser(data: { email: string; password: string }): Promise<UserResponseDto | null> {
+  const user = await this.authService.validateUser(data.email, data.password);
+  if (!user) return null;
+  return user;
+}
+
 
 }

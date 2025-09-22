@@ -4,6 +4,8 @@
   "license": "MIT",
   "private": true,
   "scripts": {
+    "auth:prisma:generate:dev": "cross-env NODE_ENV=dev prisma generate --schema=apps/auth-service/prisma/schema.prisma",
+    "auth:prisma:generate:sit": "cross-env NODE_ENV=sit prisma generate --schema=apps/auth-service/prisma/schema.prisma",
     "user:prisma:generate:dev": "cross-env NODE_ENV=dev prisma generate --schema=apps/user-service/prisma/schema.prisma",
     "user:prisma:generate:sit": "cross-env NODE_ENV=sit prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
     "user:prisma:generate:uat": "cross-env NODE_ENV=uat prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
@@ -54,6 +56,7 @@
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/platform-fastify": "^11.1.6",
     "@prisma/client": "^6.16.2",
+    "@types/google-protobuf": "^3.15.12",
     "amqp-connection-manager": "^4.1.14",
     "amqplib": "^0.10.9",
     "axios": "^1.6.0",
@@ -65,7 +68,9 @@
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
     "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.8.2"
+    "request-ip": "^3.3.0",
+    "rxjs": "^7.8.2",
+    "ua-parser-js": "^2.0.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.8.0",

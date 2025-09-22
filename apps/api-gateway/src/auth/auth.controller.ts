@@ -1,11 +1,11 @@
 import {
   Body,
   Controller,
-  Get,
   Inject,
   Logger,
   OnModuleInit,
   Post,
+ // UseGuards,
   Version,
 } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
@@ -15,14 +15,19 @@ import {
   UserResponseDto,
   LoginRequestDto,
   LoginResponseDto,
+  SessionDto,
 } from '@pivota-api/dtos';
+import { ClientInfo } from '../decorators/client-info.decorator';
+//import { LocalAuthGuard } from './local-auth.guard';
 
-// 👇 Interface for gRPC methods (must match proto service)
 interface AuthServiceGrpc {
   signup(data: SignupRequestDto): Observable<UserResponseDto>;
-  login(data: LoginRequestDto): Observable<LoginResponseDto>;
+  login(
+    loginDto: LoginRequestDto & {
+      clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>;
+    }
+  ): Observable<LoginResponseDto>;
   refresh(data: { refreshToken: string }): Observable<LoginResponseDto>;
-  healthCheck(data: { from: string }): Observable<{ status: string; service: string }>;
 }
 
 @Controller('auth')
@@ -34,7 +39,7 @@ export class AuthController implements OnModuleInit {
 
   onModuleInit() {
     this.authService = this.grpcClient.getService<AuthServiceGrpc>('AuthService');
-    this.logger.log('✅ API Gateway connected to Auth Service (gRPC)');
+    this.logger.log('API Gateway connected to Auth Service (gRPC)');
   }
 
   // ------------------ Signup ------------------
@@ -46,11 +51,18 @@ export class AuthController implements OnModuleInit {
   }
 
   // ------------------ Login ------------------
+  //@UseGuards(LocalAuthGuard) // ✅ only login uses the guard
   @Version('1')
   @Post('login')
-  async login(@Body() loginDto: LoginRequestDto): Promise<LoginResponseDto> {
-    this.logger.log(`📩 Login request: ${JSON.stringify(loginDto)}`);
-    return firstValueFrom(this.authService.login(loginDto));
+  async login(
+    @Body() loginDto: LoginRequestDto,
+    @ClientInfo() clientInfo: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>
+  ): Promise<LoginResponseDto> {
+    this.logger.log(`📩 Login request for email: ${loginDto.email}`);
+    this.logger.debug(`🖥 Client Info: ${JSON.stringify(clientInfo)}`);
+
+    const grpcPayload = { ...loginDto, clientInfo };
+    return firstValueFrom(this.authService.login(grpcPayload));
   }
 
   // ------------------ Refresh Token ------------------
@@ -59,13 +71,5 @@ export class AuthController implements OnModuleInit {
   async refresh(@Body() body: { refreshToken: string }): Promise<LoginResponseDto> {
     this.logger.log(`📩 Refresh token request`);
     return firstValueFrom(this.authService.refresh(body));
-  }
-
-  // ------------------ Health Check ------------------
-  @Version('1')
-  @Get('health')
-  async healthCheck() {
-    this.logger.log(`📩 Health check request`);
-    return firstValueFrom(this.authService.healthCheck({ from: 'api-gateway' }));
   }
 }

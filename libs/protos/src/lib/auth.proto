@@ -6,7 +6,7 @@ service AuthService {
   rpc Signup(SignupRequest) returns (SignupResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Refresh(RefreshRequest) returns (LoginResponse);
-  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc ValidateUser(ValidateUserRequest) returns (LoginResponse);
 }
 
 message SignupRequest {
@@ -27,9 +27,18 @@ message SignupResponse {
   string updatedAt = 7;
 }
 
+
+message ClientInfo {
+  string device = 1;
+  string ipAddress = 2;
+  string userAgent = 3;
+  string os = 4;
+}
+
 message LoginRequest {
   string email = 1;
   string password = 2;
+  ClientInfo clientInfo = 3; // optional
 }
 
 message LoginResponse {
@@ -48,11 +57,8 @@ message RefreshRequest {
   string refreshToken = 1;
 }
 
-message HealthCheckRequest {
-  string from = 1;
+message ValidateUserRequest {
+  string email = 1;
+  string password = 2;
 }
 
-message HealthCheckResponse {
-  string status = 1;
-  string service = 2;
-}

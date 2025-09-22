@@ -1,5 +1,5 @@
 /**
- * User Microservice (Kafka + gRPC)
+ * User Microservice (Kafka + gRPC + RabbitMQ)
  */
 
 import { Logger } from '@nestjs/common';
@@ -8,8 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import * as dotenv from 'dotenv';
 import { AppModule } from './app/app.module';
-import { USER_PROTO_PATH } from '@pivota-api/protos'; // adjust if path differs
-
+import { USER_PROTO_PATH } from '@pivota-api/protos';
 
 // Load environment explicitly
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
@@ -52,8 +51,21 @@ async function bootstrap() {
     },
   });
 
+  // ---------------- RabbitMQ Microservice ----------------
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
+      queue: 'user_service_queue', // specific queue for user service
+      queueOptions: {
+        durable: true,
+      },
+      noAck: false, // safer: requires explicit ack in handlers
+    },
+  });
+
   await app.startAllMicroservices();
-  Logger.log(`🚀 User service (Kafka + gRPC) is running...`);
+  Logger.log(`🚀 User service is running (Kafka + gRPC + RabbitMQ)`);
 }
 
 bootstrap();

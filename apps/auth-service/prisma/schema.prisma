@@ -11,16 +11,34 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = env("AUTH_SERVICE_DATABASE_URL")
 }
 
-model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  firstName String
-  lastName  String
-  phone     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Credential {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique               // references UserService userId
+  passwordHash String
+  mfaSecret    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
+
+model RefreshToken {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  tokenId     String   @default(uuid()) @unique
+  hashedToken String
+  device      String?
+  ipAddress   String?
+  userAgent   String?
+  os          String?
+  revoked     Boolean  @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([userId])
+  @@index([revoked])
+  @@index([expiresAt])
+}
+

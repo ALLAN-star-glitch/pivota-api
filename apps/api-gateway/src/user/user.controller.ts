@@ -13,8 +13,8 @@ import { firstValueFrom, map, Observable } from 'rxjs';
 import { AuthUserDto, GetUserByEmailDto, GetUserByIdDto, UserResponseDto } from '@pivota-api/dtos';
 
 interface UserServiceGrpc {
-  GetUserById(data: GetUserByIdDto): Observable<UserResponseDto | null>;
-  GetUserByEmail(data: GetUserByEmailDto): Observable<AuthUserDto | null>;
+  GetUserProfileById(data: GetUserByIdDto): Observable<UserResponseDto | null>;
+  GetUserProfileByEmail(data: GetUserByEmailDto): Observable<AuthUserDto | null>;
   GetAllUsers(data: {}): Observable<{ users: UserResponseDto[] }>;
 
 }
@@ -38,7 +38,7 @@ export class UserController implements OnModuleInit {
     
     const dto: GetUserByIdDto = { id }; // construct DTO for service
     return firstValueFrom(
-      this.userService.GetUserById(dto)
+      this.userService.GetUserProfileById(dto)
     );
   }
 
@@ -51,7 +51,7 @@ export class UserController implements OnModuleInit {
     const dto: GetUserByEmailDto = { email }; // construct DTO for service
 
     return firstValueFrom(
-      this.userService.GetUserByEmail(dto)
+      this.userService.GetUserProfileByEmail(dto)
     )
   }
 
