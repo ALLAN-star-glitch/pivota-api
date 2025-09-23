@@ -8,7 +8,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ClientGrpc } from '@nestjs/microservices';
+import { ClientGrpc, ClientProxy } from '@nestjs/microservices';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -49,6 +49,7 @@ export class AuthService implements OnModuleInit {
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
     @Inject('USER_GRPC') private readonly grpcClient: ClientGrpc,
+    @Inject('USER_RMQ') private readonly rabbitClient: ClientProxy,
   ) {}
 
   onModuleInit() {
@@ -145,21 +146,37 @@ export class AuthService implements OnModuleInit {
 
   // ------------------ Login ------------------
   async login(
-    loginDto: LoginRequestDto,
-    clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
-  ): Promise<LoginResponseDto> {
-    // Validate credentials
-    const user = await this.validateUser(loginDto.email, loginDto.password);
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+  loginDto: LoginRequestDto,
+  clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+): Promise<LoginResponseDto> {
+  // Validate credentials
+  const user = await this.validateUser(loginDto.email, loginDto.password);
+  if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    // Generate tokens
-    const { accessToken, refreshToken } = await this.generateTokens(
-      { id: user.id, email: loginDto.email },
-      clientInfo,
-    );
+  // Generate tokens
+  const { accessToken, refreshToken } = await this.generateTokens(
+    { id: user.id, email: loginDto.email },
+    clientInfo,
+  );
 
-    return { ...user, accessToken, refreshToken };
-  }
+  // Build email payload
+  const payload = {
+    to: user.email,
+    firstName: user.firstName,
+    device: clientInfo?.device || 'Unknown device',
+    ipAddress: clientInfo?.ipAddress || 'Unknown IP',
+    userAgent: clientInfo?.userAgent || 'Unknown agent',
+    os: clientInfo?.os || 'Unknown OS',
+    timestamp: new Date().toISOString(),
+  };
+
+  // Emit RabbitMQ event for login email
+  this.rabbitClient.emit('user.login.email', payload);
+  this.logger.debug(`📤 [AuthService] Login email payload: ${JSON.stringify(payload)}`);
+
+  return { ...user, accessToken, refreshToken };
+}
+
 
   // ------------------ Refresh Token ------------------
   async refreshToken(refreshToken: string): Promise<TokenPairDto> {

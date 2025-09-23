@@ -10,3 +10,5 @@ export * from './lib/GetUserByEmailDto.dto';
 export * from './lib/UserCredentialsDto.dto';
 export * from './lib/TokenPairDto.dto';
 export * from './lib/SessionDto.dto';
+export * from './lib/UserSignupEmailDto.dto';
+export * from './lib/UserLoginEmailDto.dto';

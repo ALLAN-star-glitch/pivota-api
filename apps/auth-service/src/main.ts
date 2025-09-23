@@ -50,7 +50,7 @@ async function bootstrap() {
       queueOptions: {
         durable: true,
       },
-      noAck: false, // manual ack recommended for reliability
+      noAck: true, // manual ack recommended for reliability
     },
   });
 
