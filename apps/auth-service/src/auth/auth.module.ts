@@ -3,7 +3,6 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { jwtConstants } from './constants';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { USER_PROTO_PATH } from '@pivota-api/protos';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -13,7 +12,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     PrismaModule,
     PassportModule,
     JwtModule.register({
-      secret: jwtConstants.secret,
+      secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '3600s' }, // 1 hour
     }),
 

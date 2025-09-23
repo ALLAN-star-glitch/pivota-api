@@ -1,27 +1,39 @@
-import { Logger, VersioningType } from '@nestjs/common'; import { NestFactory } from '@nestjs/core';
+import { Logger, VersioningType } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import * as dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app/app.module';
 
-// Load environment
+// Load environment variables
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  logger.log('🔄 Starting API Gateway...');
 
-  // ✅ URL-based versioning
+  const app = await NestFactory.create(AppModule);
+  logger.log('✅ Nest application instance created');
+
   app.enableVersioning({ type: VersioningType.URI });
+  logger.log('🔖 API versioning enabled (URI-based)');
 
   const configService = app.get(ConfigService);
-
-  // ✅ Use "api" as prefix
   const globalPrefix = configService.get<string>('GLOBAL_PREFIX_API_GATEWAY') || 'api';
   app.setGlobalPrefix(globalPrefix);
+  logger.log(`🌐 Global prefix set: ${globalPrefix}`);
+
+  app.use(cookieParser());
+  logger.log('🍪 Cookie parser enabled');
+
+  app.enableCors({
+    origin: true,
+    credentials: true,
+  });
+  logger.log('🌍 CORS enabled');
 
   const port = configService.get<number>('API_GATEWAY_PORT') || 3000;
   await app.listen(port);
-
   logger.log(`🚀 API Gateway running at http://localhost:${port}/${globalPrefix}`);
 }
 

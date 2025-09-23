@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { UserController } from './user.controller';
 import { USER_PROTO_PATH } from '@pivota-api/protos';
+import { UserService } from './user.service';
 
 @Module({
   imports: [
@@ -18,6 +19,8 @@ import { USER_PROTO_PATH } from '@pivota-api/protos';
     ]),
   ],
   controllers: [UserController],
+  providers: [UserService],
+  exports: [UserService],
 })
 export class UserModule {
   constructor() {

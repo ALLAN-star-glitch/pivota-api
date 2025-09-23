@@ -1,72 +1,35 @@
-/* eslint-disable @typescript-eslint/no-empty-object-type */
-import {
-  Controller,
-  Get,
-  Inject,
-  Logger,
-  OnModuleInit,
-  Param,
-  Version,
-} from '@nestjs/common';
-import { ClientGrpc } from '@nestjs/microservices';
-import { firstValueFrom, map, Observable } from 'rxjs';
-import { AuthUserDto, GetUserByEmailDto, GetUserByIdDto, UserResponseDto } from '@pivota-api/dtos';
-
-interface UserServiceGrpc {
-  GetUserProfileById(data: GetUserByIdDto): Observable<UserResponseDto | null>;
-  GetUserProfileByEmail(data: GetUserByEmailDto): Observable<AuthUserDto | null>;
-  GetAllUsers(data: {}): Observable<{ users: UserResponseDto[] }>;
-
-}
+import { Controller, Get, Param, UseGuards, Logger, Version } from '@nestjs/common';
+import { UserService } from './user.service';
+import { AuthUserDto, UserResponseDto } from '@pivota-api/dtos';
+import { JwtAuthGuard } from '../auth/jwt.guard';
 
 @Controller('users')
-export class UserController implements OnModuleInit {
+export class UserController {
   private readonly logger = new Logger(UserController.name);
-  private userService: UserServiceGrpc; 
 
-  constructor(@Inject('USER_PACKAGE') private readonly grpcClient: ClientGrpc) {}
+  constructor(private readonly userService: UserService) {}
 
-  async onModuleInit() {
-    this.userService = this.grpcClient.getService<UserServiceGrpc>('UserService');
-    this.logger.log(' API Gateway connected to User Service (gRPC)');
-  }
-
+  // 🔒 Protected route: Get user by ID
+  @UseGuards(JwtAuthGuard)
   @Version('1')
   @Get('id/:id')
   async getUserById(@Param('id') id: string): Promise<UserResponseDto | null> {
-    this.logger.log(`Fetch user by ID: ${id}`);
-    
-    const dto: GetUserByIdDto = { id }; // construct DTO for service
-    return firstValueFrom(
-      this.userService.GetUserProfileById(dto)
-    );
+    return this.userService.getUserById(id);
   }
 
-  //Get user by email
+  // 🔒 Protected route: Get user by email
+  @UseGuards(JwtAuthGuard)
   @Version('1')
   @Get('email/:email')
   async getUserByEmail(@Param('email') email: string): Promise<AuthUserDto | null> {
-    this.logger.log(`Fetch user by email: ${email}`);
-
-    const dto: GetUserByEmailDto = { email }; // construct DTO for service
-
-    return firstValueFrom(
-      this.userService.GetUserProfileByEmail(dto)
-    )
+    return this.userService.getUserByEmail(email);
   }
 
-
-
-  // 🔹 Get all users
-@Version('1')
-@Get()
-async getAllUsers(): Promise<UserResponseDto[]> {
-  this.logger.log('📩 Fetch all users');
-
-  return firstValueFrom(
-    this.userService.GetAllUsers({}).pipe(
-      map(res => res.users) // ✅ unwrap here
-    )
-  );
-}
+  // 🔒 Protected route: Get all users
+  @UseGuards(JwtAuthGuard)
+  @Version('1')
+  @Get()
+  async getAllUsers(): Promise<UserResponseDto[]> {
+    return this.userService.getAllUsers();
+  }
 }
