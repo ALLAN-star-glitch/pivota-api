@@ -2,9 +2,8 @@ import {
   Injectable,
   Logger,
   Inject,
-  ConflictException,
   OnModuleInit,
-  InternalServerErrorException,
+  
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -12,7 +11,7 @@ import {
   UserResponseDto,
 } from '@pivota-api/dtos';
 import { User } from '../../generated/prisma';
-import { ClientKafka, ClientProxy } from '@nestjs/microservices';
+import { ClientKafka, ClientProxy, RpcException } from '@nestjs/microservices';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 @Injectable()
@@ -42,48 +41,49 @@ export class UserService implements OnModuleInit {
   }
 
   /** ------------------ User Signup ------------------ */
-  async createUserProfile(signupDto: SignupRequestDto): Promise<UserResponseDto> {
-    try {
-      const user = await this.prisma.user.create({
-        data: {
-          email: signupDto.email,
-          firstName: signupDto.firstName,
-          lastName: signupDto.lastName,
-          ...(signupDto.phone ? { phone: signupDto.phone } : {}),
-        },
-      });
+ async createUserProfile(signupDto: SignupRequestDto): Promise<UserResponseDto> {
+  try {
+    const user = await this.prisma.user.create({
+      data: {
+        email: signupDto.email,
+        firstName: signupDto.firstName,
+        lastName: signupDto.lastName,
+        ...(signupDto.phone ? { phone: signupDto.phone } : {}),
+      },
+    });
 
-      const response = this.toUserResponse(user);
+    const response = this.toUserResponse(user);
 
-      // Kafka event
-      this.kafkaClient.emit('user.created', {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        phone: user.phone,
-        createdAt: user.createdAt,
-      });
+    // Kafka event
+    this.kafkaClient.emit('user.created', {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      createdAt: user.createdAt,
+    });
 
-      // RabbitMQ event for welcome email
-      this.rabbitClient.emit('user.signup.email', {
-        to: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      });
+    // RabbitMQ event for welcome email
+    this.rabbitClient.emit('user.signup.email', {
+      to: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    });
 
-      return response;
-    } catch (error) {
-      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
-        const target = (error.meta?.target as string[]) || [];
-        if (target.includes('email')) throw new ConflictException('Email already registered');
-        if (target.includes('phone')) throw new ConflictException('Phone number already registered');
-        throw new ConflictException('Duplicate field detected');
-      }
-      this.logger.error('❌ Unexpected error during signup', error);
-      throw new InternalServerErrorException('Failed to create user');
+    return response;
+  } catch (error: unknown) {
+    if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+      const target = (error.meta?.target as string[]) || [];
+      if (target.includes('email')) throw new RpcException({ code: 'ALREADY_EXISTS', message: 'Email already registered' });
+      if (target.includes('phone')) throw new RpcException({ code: 'ALREADY_EXISTS', message: 'Phone number already registered' });
+      throw new RpcException({ code: 'ALREADY_EXISTS', message: 'Duplicate field detected' });
     }
+
+    this.logger.error('❌ Unexpected error during signup', error);
+    throw new RpcException({ code: 'INTERNAL', message: 'Failed to create user' });
   }
+}
 
 /** ------------------ gRPC-friendly Profile Fetch ------------------ */
   async getUserProfileByEmail(data: { email: string }): Promise<UserResponseDto | null> {

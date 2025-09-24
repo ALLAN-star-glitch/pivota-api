@@ -1,25 +1,19 @@
-// ---------------- Prisma Schema ----------------
-
-// Client Generator
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
 }
 
-// Database Source
 datasource db {
   provider = "postgresql"
   url      = env("USER_SERVICE_DATABASE_URL")
 }
 
-// ---------------- Models ----------------
-
 model User {
-  id        Int       @id @default(autoincrement())
-  email     String    @unique
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
   firstName String
   lastName  String
   phone     String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

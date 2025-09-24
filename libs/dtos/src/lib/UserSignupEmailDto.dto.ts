@@ -21,4 +21,8 @@ export class UserSignupEmailDto {
   @IsString()
   @IsOptional()
   templateId?: string; // Optional Mailjet template ID if using templates
+
+  @IsString()
+  @IsOptional()
+  createdAt?: string; // Optional account creation date
 }

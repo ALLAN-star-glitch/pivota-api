@@ -3,6 +3,7 @@ import { EventPattern, Payload } from '@nestjs/microservices';
 import { EmailService } from './email.service';
 import { UserSignupEmailDto, UserLoginEmailDto } from '@pivota-api/dtos';
 
+
 @Controller()
 export class EmailController {
   private readonly logger = new Logger(EmailController.name);

@@ -14,10 +14,11 @@ import { JwtAuthGuard } from './jwt.guard';
 import {
   SignupRequestDto,
   LoginRequestDto,
-  UserResponseDto,
   SessionDto,
   LoginResponseDto,
+  BaseResponseDto,
 } from '@pivota-api/dtos';
+
 
 @Controller('auth')
 export class AuthController {
@@ -27,7 +28,9 @@ export class AuthController {
 
   @Version('1')
   @Post('signup')
-  async signup(@Body() signupDto: SignupRequestDto): Promise<UserResponseDto> {
+  async signup(
+    @Body() signupDto: SignupRequestDto
+  ): Promise<BaseResponseDto<SignupRequestDto>> {
     this.logger.log(`📩 Signup request: ${JSON.stringify(signupDto)}`);
     return this.authService.signup(signupDto);
   }
@@ -38,14 +41,17 @@ export class AuthController {
     @Body() loginDto: LoginRequestDto,
     @ClientInfo() clientInfo: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
     @Res({ passthrough: true }) res: Response
-  ): Promise<LoginResponseDto> {
+  ): Promise<BaseResponseDto<LoginResponseDto>> {
     this.logger.log(`📩 Login request for email: ${loginDto.email}`);
     return this.authService.login(loginDto, clientInfo, res);
   }
 
   @Version('1')
   @Post('refresh')
-  async refresh(@Body('refreshToken') refreshToken: string, @Res({ passthrough: true }) res: Response) {
+  async refresh(
+    @Body('refreshToken') refreshToken: string,
+    @Res({ passthrough: true }) res: Response
+  ) {
     return this.authService.refresh(refreshToken, res);
   }
 

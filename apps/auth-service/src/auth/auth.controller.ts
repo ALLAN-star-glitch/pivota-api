@@ -4,11 +4,11 @@ import { AuthService } from './auth.service';
 //import { LocalAuthGuard } from './local-auth.guard';
 import {
   LoginResponseDto,
-  SignupResponseDto,
   SignupRequestDto,
   LoginRequestDto,
   TokenPairDto,
   UserResponseDto,
+  BaseResponseDto,
 } from '@pivota-api/dtos';
 
   @Controller()
@@ -18,12 +18,13 @@ import {
     private readonly logger = new Logger(AuthController.name);
 
     // ------------------ Signup ------------------
-    @GrpcMethod('AuthService', 'Signup')
+   @GrpcMethod('AuthService', 'Signup')
     async handleSignupGrpc(
       signupDto: SignupRequestDto,
-    ): Promise<SignupResponseDto> {
+    ): Promise<BaseResponseDto<UserResponseDto>> {
       return this.authService.signup(signupDto);
     }
+
 
     // ------------------ Login ------------------
     @GrpcMethod('AuthService', 'Login')
@@ -36,7 +37,7 @@ import {
         os?: string 
       } 
     }
-  ): Promise<LoginResponseDto> {
+  ): Promise<BaseResponseDto<LoginResponseDto>> {
     this.logger.debug(`Login attempt for email: ${loginDto.email}`);
 
     // Provide default values if clientInfo is missing

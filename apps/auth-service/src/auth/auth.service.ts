@@ -2,8 +2,6 @@ import {
   Injectable,
   Logger,
   UnauthorizedException,
-  ConflictException,
-  InternalServerErrorException,
   OnModuleInit,
   Inject,
 } from '@nestjs/common';
@@ -18,9 +16,13 @@ import {
   SessionDto,
   TokenPairDto,
   UserResponseDto,
+  BaseResponseDto,
 } from '@pivota-api/dtos';
 import { JwtPayload } from './jwt.strategy';
 import { firstValueFrom, Observable } from 'rxjs';
+
+
+
 
 // ---------------- gRPC Interface ----------------
 interface UserServiceGrpc {
@@ -89,7 +91,7 @@ export class AuthService implements OnModuleInit {
     const hashedToken = await bcrypt.hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    await this.prisma.refreshToken.create({
+    await this.prisma.session.create({
       data: {
         userId: parseInt(user.id, 10),
         tokenId: payload.sub + '-' + Date.now(), // unique token/session id
@@ -106,40 +108,45 @@ export class AuthService implements OnModuleInit {
   }
 
   // ------------------ Signup ------------------
-  async signup(signupDto: SignupRequestDto): Promise<UserResponseDto> {
+ async signup(signupDto: SignupRequestDto): Promise<BaseResponseDto<UserResponseDto>> {
+  const userGrpcService = this.getGrpcService();
   try {
-    const userGrpcService = this.getGrpcService();
-
-    // Explicitly type the Observable
     const userProfile$ = userGrpcService.createUserProfile({
       email: signupDto.email,
       firstName: signupDto.firstName,
       lastName: signupDto.lastName,
       phone: signupDto.phone,
-    }) as Observable<UserResponseDto>;  // 👈 ensure Observable<UserResponseDto>
+    });
 
     const userProfile = await firstValueFrom(userProfile$);
 
     const hashedPassword = await bcrypt.hash(signupDto.password, 10);
 
-    this.logger.debug('UserProfile from gRPC:', userProfile);
-
     await this.prisma.credential.create({
-      data: {
-        userId: parseInt(userProfile.id, 10),
-        passwordHash: hashedPassword,
-      },
+      data: { userId: parseInt(userProfile.id, 10), passwordHash: hashedPassword },
     });
 
-    return userProfile;
-  } catch (err: unknown) {
-    this.logger.error('Signup failed', err);
+        // inside AuthService.signup in microservice
+    const signupResponse = {
+      success: true,
+      message: 'Signup successful',
+      code: 'OK',
+      user: userProfile,       // <--- map the actual user here
+      error: null,
+    };
 
-    if (err instanceof Error && 'code' in err && (err as { code?: string }).code === 'P2002') {
-      throw new ConflictException('Email already exists');
+    return signupResponse;
+  } catch (error: unknown) {
+    this.logger.error('Signup failed', error);
+
+    if (typeof error === 'object' && error !== null && 'code' in error) {
+      const code = (error as { code?: string }).code;
+      if (code === 'EMAIL_CONFLICT') return BaseResponseDto.fail('Email already registered', 'ALREADY_EXISTS');
+      if (code === 'PHONE_CONFLICT') return BaseResponseDto.fail('Phone number already registered', 'ALREADY_EXISTS');
     }
 
-    throw new InternalServerErrorException('Signup failed');
+    return BaseResponseDto.fail('Signup failed', 'INTERNAL');
+
   }
 }
 
@@ -148,7 +155,7 @@ export class AuthService implements OnModuleInit {
   async login(
   loginDto: LoginRequestDto,
   clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
-): Promise<LoginResponseDto> {
+): Promise<BaseResponseDto<LoginResponseDto>> {
   // Validate credentials
   const user = await this.validateUser(loginDto.email, loginDto.password);
   if (!user) throw new UnauthorizedException('Invalid credentials');
@@ -170,11 +177,23 @@ export class AuthService implements OnModuleInit {
     timestamp: new Date().toISOString(),
   };
 
+
+
   // Emit RabbitMQ event for login email
   this.rabbitClient.emit('user.login.email', payload);
   this.logger.debug(`📤 [AuthService] Login email payload: ${JSON.stringify(payload)}`);
 
-  return { ...user, accessToken, refreshToken };
+  const authUser = { ...user, accessToken, refreshToken };
+
+  const loginResponse =  {
+    success: true,
+    message: 'Login successful',
+    code: 'OK',
+    user: authUser,
+    error: null,
+  }
+
+  return loginResponse;
 }
 
 
@@ -188,7 +207,7 @@ export class AuthService implements OnModuleInit {
     const user = await firstValueFrom(user$);
 
     // Get all active sessions
-    const sessions = await this.prisma.refreshToken.findMany({ where: { userId: parseInt(payload.sub), revoked: false } });
+    const sessions = await this.prisma.session.findMany({ where: { userId: parseInt(payload.sub), revoked: false } });
 
     // Find matching hashed token
     const validSession = sessions.find((s) => bcrypt.compareSync(refreshToken, s.hashedToken));
@@ -201,10 +220,10 @@ export class AuthService implements OnModuleInit {
   async logout(userId: string, tokenId?: string): Promise<void> {
     if (tokenId) {
       // Logout from a single session
-      await this.prisma.refreshToken.updateMany({ where: { tokenId }, data: { revoked: true } });
+      await this.prisma.session.updateMany({ where: { tokenId }, data: { revoked: true } });
     } else {
       // Logout from all sessions
-      await this.prisma.refreshToken.updateMany({ where: { userId: parseInt(userId) }, data: { revoked: true } });
+      await this.prisma.session.updateMany({ where: { userId: parseInt(userId) }, data: { revoked: true } });
     }
   }
 }
