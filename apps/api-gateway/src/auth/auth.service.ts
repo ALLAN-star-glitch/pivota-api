@@ -15,24 +15,17 @@ import { JwtPayload } from '@pivota-api/interfaces';
 
 // Updated gRPC interface for AuthService (signup now returns BaseResponse)
 interface AuthServiceGrpc {
-  signup(data: SignupRequestDto): Observable<SignupResponseGrpc<SignupRequestDto>>;
+  signup(data: SignupRequestDto): Observable<BaseUserResponseGrpc<SignupRequestDto>>;
   login(
     data: LoginRequestDto & { clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'> }
-  ): Observable<LoginResponseGrpc<LoginResponseDto>>;
+  ): Observable<BaseUserResponseGrpc<LoginResponseDto>>;
   refresh(data: { refreshToken: string }): Observable<LoginResponseDto>;
   logout(data: { userId: string }): Observable<{ message: string }>;
 }
 
 // Generic BaseResponse from gRPC
-interface SignupResponseGrpc<T> {
-  success: boolean;
-  message: string;
-  code: string;
-  user?: T;
-  error?: string;
-}
 
-interface LoginResponseGrpc<T> {
+interface BaseUserResponseGrpc<T> {
   success: boolean;
   message: string;
   code: string;
