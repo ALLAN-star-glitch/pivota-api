@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "auth:prisma:generate:dev": "cross-env NODE_ENV=dev prisma generate --schema=apps/auth-service/prisma/schema.prisma",
+    "admin:prisma:generate:dev": "cross-env NODE_ENV=dev prisma generate --schema=apps/admin-service/prisma/schema.prisma", 
     "auth:prisma:generate:sit": "cross-env NODE_ENV=sit prisma generate --schema=apps/auth-service/prisma/schema.prisma",
     "user:prisma:generate:dev": "cross-env NODE_ENV=dev prisma generate --schema=apps/user-service/prisma/schema.prisma",
     "user:prisma:generate:sit": "cross-env NODE_ENV=sit prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
@@ -43,7 +44,12 @@
     "build:pilot:gateway": "nx build api-gateway",
     "build:prod:auth": "nx build auth-service",
     "build:prod:user": "npm run user:prisma:generate:prod && nx build user-service",
-    "build:prod:gateway": "nx build api-gateway"
+    "build:prod:gateway": "nx build api-gateway",
+    "build:dev:all": "npm run user:prisma:generate:dev && npm run auth:prisma:generate:dev && npm run admin:prisma:generate:dev && nx run-many --target=build --all --configuration=development"
+
+
+
+
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.13.4",
