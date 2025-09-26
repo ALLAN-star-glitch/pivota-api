@@ -23,7 +23,4 @@ import { UserService } from './user.service';
   exports: [UserService],
 })
 export class UserModule {
-  constructor() {
-    console.log('✅ API Gateway UserModule initialized with KAFKA_BROKERS:', process.env.KAFKA_BROKERS);
-  }
 }
