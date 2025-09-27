@@ -59,7 +59,19 @@
     "build:onrender:auth": "npm run auth:prisma:generate:onrender && nx build auth-service", 
     "build:onrender:user": "npm run user:prisma:generate:onrender && nx build user-service",
     "build:onrender:notification": "nx build notification-service",
-    "build:onrender:admin": "nx build admin-service"
+    "build:onrender:admin": "nx build admin-service",
+
+
+
+
+    "start:onrender:gateway": "node dist/apps/api-gateway/main.js",
+    "start:onrender:auth": "node dist/apps/auth-service/main.js",
+    "start:onrender:user": "node dist/apps/user-service/main.js",       
+    "start:onrender:notification": "node dist/apps/notification-service/main.js",
+    "start:onrender:admin": "node dist/apps/admin-service/main.js"
+
+
+
    
 
 
