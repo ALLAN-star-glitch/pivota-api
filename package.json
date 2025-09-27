@@ -55,7 +55,7 @@
 
 
 
-    "build:onrender:gatewat": "nx build api-gateway",
+    "build:onrender:gateway": "nx build api-gateway",
     "build:onrender:auth": "npm run auth:prisma:generate:onrender && nx build auth-service", 
     "build:onrender:user": "npm run user:prisma:generate:onrender && nx build user-service",
     "build:onrender:notification": "nx build notification-service",
