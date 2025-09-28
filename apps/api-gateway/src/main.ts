@@ -19,9 +19,7 @@ async function bootstrap() {
   logger.log('🔖 API versioning enabled (URI-based)');
 
   const configService = app.get(ConfigService);
-  const globalPrefix = configService.get<string>('GLOBAL_PREFIX_API_GATEWAY') || 'api';
-  app.setGlobalPrefix(globalPrefix);
-  logger.log(`🌐 Global prefix set: ${globalPrefix}`);
+
 
   app.use(cookieParser());
   logger.log('🍪 Cookie parser enabled');
@@ -34,7 +32,7 @@ async function bootstrap() {
 
   const port = configService.get<number>('API_GATEWAY_PORT') || 3000;
   await app.listen(port);
-  logger.log(`🚀 API Gateway running at http://localhost:${port}/${globalPrefix}`);
+  logger.log(`🚀 API Gateway running at http://localhost:${port}`);
 }
 
 bootstrap();

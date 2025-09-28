@@ -13,7 +13,7 @@ async function bootstrap() {
   const rmqServer = app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
+      urls: [process.env.RABBITMQ_URL || 'amqp://admin:7TX75zcT@rabbitmq-202760-0.cloudclusters.net:19996'],
       queue: process.env.RABBITMQ_NOTIFICATION_QUEUE || 'notification_queue',
       queueOptions: { durable: true },
     },

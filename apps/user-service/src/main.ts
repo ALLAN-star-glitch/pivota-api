@@ -26,6 +26,7 @@ async function bootstrap() {
   Logger.log(`KAFKA_BROKERS (via ConfigService) = ${configService.get<string>('KAFKA_BROKERS')}`);
   Logger.log(`DATABASE_URL (via ConfigService) = ${configService.get<string>('USER_SERVICE_DATABASE_URL')}`);
   Logger.log(`JWT_SECRET (via ConfigService) = ${configService.get<string>('JWT_SECRET')}`);
+  Logger.log(`RABBITMQ_URL (via ConfigService) = ${configService.get<string>('RABBITMQ_URL')}`);
 
   // ---------------- Kafka Microservice ----------------
   app.connectMicroservice<MicroserviceOptions>({
@@ -55,7 +56,7 @@ async function bootstrap() {
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
+      urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672'],
       queue: 'user_service_queue', // specific queue for user service
       queueOptions: {
         durable: true,

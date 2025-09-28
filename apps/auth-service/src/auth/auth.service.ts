@@ -20,6 +20,7 @@ import {
 } from '@pivota-api/dtos';
 import { JwtPayload } from './jwt.strategy';
 import { firstValueFrom, Observable } from 'rxjs';
+import { BaseUserResponseGrpc } from '@pivota-api/interfaces';
 
 
 
@@ -32,8 +33,8 @@ interface UserServiceGrpc {
     lastName: string;
     phone?: string;
   }): Observable<UserResponseDto>;
-  getUserProfileByEmail(data: { email: string }): Observable<UserResponseDto | null>;
-  getUserProfileById(data: { id: string }): Observable<UserResponseDto | null>;
+  getUserProfileByEmail(data: { email: string }): Observable<BaseUserResponseGrpc<UserResponseDto >| null>;
+  getUserProfileById(data: { id: string }): Observable<BaseUserResponseGrpc<UserResponseDto >| null>;
 }
 
 @Injectable()
@@ -61,20 +62,28 @@ export class AuthService implements OnModuleInit {
 
   // ------------------ Validate User ------------------
   async validateUser(email: string, password: string): Promise<UserResponseDto | null> {
+  // Call gRPC service
   const userGrpcService = this.getGrpcService();
-  const userProfile$ = userGrpcService.getUserProfileByEmail({ email });
-  const userProfile = await firstValueFrom(userProfile$);   // ✅ convert Observable → Promise
+  const userProfileGrpcResponse: BaseUserResponseGrpc<UserResponseDto> | null =
+    await firstValueFrom(userGrpcService.getUserProfileByEmail({ email }));
 
-  if (!userProfile) return null;
+  if (!userProfileGrpcResponse || !userProfileGrpcResponse.success || !userProfileGrpcResponse.user) {
+    return null;
+  }
 
+  const userProfile = userProfileGrpcResponse.user;
+
+  // Look up credentials
   const credential = await this.prisma.credential.findUnique({
     where: { userId: parseInt(userProfile.id) },
   });
   if (!credential) return null;
 
+  // Check password
   const isValid = await bcrypt.compare(password, credential.passwordHash);
   if (!isValid) return null;
 
+  // return clean UserResponseDto
   return userProfile;
 }
 
@@ -204,7 +213,7 @@ export class AuthService implements OnModuleInit {
     const payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken);
 
     const user$ = this.userGrpcService.getUserProfileById({ id: payload.sub });
-    const user = await firstValueFrom(user$);
+    const user: BaseUserResponseGrpc<UserResponseDto>  = await firstValueFrom(user$);
 
     // Get all active sessions
     const sessions = await this.prisma.session.findMany({ where: { userId: parseInt(payload.sub), revoked: false } });
@@ -213,7 +222,7 @@ export class AuthService implements OnModuleInit {
     const validSession = sessions.find((s) => bcrypt.compareSync(refreshToken, s.hashedToken));
     if (!validSession) throw new UnauthorizedException('Invalid or revoked refresh token');
 
-    return this.generateTokens({ id: user.id, email: user.email });
+    return this.generateTokens({ id: user.user.id, email: user.user.email });
   }
 
   // ------------------ Logout ------------------

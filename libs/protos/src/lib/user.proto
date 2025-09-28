@@ -5,10 +5,9 @@ package user;
 service UserService {
   // Profile operations
   rpc CreateUserProfile(CreateUserProfileRequest) returns (UserResponse);
-  rpc GetUserProfileById(GetUserByIdRequest) returns (UserResponse);
-  rpc GetUserProfileByEmail(GetUserByEmailRequest) returns (UserResponse);
+  rpc GetUserProfileById(GetUserByIdRequest) returns (UserProfileResponse);
+  rpc GetUserProfileByEmail(GetUserByEmailRequest) returns (UserProfileResponse);
 
-  // Existing (internal/admin use)
   rpc GetUserByIdInternal(GetUserByIdRequest) returns (UserInternalResponse);
   rpc GetAllUsers(Empty) returns (UserListResponse);
 }
@@ -30,6 +29,20 @@ message GetUserByEmailRequest {
 }
 
 // Responses
+message ErrorPayload {
+  string message = 1;
+  int32 code = 2;
+}
+
+message UserProfileResponse {
+  bool success = 1;
+  string message = 2;
+  int32 code = 3;
+  UserResponse user = 4;          // populated only on success
+  ErrorPayload error = 5;         // structured error object
+}
+
+
 message UserResponse {
   int32 id = 1;
   string firstName = 2;
@@ -52,7 +65,13 @@ message UserInternalResponse {
 }
 
 message UserListResponse {
-  repeated UserResponse users = 1;
+  bool success = 1;
+  string message = 2;
+  int32 code = 3;
+  repeated UserResponse users = 4; // list of users
+  ErrorPayload error = 5;          // structured error object
+ 
 }
 
 message Empty {}
+
