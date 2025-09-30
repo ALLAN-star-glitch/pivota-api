@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { RbacController } from './rbac-module.controller';
+import { RbacController } from './rbac.controller';
 
-describe('RbacModuleController', () => {
+describe('RbacController', () => {
   let controller: RbacController;
 
   beforeEach(async () => {

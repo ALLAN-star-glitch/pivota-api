@@ -13,4 +13,15 @@ export * from './lib/SessionDto.dto';
 export * from './lib/UserSignupEmailDto.dto';
 export * from './lib/UserLoginEmailDto.dto';
 export * from './lib/BaseResponseDto.dto';
+export * from './lib/UserRoleResponseDto.dto';
+export * from './lib/PermissionResponseDto.dto';
+export * from './lib/RoleResponseDto.dto';
+export * from './lib/RolePermissionResponseDto.dto'
+export * from './lib/CreateRoleRequestDto.dto';
+export * from './lib/UpdateRoleRequestDto.dto';
+export * from './lib/IdRequestDto.dto';
+export * from './lib/CreatePermissionRequestDto.dto';
+export * from './lib/AssignPermissionToRoleRequestDto.dto';
+export * from './lib/AssignRoleToUserRequestDto.dto'
+
 

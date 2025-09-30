@@ -11,7 +11,7 @@ import { RBAC_PROTO_PATH } from '@pivota-api/protos';
         name: 'RBAC_PACKAGE', // Provider name for injection  
         transport: Transport.GRPC,  
         options: {  
-          url: process.env.GRPC_RBAC_SERVICE_URL || 'localhost:50053',  
+          url: process.env.GRPC_RBAC_SERVICE_URL || 'localhost:50055',  
           package: 'rbac',  
           protoPath: RBAC_PROTO_PATH,  
         },  

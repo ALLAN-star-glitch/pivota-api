@@ -68,18 +68,23 @@
     "start:onrender:auth": "node dist/apps/auth-service/main.js",
     "start:onrender:user": "node dist/apps/user-service/main.js",       
     "start:onrender:notification": "node dist/apps/notification-service/main.js",
-    "start:onrender:admin": "node dist/apps/admin-service/main.js"
-
-
-
-   
-
-
-
+    "start:onrender:admin": "node dist/apps/admin-service/main.js",
+    
+    "prisma:seed:admin": "prisma db seed --schema=apps/admin-service/prisma/schema.prisma",
+    "prisma:seed:auth": "prisma db seed --schema=apps/auth-service/prisma/schema.prisma",
+    "prisma:seed:user": "prisma db seed --schema=apps/user-service/prisma/schema.prisma"
 
 
 
   },
+
+
+    "prisma": {
+        "seed": "ts-node apps/admin-service/prisma/seed.ts"
+      },
+
+     
+  
   "dependencies": {
     "@grpc/grpc-js": "^1.13.4",
     "@grpc/proto-loader": "^0.8.0",

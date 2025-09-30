@@ -3,6 +3,7 @@ import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.dev' }); // MUST come before importing PrismaClient
+
 import { PrismaClient } from '../../generated/prisma';
 
 

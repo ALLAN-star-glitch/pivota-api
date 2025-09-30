@@ -17,6 +17,7 @@ import {
   SessionDto,
   LoginResponseDto,
   BaseResponseDto,
+  SignupResponseDto,
 } from '@pivota-api/dtos';
 
 
@@ -30,7 +31,7 @@ export class AuthController {
   @Post('signup')
   async signup(
     @Body() signupDto: SignupRequestDto
-  ): Promise<BaseResponseDto<SignupRequestDto>> {
+  ): Promise<BaseResponseDto<SignupResponseDto>> {
     this.logger.log(`📩 Signup request: ${JSON.stringify(signupDto)}`);
     return this.authService.signup(signupDto);
   }

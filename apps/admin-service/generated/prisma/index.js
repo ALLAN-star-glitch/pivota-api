@@ -190,7 +190,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "/Users/admin/Desktop/pivota/pivota-api/apps/admin-service/app/generated/prisma",
+      "value": "/Users/admin/Desktop/pivota/pivota-api/apps/admin-service/generated/prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -209,9 +209,9 @@ const config = {
   },
   "relativeEnvPaths": {
     "rootEnvPath": null,
-    "schemaEnvPath": "../../../.env"
+    "schemaEnvPath": "../../.env"
   },
-  "relativePath": "../../../prisma",
+  "relativePath": "../../prisma",
   "clientVersion": "6.16.2",
   "engineVersion": "1c57fdcd7e44b29b9313256c76699e91c3ac3c43",
   "datasourceNames": [
@@ -227,8 +227,8 @@ const config = {
       }
     }
   },
-  "inlineSchema": "// This is your Prisma schema file,\n// learn more about it in the docs: https://pris.ly/d/prisma-schema\n\n// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?\n// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init\n\ngenerator client {\n  provider = \"prisma-client-js\"\n  output   = \"../app/generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"ADMIN_SERVICE_DATABASE_URL\")\n}\n\nmodel Role {\n  id          Int      @id @default(autoincrement())\n  name        String   @unique\n  description String?\n  createdAt   DateTime @default(now())\n  updatedAt   DateTime @updatedAt\n\n  userRoles       UserRole[]\n  rolePermissions RolePermission[]\n}\n\nmodel Permission {\n  id          Int      @id @default(autoincrement())\n  action      String   @unique\n  description String?\n  createdAt   DateTime @default(now())\n  updatedAt   DateTime @updatedAt\n\n  rolePermissions RolePermission[]\n}\n\nmodel UserRole {\n  id     Int @id @default(autoincrement())\n  userId Int\n  roleId Int\n\n  role Role @relation(fields: [roleId], references: [id])\n\n  @@unique([userId, roleId])\n}\n\nmodel RolePermission {\n  id           Int @id @default(autoincrement())\n  roleId       Int\n  permissionId Int\n\n  role       Role       @relation(fields: [roleId], references: [id])\n  permission Permission @relation(fields: [permissionId], references: [id])\n\n  @@unique([roleId, permissionId])\n}\n\nmodel UserCategory {\n  id         Int     @id @default(autoincrement())\n  userId     Int\n  categoryId String\n  verified   Boolean @default(false)\n  approvedBy Int?\n  entityType String // \"individual\" | \"organization\"\n  orgName    String?\n\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n}\n\nmodel Subscription {\n  id        Int      @id @default(autoincrement())\n  userId    Int\n  plan      String\n  premium   Boolean  @default(false)\n  status    String\n  expiresAt DateTime\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n}\n\nmodel AuditLog {\n  id          Int      @id @default(autoincrement())\n  userId      Int?\n  action      String\n  entity      String\n  entityId    Int?\n  performedBy Int?\n  createdAt   DateTime @default(now())\n}\n",
-  "inlineSchemaHash": "c55a01bca5e8803167f25f2eb7385b0523627d5a5614e097238039389c983f94",
+  "inlineSchema": "// This is your Prisma schema file,\n// learn more about it in the docs: https://pris.ly/d/prisma-schema\n\n// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?\n// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init\n\ngenerator client {\n  provider = \"prisma-client-js\"\n  output   = \"../generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"ADMIN_SERVICE_DATABASE_URL\")\n}\n\nmodel Role {\n  id          Int      @id @default(autoincrement())\n  name        String   @unique\n  description String?\n  createdAt   DateTime @default(now())\n  updatedAt   DateTime @updatedAt\n\n  userRoles       UserRole[]\n  rolePermissions RolePermission[]\n}\n\nmodel Permission {\n  id          Int      @id @default(autoincrement())\n  action      String   @unique\n  description String?\n  createdAt   DateTime @default(now())\n  updatedAt   DateTime @updatedAt\n\n  rolePermissions RolePermission[]\n}\n\nmodel UserRole {\n  id     Int @id @default(autoincrement())\n  userId Int\n  roleId Int\n\n  role Role @relation(fields: [roleId], references: [id])\n\n  @@unique([userId, roleId])\n}\n\nmodel RolePermission {\n  id           Int @id @default(autoincrement())\n  roleId       Int\n  permissionId Int\n\n  role       Role       @relation(fields: [roleId], references: [id])\n  permission Permission @relation(fields: [permissionId], references: [id])\n\n  @@unique([roleId, permissionId])\n}\n\nmodel UserCategory {\n  id         Int     @id @default(autoincrement())\n  userId     Int\n  categoryId String\n  verified   Boolean @default(false)\n  approvedBy Int?\n  entityType String // \"individual\" | \"organization\"\n  orgName    String?\n\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n}\n\nmodel Subscription {\n  id        Int      @id @default(autoincrement())\n  userId    Int\n  plan      String\n  premium   Boolean  @default(false)\n  status    String\n  expiresAt DateTime\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n}\n\nmodel AuditLog {\n  id          Int      @id @default(autoincrement())\n  userId      Int?\n  action      String\n  entity      String\n  entityId    Int?\n  performedBy Int?\n  createdAt   DateTime @default(now())\n}\n",
+  "inlineSchemaHash": "275e8114d7a80c7c21af14ef39a3b834b353ef547ed8c9d30e1e7423866e9d19",
   "copyEngine": true
 }
 
@@ -237,8 +237,8 @@ const fs = require('fs')
 config.dirname = __dirname
 if (!fs.existsSync(path.join(__dirname, 'schema.prisma'))) {
   const alternativePaths = [
-    "app/generated/prisma",
     "generated/prisma",
+    "prisma",
   ]
   
   const alternativePath = alternativePaths.find((altPath) => {
@@ -268,7 +268,7 @@ Object.assign(exports, Prisma)
 
 // file annotations for bundling tools to include these files
 path.join(__dirname, "libquery_engine-darwin-arm64.dylib.node");
-path.join(process.cwd(), "app/generated/prisma/libquery_engine-darwin-arm64.dylib.node")
+path.join(process.cwd(), "generated/prisma/libquery_engine-darwin-arm64.dylib.node")
 // file annotations for bundling tools to include these files
 path.join(__dirname, "schema.prisma");
-path.join(process.cwd(), "app/generated/prisma/schema.prisma")
+path.join(process.cwd(), "generated/prisma/schema.prisma")

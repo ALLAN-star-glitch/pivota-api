@@ -9,13 +9,14 @@ import {
   SessionDto,
   UserResponseDto,
   BaseResponseDto,
+  SignupResponseDto,
 } from '@pivota-api/dtos';
 import { BaseUserResponseGrpc, JwtPayload } from '@pivota-api/interfaces';
 
 
 // Updated gRPC interface for AuthService (signup now returns BaseResponse)
 interface AuthServiceGrpc {
-  signup(data: SignupRequestDto): Observable<BaseUserResponseGrpc<SignupRequestDto>>;
+  signup(data: SignupRequestDto): Observable<BaseUserResponseGrpc<SignupResponseDto>>;
   login(
     data: LoginRequestDto & { clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'> }
   ): Observable<BaseUserResponseGrpc<LoginResponseDto>>;
@@ -43,7 +44,7 @@ export class AuthService {
   }
 
   /** ------------------ Signup ------------------ */
-  async signup(signupDto: SignupRequestDto): Promise<BaseResponseDto<SignupRequestDto>> {
+  async signup(signupDto: SignupRequestDto): Promise<BaseResponseDto<SignupResponseDto>> {
   this.logger.log('📩 Calling Auth microservice for signup');
   
 

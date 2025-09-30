@@ -4,3 +4,8 @@ export * from './lib/error-payload.interface';
 export * from './lib/grpc-error.interface';
 export * from './lib/base-user-response.interface'; 
 export * from './lib/base-users-response.interface';    
+export * from './lib/BaseUserRoleResponseGrpc';
+export * from './lib/BasePermissionResponseGrpc.interface';
+export * from './lib/BaseRoleResponseGrpc.interface';
+export * from './lib/BaseRoleResponsesGrpc.interface';
+export * from './lib/BaseRolePermissionResponseGrpc.interface';
