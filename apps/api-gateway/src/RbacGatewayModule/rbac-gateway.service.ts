@@ -35,6 +35,13 @@ interface RbacServiceGrpc {
 export class RbacGatewayService implements OnModuleInit {
   private rbacServiceGrpc: RbacServiceGrpc;
 
+  private getGrpcService(): RbacServiceGrpc {
+    if (!this.rbacServiceGrpc){
+        this.rbacServiceGrpc = this.grpcClient.getService<RbacServiceGrpc>('RbacService');
+    }
+    return this.rbacServiceGrpc;
+  }
+
   constructor(@Inject('RBAC_PACKAGE') private readonly grpcClient: ClientGrpc) {}
 
   onModuleInit() {
@@ -44,7 +51,10 @@ export class RbacGatewayService implements OnModuleInit {
 
   //Create Role
   async createRole(dto: CreateRoleRequestDto): Promise<BaseResponseDto<RoleResponseDto>> {
-    const response$ = this.rbacServiceGrpc.createRole({ name: dto.name, description: dto.description });
+
+    const grpcService = this.getGrpcService()
+
+    const response$ = grpcService.createRole({ name: dto.name, description: dto.description });
     const response = await firstValueFrom(response$);
 
     if (response.success) {

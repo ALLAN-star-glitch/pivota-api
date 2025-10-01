@@ -63,6 +63,7 @@ message BaseRoleResponse {
   ErrorPayload error = 5;
 }
 
+
 message BasePermissionResponse {
   bool success = 1;
   string code = 2;
@@ -96,11 +97,12 @@ message BaseUserRolesResponse {
 }
 
 // Entities
-
 message RoleResponse {
   int32 id = 1;
   string name = 2;
   string description = 3;
+  string createdAt = 4;
+  string updatedAt = 5;
 }
 
 message PermissionResponse {

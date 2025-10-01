@@ -57,42 +57,57 @@ export class RbacService implements OnModuleInit {
   //Create role
 
   async createRole(
-    dto: CreateRoleRequestDto
-  ): Promise<BaseResponseDto<RoleResponseDto>> {
-    const role = await this.prisma.role.create({ data: { name: dto.name, description: dto.description } });
+  dto: CreateRoleRequestDto
+): Promise<BaseResponseDto<RoleResponseDto>> {
+  const role = await this.prisma.role.create({
+    data: { name: dto.name, description: dto.description },
+  });
 
-    const roleResponse: BaseRoleResponseGrpc<RoleResponseDto> = {
-      success: true,
-      message: 'Role created successfully',
-      role: role,
-      error: null,
-      code: 'Ok',
-    };
+  const roleResponse: BaseRoleResponseGrpc<RoleResponseDto> = {
+    success: true,
+    message: 'Role created successfully',
+    role: {
+      id: role.id,
+      name: role.name,
+      description: role.description,
+      createdAt: role.createdAt.toISOString(),
+      updatedAt: role.updatedAt.toISOString(),
+    },
+    error: null,
+    code: 'Ok',
+  };
 
-    return roleResponse;
-  }
+  return roleResponse;
+}
+
 
 
   //Update role
   async updateRole(
-    dto: UpdateRoleRequestDto
-  ): Promise<BaseResponseDto<RoleResponseDto>> {
+  dto: UpdateRoleRequestDto
+): Promise<BaseResponseDto<RoleResponseDto>> {
+  const role = await this.prisma.role.update({
+    where: { id: Number(dto.id) },
+    data: { description: dto.description },
+  });
 
-    const role = await this.prisma.role.update({
-      where: { id: Number(dto.id)},
-      data: { description: dto.description },
-    });
+  const response: BaseRoleResponseGrpc<RoleResponseDto> = {
+    success: true,
+    message: 'Role updated successfully',
+    role: {
+      id: role.id,
+      name: role.name,
+      description: role.description,
+      createdAt: role.createdAt.toISOString(),
+      updatedAt: role.updatedAt.toISOString(),
+    },
+    error: null,
+    code: 'Ok',
+  };
 
-    const response: BaseRoleResponseGrpc<RoleResponseDto> = {
-      success: true,
-      message: 'Role updated successfully',
-      role: role,
-      error: null,
-      code: 'Ok',
-    };
+  return response;
+}
 
-    return response;
-  }
 
 
   //Delete Role
@@ -113,18 +128,26 @@ export class RbacService implements OnModuleInit {
 
   //Get all roles
   async getAllRoles(): Promise<BaseResponseDto<RoleResponseDto[]>> {
-    const roles = await this.prisma.role.findMany();
+  const roles = await this.prisma.role.findMany();
 
-    const response: BaseRoleResponsesGrpc<RoleResponseDto> = {
-      success: true,
-      message: 'Roles fetched successfully',
-      roles: roles,
-      error: null,
-      code: 'Ok',
-    };
+  const response: BaseRoleResponsesGrpc<RoleResponseDto> = {
+    success: true,
+    message: 'Roles fetched successfully',
+    roles: roles.map(r => ({
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    })),
+    error: null,
+    code: 'Ok',
+  };
 
-    return response;
-  }
+  return response;
+}
+
+
 
   // -------------------------
   // Permission Management
