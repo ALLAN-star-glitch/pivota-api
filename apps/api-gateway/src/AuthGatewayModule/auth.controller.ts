@@ -56,6 +56,8 @@ export class AuthController {
     return this.authService.refresh(refreshToken, res);
   }
 
+  
+
   @Version('1')
   @UseGuards(JwtAuthGuard)
   @Post('logout')

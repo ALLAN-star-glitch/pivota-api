@@ -13,7 +13,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     super({
       datasources: {
         db: {
-          url: configService.get<string>(`USER_SERVICE_DATABASE_URL`),
+          url: configService.get<string>(`ADMIN_SERVICE_DATABASE_URL`),
         },
       },
     });

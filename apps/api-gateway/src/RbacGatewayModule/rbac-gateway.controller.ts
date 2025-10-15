@@ -28,15 +28,16 @@ export class RbacGatewayController {
 
 
    @Version('1')
-  @Put('roles/:id')
+  @Put('updateRole/:id')
   async updateRole(
     @Body() body:  UpdateRoleRequestDto,
   ): Promise<BaseResponseDto<RoleResponseDto>> {
     return this.rbacGatewayService.updateRole(body);
   }
 
+
   @Version('1')
-  @Post('permissions')
+  @Post('createPermission')
   async createPermission(
     @Body() body: CreatePermissionRequestDto,
   ): Promise<BaseResponseDto<PermissionResponseDto>> {
@@ -47,7 +48,7 @@ export class RbacGatewayController {
   //Assign permission to role
 
    @Version('1')
-  @Post('assign-role')
+  @Post('assignPermissionToRole')
   async assignPermissionToRole(
     @Body() body: AssignPermissionToRoleRequestDto,
   ): Promise<BaseResponseDto<RolePermissionResponseDto>> {

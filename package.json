@@ -79,9 +79,7 @@
   },
 
 
-    "prisma": {
-        "seed": "ts-node apps/admin-service/prisma/seed.ts"
-      },
+   
 
      
   

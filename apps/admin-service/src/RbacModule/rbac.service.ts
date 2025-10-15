@@ -1,8 +1,7 @@
 // apps/admin-service/src/modules/rbac/rbac.service.ts
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import {  Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ClientGrpc } from '@nestjs/microservices';
-//import { lastValueFrom, Observable } from 'rxjs';
+
 
 import {
   RoleResponseDto,
@@ -36,19 +35,14 @@ interface UserServiceGrpc {
 }
 
 @Injectable()
-export class RbacService implements OnModuleInit {
+export class RbacService {
   private userServiceGrpc: UserServiceGrpc;
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('USER_PACKAGE')
-    private readonly grpcClient: ClientGrpc,
   ) {}
 
-  onModuleInit() {
-    this.userServiceGrpc =
-      this.grpcClient.getService<UserServiceGrpc>('UserService');
-  }
+  
 
   // -------------------------
   // Role Management
@@ -88,7 +82,7 @@ export class RbacService implements OnModuleInit {
 ): Promise<BaseResponseDto<RoleResponseDto>> {
   const role = await this.prisma.role.update({
     where: { id: Number(dto.id) },
-    data: { description: dto.description },
+    data: { description: dto.description, name: dto.name  },
   });
 
   const response: BaseRoleResponseGrpc<RoleResponseDto> = {
@@ -104,6 +98,7 @@ export class RbacService implements OnModuleInit {
     error: null,
     code: 'Ok',
   };
+
 
   return response;
 }
@@ -192,6 +187,7 @@ export class RbacService implements OnModuleInit {
     code: 'Ok',
   };
 
+  
   return permissionResponse;
 }
 
