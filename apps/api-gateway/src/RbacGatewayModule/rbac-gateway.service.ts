@@ -100,7 +100,7 @@ export class RbacGatewayService implements OnModuleInit {
     )
 
     if(response.success){
-        return BaseResponseDto.ok(response.rolePermission, response.message, response.code)
+        BaseResponseDto.ok(response.rolePermission, response.message, response.code)
     }
     else {
         return BaseResponseDto.fail(response.message, response.code)

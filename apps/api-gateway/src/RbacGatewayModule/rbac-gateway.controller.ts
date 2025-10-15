@@ -11,6 +11,8 @@ import {
   CreatePermissionRequestDto,
   AssignPermissionToRoleRequestDto,
   RolePermissionResponseDto,
+  AssignRoleToUserRequestDto,
+  UserRoleResponseDto,
 } from '@pivota-api/dtos';
 
 @Controller('admin-service')
@@ -53,5 +55,15 @@ export class RbacGatewayController {
     @Body() body: AssignPermissionToRoleRequestDto,
   ): Promise<BaseResponseDto<RolePermissionResponseDto>> {
     return this.rbacGatewayService.assignPermissionToRole(body);
+  }
+
+
+  //Assign role to user
+  @Version('1')
+  @Post('assignRoleToUser')
+  async assignRoleToUser(
+    @Body() body: AssignRoleToUserRequestDto,
+  ): Promise<BaseResponseDto<UserRoleResponseDto>> {
+    return this.rbacGatewayService.assignRoleToUser(body);
   }
 }
