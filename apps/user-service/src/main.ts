@@ -67,6 +67,11 @@ async function bootstrap() {
 
   await app.startAllMicroservices();
   Logger.log(`🚀 User service is running (Kafka + gRPC + RabbitMQ)`);
+  Logger.log(`✅ Kafka connected to ${process.env.KAFKA_BROKERS} || 'localhost:9092'`);
+  Logger.log(`✅ gRPC listening on ${process.env.USER_GRPC_URL || ' 0.0.0.0:50052'}`);
+
+
+
 }
 
 bootstrap();
