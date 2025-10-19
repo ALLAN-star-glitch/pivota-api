@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Response } from 'express';
 import { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom, Observable } from 'rxjs';
@@ -10,6 +10,7 @@ import {
   UserResponseDto,
   BaseResponseDto,
   SignupResponseDto,
+  GetUserByUserUuidDto,
 } from '@pivota-api/dtos';
 import { BaseUserResponseGrpc, JwtPayload } from '@pivota-api/interfaces';
 
@@ -25,8 +26,9 @@ interface AuthServiceGrpc {
 }
 
 
+
 interface UserServiceGrpc {
-  getUserProfileById(data: { id: string }): Observable<UserResponseDto | null>;
+  getUserProfileByUuid  (data: GetUserByUserUuidDto ): Observable<BaseUserResponseGrpc<UserResponseDto> | null>;
 }
 
 @Injectable()
@@ -123,10 +125,18 @@ export class AuthService {
   }
 
   /** ------------------ Get User From Payload ------------------ */
-  async getUserFromPayload(payload: JwtPayload): Promise<UserResponseDto | null> {
-    this.logger.debug(`Fetching user from User service for payload: ${JSON.stringify(payload)}`);
-    const user$ = this.userGrpc.getUserProfileById({ id: payload.sub });
-    const user = await firstValueFrom(user$);
-    return user || null;
+  async getUserFromPayload(payload: JwtPayload): Promise<UserResponseDto> {
+    const userResponse = await firstValueFrom(
+      this.userGrpc.getUserProfileByUuid({ userUuid: payload.userUuid })
+    );
+
+    if (!userResponse.success || !userResponse.user) {
+      throw new UnauthorizedException('User not found or inactive');
+    }
+
+    return userResponse.user;
   }
+  
+
+
 }

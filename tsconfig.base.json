@@ -13,11 +13,18 @@
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
+    "typeRoots": ["./node_modules/@types"],
     "baseUrl": ".",
     "paths": {
+      "@pivota-api/decorators": ["libs/decorators/src/index.ts"],
       "@pivota-api/dtos": ["libs/dtos/src/index.ts"],
+      "@pivota-api/exceptions": ["libs/exceptions/src/index.ts"],
+      "@pivota-api/filters": ["libs/filters/src/index.ts"],
+      "@pivota-api/grpc-interfaces": ["libs/grpc-interfaces/src/index.ts"],
+      "@pivota-api/guards": ["libs/guards/src/index.ts"],
       "@pivota-api/interfaces": ["libs/interfaces/src/index.ts"],
-      "@pivota-api/protos": ["libs/protos/src/index.ts"]
+      "@pivota-api/protos": ["libs/protos/src/index.ts"],
+      "@pivota-api/types": ["libs/types/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

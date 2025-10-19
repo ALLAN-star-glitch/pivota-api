@@ -3726,31 +3726,29 @@ export namespace Prisma {
 
   export type UserRoleAvgAggregateOutputType = {
     id: number | null
-    userId: number | null
     roleId: number | null
   }
 
   export type UserRoleSumAggregateOutputType = {
     id: number | null
-    userId: number | null
     roleId: number | null
   }
 
   export type UserRoleMinAggregateOutputType = {
     id: number | null
-    userId: number | null
+    userUuid: string | null
     roleId: number | null
   }
 
   export type UserRoleMaxAggregateOutputType = {
     id: number | null
-    userId: number | null
+    userUuid: string | null
     roleId: number | null
   }
 
   export type UserRoleCountAggregateOutputType = {
     id: number
-    userId: number
+    userUuid: number
     roleId: number
     _all: number
   }
@@ -3758,31 +3756,29 @@ export namespace Prisma {
 
   export type UserRoleAvgAggregateInputType = {
     id?: true
-    userId?: true
     roleId?: true
   }
 
   export type UserRoleSumAggregateInputType = {
     id?: true
-    userId?: true
     roleId?: true
   }
 
   export type UserRoleMinAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     roleId?: true
   }
 
   export type UserRoleMaxAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     roleId?: true
   }
 
   export type UserRoleCountAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     roleId?: true
     _all?: true
   }
@@ -3875,7 +3871,7 @@ export namespace Prisma {
 
   export type UserRoleGroupByOutputType = {
     id: number
-    userId: number
+    userUuid: string
     roleId: number
     _count: UserRoleCountAggregateOutputType | null
     _avg: UserRoleAvgAggregateOutputType | null
@@ -3900,32 +3896,32 @@ export namespace Prisma {
 
   export type UserRoleSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     roleId?: boolean
     role?: boolean | RoleDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["userRole"]>
 
   export type UserRoleSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     roleId?: boolean
     role?: boolean | RoleDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["userRole"]>
 
   export type UserRoleSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     roleId?: boolean
     role?: boolean | RoleDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["userRole"]>
 
   export type UserRoleSelectScalar = {
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     roleId?: boolean
   }
 
-  export type UserRoleOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userId" | "roleId", ExtArgs["result"]["userRole"]>
+  export type UserRoleOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userUuid" | "roleId", ExtArgs["result"]["userRole"]>
   export type UserRoleInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     role?: boolean | RoleDefaultArgs<ExtArgs>
   }
@@ -3943,7 +3939,7 @@ export namespace Prisma {
     }
     scalars: $Extensions.GetPayloadResult<{
       id: number
-      userId: number
+      userUuid: string
       roleId: number
     }, ExtArgs["result"]["userRole"]>
     composites: {}
@@ -4370,7 +4366,7 @@ export namespace Prisma {
    */
   interface UserRoleFieldRefs {
     readonly id: FieldRef<"UserRole", 'Int'>
-    readonly userId: FieldRef<"UserRole", 'Int'>
+    readonly userUuid: FieldRef<"UserRole", 'String'>
     readonly roleId: FieldRef<"UserRole", 'Int'>
   }
     
@@ -5882,22 +5878,18 @@ export namespace Prisma {
 
   export type UserCategoryAvgAggregateOutputType = {
     id: number | null
-    userId: number | null
-    approvedBy: number | null
   }
 
   export type UserCategorySumAggregateOutputType = {
     id: number | null
-    userId: number | null
-    approvedBy: number | null
   }
 
   export type UserCategoryMinAggregateOutputType = {
     id: number | null
-    userId: number | null
+    userUuid: string | null
     categoryId: string | null
     verified: boolean | null
-    approvedBy: number | null
+    approvedBy: string | null
     entityType: string | null
     orgName: string | null
     createdAt: Date | null
@@ -5906,10 +5898,10 @@ export namespace Prisma {
 
   export type UserCategoryMaxAggregateOutputType = {
     id: number | null
-    userId: number | null
+    userUuid: string | null
     categoryId: string | null
     verified: boolean | null
-    approvedBy: number | null
+    approvedBy: string | null
     entityType: string | null
     orgName: string | null
     createdAt: Date | null
@@ -5918,7 +5910,7 @@ export namespace Prisma {
 
   export type UserCategoryCountAggregateOutputType = {
     id: number
-    userId: number
+    userUuid: number
     categoryId: number
     verified: number
     approvedBy: number
@@ -5932,19 +5924,15 @@ export namespace Prisma {
 
   export type UserCategoryAvgAggregateInputType = {
     id?: true
-    userId?: true
-    approvedBy?: true
   }
 
   export type UserCategorySumAggregateInputType = {
     id?: true
-    userId?: true
-    approvedBy?: true
   }
 
   export type UserCategoryMinAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     categoryId?: true
     verified?: true
     approvedBy?: true
@@ -5956,7 +5944,7 @@ export namespace Prisma {
 
   export type UserCategoryMaxAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     categoryId?: true
     verified?: true
     approvedBy?: true
@@ -5968,7 +5956,7 @@ export namespace Prisma {
 
   export type UserCategoryCountAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     categoryId?: true
     verified?: true
     approvedBy?: true
@@ -6067,10 +6055,10 @@ export namespace Prisma {
 
   export type UserCategoryGroupByOutputType = {
     id: number
-    userId: number
+    userUuid: string
     categoryId: string
     verified: boolean
-    approvedBy: number | null
+    approvedBy: string | null
     entityType: string
     orgName: string | null
     createdAt: Date
@@ -6098,7 +6086,7 @@ export namespace Prisma {
 
   export type UserCategorySelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     categoryId?: boolean
     verified?: boolean
     approvedBy?: boolean
@@ -6110,7 +6098,7 @@ export namespace Prisma {
 
   export type UserCategorySelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     categoryId?: boolean
     verified?: boolean
     approvedBy?: boolean
@@ -6122,7 +6110,7 @@ export namespace Prisma {
 
   export type UserCategorySelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     categoryId?: boolean
     verified?: boolean
     approvedBy?: boolean
@@ -6134,7 +6122,7 @@ export namespace Prisma {
 
   export type UserCategorySelectScalar = {
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     categoryId?: boolean
     verified?: boolean
     approvedBy?: boolean
@@ -6144,17 +6132,17 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type UserCategoryOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userId" | "categoryId" | "verified" | "approvedBy" | "entityType" | "orgName" | "createdAt" | "updatedAt", ExtArgs["result"]["userCategory"]>
+  export type UserCategoryOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userUuid" | "categoryId" | "verified" | "approvedBy" | "entityType" | "orgName" | "createdAt" | "updatedAt", ExtArgs["result"]["userCategory"]>
 
   export type $UserCategoryPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "UserCategory"
     objects: {}
     scalars: $Extensions.GetPayloadResult<{
       id: number
-      userId: number
+      userUuid: string
       categoryId: string
       verified: boolean
-      approvedBy: number | null
+      approvedBy: string | null
       entityType: string
       orgName: string | null
       createdAt: Date
@@ -6583,10 +6571,10 @@ export namespace Prisma {
    */
   interface UserCategoryFieldRefs {
     readonly id: FieldRef<"UserCategory", 'Int'>
-    readonly userId: FieldRef<"UserCategory", 'Int'>
+    readonly userUuid: FieldRef<"UserCategory", 'String'>
     readonly categoryId: FieldRef<"UserCategory", 'String'>
     readonly verified: FieldRef<"UserCategory", 'Boolean'>
-    readonly approvedBy: FieldRef<"UserCategory", 'Int'>
+    readonly approvedBy: FieldRef<"UserCategory", 'String'>
     readonly entityType: FieldRef<"UserCategory", 'String'>
     readonly orgName: FieldRef<"UserCategory", 'String'>
     readonly createdAt: FieldRef<"UserCategory", 'DateTime'>
@@ -6971,17 +6959,15 @@ export namespace Prisma {
 
   export type SubscriptionAvgAggregateOutputType = {
     id: number | null
-    userId: number | null
   }
 
   export type SubscriptionSumAggregateOutputType = {
     id: number | null
-    userId: number | null
   }
 
   export type SubscriptionMinAggregateOutputType = {
     id: number | null
-    userId: number | null
+    userUuid: string | null
     plan: string | null
     premium: boolean | null
     status: string | null
@@ -6992,7 +6978,7 @@ export namespace Prisma {
 
   export type SubscriptionMaxAggregateOutputType = {
     id: number | null
-    userId: number | null
+    userUuid: string | null
     plan: string | null
     premium: boolean | null
     status: string | null
@@ -7003,7 +6989,7 @@ export namespace Prisma {
 
   export type SubscriptionCountAggregateOutputType = {
     id: number
-    userId: number
+    userUuid: number
     plan: number
     premium: number
     status: number
@@ -7016,17 +7002,15 @@ export namespace Prisma {
 
   export type SubscriptionAvgAggregateInputType = {
     id?: true
-    userId?: true
   }
 
   export type SubscriptionSumAggregateInputType = {
     id?: true
-    userId?: true
   }
 
   export type SubscriptionMinAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     plan?: true
     premium?: true
     status?: true
@@ -7037,7 +7021,7 @@ export namespace Prisma {
 
   export type SubscriptionMaxAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     plan?: true
     premium?: true
     status?: true
@@ -7048,7 +7032,7 @@ export namespace Prisma {
 
   export type SubscriptionCountAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     plan?: true
     premium?: true
     status?: true
@@ -7146,7 +7130,7 @@ export namespace Prisma {
 
   export type SubscriptionGroupByOutputType = {
     id: number
-    userId: number
+    userUuid: string
     plan: string
     premium: boolean
     status: string
@@ -7176,7 +7160,7 @@ export namespace Prisma {
 
   export type SubscriptionSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     plan?: boolean
     premium?: boolean
     status?: boolean
@@ -7187,7 +7171,7 @@ export namespace Prisma {
 
   export type SubscriptionSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     plan?: boolean
     premium?: boolean
     status?: boolean
@@ -7198,7 +7182,7 @@ export namespace Prisma {
 
   export type SubscriptionSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     plan?: boolean
     premium?: boolean
     status?: boolean
@@ -7209,7 +7193,7 @@ export namespace Prisma {
 
   export type SubscriptionSelectScalar = {
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     plan?: boolean
     premium?: boolean
     status?: boolean
@@ -7218,14 +7202,14 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type SubscriptionOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userId" | "plan" | "premium" | "status" | "expiresAt" | "createdAt" | "updatedAt", ExtArgs["result"]["subscription"]>
+  export type SubscriptionOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userUuid" | "plan" | "premium" | "status" | "expiresAt" | "createdAt" | "updatedAt", ExtArgs["result"]["subscription"]>
 
   export type $SubscriptionPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "Subscription"
     objects: {}
     scalars: $Extensions.GetPayloadResult<{
       id: number
-      userId: number
+      userUuid: string
       plan: string
       premium: boolean
       status: string
@@ -7656,7 +7640,7 @@ export namespace Prisma {
    */
   interface SubscriptionFieldRefs {
     readonly id: FieldRef<"Subscription", 'Int'>
-    readonly userId: FieldRef<"Subscription", 'Int'>
+    readonly userUuid: FieldRef<"Subscription", 'String'>
     readonly plan: FieldRef<"Subscription", 'String'>
     readonly premium: FieldRef<"Subscription", 'Boolean'>
     readonly status: FieldRef<"Subscription", 'String'>
@@ -8043,41 +8027,37 @@ export namespace Prisma {
 
   export type AuditLogAvgAggregateOutputType = {
     id: number | null
-    userId: number | null
     entityId: number | null
-    performedBy: number | null
   }
 
   export type AuditLogSumAggregateOutputType = {
     id: number | null
-    userId: number | null
     entityId: number | null
-    performedBy: number | null
   }
 
   export type AuditLogMinAggregateOutputType = {
     id: number | null
-    userId: number | null
+    userUuid: string | null
     action: string | null
     entity: string | null
     entityId: number | null
-    performedBy: number | null
+    performedBy: string | null
     createdAt: Date | null
   }
 
   export type AuditLogMaxAggregateOutputType = {
     id: number | null
-    userId: number | null
+    userUuid: string | null
     action: string | null
     entity: string | null
     entityId: number | null
-    performedBy: number | null
+    performedBy: string | null
     createdAt: Date | null
   }
 
   export type AuditLogCountAggregateOutputType = {
     id: number
-    userId: number
+    userUuid: number
     action: number
     entity: number
     entityId: number
@@ -8089,21 +8069,17 @@ export namespace Prisma {
 
   export type AuditLogAvgAggregateInputType = {
     id?: true
-    userId?: true
     entityId?: true
-    performedBy?: true
   }
 
   export type AuditLogSumAggregateInputType = {
     id?: true
-    userId?: true
     entityId?: true
-    performedBy?: true
   }
 
   export type AuditLogMinAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     action?: true
     entity?: true
     entityId?: true
@@ -8113,7 +8089,7 @@ export namespace Prisma {
 
   export type AuditLogMaxAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     action?: true
     entity?: true
     entityId?: true
@@ -8123,7 +8099,7 @@ export namespace Prisma {
 
   export type AuditLogCountAggregateInputType = {
     id?: true
-    userId?: true
+    userUuid?: true
     action?: true
     entity?: true
     entityId?: true
@@ -8220,11 +8196,11 @@ export namespace Prisma {
 
   export type AuditLogGroupByOutputType = {
     id: number
-    userId: number | null
+    userUuid: string | null
     action: string
     entity: string
     entityId: number | null
-    performedBy: number | null
+    performedBy: string | null
     createdAt: Date
     _count: AuditLogCountAggregateOutputType | null
     _avg: AuditLogAvgAggregateOutputType | null
@@ -8249,7 +8225,7 @@ export namespace Prisma {
 
   export type AuditLogSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     action?: boolean
     entity?: boolean
     entityId?: boolean
@@ -8259,7 +8235,7 @@ export namespace Prisma {
 
   export type AuditLogSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     action?: boolean
     entity?: boolean
     entityId?: boolean
@@ -8269,7 +8245,7 @@ export namespace Prisma {
 
   export type AuditLogSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     action?: boolean
     entity?: boolean
     entityId?: boolean
@@ -8279,7 +8255,7 @@ export namespace Prisma {
 
   export type AuditLogSelectScalar = {
     id?: boolean
-    userId?: boolean
+    userUuid?: boolean
     action?: boolean
     entity?: boolean
     entityId?: boolean
@@ -8287,18 +8263,18 @@ export namespace Prisma {
     createdAt?: boolean
   }
 
-  export type AuditLogOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userId" | "action" | "entity" | "entityId" | "performedBy" | "createdAt", ExtArgs["result"]["auditLog"]>
+  export type AuditLogOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userUuid" | "action" | "entity" | "entityId" | "performedBy" | "createdAt", ExtArgs["result"]["auditLog"]>
 
   export type $AuditLogPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "AuditLog"
     objects: {}
     scalars: $Extensions.GetPayloadResult<{
       id: number
-      userId: number | null
+      userUuid: string | null
       action: string
       entity: string
       entityId: number | null
-      performedBy: number | null
+      performedBy: string | null
       createdAt: Date
     }, ExtArgs["result"]["auditLog"]>
     composites: {}
@@ -8724,11 +8700,11 @@ export namespace Prisma {
    */
   interface AuditLogFieldRefs {
     readonly id: FieldRef<"AuditLog", 'Int'>
-    readonly userId: FieldRef<"AuditLog", 'Int'>
+    readonly userUuid: FieldRef<"AuditLog", 'String'>
     readonly action: FieldRef<"AuditLog", 'String'>
     readonly entity: FieldRef<"AuditLog", 'String'>
     readonly entityId: FieldRef<"AuditLog", 'Int'>
-    readonly performedBy: FieldRef<"AuditLog", 'Int'>
+    readonly performedBy: FieldRef<"AuditLog", 'String'>
     readonly createdAt: FieldRef<"AuditLog", 'DateTime'>
   }
     
@@ -9134,7 +9110,7 @@ export namespace Prisma {
 
   export const UserRoleScalarFieldEnum: {
     id: 'id',
-    userId: 'userId',
+    userUuid: 'userUuid',
     roleId: 'roleId'
   };
 
@@ -9152,7 +9128,7 @@ export namespace Prisma {
 
   export const UserCategoryScalarFieldEnum: {
     id: 'id',
-    userId: 'userId',
+    userUuid: 'userUuid',
     categoryId: 'categoryId',
     verified: 'verified',
     approvedBy: 'approvedBy',
@@ -9167,7 +9143,7 @@ export namespace Prisma {
 
   export const SubscriptionScalarFieldEnum: {
     id: 'id',
-    userId: 'userId',
+    userUuid: 'userUuid',
     plan: 'plan',
     premium: 'premium',
     status: 'status',
@@ -9181,7 +9157,7 @@ export namespace Prisma {
 
   export const AuditLogScalarFieldEnum: {
     id: 'id',
-    userId: 'userId',
+    userUuid: 'userUuid',
     action: 'action',
     entity: 'entity',
     entityId: 'entityId',
@@ -9409,32 +9385,31 @@ export namespace Prisma {
     OR?: UserRoleWhereInput[]
     NOT?: UserRoleWhereInput | UserRoleWhereInput[]
     id?: IntFilter<"UserRole"> | number
-    userId?: IntFilter<"UserRole"> | number
+    userUuid?: StringFilter<"UserRole"> | string
     roleId?: IntFilter<"UserRole"> | number
     role?: XOR<RoleScalarRelationFilter, RoleWhereInput>
   }
 
   export type UserRoleOrderByWithRelationInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     roleId?: SortOrder
     role?: RoleOrderByWithRelationInput
   }
 
   export type UserRoleWhereUniqueInput = Prisma.AtLeast<{
     id?: number
-    userId_roleId?: UserRoleUserIdRoleIdCompoundUniqueInput
+    userUuid?: string
     AND?: UserRoleWhereInput | UserRoleWhereInput[]
     OR?: UserRoleWhereInput[]
     NOT?: UserRoleWhereInput | UserRoleWhereInput[]
-    userId?: IntFilter<"UserRole"> | number
     roleId?: IntFilter<"UserRole"> | number
     role?: XOR<RoleScalarRelationFilter, RoleWhereInput>
-  }, "id" | "userId_roleId">
+  }, "id" | "userUuid">
 
   export type UserRoleOrderByWithAggregationInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     roleId?: SortOrder
     _count?: UserRoleCountOrderByAggregateInput
     _avg?: UserRoleAvgOrderByAggregateInput
@@ -9448,7 +9423,7 @@ export namespace Prisma {
     OR?: UserRoleScalarWhereWithAggregatesInput[]
     NOT?: UserRoleScalarWhereWithAggregatesInput | UserRoleScalarWhereWithAggregatesInput[]
     id?: IntWithAggregatesFilter<"UserRole"> | number
-    userId?: IntWithAggregatesFilter<"UserRole"> | number
+    userUuid?: StringWithAggregatesFilter<"UserRole"> | string
     roleId?: IntWithAggregatesFilter<"UserRole"> | number
   }
 
@@ -9508,10 +9483,10 @@ export namespace Prisma {
     OR?: UserCategoryWhereInput[]
     NOT?: UserCategoryWhereInput | UserCategoryWhereInput[]
     id?: IntFilter<"UserCategory"> | number
-    userId?: IntFilter<"UserCategory"> | number
+    userUuid?: StringFilter<"UserCategory"> | string
     categoryId?: StringFilter<"UserCategory"> | string
     verified?: BoolFilter<"UserCategory"> | boolean
-    approvedBy?: IntNullableFilter<"UserCategory"> | number | null
+    approvedBy?: StringNullableFilter<"UserCategory"> | string | null
     entityType?: StringFilter<"UserCategory"> | string
     orgName?: StringNullableFilter<"UserCategory"> | string | null
     createdAt?: DateTimeFilter<"UserCategory"> | Date | string
@@ -9520,7 +9495,7 @@ export namespace Prisma {
 
   export type UserCategoryOrderByWithRelationInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     categoryId?: SortOrder
     verified?: SortOrder
     approvedBy?: SortOrderInput | SortOrder
@@ -9535,10 +9510,10 @@ export namespace Prisma {
     AND?: UserCategoryWhereInput | UserCategoryWhereInput[]
     OR?: UserCategoryWhereInput[]
     NOT?: UserCategoryWhereInput | UserCategoryWhereInput[]
-    userId?: IntFilter<"UserCategory"> | number
+    userUuid?: StringFilter<"UserCategory"> | string
     categoryId?: StringFilter<"UserCategory"> | string
     verified?: BoolFilter<"UserCategory"> | boolean
-    approvedBy?: IntNullableFilter<"UserCategory"> | number | null
+    approvedBy?: StringNullableFilter<"UserCategory"> | string | null
     entityType?: StringFilter<"UserCategory"> | string
     orgName?: StringNullableFilter<"UserCategory"> | string | null
     createdAt?: DateTimeFilter<"UserCategory"> | Date | string
@@ -9547,7 +9522,7 @@ export namespace Prisma {
 
   export type UserCategoryOrderByWithAggregationInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     categoryId?: SortOrder
     verified?: SortOrder
     approvedBy?: SortOrderInput | SortOrder
@@ -9567,10 +9542,10 @@ export namespace Prisma {
     OR?: UserCategoryScalarWhereWithAggregatesInput[]
     NOT?: UserCategoryScalarWhereWithAggregatesInput | UserCategoryScalarWhereWithAggregatesInput[]
     id?: IntWithAggregatesFilter<"UserCategory"> | number
-    userId?: IntWithAggregatesFilter<"UserCategory"> | number
+    userUuid?: StringWithAggregatesFilter<"UserCategory"> | string
     categoryId?: StringWithAggregatesFilter<"UserCategory"> | string
     verified?: BoolWithAggregatesFilter<"UserCategory"> | boolean
-    approvedBy?: IntNullableWithAggregatesFilter<"UserCategory"> | number | null
+    approvedBy?: StringNullableWithAggregatesFilter<"UserCategory"> | string | null
     entityType?: StringWithAggregatesFilter<"UserCategory"> | string
     orgName?: StringNullableWithAggregatesFilter<"UserCategory"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"UserCategory"> | Date | string
@@ -9582,7 +9557,7 @@ export namespace Prisma {
     OR?: SubscriptionWhereInput[]
     NOT?: SubscriptionWhereInput | SubscriptionWhereInput[]
     id?: IntFilter<"Subscription"> | number
-    userId?: IntFilter<"Subscription"> | number
+    userUuid?: StringFilter<"Subscription"> | string
     plan?: StringFilter<"Subscription"> | string
     premium?: BoolFilter<"Subscription"> | boolean
     status?: StringFilter<"Subscription"> | string
@@ -9593,7 +9568,7 @@ export namespace Prisma {
 
   export type SubscriptionOrderByWithRelationInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     plan?: SortOrder
     premium?: SortOrder
     status?: SortOrder
@@ -9607,7 +9582,7 @@ export namespace Prisma {
     AND?: SubscriptionWhereInput | SubscriptionWhereInput[]
     OR?: SubscriptionWhereInput[]
     NOT?: SubscriptionWhereInput | SubscriptionWhereInput[]
-    userId?: IntFilter<"Subscription"> | number
+    userUuid?: StringFilter<"Subscription"> | string
     plan?: StringFilter<"Subscription"> | string
     premium?: BoolFilter<"Subscription"> | boolean
     status?: StringFilter<"Subscription"> | string
@@ -9618,7 +9593,7 @@ export namespace Prisma {
 
   export type SubscriptionOrderByWithAggregationInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     plan?: SortOrder
     premium?: SortOrder
     status?: SortOrder
@@ -9637,7 +9612,7 @@ export namespace Prisma {
     OR?: SubscriptionScalarWhereWithAggregatesInput[]
     NOT?: SubscriptionScalarWhereWithAggregatesInput | SubscriptionScalarWhereWithAggregatesInput[]
     id?: IntWithAggregatesFilter<"Subscription"> | number
-    userId?: IntWithAggregatesFilter<"Subscription"> | number
+    userUuid?: StringWithAggregatesFilter<"Subscription"> | string
     plan?: StringWithAggregatesFilter<"Subscription"> | string
     premium?: BoolWithAggregatesFilter<"Subscription"> | boolean
     status?: StringWithAggregatesFilter<"Subscription"> | string
@@ -9651,17 +9626,17 @@ export namespace Prisma {
     OR?: AuditLogWhereInput[]
     NOT?: AuditLogWhereInput | AuditLogWhereInput[]
     id?: IntFilter<"AuditLog"> | number
-    userId?: IntNullableFilter<"AuditLog"> | number | null
+    userUuid?: StringNullableFilter<"AuditLog"> | string | null
     action?: StringFilter<"AuditLog"> | string
     entity?: StringFilter<"AuditLog"> | string
     entityId?: IntNullableFilter<"AuditLog"> | number | null
-    performedBy?: IntNullableFilter<"AuditLog"> | number | null
+    performedBy?: StringNullableFilter<"AuditLog"> | string | null
     createdAt?: DateTimeFilter<"AuditLog"> | Date | string
   }
 
   export type AuditLogOrderByWithRelationInput = {
     id?: SortOrder
-    userId?: SortOrderInput | SortOrder
+    userUuid?: SortOrderInput | SortOrder
     action?: SortOrder
     entity?: SortOrder
     entityId?: SortOrderInput | SortOrder
@@ -9674,17 +9649,17 @@ export namespace Prisma {
     AND?: AuditLogWhereInput | AuditLogWhereInput[]
     OR?: AuditLogWhereInput[]
     NOT?: AuditLogWhereInput | AuditLogWhereInput[]
-    userId?: IntNullableFilter<"AuditLog"> | number | null
+    userUuid?: StringNullableFilter<"AuditLog"> | string | null
     action?: StringFilter<"AuditLog"> | string
     entity?: StringFilter<"AuditLog"> | string
     entityId?: IntNullableFilter<"AuditLog"> | number | null
-    performedBy?: IntNullableFilter<"AuditLog"> | number | null
+    performedBy?: StringNullableFilter<"AuditLog"> | string | null
     createdAt?: DateTimeFilter<"AuditLog"> | Date | string
   }, "id">
 
   export type AuditLogOrderByWithAggregationInput = {
     id?: SortOrder
-    userId?: SortOrderInput | SortOrder
+    userUuid?: SortOrderInput | SortOrder
     action?: SortOrder
     entity?: SortOrder
     entityId?: SortOrderInput | SortOrder
@@ -9702,11 +9677,11 @@ export namespace Prisma {
     OR?: AuditLogScalarWhereWithAggregatesInput[]
     NOT?: AuditLogScalarWhereWithAggregatesInput | AuditLogScalarWhereWithAggregatesInput[]
     id?: IntWithAggregatesFilter<"AuditLog"> | number
-    userId?: IntNullableWithAggregatesFilter<"AuditLog"> | number | null
+    userUuid?: StringNullableWithAggregatesFilter<"AuditLog"> | string | null
     action?: StringWithAggregatesFilter<"AuditLog"> | string
     entity?: StringWithAggregatesFilter<"AuditLog"> | string
     entityId?: IntNullableWithAggregatesFilter<"AuditLog"> | number | null
-    performedBy?: IntNullableWithAggregatesFilter<"AuditLog"> | number | null
+    performedBy?: StringNullableWithAggregatesFilter<"AuditLog"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"AuditLog"> | Date | string
   }
 
@@ -9829,40 +9804,40 @@ export namespace Prisma {
   }
 
   export type UserRoleCreateInput = {
-    userId: number
+    userUuid: string
     role: RoleCreateNestedOneWithoutUserRolesInput
   }
 
   export type UserRoleUncheckedCreateInput = {
     id?: number
-    userId: number
+    userUuid: string
     roleId: number
   }
 
   export type UserRoleUpdateInput = {
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
     role?: RoleUpdateOneRequiredWithoutUserRolesNestedInput
   }
 
   export type UserRoleUncheckedUpdateInput = {
     id?: IntFieldUpdateOperationsInput | number
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
     roleId?: IntFieldUpdateOperationsInput | number
   }
 
   export type UserRoleCreateManyInput = {
     id?: number
-    userId: number
+    userUuid: string
     roleId: number
   }
 
   export type UserRoleUpdateManyMutationInput = {
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
   }
 
   export type UserRoleUncheckedUpdateManyInput = {
     id?: IntFieldUpdateOperationsInput | number
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
     roleId?: IntFieldUpdateOperationsInput | number
   }
 
@@ -9905,10 +9880,10 @@ export namespace Prisma {
   }
 
   export type UserCategoryCreateInput = {
-    userId: number
+    userUuid: string
     categoryId: string
     verified?: boolean
-    approvedBy?: number | null
+    approvedBy?: string | null
     entityType: string
     orgName?: string | null
     createdAt?: Date | string
@@ -9917,10 +9892,10 @@ export namespace Prisma {
 
   export type UserCategoryUncheckedCreateInput = {
     id?: number
-    userId: number
+    userUuid: string
     categoryId: string
     verified?: boolean
-    approvedBy?: number | null
+    approvedBy?: string | null
     entityType: string
     orgName?: string | null
     createdAt?: Date | string
@@ -9928,10 +9903,10 @@ export namespace Prisma {
   }
 
   export type UserCategoryUpdateInput = {
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
     categoryId?: StringFieldUpdateOperationsInput | string
     verified?: BoolFieldUpdateOperationsInput | boolean
-    approvedBy?: NullableIntFieldUpdateOperationsInput | number | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
     entityType?: StringFieldUpdateOperationsInput | string
     orgName?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -9940,10 +9915,10 @@ export namespace Prisma {
 
   export type UserCategoryUncheckedUpdateInput = {
     id?: IntFieldUpdateOperationsInput | number
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
     categoryId?: StringFieldUpdateOperationsInput | string
     verified?: BoolFieldUpdateOperationsInput | boolean
-    approvedBy?: NullableIntFieldUpdateOperationsInput | number | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
     entityType?: StringFieldUpdateOperationsInput | string
     orgName?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -9952,10 +9927,10 @@ export namespace Prisma {
 
   export type UserCategoryCreateManyInput = {
     id?: number
-    userId: number
+    userUuid: string
     categoryId: string
     verified?: boolean
-    approvedBy?: number | null
+    approvedBy?: string | null
     entityType: string
     orgName?: string | null
     createdAt?: Date | string
@@ -9963,10 +9938,10 @@ export namespace Prisma {
   }
 
   export type UserCategoryUpdateManyMutationInput = {
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
     categoryId?: StringFieldUpdateOperationsInput | string
     verified?: BoolFieldUpdateOperationsInput | boolean
-    approvedBy?: NullableIntFieldUpdateOperationsInput | number | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
     entityType?: StringFieldUpdateOperationsInput | string
     orgName?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -9975,10 +9950,10 @@ export namespace Prisma {
 
   export type UserCategoryUncheckedUpdateManyInput = {
     id?: IntFieldUpdateOperationsInput | number
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
     categoryId?: StringFieldUpdateOperationsInput | string
     verified?: BoolFieldUpdateOperationsInput | boolean
-    approvedBy?: NullableIntFieldUpdateOperationsInput | number | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
     entityType?: StringFieldUpdateOperationsInput | string
     orgName?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -9986,7 +9961,7 @@ export namespace Prisma {
   }
 
   export type SubscriptionCreateInput = {
-    userId: number
+    userUuid: string
     plan: string
     premium?: boolean
     status: string
@@ -9997,7 +9972,7 @@ export namespace Prisma {
 
   export type SubscriptionUncheckedCreateInput = {
     id?: number
-    userId: number
+    userUuid: string
     plan: string
     premium?: boolean
     status: string
@@ -10007,7 +9982,7 @@ export namespace Prisma {
   }
 
   export type SubscriptionUpdateInput = {
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
     plan?: StringFieldUpdateOperationsInput | string
     premium?: BoolFieldUpdateOperationsInput | boolean
     status?: StringFieldUpdateOperationsInput | string
@@ -10018,7 +9993,7 @@ export namespace Prisma {
 
   export type SubscriptionUncheckedUpdateInput = {
     id?: IntFieldUpdateOperationsInput | number
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
     plan?: StringFieldUpdateOperationsInput | string
     premium?: BoolFieldUpdateOperationsInput | boolean
     status?: StringFieldUpdateOperationsInput | string
@@ -10029,7 +10004,7 @@ export namespace Prisma {
 
   export type SubscriptionCreateManyInput = {
     id?: number
-    userId: number
+    userUuid: string
     plan: string
     premium?: boolean
     status: string
@@ -10039,7 +10014,7 @@ export namespace Prisma {
   }
 
   export type SubscriptionUpdateManyMutationInput = {
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
     plan?: StringFieldUpdateOperationsInput | string
     premium?: BoolFieldUpdateOperationsInput | boolean
     status?: StringFieldUpdateOperationsInput | string
@@ -10050,7 +10025,7 @@ export namespace Prisma {
 
   export type SubscriptionUncheckedUpdateManyInput = {
     id?: IntFieldUpdateOperationsInput | number
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
     plan?: StringFieldUpdateOperationsInput | string
     premium?: BoolFieldUpdateOperationsInput | boolean
     status?: StringFieldUpdateOperationsInput | string
@@ -10060,69 +10035,69 @@ export namespace Prisma {
   }
 
   export type AuditLogCreateInput = {
-    userId?: number | null
+    userUuid?: string | null
     action: string
     entity: string
     entityId?: number | null
-    performedBy?: number | null
+    performedBy?: string | null
     createdAt?: Date | string
   }
 
   export type AuditLogUncheckedCreateInput = {
     id?: number
-    userId?: number | null
+    userUuid?: string | null
     action: string
     entity: string
     entityId?: number | null
-    performedBy?: number | null
+    performedBy?: string | null
     createdAt?: Date | string
   }
 
   export type AuditLogUpdateInput = {
-    userId?: NullableIntFieldUpdateOperationsInput | number | null
+    userUuid?: NullableStringFieldUpdateOperationsInput | string | null
     action?: StringFieldUpdateOperationsInput | string
     entity?: StringFieldUpdateOperationsInput | string
     entityId?: NullableIntFieldUpdateOperationsInput | number | null
-    performedBy?: NullableIntFieldUpdateOperationsInput | number | null
+    performedBy?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type AuditLogUncheckedUpdateInput = {
     id?: IntFieldUpdateOperationsInput | number
-    userId?: NullableIntFieldUpdateOperationsInput | number | null
+    userUuid?: NullableStringFieldUpdateOperationsInput | string | null
     action?: StringFieldUpdateOperationsInput | string
     entity?: StringFieldUpdateOperationsInput | string
     entityId?: NullableIntFieldUpdateOperationsInput | number | null
-    performedBy?: NullableIntFieldUpdateOperationsInput | number | null
+    performedBy?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type AuditLogCreateManyInput = {
     id?: number
-    userId?: number | null
+    userUuid?: string | null
     action: string
     entity: string
     entityId?: number | null
-    performedBy?: number | null
+    performedBy?: string | null
     createdAt?: Date | string
   }
 
   export type AuditLogUpdateManyMutationInput = {
-    userId?: NullableIntFieldUpdateOperationsInput | number | null
+    userUuid?: NullableStringFieldUpdateOperationsInput | string | null
     action?: StringFieldUpdateOperationsInput | string
     entity?: StringFieldUpdateOperationsInput | string
     entityId?: NullableIntFieldUpdateOperationsInput | number | null
-    performedBy?: NullableIntFieldUpdateOperationsInput | number | null
+    performedBy?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type AuditLogUncheckedUpdateManyInput = {
     id?: IntFieldUpdateOperationsInput | number
-    userId?: NullableIntFieldUpdateOperationsInput | number | null
+    userUuid?: NullableStringFieldUpdateOperationsInput | string | null
     action?: StringFieldUpdateOperationsInput | string
     entity?: StringFieldUpdateOperationsInput | string
     entityId?: NullableIntFieldUpdateOperationsInput | number | null
-    performedBy?: NullableIntFieldUpdateOperationsInput | number | null
+    performedBy?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
@@ -10338,38 +10313,31 @@ export namespace Prisma {
     isNot?: RoleWhereInput
   }
 
-  export type UserRoleUserIdRoleIdCompoundUniqueInput = {
-    userId: number
-    roleId: number
-  }
-
   export type UserRoleCountOrderByAggregateInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     roleId?: SortOrder
   }
 
   export type UserRoleAvgOrderByAggregateInput = {
     id?: SortOrder
-    userId?: SortOrder
     roleId?: SortOrder
   }
 
   export type UserRoleMaxOrderByAggregateInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     roleId?: SortOrder
   }
 
   export type UserRoleMinOrderByAggregateInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     roleId?: SortOrder
   }
 
   export type UserRoleSumOrderByAggregateInput = {
     id?: SortOrder
-    userId?: SortOrder
     roleId?: SortOrder
   }
 
@@ -10418,20 +10386,9 @@ export namespace Prisma {
     not?: NestedBoolFilter<$PrismaModel> | boolean
   }
 
-  export type IntNullableFilter<$PrismaModel = never> = {
-    equals?: number | IntFieldRefInput<$PrismaModel> | null
-    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
-    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
-    lt?: number | IntFieldRefInput<$PrismaModel>
-    lte?: number | IntFieldRefInput<$PrismaModel>
-    gt?: number | IntFieldRefInput<$PrismaModel>
-    gte?: number | IntFieldRefInput<$PrismaModel>
-    not?: NestedIntNullableFilter<$PrismaModel> | number | null
-  }
-
   export type UserCategoryCountOrderByAggregateInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     categoryId?: SortOrder
     verified?: SortOrder
     approvedBy?: SortOrder
@@ -10443,13 +10400,11 @@ export namespace Prisma {
 
   export type UserCategoryAvgOrderByAggregateInput = {
     id?: SortOrder
-    userId?: SortOrder
-    approvedBy?: SortOrder
   }
 
   export type UserCategoryMaxOrderByAggregateInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     categoryId?: SortOrder
     verified?: SortOrder
     approvedBy?: SortOrder
@@ -10461,7 +10416,7 @@ export namespace Prisma {
 
   export type UserCategoryMinOrderByAggregateInput = {
     id?: SortOrder
-    userId?: SortOrder
+    userUuid?: SortOrder
     categoryId?: SortOrder
     verified?: SortOrder
     approvedBy?: SortOrder
@@ -10473,8 +10428,6 @@ export namespace Prisma {
 
   export type UserCategorySumOrderByAggregateInput = {
     id?: SortOrder
-    userId?: SortOrder
-    approvedBy?: SortOrder
   }
 
   export type BoolWithAggregatesFilter<$PrismaModel = never> = {
@@ -10483,6 +10436,98 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedBoolFilter<$PrismaModel>
     _max?: NestedBoolFilter<$PrismaModel>
+  }
+
+  export type SubscriptionCountOrderByAggregateInput = {
+    id?: SortOrder
+    userUuid?: SortOrder
+    plan?: SortOrder
+    premium?: SortOrder
+    status?: SortOrder
+    expiresAt?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type SubscriptionAvgOrderByAggregateInput = {
+    id?: SortOrder
+  }
+
+  export type SubscriptionMaxOrderByAggregateInput = {
+    id?: SortOrder
+    userUuid?: SortOrder
+    plan?: SortOrder
+    premium?: SortOrder
+    status?: SortOrder
+    expiresAt?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type SubscriptionMinOrderByAggregateInput = {
+    id?: SortOrder
+    userUuid?: SortOrder
+    plan?: SortOrder
+    premium?: SortOrder
+    status?: SortOrder
+    expiresAt?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type SubscriptionSumOrderByAggregateInput = {
+    id?: SortOrder
+  }
+
+  export type IntNullableFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntNullableFilter<$PrismaModel> | number | null
+  }
+
+  export type AuditLogCountOrderByAggregateInput = {
+    id?: SortOrder
+    userUuid?: SortOrder
+    action?: SortOrder
+    entity?: SortOrder
+    entityId?: SortOrder
+    performedBy?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type AuditLogAvgOrderByAggregateInput = {
+    id?: SortOrder
+    entityId?: SortOrder
+  }
+
+  export type AuditLogMaxOrderByAggregateInput = {
+    id?: SortOrder
+    userUuid?: SortOrder
+    action?: SortOrder
+    entity?: SortOrder
+    entityId?: SortOrder
+    performedBy?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type AuditLogMinOrderByAggregateInput = {
+    id?: SortOrder
+    userUuid?: SortOrder
+    action?: SortOrder
+    entity?: SortOrder
+    entityId?: SortOrder
+    performedBy?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type AuditLogSumOrderByAggregateInput = {
+    id?: SortOrder
+    entityId?: SortOrder
   }
 
   export type IntNullableWithAggregatesFilter<$PrismaModel = never> = {
@@ -10499,93 +10544,6 @@ export namespace Prisma {
     _sum?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedIntNullableFilter<$PrismaModel>
     _max?: NestedIntNullableFilter<$PrismaModel>
-  }
-
-  export type SubscriptionCountOrderByAggregateInput = {
-    id?: SortOrder
-    userId?: SortOrder
-    plan?: SortOrder
-    premium?: SortOrder
-    status?: SortOrder
-    expiresAt?: SortOrder
-    createdAt?: SortOrder
-    updatedAt?: SortOrder
-  }
-
-  export type SubscriptionAvgOrderByAggregateInput = {
-    id?: SortOrder
-    userId?: SortOrder
-  }
-
-  export type SubscriptionMaxOrderByAggregateInput = {
-    id?: SortOrder
-    userId?: SortOrder
-    plan?: SortOrder
-    premium?: SortOrder
-    status?: SortOrder
-    expiresAt?: SortOrder
-    createdAt?: SortOrder
-    updatedAt?: SortOrder
-  }
-
-  export type SubscriptionMinOrderByAggregateInput = {
-    id?: SortOrder
-    userId?: SortOrder
-    plan?: SortOrder
-    premium?: SortOrder
-    status?: SortOrder
-    expiresAt?: SortOrder
-    createdAt?: SortOrder
-    updatedAt?: SortOrder
-  }
-
-  export type SubscriptionSumOrderByAggregateInput = {
-    id?: SortOrder
-    userId?: SortOrder
-  }
-
-  export type AuditLogCountOrderByAggregateInput = {
-    id?: SortOrder
-    userId?: SortOrder
-    action?: SortOrder
-    entity?: SortOrder
-    entityId?: SortOrder
-    performedBy?: SortOrder
-    createdAt?: SortOrder
-  }
-
-  export type AuditLogAvgOrderByAggregateInput = {
-    id?: SortOrder
-    userId?: SortOrder
-    entityId?: SortOrder
-    performedBy?: SortOrder
-  }
-
-  export type AuditLogMaxOrderByAggregateInput = {
-    id?: SortOrder
-    userId?: SortOrder
-    action?: SortOrder
-    entity?: SortOrder
-    entityId?: SortOrder
-    performedBy?: SortOrder
-    createdAt?: SortOrder
-  }
-
-  export type AuditLogMinOrderByAggregateInput = {
-    id?: SortOrder
-    userId?: SortOrder
-    action?: SortOrder
-    entity?: SortOrder
-    entityId?: SortOrder
-    performedBy?: SortOrder
-    createdAt?: SortOrder
-  }
-
-  export type AuditLogSumOrderByAggregateInput = {
-    id?: SortOrder
-    userId?: SortOrder
-    entityId?: SortOrder
-    performedBy?: SortOrder
   }
 
   export type UserRoleCreateNestedManyWithoutRoleInput = {
@@ -10965,12 +10923,12 @@ export namespace Prisma {
   }
 
   export type UserRoleCreateWithoutRoleInput = {
-    userId: number
+    userUuid: string
   }
 
   export type UserRoleUncheckedCreateWithoutRoleInput = {
     id?: number
-    userId: number
+    userUuid: string
   }
 
   export type UserRoleCreateOrConnectWithoutRoleInput = {
@@ -11023,7 +10981,7 @@ export namespace Prisma {
     OR?: UserRoleScalarWhereInput[]
     NOT?: UserRoleScalarWhereInput | UserRoleScalarWhereInput[]
     id?: IntFilter<"UserRole"> | number
-    userId?: IntFilter<"UserRole"> | number
+    userUuid?: StringFilter<"UserRole"> | string
     roleId?: IntFilter<"UserRole"> | number
   }
 
@@ -11235,7 +11193,7 @@ export namespace Prisma {
 
   export type UserRoleCreateManyRoleInput = {
     id?: number
-    userId: number
+    userUuid: string
   }
 
   export type RolePermissionCreateManyRoleInput = {
@@ -11244,17 +11202,17 @@ export namespace Prisma {
   }
 
   export type UserRoleUpdateWithoutRoleInput = {
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
   }
 
   export type UserRoleUncheckedUpdateWithoutRoleInput = {
     id?: IntFieldUpdateOperationsInput | number
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
   }
 
   export type UserRoleUncheckedUpdateManyWithoutRoleInput = {
     id?: IntFieldUpdateOperationsInput | number
-    userId?: IntFieldUpdateOperationsInput | number
+    userUuid?: StringFieldUpdateOperationsInput | string
   }
 
   export type RolePermissionUpdateWithoutRoleInput = {

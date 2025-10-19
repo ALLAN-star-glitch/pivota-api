@@ -5,15 +5,15 @@
   "private": true,
   "scripts": {
     "auth:prisma:generate:dev": "cross-env NODE_ENV=dev prisma generate --schema=apps/auth-service/prisma/schema.prisma",
-    "auth:prisma:generate:uat": "cross-env NODE_ENV=uat prisma generate --schema=apps/auth-service/prisma/schema.prisma", 
-    "admin:prisma:generate:dev": "cross-env NODE_ENV=dev prisma generate --schema=apps/admin-service/prisma/schema.prisma", 
+    "auth:prisma:generate:uat": "cross-env NODE_ENV=uat prisma generate --schema=apps/auth-service/prisma/schema.prisma",
+    "admin:prisma:generate:dev": "cross-env NODE_ENV=dev prisma generate --schema=apps/admin-service/prisma/schema.prisma",
     "auth:prisma:generate:sit": "cross-env NODE_ENV=sit prisma generate --schema=apps/auth-service/prisma/schema.prisma",
     "user:prisma:generate:dev": "cross-env NODE_ENV=dev prisma generate --schema=apps/user-service/prisma/schema.prisma",
     "user:prisma:generate:sit": "cross-env NODE_ENV=sit prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
     "user:prisma:generate:uat": "cross-env NODE_ENV=uat prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
     "user:prisma:generate:pilot": "cross-env NODE_ENV=pilot prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
     "user:prisma:generate:prod": "cross-env NODE_ENV=prod prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
-    "start:dev:admin": "cross-env NODE_ENV=dev nx serve admin-service ", 
+    "start:dev:admin": "cross-env NODE_ENV=dev nx serve admin-service ",
     "start:dev:notification": "cross-env NODE_ENV=dev nx serve notification-service",
     "start:dev:auth": "cross-env NODE_ENV=dev nx serve auth-service",
     "start:dev:user": "cross-env NODE_ENV=dev nx serve user-service",
@@ -47,42 +47,25 @@
     "build:prod:user": "npm run user:prisma:generate:prod && nx build user-service",
     "build:prod:gateway": "nx build api-gateway",
     "build:dev:all": "npm run user:prisma:generate:dev && npm run auth:prisma:generate:dev && npm run admin:prisma:generate:dev && nx run-many --target=build --all --configuration=development",
-
-
-    
     "auth:prisma:generate:onrender": "prisma generate --schema=apps/auth-service/prisma/schema.prisma",
-    "user:prisma:generate:onrender": "prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",   
-
-
-
+    "user:prisma:generate:onrender": "prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
     "build:onrender:gateway": "nx build api-gateway",
-    "build:onrender:auth": "npm run auth:prisma:generate:onrender && nx build auth-service", 
+    "build:onrender:auth": "npm run auth:prisma:generate:onrender && nx build auth-service",
     "build:onrender:user": "npm run user:prisma:generate:onrender && nx build user-service",
     "build:onrender:notification": "nx build notification-service",
     "build:onrender:admin": "nx build admin-service",
-
-
-
-
     "start:onrender:gateway": "node dist/apps/api-gateway/main.js",
     "start:onrender:auth": "node dist/apps/auth-service/main.js",
-    "start:onrender:user": "node dist/apps/user-service/main.js",       
+    "start:onrender:user": "node dist/apps/user-service/main.js",
     "start:onrender:notification": "node dist/apps/notification-service/main.js",
     "start:onrender:admin": "node dist/apps/admin-service/main.js",
-    
     "prisma:seed:admin": "prisma db seed --schema=apps/admin-service/prisma/schema.prisma",
     "prisma:seed:auth": "prisma db seed --schema=apps/auth-service/prisma/schema.prisma",
     "prisma:seed:user": "prisma db seed --schema=apps/user-service/prisma/schema.prisma"
-
-
-
   },
-
-
-   
-
-     
-  
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "dependencies": {
     "@grpc/grpc-js": "^1.13.4",
     "@grpc/proto-loader": "^0.8.0",
@@ -101,10 +84,13 @@
     "amqplib": "^0.10.9",
     "axios": "^1.6.0",
     "bcrypt": "^6.0.0",
+    "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "cookie-parser": "^1.4.7",
+    "cross-env": "^10.0.0",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
+    "helmet": "^8.1.0",
     "kafkajs": "^2.2.4",
     "node-mailjet": "^6.0.9",
     "passport": "^0.7.0",
@@ -113,8 +99,7 @@
     "reflect-metadata": "^0.1.13",
     "request-ip": "^3.3.0",
     "rxjs": "^7.8.2",
-    "ua-parser-js": "^2.0.5",
-    "cross-env": "^10.0.0"
+    "ua-parser-js": "^2.0.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.8.0",

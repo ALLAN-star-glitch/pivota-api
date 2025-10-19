@@ -1,8 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Admin Service Prisma Schema
+// https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-js"
@@ -14,6 +11,7 @@ datasource db {
   url      = env("ADMIN_SERVICE_DATABASE_URL")
 }
 
+// ================== Role Management ==================
 model Role {
   id          Int      @id @default(autoincrement())
   name        String   @unique
@@ -21,8 +19,8 @@ model Role {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  userRoles       UserRole[]
-  rolePermissions RolePermission[]
+  userRoles       UserRole[] // 1-to-many users (each user only has one role)
+  rolePermissions RolePermission[] // many-to-many with permissions
 }
 
 model Permission {
@@ -32,19 +30,21 @@ model Permission {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  rolePermissions RolePermission[]
+  rolePermissions RolePermission[] // many-to-many with roles
 }
 
+// ================== Single Role Per User ==================
 model UserRole {
-  id     Int @id @default(autoincrement())
-  userId Int
-  roleId Int
+  id       Int    @id @default(autoincrement())
+  userUuid String @unique // <-- ensures a user can only have one role
+  roleId   Int
 
   role Role @relation(fields: [roleId], references: [id])
 
-  @@unique([userId, roleId])
+  @@index([roleId])
 }
 
+// ================== Role-Permission Mapping ==================
 model RolePermission {
   id           Int @id @default(autoincrement())
   roleId       Int
@@ -56,36 +56,48 @@ model RolePermission {
   @@unique([roleId, permissionId])
 }
 
+// ================== User Categories ==================
 model UserCategory {
   id         Int     @id @default(autoincrement())
-  userId     Int
+  userUuid   String
   categoryId String
   verified   Boolean @default(false)
-  approvedBy Int?
+  approvedBy String? // UUID of admin approving
   entityType String // "individual" | "organization"
   orgName    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userUuid])
+  @@index([createdAt])
 }
 
+// ================== Subscriptions ==================
 model Subscription {
   id        Int      @id @default(autoincrement())
-  userId    Int
+  userUuid  String
   plan      String
   premium   Boolean  @default(false)
   status    String
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userUuid])
+  @@index([createdAt])
 }
 
+// ================== Audit Logs ==================
 model AuditLog {
   id          Int      @id @default(autoincrement())
-  userId      Int?
+  userUuid    String? // optional if action not tied to a user
   action      String
   entity      String
   entityId    Int?
-  performedBy Int?
+  performedBy String? // UUID of admin performing action
   createdAt   DateTime @default(now())
+
+  @@index([userUuid])
+  @@index([createdAt])
 }

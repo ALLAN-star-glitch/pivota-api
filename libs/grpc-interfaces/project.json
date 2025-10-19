@@ -1,0 +1,20 @@
+{
+  "name": "grpc-interfaces",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/grpc-interfaces/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/grpc-interfaces",
+        "tsConfig": "libs/grpc-interfaces/tsconfig.lib.json",
+        "packageJson": "libs/grpc-interfaces/package.json",
+        "main": "libs/grpc-interfaces/src/index.ts",
+        "assets": ["libs/grpc-interfaces/*.md"]
+      }
+    }
+  }
+}

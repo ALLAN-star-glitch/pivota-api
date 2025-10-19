@@ -8,8 +8,12 @@ datasource db {
   url      = env("USER_SERVICE_DATABASE_URL")
 }
 
+
+
 model User {
   id        Int      @id @default(autoincrement())
+  uuid      String   @unique @default(uuid())
+  userCode  String   @unique
   email     String   @unique
   firstName String
   lastName  String

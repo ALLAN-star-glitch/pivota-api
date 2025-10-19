@@ -8,10 +8,12 @@ service RbacService {
   rpc CreatePermission (CreatePermissionRequest) returns (BasePermissionResponse);
   rpc AssignPermissionToRole (AssignPermissionToRoleRequest) returns (BasePermissionRoleResponse);
   rpc AssignRoleToUser (AssignRoleToUserRequest) returns (BaseUserRoleResponse);
-  rpc GetUserRoles (GetUserRolesRequest) returns (BaseUserRolesResponse);
+  rpc GetUserRole (GetUserRolesRequest) returns (BaseGetUserRolesResponse);
 }
 
+// ---------------------------
 // Requests
+// ---------------------------
 
 message CreateRoleRequest {
   string name = 1;
@@ -30,23 +32,24 @@ message CreatePermissionRequest {
 }
 
 message AssignPermissionToRoleRequest {
-
   int32 roleId = 1;
   int32 permissionId = 2;
-
 }
 
-
+//  Updated: use UUID instead of numeric userId
 message AssignRoleToUserRequest {
-  int32 userId = 1;
+  string userUuid = 1;
   int32 roleId = 2;
 }
 
+// Updated: also use UUID for querying user roles
 message GetUserRolesRequest {
-  int32 userId = 1;
+  string userUuid = 1;
 }
 
+// ---------------------------
 // Common Error Payload
+// ---------------------------
 
 message ErrorPayload {
   string message = 1;
@@ -54,7 +57,9 @@ message ErrorPayload {
   string details = 3;
 }
 
+// ---------------------------
 // Base Response Wrappers
+// ---------------------------
 
 message BaseRoleResponse {
   bool success = 1;
@@ -63,7 +68,6 @@ message BaseRoleResponse {
   RoleResponse role = 4;
   ErrorPayload error = 5;
 }
-
 
 message BasePermissionResponse {
   bool success = 1;
@@ -89,22 +93,26 @@ message BasePermissionRoleResponse {
   ErrorPayload error = 5;
 }
 
-message BaseUserRolesResponse {
+message BaseGetUserRolesResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-  repeated RoleResponse roles = 4;
+  RoleResponse role = 4;
   ErrorPayload error = 5;
 }
 
+// ---------------------------
 // Entities
+// ---------------------------
+
 message RoleResponse {
-  int32 id = 1;
+  string id = 1;
   string name = 2;
   string description = 3;
   string createdAt = 4;
   string updatedAt = 5;
 }
+
 
 message PermissionResponse {
   int32 id = 1;
@@ -112,9 +120,10 @@ message PermissionResponse {
   string description = 3;
 }
 
+// Updated: userUuid instead of numeric userId
 message UserRoleResponse {
   int32 id = 1;
-  int32 userId = 2;
+  string userUuid = 2;
   int32 roleId = 3;
 }
 

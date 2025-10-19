@@ -1,12 +1,26 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom, Observable } from 'rxjs';
-import { AuthUserDto, BaseResponseDto, GetUserByEmailDto, GetUserByIdDto, UserResponseDto } from '@pivota-api/dtos';
+import {
+  AuthUserDto,
+  BaseResponseDto,
+  GetUserByEmailDto,
+  GetUserByUserCodeDto, 
+  UserResponseDto,
+} from '@pivota-api/dtos';
 import { BaseUserResponseGrpc, BaseUsersResponseGrpc } from '@pivota-api/interfaces';
 
+
+// ---------------- gRPC Interface ----------------
 interface UserServiceGrpc {
-  GetUserProfileById(data: GetUserByIdDto): Observable<BaseUserResponseGrpc<UserResponseDto >| null>;
-  GetUserProfileByEmail(data: GetUserByEmailDto): Observable<BaseUserResponseGrpc<AuthUserDto> | null>;
+  GetUserProfileByUserCode(
+    data: GetUserByUserCodeDto,
+  ): Observable<BaseUserResponseGrpc<UserResponseDto> | null>;
+  
+  GetUserProfileByEmail(
+    data: GetUserByEmailDto,
+  ): Observable<BaseUserResponseGrpc<AuthUserDto> | null>;
+
   GetAllUsers(data: object): Observable<BaseUsersResponseGrpc<UserResponseDto[]>>;
 }
 
@@ -19,34 +33,49 @@ export class UserService {
     this.grpcService = this.grpcClient.getService<UserServiceGrpc>('UserService');
   }
 
-  async getUserById(id: string): Promise<BaseResponseDto<UserResponseDto> | null> {
-   this.logger.log(`Fetching user by ID: ${id}`);
-    const res =  firstValueFrom(this.grpcService.GetUserProfileById({ id }));
-    if ((await res).success) {
-      return BaseResponseDto.ok((await res).user, (await res).message, (await res).code)
+  // ---------------- Get User by User Code ----------------
+  async getUserByUserCode(userCode: string): Promise<BaseResponseDto<UserResponseDto> | null> {
+    this.logger.log(`Fetching user by User Code: ${userCode}`);
+    
+    const res = await firstValueFrom(
+      this.grpcService.GetUserProfileByUserCode({ userCode }),
+    );
+
+    if (res && res.success) {
+      return BaseResponseDto.ok(res.user, res.message, res.code);
     }
+
+    this.logger.warn(`User not found for userCode: ${userCode}`);
+    return BaseResponseDto.fail('User not found', 'NOT_FOUND');
   }
 
-  async getUserByEmail(email: string): Promise<BaseResponseDto<AuthUserDto >| null> {
+  // ---------------- Get User by Email ----------------
+  async getUserByEmail(email: string): Promise<BaseResponseDto<AuthUserDto> | null> {
     this.logger.log(`Fetching user by email: ${email}`);
-    const res = firstValueFrom(this.grpcService.GetUserProfileByEmail({ email }));
-    if ((await res).success){
-      return BaseResponseDto.ok((await res).user, (await res).message, (await res).code)
+    
+    const res = await firstValueFrom(
+      this.grpcService.GetUserProfileByEmail({ email }),
+    );
+
+    if (res && res.success) {
+      return BaseResponseDto.ok(res.user, res.message, res.code);
     }
+
+    this.logger.warn(`User not found for email: ${email}`);
+    return BaseResponseDto.fail('User not found', 'NOT_FOUND');
   }
 
+  // ---------------- Get All Users ----------------
   async getAllUsers(): Promise<BaseResponseDto<UserResponseDto[]>> {
     this.logger.log('Fetching all users');
+    
     const res = await firstValueFrom(this.grpcService.GetAllUsers({}));
-    this.logger.debug(`Grpc Response from user service: ${JSON.stringify(res)}`); 
+    this.logger.debug(`gRPC response from user service: ${JSON.stringify(res)}`);
 
-
-    if (res.success) {  
-      return BaseResponseDto.ok(res.users || [], res.message, res.code);  
-    } else {
-      return BaseResponseDto.fail(res.message, res.code); 
+    if (res.success) {
+      return BaseResponseDto.ok(res.users || [], res.message, res.code);
     }
 
-
+    return BaseResponseDto.fail(res.message, res.code);
   }
 }

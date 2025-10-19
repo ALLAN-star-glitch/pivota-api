@@ -1,0 +1,20 @@
+{
+  "name": "filters",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/filters/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/filters",
+        "tsConfig": "libs/filters/tsconfig.lib.json",
+        "packageJson": "libs/filters/package.json",
+        "main": "libs/filters/src/index.ts",
+        "assets": ["libs/filters/*.md"]
+      }
+    }
+  }
+}

@@ -4,7 +4,7 @@ import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { USER_PROTO_PATH } from '@pivota-api/protos';
+import { RBAC_PROTO_PATH, USER_PROTO_PATH } from '@pivota-api/protos';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
@@ -26,6 +26,16 @@ import { PrismaModule } from '../prisma/prisma.module';
           package: 'user',
           protoPath: USER_PROTO_PATH,
           url: process.env.USER_GRPC_URL || 'localhost:50052',
+        },
+      },
+      // gRPC client for RBAC service
+      {
+        name: 'RBAC_PACKAGE',
+        transport: Transport.GRPC,
+        options: {
+          package: 'rbac',
+          protoPath: RBAC_PROTO_PATH,
+          url: process.env.RBAC_GRPC_URL || 'localhost:50055',
         },
       },
       // RabbitMQ client for refresh token events

@@ -1,7 +1,5 @@
 export class UserRoleResponseDto {
-
-    id!: number;
-    userId!: number;
-    roleId!: number;
-
+  id!: number;
+  userUuid!: string; 
+  roleId!: number;
 }

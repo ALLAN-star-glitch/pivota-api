@@ -138,7 +138,7 @@ exports.Prisma.PermissionScalarFieldEnum = {
 
 exports.Prisma.UserRoleScalarFieldEnum = {
   id: 'id',
-  userId: 'userId',
+  userUuid: 'userUuid',
   roleId: 'roleId'
 };
 
@@ -150,7 +150,7 @@ exports.Prisma.RolePermissionScalarFieldEnum = {
 
 exports.Prisma.UserCategoryScalarFieldEnum = {
   id: 'id',
-  userId: 'userId',
+  userUuid: 'userUuid',
   categoryId: 'categoryId',
   verified: 'verified',
   approvedBy: 'approvedBy',
@@ -162,7 +162,7 @@ exports.Prisma.UserCategoryScalarFieldEnum = {
 
 exports.Prisma.SubscriptionScalarFieldEnum = {
   id: 'id',
-  userId: 'userId',
+  userUuid: 'userUuid',
   plan: 'plan',
   premium: 'premium',
   status: 'status',
@@ -173,7 +173,7 @@ exports.Prisma.SubscriptionScalarFieldEnum = {
 
 exports.Prisma.AuditLogScalarFieldEnum = {
   id: 'id',
-  userId: 'userId',
+  userUuid: 'userUuid',
   action: 'action',
   entity: 'entity',
   entityId: 'entityId',

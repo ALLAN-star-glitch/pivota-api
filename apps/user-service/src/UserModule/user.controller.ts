@@ -3,6 +3,7 @@ import { GrpcMethod, Payload } from '@nestjs/microservices';
 import { UserService } from './user.service';
 import {
   BaseResponseDto,
+  GetUserByUserUuidDto,
   SignupRequestDto,
   UserResponseDto,
 } from '@pivota-api/dtos';
@@ -13,32 +14,48 @@ export class UserController {
 
   constructor(private readonly userService: UserService) {}
 
-  // ------------------ Signup / Create User Profile ------------------
+  /** ------------------ Signup / Create User Profile ------------------ */
   @GrpcMethod('UserService', 'CreateUserProfile')
-  async handleCreateUserProfile(@Payload() signupDto: SignupRequestDto): Promise<UserResponseDto> {
-    this.logger.log(`Creating user profile for email: ${signupDto.email}`);
-    return this.userService.createUserProfile(signupDto);
-  }
+async handleCreateUserProfile(
+  @Payload() signupDto: SignupRequestDto,
+): Promise<BaseResponseDto<UserResponseDto>> {
+  this.logger.log(`Creating user profile for email: ${signupDto.email}`);
+  return this.userService.createUserProfile(signupDto);
+}
 
-  // ------------------ Get User Profile by Email ------------------
+
+  /** ------------------ Get User Profile by Email ------------------ */
   @GrpcMethod('UserService', 'GetUserProfileByEmail')
-  async handleGetUserProfileByEmail(@Payload() data: { email: string }): Promise<BaseResponseDto<UserResponseDto >| null> {
+  async handleGetUserProfileByEmail(
+    @Payload() data: { email: string },
+  ): Promise<BaseResponseDto<UserResponseDto> | null> {
     this.logger.log(`Fetching user profile by email: ${data.email}`);
     return this.userService.getUserProfileByEmail(data);
   }
 
-  // ------------------ Get User Profile by ID ------------------
-  @GrpcMethod('UserService', 'GetUserProfileById')
-  async handleGetUserProfileById(@Payload() data: { id: string }): Promise<BaseResponseDto<UserResponseDto >| null> {
-    this.logger.log(`Fetching user profile by ID: ${data.id}`);
-    return this.userService.getUserProfileById(data);
+  /** ------------------ Get User Profile by UserCode ------------------ */
+  @GrpcMethod('UserService', 'GetUserProfileByUserCode')
+
+  async handleGetUserProfileByUserCode(
+    @Payload() data: { userCode: string },
+  ): Promise<BaseResponseDto<UserResponseDto> | null> {
+    this.logger.log(`Fetching user profile by userCode: ${data.userCode}`);
+    return this.userService.getUserProfileByUserCode(data);
   }
 
-
-  // ------------------ Get All Users ------------------
+  /** ------------------ Get User Profile by UUID ------------------ */
+  @GrpcMethod('UserService', 'GetUserProfileByUuid')
+  async handleGetUserProfileByUuid(
+    @Payload() data: GetUserByUserUuidDto,
+  ): Promise<BaseResponseDto<UserResponseDto> | null> {
+    this.logger.log(`Fetching user profile by UUID: ${data.userUuid}`);
+    return this.userService.getUserProfileByUuid(data);
+  }
+  
+  /** ------------------ Get All Users ------------------ */
   @GrpcMethod('UserService', 'GetAllUsers')
   async handleGetAllUsers(): Promise<BaseResponseDto<UserResponseDto[]>> {
-    const users = await this.userService.getAllUsers();
-    return  users ;
+    this.logger.log('Fetching all users');
+    return this.userService.getAllUsers();
   }
 }

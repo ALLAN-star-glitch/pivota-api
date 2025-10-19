@@ -4,12 +4,14 @@ import { UserService } from './user.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 
+
+
 @Module({
   imports: [
     PrismaModule,
     ClientsModule.register([
       {
-        // 🔹 Kafka client for user events
+        //  Kafka client for user events
         name: 'USER_KAFKA',
         transport: Transport.KAFKA,
         options: {
@@ -37,7 +39,10 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
     ]),
   ],
   controllers: [UserController],
-  providers: [UserService],
+  providers: [
+    UserService,
+   
+  ],
 })
 export class UserModule {
   constructor() {
@@ -50,3 +55,4 @@ export class UserModule {
     );
   }
 }
+

@@ -36,13 +36,15 @@ message SignupResponse {
 
 // User info used in BaseResponse
 message UserResponse {
-  string id = 1;
-  string firstName = 2;
-  string lastName = 3;
-  string email = 4;
-  string phone = 5;
-  string createdAt = 6;
-  string updatedAt = 7;
+  string userCode = 1;       
+  string uuid = 2;  
+  string id = 3;
+  string firstName = 4;
+  string lastName = 5;
+  string email = 6;
+  string phone = 7;
+  string createdAt = 8;
+  string updatedAt = 9;
 }
 
 // ------------------ Login / Refresh / Validate ------------------
@@ -61,15 +63,17 @@ message LoginRequest {
 
 message AuthUserResponse {
   
-  int32 id = 1;
-  string email = 2;
-  string firstName = 3;
-  string lastName = 4;
-  string phone = 5;
-  string accessToken = 6;
-  string refreshToken = 7;
-  string createdAt = 8;
-  string updatedAt = 9;
+  string userCode = 1;           
+  string uuid = 2;  
+  int32 id = 3;
+  string email = 4;
+  string firstName = 5;
+  string lastName = 6;
+  string phone = 7;
+  string accessToken = 8;
+  string refreshToken = 9;
+  string createdAt = 10;
+  string updatedAt = 11;
 }
 
 message LoginResponse {

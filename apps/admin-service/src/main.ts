@@ -25,7 +25,7 @@ async function bootstrap() {
     options: {
       package: 'rbac',
       protoPath: RBAC_PROTO_PATH,
-      url: process.env.RBAC_GRPC_URL || '0.0.0.0:50055',
+      url: process.env.RBAC_GRPC_URL || '0.0.0.0:5005',
     },
   });
 

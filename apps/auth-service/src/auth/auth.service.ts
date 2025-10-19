@@ -17,12 +17,11 @@ import {
   TokenPairDto,
   UserResponseDto,
   BaseResponseDto,
+  GetUserByUserUuidDto,
+  RoleResponseDto,
 } from '@pivota-api/dtos';
-import { JwtPayload } from './jwt.strategy';
 import { firstValueFrom, Observable } from 'rxjs';
-import { BaseUserResponseGrpc } from '@pivota-api/interfaces';
-
-
+import { BaseUserResponseGrpc, BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
 
 
 // ---------------- gRPC Interface ----------------
@@ -32,179 +31,241 @@ interface UserServiceGrpc {
     firstName: string;
     lastName: string;
     phone?: string;
-  }): Observable<UserResponseDto>;
-  getUserProfileByEmail(data: { email: string }): Observable<BaseUserResponseGrpc<UserResponseDto >| null>;
-  getUserProfileById(data: { id: string }): Observable<BaseUserResponseGrpc<UserResponseDto >| null>;
+  }): Observable<BaseUserResponseGrpc<UserResponseDto>>;
+
+  getUserProfileByEmail(data: {
+    email: string;
+  }): Observable<BaseUserResponseGrpc<UserResponseDto> | null>;
+
+  getUserProfileByUuid(data: GetUserByUserUuidDto): Observable<BaseUserResponseGrpc<UserResponseDto> | null>;
 }
 
+interface RbacServiceGrpc {
+
+ getUserRole(data: GetUserByUserUuidDto): Observable<BaseGetUserRoleReponseGrpc<RoleResponseDto> | null>;
+
+}
 @Injectable()
 export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
   private userGrpcService: UserServiceGrpc;
-  private getGrpcService(): UserServiceGrpc {
-    if (!this.userGrpcService){
-        this.userGrpcService = this.grpcClient.getService<UserServiceGrpc>('UserService');
-    }
-    return this.userGrpcService;
-  }
+  private rbacGrpcService: RbacServiceGrpc;
+
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
     @Inject('USER_GRPC') private readonly grpcClient: ClientGrpc,
     @Inject('USER_RMQ') private readonly rabbitClient: ClientProxy,
+    @Inject('RBAC_PACKAGE') private readonly rbacClient: ClientGrpc,  
   ) {}
 
   onModuleInit() {
     this.userGrpcService = this.grpcClient.getService<UserServiceGrpc>('UserService');
-    this.logger.log('✅ AuthService initialized (gRPC)');
+    this.logger.log('AuthService initialized (gRPC)');
+    this.rbacGrpcService = this.rbacClient.getService<RbacServiceGrpc>('RbacService');
+    this.logger.log('RbacService initialized (gRPC)');  
   }
+
+  private getGrpcService(): UserServiceGrpc {
+    if (!this.userGrpcService) {
+      this.userGrpcService = this.grpcClient.getService<UserServiceGrpc>('UserService');
+    }
+    return this.userGrpcService;
+  }
+
+  private getRbacGrpcService(): RbacServiceGrpc {
+    if (!this.rbacGrpcService) {
+      this.rbacGrpcService = this.rbacClient.getService<RbacServiceGrpc>('RbacService');
+    }
+    return this.rbacGrpcService;
+  }
+
 
   // ------------------ Validate User ------------------
   async validateUser(email: string, password: string): Promise<UserResponseDto | null> {
-  // Call gRPC service
-  const userGrpcService = this.getGrpcService();
-  const userProfileGrpcResponse: BaseUserResponseGrpc<UserResponseDto> | null =
-    await firstValueFrom(userGrpcService.getUserProfileByEmail({ email }));
+    const userGrpcService = this.getGrpcService();
+    const userProfileGrpcResponse: BaseUserResponseGrpc<UserResponseDto> | null =
+      await firstValueFrom(userGrpcService.getUserProfileByEmail({ email }));
 
-  if (!userProfileGrpcResponse || !userProfileGrpcResponse.success || !userProfileGrpcResponse.user) {
-    return null;
+    if (!userProfileGrpcResponse || !userProfileGrpcResponse.success || !userProfileGrpcResponse.user) {
+      return null;
+    }
+
+    const userProfile = userProfileGrpcResponse.user;
+
+    // Look up credentials using UUID
+    const credential = await this.prisma.credential.findUnique({
+      where: { userUuid: userProfile.uuid },
+    });
+    if (!credential) return null;
+
+    // Check password
+    const isValid = await bcrypt.compare(password, credential.passwordHash);
+    if (!isValid) return null;
+
+    return userProfile;
   }
 
-  const userProfile = userProfileGrpcResponse.user;
+  // ------------------ Generate Tokens ------------------
+ async generateTokens(
+  user: { uuid: string; email: string },
+  clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+): Promise<{ accessToken: string; refreshToken: string }> {
 
-  // Look up credentials
-  const credential = await this.prisma.credential.findUnique({
-    where: { userId: parseInt(userProfile.id) },
+  const getGrpcService = this.getRbacGrpcService();
+  const userRoleResponse = await firstValueFrom(
+    getGrpcService.getUserRole({ userUuid: user.uuid }),
+  );
+
+  // Single role name for JWT
+  const roleName: string = userRoleResponse?.role?.name ?? 'Guest'; // default role if none
+
+  const payload: JwtPayload = {
+    userUuid: user.uuid,
+    email: user.email,
+    role: roleName,
+  };
+
+  this.logger.debug(
+    `Generating JWT for user role: ${JSON.stringify(
+      userRoleResponse,
+      null,
+      2,
+    )}`,
+  );
+
+  const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
+  const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
+
+  const hashedToken = await bcrypt.hash(refreshToken, 10);
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  await this.prisma.session.create({
+    data: {
+      userUuid: user.uuid,
+      tokenId: `${payload.userUuid}-${Date.now()}`,
+      hashedToken,
+      device: clientInfo?.device,
+      ipAddress: clientInfo?.ipAddress,
+      userAgent: clientInfo?.userAgent,
+      os: clientInfo?.os,
+      expiresAt,
+    },
   });
-  if (!credential) return null;
 
-  // Check password
-  const isValid = await bcrypt.compare(password, credential.passwordHash);
-  if (!isValid) return null;
-
-  // return clean UserResponseDto
-  return userProfile;
+  return { accessToken, refreshToken };
 }
 
 
-  // ------------------ Generate Tokens ------------------
-  async generateTokens(
-    user: { id: string; email: string },
-    clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
-    const payload: JwtPayload = { sub: user.id, email: user.email };
-    const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
-    const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
-
-    const hashedToken = await bcrypt.hash(refreshToken, 10);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
-    await this.prisma.session.create({
-      data: {
-        userId: parseInt(user.id, 10),
-        tokenId: payload.sub + '-' + Date.now(), // unique token/session id
-        hashedToken,
-        device: clientInfo?.device,
-        ipAddress: clientInfo?.ipAddress,
-        userAgent: clientInfo?.userAgent,
-        os: clientInfo?.os,
-        expiresAt,
-      },
-    });
-
-    return { accessToken, refreshToken };
-  }
 
   // ------------------ Signup ------------------
- async signup(signupDto: SignupRequestDto): Promise<BaseResponseDto<UserResponseDto>> {
+  async signup(signupDto: SignupRequestDto): Promise<BaseResponseDto<UserResponseDto>> {
   const userGrpcService = this.getGrpcService();
+
   try {
-    const userProfile$ = userGrpcService.createUserProfile({
+    // 1️⃣ Call UserService to create user profile
+    const userProfile$= userGrpcService.createUserProfile({
       email: signupDto.email,
       firstName: signupDto.firstName,
       lastName: signupDto.lastName,
       phone: signupDto.phone,
     });
 
-    const userProfile = await firstValueFrom(userProfile$);
+    const userResponse = await firstValueFrom(userProfile$);
 
+    if (!userResponse.success || !userResponse.user) {
+      this.logger.warn('⚠️ User service failed to create profile', userResponse);
+
+      const failedResponse = {
+        success: false,
+        message: 'User profile creation failed',
+        code: 'INTERNAL',
+        user: null,
+        error: { code: 'INTERNAL', message: 'User creation failed' },
+      };  
+
+      return failedResponse;
+    }
+
+    const user = userResponse.user;
+
+    // 2️⃣ Hash password and create credentials
     const hashedPassword = await bcrypt.hash(signupDto.password, 10);
 
     await this.prisma.credential.create({
-      data: { userId: parseInt(userProfile.id, 10), passwordHash: hashedPassword },
+      data: {
+        userUuid: user.uuid,
+        passwordHash: hashedPassword,
+      },
     });
 
-        // inside AuthService.signup in microservice
-    const signupResponse = {
+    this.logger.log('✅ Credentials created successfully for user:', user.uuid);
+
+    const payload = {
+
       success: true,
       message: 'Signup successful',
       code: 'OK',
-      user: userProfile,       // <--- map the actual user here
+      user,
       error: null,
-    };
+    }
 
-    return signupResponse;
+    return payload;
   } catch (error: unknown) {
-    this.logger.error('Signup failed', error);
+    this.logger.error('❌ Signup failed', error);
 
     if (typeof error === 'object' && error !== null && 'code' in error) {
       const code = (error as { code?: string }).code;
-      if (code === 'EMAIL_CONFLICT') return BaseResponseDto.fail('Email already registered', 'ALREADY_EXISTS');
-      if (code === 'PHONE_CONFLICT') return BaseResponseDto.fail('Phone number already registered', 'ALREADY_EXISTS');
+      if (code === 'ALREADY_EXISTS')
+        return BaseResponseDto.fail('User already registered', 'ALREADY_EXISTS');
     }
 
     return BaseResponseDto.fail('Signup failed', 'INTERNAL');
-
   }
 }
 
 
   // ------------------ Login ------------------
   async login(
-  loginDto: LoginRequestDto,
-  clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
-): Promise<BaseResponseDto<LoginResponseDto>> {
-  // Validate credentials
-  const user = await this.validateUser(loginDto.email, loginDto.password);
-  if (!user) throw new UnauthorizedException('Invalid credentials');
+    loginDto: LoginRequestDto,
+    clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+  ): Promise<BaseResponseDto<LoginResponseDto>> {
+    const user = await this.validateUser(loginDto.email, loginDto.password);
+    if (!user) throw new UnauthorizedException('Invalid credentials');
 
-  // Generate tokens
-  const { accessToken, refreshToken } = await this.generateTokens(
-    { id: user.id, email: loginDto.email },
-    clientInfo,
-  );
+    const { accessToken, refreshToken } = await this.generateTokens(
+      { uuid: user.uuid, email: user.email },
+      clientInfo,
+    );
 
-  // Build email payload
-  const payload = {
-    to: user.email,
-    firstName: user.firstName,
-    device: clientInfo?.device || 'Unknown device',
-    ipAddress: clientInfo?.ipAddress || 'Unknown IP',
-    userAgent: clientInfo?.userAgent || 'Unknown agent',
-    os: clientInfo?.os || 'Unknown OS',
-    timestamp: new Date().toISOString(),
-  };
+    const payload = {
+      to: user.email,
+      firstName: user.firstName,
+      device: clientInfo?.device || 'Unknown device',
+      ipAddress: clientInfo?.ipAddress || 'Unknown IP',
+      userAgent: clientInfo?.userAgent || 'Unknown agent',
+      os: clientInfo?.os || 'Unknown OS',
+      timestamp: new Date().toISOString(),
+    };
+
+    this.rabbitClient.emit('user.login.email', payload);
+    this.logger.debug(`📤 [AuthService] Login email payload: ${JSON.stringify(payload)}`);
+
+    const authUser = { ...user, accessToken, refreshToken };
 
 
+    const loginResponse = {
 
-  // Emit RabbitMQ event for login email
-  this.rabbitClient.emit('user.login.email', payload);
-  this.logger.debug(`📤 [AuthService] Login email payload: ${JSON.stringify(payload)}`);
-
-  const authUser = { ...user, accessToken, refreshToken };
-
-  const loginResponse =  {
-    success: true,
-    message: 'Login successful',
-    code: 'OK',
-    user: authUser,
-    error: null,
+      success: true,
+      message: 'Login successful',
+      code: 'OK',
+      user: authUser,
+      error: null,
+    
+    }
+    return loginResponse;
   }
-
-  return loginResponse;
-}
-
 
   // ------------------ Refresh Token ------------------
   async refreshToken(refreshToken: string): Promise<TokenPairDto> {
@@ -212,27 +273,31 @@ export class AuthService implements OnModuleInit {
 
     const payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken);
 
-    const user$ = this.userGrpcService.getUserProfileById({ id: payload.sub });
-    const user: BaseUserResponseGrpc<UserResponseDto>  = await firstValueFrom(user$);
+    const user$ = this.userGrpcService.getUserProfileByUuid({ userUuid: payload.userUuid });
+    const user: BaseUserResponseGrpc<UserResponseDto> = await firstValueFrom(user$);
 
-    // Get all active sessions
-    const sessions = await this.prisma.session.findMany({ where: { userId: parseInt(payload.sub), revoked: false } });
+    const sessions = await this.prisma.session.findMany({
+      where: { userUuid: payload.userUuid, revoked: false },
+    });
 
-    // Find matching hashed token
     const validSession = sessions.find((s) => bcrypt.compareSync(refreshToken, s.hashedToken));
     if (!validSession) throw new UnauthorizedException('Invalid or revoked refresh token');
 
-    return this.generateTokens({ id: user.user.id, email: user.user.email });
+    return this.generateTokens({ uuid: user.user.uuid, email: user.user.email });
   }
 
   // ------------------ Logout ------------------
-  async logout(userId: string, tokenId?: string): Promise<void> {
+  async logout(userUuid: string, tokenId?: string): Promise<void> {
     if (tokenId) {
-      // Logout from a single session
-      await this.prisma.session.updateMany({ where: { tokenId }, data: { revoked: true } });
+      await this.prisma.session.updateMany({
+        where: { tokenId },
+        data: { revoked: true },
+      });
     } else {
-      // Logout from all sessions
-      await this.prisma.session.updateMany({ where: { userId: parseInt(userId) }, data: { revoked: true } });
+      await this.prisma.session.updateMany({
+        where: { userUuid },
+        data: { revoked: true },
+      });
     }
   }
 }

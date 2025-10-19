@@ -1,4 +1,4 @@
-import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
+import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientGrpc } from '@nestjs/microservices';
 import { lastValueFrom, Observable } from 'rxjs';
@@ -16,6 +16,7 @@ import {
   CreatePermissionRequestDto,
   AssignPermissionToRoleRequestDto,
   AssignRoleToUserRequestDto,
+  GetUserByUserUuidDto,
 } from '@pivota-api/dtos';
 
 import {
@@ -23,43 +24,44 @@ import {
   BaseRoleResponseGrpc,
   BaseRoleResponsesGrpc,
   BasePermissionResponseGrpc,
+  BaseGetUserRoleReponseGrpc,
   BaseRolePermissionResponseGrpc,
   BaseUserRoleResponseGrpc,
 } from '@pivota-api/interfaces';
 
+// ------------------ gRPC User Service Interface ------------------
 interface UserServiceGrpc {
-  getUserProfileById(
-    data: { id: string },
+  getUserProfileByUuid(
+    data: GetUserByUserUuidDto,
   ): Observable<BaseUserResponseGrpc<UserResponseDto> | null>;
 }
 
+// ------------------ RbacService ------------------
 @Injectable()
 export class RbacService implements OnModuleInit {
   private userServiceGrpc: UserServiceGrpc;
+  private readonly logger = new Logger()  
+  
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject('USER_PACKAGE') private readonly grpcClient: ClientGrpc,
+  ) {}
+
+  // ------------------ Module Init ------------------
+  onModuleInit() {
+    this.userServiceGrpc = this.grpcClient.getService<UserServiceGrpc>('UserService');
+  }
+
   private getGrpcService(): UserServiceGrpc {
-    if (!this.userServiceGrpc){
-        this.userServiceGrpc = this.grpcClient.getService<UserServiceGrpc>('UserService');
+    if (!this.userServiceGrpc) {
+      this.userServiceGrpc = this.grpcClient.getService<UserServiceGrpc>('UserService');
     }
     return this.userServiceGrpc;
   }
 
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject('USER_PACKAGE') private readonly grpcClient: ClientGrpc, // added gRPC client injection
-  ) {}
-
-  onModuleInit() {
-    //  get gRPC service reference for user service
-    this.userServiceGrpc = this.grpcClient.getService<UserServiceGrpc>('UserService');
-  }
-
-  // -------------------------
-  // Role Management
-  // -------------------------
-
-  async createRole(
-    dto: CreateRoleRequestDto,
-  ): Promise<BaseResponseDto<RoleResponseDto>> {
+  // ------------------ Role Management ------------------
+  async createRole(dto: CreateRoleRequestDto): Promise<BaseResponseDto<RoleResponseDto>> {
     const role = await this.prisma.role.create({
       data: { name: dto.name, description: dto.description },
     });
@@ -68,7 +70,7 @@ export class RbacService implements OnModuleInit {
       success: true,
       message: 'Role created successfully',
       role: {
-        id: role.id,
+        id: role.id.toString(),
         name: role.name,
         description: role.description,
         createdAt: role.createdAt.toISOString(),
@@ -81,9 +83,7 @@ export class RbacService implements OnModuleInit {
     return roleResponse;
   }
 
-  async updateRole(
-    dto: UpdateRoleRequestDto,
-  ): Promise<BaseResponseDto<RoleResponseDto>> {
+  async updateRole(dto: UpdateRoleRequestDto): Promise<BaseResponseDto<RoleResponseDto>> {
     const role = await this.prisma.role.update({
       where: { id: Number(dto.id) },
       data: { description: dto.description, name: dto.name },
@@ -93,7 +93,7 @@ export class RbacService implements OnModuleInit {
       success: true,
       message: 'Role updated successfully',
       role: {
-        id: role.id,
+        id: role.id.toString(),
         name: role.name,
         description: role.description,
         createdAt: role.createdAt.toISOString(),
@@ -127,7 +127,7 @@ export class RbacService implements OnModuleInit {
       success: true,
       message: 'Roles fetched successfully',
       roles: roles.map((r) => ({
-        id: r.id,
+        id: r.id.toString(),
         name: r.name,
         description: r.description,
         createdAt: r.createdAt.toISOString(),
@@ -140,10 +140,7 @@ export class RbacService implements OnModuleInit {
     return response;
   }
 
-  // -------------------------
-  // Permission Management
-  // -------------------------
-
+  // ------------------ Permission Management ------------------
   async createPermission(
     dto: CreatePermissionRequestDto,
   ): Promise<BaseResponseDto<PermissionResponseDto>> {
@@ -153,8 +150,8 @@ export class RbacService implements OnModuleInit {
 
     const permissionResponse: BasePermissionResponseGrpc<PermissionResponseDto> = {
       success: true,
+      message: 'Permission created successfully',
       descriptioAction: permission,
-      message: 'Permission Created Successfully!',
       error: null,
       code: 'Ok',
     };
@@ -183,58 +180,106 @@ export class RbacService implements OnModuleInit {
     return permissionResponse;
   }
 
-  // -------------------------
-  // User ↔ Role Management
-  // -------------------------
-  async assignRoleToUser(
-    dto: AssignRoleToUserRequestDto,
-  ): Promise<BaseResponseDto<UserRoleResponseDto>> {
-    // 👇 Step 1: Fetch user from UserService before assigning
-    const userServiceGrpc = this.getGrpcService();  
 
-    const userResponse = await lastValueFrom(
-      userServiceGrpc.getUserProfileById({ id: dto.userId }),
-    );
 
-   if (!userResponse || !userResponse.success || !userResponse.user) {
-      const failedResponse: BaseUserRoleResponseGrpc<UserRoleResponseDto> = {
-        success: false,
+
+  // ------------------ User ↔ Role Management ------------------
+  // ------------------ Fetch role for a given user ------------------
+async getRoleForUser(
+  userUuid: GetUserByUserUuidDto,
+): Promise<BaseGetUserRoleReponseGrpc<RoleResponseDto | null>> {
+  // Fetch the single role linked to the user
+  const userRole = await this.prisma.userRole.findUnique({
+    where: { userUuid: userUuid.userUuid },
+    include: { role: true }, // join with role table to get role details
+  });
+
+  // Map the role to RoleResponseDto if it exists, otherwise null
+  const role: RoleResponseDto | null = userRole?.role
+    ? {
+        id: userRole.role.id.toString(),
+        name: userRole.role.name,
+        description: userRole.role.description,
+        createdAt: userRole.role.createdAt.toISOString(),
+        updatedAt: userRole.role.updatedAt.toISOString(),
+      }
+    : null;
+
+    
+
+  this.logger.debug(`Mapped role: ${JSON.stringify(role, null, 2)}`);
+
+  return {
+    success: true,
+    message: 'Role fetched successfully',
+    code: 'Ok',
+    role,
+  };
+}
+
+
+// ------------------ Assign role to a user ------------------
+async assignRoleToUser(
+  dto: AssignRoleToUserRequestDto,
+): Promise<BaseResponseDto<UserRoleResponseDto>> {
+  const userServiceGrpc = this.getGrpcService();
+
+  // Fetch user by UUID
+  const userResponse = await lastValueFrom(
+    userServiceGrpc.getUserProfileByUuid({ userUuid: dto.userUuid }),
+  );
+
+  if (!userResponse || !userResponse.success || !userResponse.user) {
+    const failedResponse: BaseUserRoleResponseGrpc<UserRoleResponseDto> = {
+      success: false,
+      message: 'User not found or unavailable',
+      userRole: null,
+      error: {
+        code: 'USER_NOT_FOUND',
         message: 'User not found or unavailable',
-        userRole: null,
-        error: {
-          code: 'USER_NOT_FOUND',
-          message: 'User not found or unavailable',
-        },
-        code: 'NotFound',
-      };
-      return failedResponse;
-    }
-
-
-
-    //  Step 2: Proceed with assignment if user exists
-    const userRole = await this.prisma.userRole.create({
-      data: { userId: Number(dto.userId), roleId: Number(dto.roleId) },
-    });
-
-    const userRoleResponse: BaseUserRoleResponseGrpc<UserRoleResponseDto> = {
-      success: true,
-      message: 'Role assigned to user successfully',
-      userRole: userRole,
-      error: undefined,
-      code: 'Ok',
+      },
+      code: 'NotFound',
     };
-
-    return userRoleResponse;
+    return failedResponse;
   }
 
-  // -------------------------
-  // Example gRPC Helper
-  // -------------------------
-  async getUserProfile(userId: string) {
-    const user = await lastValueFrom(
-      this.userServiceGrpc.getUserProfileById({ id: userId }),
-    );
-    return user;
+  // Check if the user already has a role
+  const existingRole = await this.prisma.userRole.findUnique({
+    where: { userUuid: dto.userUuid },
+  });
+
+  let userRole;
+  if (existingRole) {
+    // Update existing role
+    userRole = await this.prisma.userRole.update({
+      where: { id: existingRole.id },
+      data: { roleId: Number(dto.roleId) },
+    });
+  } else {
+    // Assign new role
+    userRole = await this.prisma.userRole.create({
+      data: { userUuid: dto.userUuid, roleId: Number(dto.roleId) },
+    });
   }
+
+  const userRoleResponse: BaseUserRoleResponseGrpc<UserRoleResponseDto> = {
+    success: true,
+    message: existingRole ? 'User role updated successfully' : 'Role assigned to user successfully',
+    userRole: userRole,
+    error: undefined,
+    code: 'Ok',
+  };
+
+  return userRoleResponse;
+}
+
+
+
+
+  async getRoleIdByName(name: string): Promise<number> {
+  const role = await this.prisma.role.findUnique({ where: { name } });
+  if (!role) throw new Error(`Role '${name}' not found`);
+  return role.id;
+}
+
 }

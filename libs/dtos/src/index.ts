@@ -22,6 +22,8 @@ export * from './lib/UpdateRoleRequestDto.dto';
 export * from './lib/IdRequestDto.dto';
 export * from './lib/CreatePermissionRequestDto.dto';
 export * from './lib/AssignPermissionToRoleRequestDto.dto';
-export * from './lib/AssignRoleToUserRequestDto.dto'
+export * from './lib/AssignRoleToUserRequestDto.dto';
+export * from './lib/GetUserByUserCodeDto.dto'; 
+export * from './lib/GetUserByUserUuidDto.dto';
 
 

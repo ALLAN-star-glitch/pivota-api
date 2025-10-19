@@ -1,6 +1,6 @@
 // apps/api-gateway/src/modules/rbac/rbac-gateway.service.ts
 
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom, Observable } from 'rxjs';
 import {
@@ -13,13 +13,16 @@ import {
   AssignRoleToUserRequestDto,
   CreatePermissionRequestDto,
   CreateRoleRequestDto,
-  UpdateRoleRequestDto
+  UpdateRoleRequestDto,
+  GetUserByUserUuidDto
 } from '@pivota-api/dtos';
 import {
+  
   BaseRoleResponseGrpc,
-  BasePermissionResponseGrpc,
   BaseUserRoleResponseGrpc,
-  BaseRolePermissionResponseGrpc
+  BasePermissionResponseGrpc,
+  BaseRolePermissionResponseGrpc,
+  BaseGetUserRoleReponseGrpc
 } from '@pivota-api/interfaces';
 
 interface RbacServiceGrpc {
@@ -28,13 +31,16 @@ interface RbacServiceGrpc {
   createPermission(data: CreatePermissionRequestDto): Observable<BasePermissionResponseGrpc<PermissionResponseDto>>;
   assignPermissionToRole(data: AssignPermissionToRoleRequestDto): Observable<BaseRolePermissionResponseGrpc<RolePermissionResponseDto>>
   assignRoleToUser(data: AssignRoleToUserRequestDto): Observable<BaseUserRoleResponseGrpc<UserRoleResponseDto>>;
+  getUserRole(data: GetUserByUserUuidDto): Observable<BaseGetUserRoleReponseGrpc<RoleResponseDto>>;
+
   
 }
 
 @Injectable()
 export class RbacGatewayService implements OnModuleInit {
   private rbacServiceGrpc: RbacServiceGrpc;
-
+  private readonly logger = new Logger()
+  
   private getGrpcService(): RbacServiceGrpc {
     if (!this.rbacServiceGrpc){
         this.rbacServiceGrpc = this.grpcClient.getService<RbacServiceGrpc>('RbacService');
@@ -100,7 +106,7 @@ export class RbacGatewayService implements OnModuleInit {
     )
 
     if(response.success){
-        BaseResponseDto.ok(response.rolePermission, response.message, response.code)
+        return BaseResponseDto.ok(response.rolePermission, response.message, response.code)
     }
     else {
         return BaseResponseDto.fail(response.message, response.code)
@@ -112,7 +118,10 @@ export class RbacGatewayService implements OnModuleInit {
 
   //Asssign role to user
   async assignRoleToUser(dto: AssignRoleToUserRequestDto): Promise<BaseResponseDto<UserRoleResponseDto>> {
-    const response$ = this.rbacServiceGrpc.assignRoleToUser({ userId: dto.userId, roleId: dto.roleId });
+
+
+     this.logger.debug('API-GW: calling Admin gRPC assignRoleToUser with:', JSON.stringify(dto));
+    const response$ = this.rbacServiceGrpc.assignRoleToUser({ userUuid: dto.userUuid, roleId: dto.roleId });
     const response = await firstValueFrom(response$);
 
     if (response.success) {
@@ -121,6 +130,25 @@ export class RbacGatewayService implements OnModuleInit {
       return BaseResponseDto.fail(response.message, response.code);
     }
   }
+
+  // -------------------------
+  // Get Roles for a User
+  // -------------------------
+  async getRoleForUser(userUuid: string): Promise<BaseResponseDto<RoleResponseDto>> {
+    this.logger.debug(`API-GW: Fetching role for userUuid=${userUuid}`);
+    const response$ = this.getGrpcService().getUserRole({ userUuid });
+    const response = await firstValueFrom(response$);
+
+
+    if (response.success) {
+      return BaseResponseDto.ok(response.role, response.message, response.code);
+    } else {
+      return BaseResponseDto.fail(response.message, response.code);
+    }
+  }
+
+
+
 
 
 

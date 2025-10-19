@@ -16,6 +16,7 @@ export class EmailController {
     await this.emailService.sendWelcomeEmail(data);
   }
 
+  
   @EventPattern('user.login.email')
   async handleLoginEmail(@Payload() data: UserLoginEmailDto) {
     this.logger.debug(`📥 Received login email event: ${JSON.stringify(data)}`);

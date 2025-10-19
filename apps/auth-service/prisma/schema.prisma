@@ -9,29 +9,29 @@ datasource db {
 }
 
 model Credential {
-  id           Int      @id @default(autoincrement())
-  userId       Int      @unique
-  passwordHash String
-  mfaSecret    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            Int       @id @default(autoincrement())
+  userUuid      String    @unique        // links to user service UUID
+  passwordHash  String
+  mfaSecret     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model Session {
-  id          Int       @id @default(autoincrement())
-  userId      Int
-  tokenId     String    @unique @default(uuid())
-  hashedToken String
-  device      String?
-  ipAddress   String?
-  userAgent   String?
-  os          String?
-  revoked     Boolean   @default(false)
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  expiresAt   DateTime
+  id           Int       @id @default(autoincrement())
+  userUuid     String                 // links to user via UUID
+  tokenId      String    @unique @default(uuid())
+  hashedToken  String
+  device       String?
+  ipAddress    String?
+  userAgent    String?
+  os           String?
+  revoked      Boolean   @default(false)
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
 
-  @@index([userId])
+  @@index([userUuid])
   @@index([revoked])
   @@index([expiresAt])
 }
