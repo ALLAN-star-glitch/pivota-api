@@ -2,7 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { RbacModule } from '../RbacModule/rbac.module';
+import { RbacModule } from '../modules/rbac-and-security/rbac/rbac.module';
+
 
 @Module({
   imports: [

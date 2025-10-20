@@ -8,7 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ClientGrpc, ClientProxy } from '@nestjs/microservices';
 import * as bcrypt from 'bcrypt';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   SignupRequestDto,
   LoginResponseDto,
@@ -164,8 +164,10 @@ export class AuthService implements OnModuleInit {
   const userGrpcService = this.getGrpcService();
 
   try {
+
+    this.logger.log(`Calling CreateUserProfile ... `)
     // 1️⃣ Call UserService to create user profile
-    const userProfile$= userGrpcService.createUserProfile({
+    const userProfile$ = userGrpcService.createUserProfile({
       email: signupDto.email,
       firstName: signupDto.firstName,
       lastName: signupDto.lastName,
@@ -174,16 +176,19 @@ export class AuthService implements OnModuleInit {
 
     const userResponse = await firstValueFrom(userProfile$);
 
+    this.logger.debug(`User Response: ${JSON.stringify(userResponse)}`)
+
     if (!userResponse.success || !userResponse.user) {
       this.logger.warn('⚠️ User service failed to create profile', userResponse);
 
-      const failedResponse = {
+      const failedResponse = {  
         success: false,
         message: 'User profile creation failed',
         code: 'INTERNAL',
-        user: null,
+        user: null, 
         error: { code: 'INTERNAL', message: 'User creation failed' },
-      };  
+      };
+
 
       return failedResponse;
     }
@@ -192,7 +197,6 @@ export class AuthService implements OnModuleInit {
 
     // 2️⃣ Hash password and create credentials
     const hashedPassword = await bcrypt.hash(signupDto.password, 10);
-
     await this.prisma.credential.create({
       data: {
         userUuid: user.uuid,
@@ -200,18 +204,31 @@ export class AuthService implements OnModuleInit {
       },
     });
 
-    this.logger.log('✅ Credentials created successfully for user:', user.uuid);
+    this.logger.log('Credentials created successfully for user:', user.uuid);
 
-    const payload = {
+    // 3️⃣ Fetch role from RBAC
+    const rbacGrpcService = this.getRbacGrpcService();
+    const userRoleResponse = await firstValueFrom(
+      rbacGrpcService.getUserRole({ userUuid: user.uuid })
+    );
+    const roleName = userRoleResponse?.role?.name ?? 'RegisteredUser';
 
+    // 4️⃣ Include role in the user object
+    const userWithRole: UserResponseDto = {
+      ...user,
+      role: roleName,
+    };
+
+    const grpcSuccessBaseResponse = {
       success: true,
       message: 'Signup successful',
-      code: 'OK',
-      user,
+      code: 'Ok',
+      user: userWithRole,
       error: null,
-    }
+    };  
 
-    return payload;
+    // 5️⃣ Return signup response
+    return grpcSuccessBaseResponse;
   } catch (error: unknown) {
     this.logger.error('❌ Signup failed', error);
 
@@ -226,46 +243,67 @@ export class AuthService implements OnModuleInit {
 }
 
 
+
+
+
   // ------------------ Login ------------------
-  async login(
-    loginDto: LoginRequestDto,
-    clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
-  ): Promise<BaseResponseDto<LoginResponseDto>> {
-    const user = await this.validateUser(loginDto.email, loginDto.password);
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+ async login(
+  loginDto: LoginRequestDto,
+  clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+): Promise<BaseResponseDto<LoginResponseDto>> {
+  // 1️ Validate user credentials
+  const user = await this.validateUser(loginDto.email, loginDto.password);
+  if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const { accessToken, refreshToken } = await this.generateTokens(
-      { uuid: user.uuid, email: user.email },
-      clientInfo,
-    );
+  // 2️ Fetch role from RBAC service
+  const rbacGrpcService = this.getRbacGrpcService();
+  const userRoleResponse = await firstValueFrom(
+    rbacGrpcService.getUserRole({ userUuid: user.uuid })
+  );
+  const roleName = userRoleResponse?.role?.name ?? 'RegisteredUser';
 
-    const payload = {
-      to: user.email,
-      firstName: user.firstName,
-      device: clientInfo?.device || 'Unknown device',
-      ipAddress: clientInfo?.ipAddress || 'Unknown IP',
-      userAgent: clientInfo?.userAgent || 'Unknown agent',
-      os: clientInfo?.os || 'Unknown OS',
-      timestamp: new Date().toISOString(),
-    };
-
-    this.rabbitClient.emit('user.login.email', payload);
-    this.logger.debug(`📤 [AuthService] Login email payload: ${JSON.stringify(payload)}`);
-
-    const authUser = { ...user, accessToken, refreshToken };
+  this.logger.debug(`User Role: ${roleName}`)
 
 
-    const loginResponse = {
+  // 3️Generate access and refresh tokens
+  const { accessToken, refreshToken } = await this.generateTokens(
+    { uuid: user.uuid, email: user.email },
+    clientInfo,
+  );
 
-      success: true,
-      message: 'Login successful',
-      code: 'OK',
-      user: authUser,
-      error: null,
-    
-    }
-    return loginResponse;
-  }
+  // 4️ Emit login email event
+  const payload = {
+    to: user.email,
+    firstName: user.firstName,
+    device: clientInfo?.device || 'Unknown device',
+    ipAddress: clientInfo?.ipAddress || 'Unknown IP',
+    userAgent: clientInfo?.userAgent || 'Unknown agent',
+    os: clientInfo?.os || 'Unknown OS',
+    timestamp: new Date().toISOString(),
+  };
+  this.rabbitClient.emit('user.login.email', payload);
+  this.logger.debug(`📤 [AuthService] Login email payload: ${JSON.stringify(payload)}`);
+
+  // 5️ Attach role to user object along with tokens
+  const authUser = {
+    ...user,
+    role: roleName,
+    accessToken,
+    refreshToken,
+  };
+
+  // 6️ Return login response
+  const loginResponse = {
+    success: true,
+    message: 'Login successful',
+    code: 'OK',
+    user: authUser,
+    error: null,
+  };
+
+  return loginResponse;
+}
+
 
   // ------------------ Refresh Token ------------------
   async refreshToken(refreshToken: string): Promise<TokenPairDto> {

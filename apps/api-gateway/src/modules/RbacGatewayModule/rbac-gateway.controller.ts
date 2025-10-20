@@ -24,7 +24,7 @@ import {
 } from '@pivota-api/dtos';
 import { Roles } from '@pivota-api/decorators';
 import { RolesGuard } from '@pivota-api/guards';
-import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
 
 @Controller('admin-service')
 export class RbacGatewayController {
@@ -131,7 +131,7 @@ async assignRoleToUser(
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('RootGuardian', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
   @Version('1')
-  @Get('users/:userUuid/roles')
+  @Get('users/:userUuid/role')
   async getRolesForUser(
     @Param('userUuid') userUuid: string,
   ): Promise<BaseResponseDto<RoleResponseDto>> {

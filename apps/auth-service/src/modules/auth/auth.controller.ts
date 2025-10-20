@@ -52,6 +52,7 @@ import {
     // Pass clientInfo to AuthService.login
     const result = await this.authService.login(loginDto, clientInfo);
 
+
     this.logger.debug(`Login successful for email: ${loginDto.email}`);
     return result;
   }

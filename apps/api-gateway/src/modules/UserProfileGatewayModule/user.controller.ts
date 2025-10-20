@@ -13,7 +13,7 @@ import {
   UserResponseDto,
 } from '@pivota-api/dtos';
 import { RolesGuard } from '@pivota-api/guards';
-import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
 import { Roles } from '@pivota-api/decorators';
 
 @Controller('user-service')

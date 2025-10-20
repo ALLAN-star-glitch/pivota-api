@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
 import { RbacService } from './rbac.service';
 import { RbacController } from './rbac.controller';
-import { PrismaService } from '../prisma/prisma.service';
+
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { USER_PROTO_PATH } from '@pivota-api/protos';
+import { PrismaModule } from '../../../prisma/prisma.module'
 
 @Module({
   imports: [
+    PrismaModule,
     ClientsModule.register([
       // GRPC client for User Service
       {
@@ -35,7 +37,8 @@ import { USER_PROTO_PATH } from '@pivota-api/protos';
     ]),
   ],
   controllers: [RbacController],
-  providers: [RbacService, PrismaService],
+  providers: [RbacService],
   exports: [RbacService],
 })
 export class RbacModule {}
+

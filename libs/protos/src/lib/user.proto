@@ -2,14 +2,15 @@ syntax = "proto3";
 
 package user;
 
+// ================== Service Definition ==================
 service UserService {
-  // Profile operations
+  // Core profile operations
   rpc CreateUserProfile(CreateUserProfileRequest) returns (UserProfileResponse);
   rpc GetUserProfileByUuid(GetUserByUuidRequest) returns (UserProfileResponse);
   rpc GetUserProfileByUserCode(GetUserByUserCodeRequest) returns (UserProfileResponse);
   rpc GetUserProfileByEmail(GetUserByEmailRequest) returns (UserProfileResponse);
 
-  // Internal use (for admin/dashboard)
+  // Admin or dashboard-only operations
   rpc GetAllUsers(Empty) returns (UserListResponse);
 }
 
@@ -19,6 +20,7 @@ message CreateUserProfileRequest {
   string lastName = 2;
   string email = 3;
   string phone = 4;
+  string profileImage = 5; // optional
 }
 
 message GetUserByUuidRequest {
@@ -43,20 +45,32 @@ message UserProfileResponse {
   bool success = 1;
   string message = 2;
   int32 code = 3;
-  UserResponse user = 4;          // populated only on success
-  ErrorPayload error = 5;         // structured error object
+  UserResponse user = 4;   // populated only on success
+  ErrorPayload error = 5;  // structured error object
 }
 
 message UserResponse {
-  string userCode = 1;            // external identifier
-  string uuid = 2;                // internal global unique identifier
-  string firstName = 3;
-  string lastName = 4;
-  string email = 5;
-  string phone = 6;
-  string createdAt = 7;
-  string updatedAt = 8;
+  string id = 1;
+  string userCode = 2;            // External identifier (e.g., PIV-000123)
+  string uuid = 3;                // Internal global unique identifier
+  string firstName = 4;
+  string lastName = 5;
+  string email = 6;
+  string phone = 7;
+  string profileImage = 8;
+  string status = 9;              // active, banned, pending
+  string createdAt = 10;
+  string updatedAt = 11;
+
+  // Virtual fields populated dynamically from other services
+  string role = 12;                  // fetched from admin-service RBAC
+  string currentSubscription = 13;   // from payment-service
+  string subscriptionStatus = 14;    // active, pending, expired
+  string subscriptionExpiresAt = 15; // date string, optional
+  string planId = 16;                // subscription plan ID
+  string categoryId = 17;            // service category ID
 }
+
 
 message UserListResponse {
   bool success = 1;

@@ -8,16 +8,22 @@ datasource db {
   url      = env("USER_SERVICE_DATABASE_URL")
 }
 
-
-
 model User {
-  id        Int      @id @default(autoincrement())
-  uuid      String   @unique @default(uuid())
-  userCode  String   @unique
-  email     String   @unique
-  firstName String
-  lastName  String
-  phone     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                    Int       @id @default(autoincrement())
+  email                 String    @unique
+  firstName             String
+  lastName              String
+  phone                 String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  userCode              String    @unique
+  uuid                  String    @unique @default(uuid())
+  currentSubscription   String?   @ignore
+  profileImage          String?
+  role                  String?   @ignore
+  status                String    @default("active")
+  subscriptionExpiresAt DateTime? @ignore
+  subscriptionStatus    String?   @ignore
+  categoryId            Int?      @ignore
+  planId                Int?      @ignore
 }

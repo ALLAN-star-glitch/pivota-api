@@ -4,14 +4,14 @@ import {
   Inject,
   OnModuleInit,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   BaseResponseDto,
   GetUserByUserUuidDto,
   SignupRequestDto,
   UserResponseDto,
 } from '@pivota-api/dtos';
-import { User } from '../../generated/prisma';
+import { User } from '../../../generated/prisma';
 import { ClientKafka, ClientProxy, RpcException } from '@nestjs/microservices';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { randomUUID } from 'crypto';
@@ -273,17 +273,30 @@ export class UserService implements OnModuleInit {
   }
 
   /** ------------------ Mappers ------------------ */
-  private toUserResponse(user: User): UserResponseDto {
-    return {
-      id: user.id?.toString(),
-      uuid: user.uuid,
-      userCode: user.userCode,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      phone: user.phone,
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-    };
-  }
+  private toUserResponse(
+  user: User,
+  extras?: Partial<UserResponseDto>
+): UserResponseDto {
+  return {
+    id: user.id?.toString(),
+    uuid: user.uuid,
+    userCode: user.userCode,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    phone: user.phone,
+    status: user.status,
+    profileImage: user.profileImage,
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
+    //  Virtual fields
+    role: extras?.role || undefined,
+    currentSubscription: extras?.currentSubscription || undefined,
+    subscriptionStatus: extras?.subscriptionStatus || undefined,
+    subscriptionExpiresAt: extras?.subscriptionExpiresAt || undefined,
+    planId: extras?.planId || undefined,
+    categoryId: extras?.categoryId || undefined,
+  };
+}
+
 }
