@@ -1,11 +1,31 @@
+import { ApiProperty, ApiExtraModels } from '@nestjs/swagger';
 import { ErrorPayload } from '@pivota-api/interfaces';
 
+@ApiExtraModels() // Tell Swagger to inspect nested generic types
 export class BaseResponseDto<T = unknown> {
-  readonly success: boolean;      // true if operation succeeded
-  readonly message: string;       // human-readable info
-  readonly code: string;          // machine-readable status
-  readonly data?: T;              // populated on success
-  readonly error?: ErrorPayload;  // populated on failure
+  @ApiProperty({ example: true, description: 'True if operation succeeded' })
+  readonly success: boolean;
+
+  @ApiProperty({ example: 'Success', description: 'Human-readable message' })
+  readonly message: string;
+
+  @ApiProperty({ example: 'OK', description: 'Machine-readable status code' })
+  readonly code: string;
+
+  @ApiProperty({
+    description: 'Response data (populated on success)',
+    required: false,
+    type: Object, // Default to Object; for controllers we can override with T
+  })
+  readonly data?: T;
+
+  @ApiProperty({
+    description: 'Error payload (populated on failure)',
+    required: false,
+    type: Object,
+    example: { message: 'Something went wrong', code: 'INTERNAL_ERROR', details: null },
+  })
+  readonly error?: ErrorPayload;
 
   private constructor(
     success: boolean,
@@ -27,7 +47,11 @@ export class BaseResponseDto<T = unknown> {
   }
 
   // Failure factory
-  static fail(message: string, code = 'INTERNAL_ERROR', details?: unknown): BaseResponseDto<null> {
+  static fail(
+    message: string,
+    code = 'INTERNAL_ERROR',
+    details?: unknown
+  ): BaseResponseDto<null> {
     return new BaseResponseDto<null>(
       false,
       message,
