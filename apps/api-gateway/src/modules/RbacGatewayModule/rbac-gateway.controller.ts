@@ -24,7 +24,8 @@ import {
 } from '@pivota-api/dtos';
 import { Roles } from '@pivota-api/decorators';
 import { RolesGuard } from '@pivota-api/guards';
-import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
+
 
 @Controller('admin-service')
 export class RbacGatewayController {

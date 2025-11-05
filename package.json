@@ -19,7 +19,7 @@
     "start:dev:user": "cross-env NODE_ENV=dev nx serve user-service",
     "start:dev:gateway": "cross-env NODE_ENV=dev nx serve api-gateway",
     "start:dev:all": "concurrently \"npm run start:dev:auth\" \"npm run start:dev:user\" \"npm run start:dev:gateway\" \"npm run start:dev:notification\" \"npm run start:dev:admin\" ",
-    "start:sit:auth": "node dist/apps/auth-service/main.js",
+    "start:sit:auth": "node dist/apps/auth-service/main.js", 
     "start:sit:user": "npm run user:prisma:generate:sit && node dist/apps/user-service/main.js",
     "start:sit:gateway": "node dist/apps/api-gateway/main.js",
     "start:uat:auth": "node dist/apps/auth-service/main.js",

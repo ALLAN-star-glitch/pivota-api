@@ -6,7 +6,7 @@ package auth;
 service AuthService {
   rpc Signup(SignupRequest) returns (SignupResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
-  rpc Refresh(RefreshRequest) returns (LoginResponse);
+  rpc Refresh(RefreshRequest) returns (BaseRefreshTokenResponse);
   rpc ValidateUser(ValidateUserRequest) returns (LoginResponse);
 }
 
@@ -86,4 +86,21 @@ message LoginResponse {
   string code = 3;
   AuthUserResponse user = 4;
   ErrorPayload error = 5;
+}
+
+message RefreshTokenResponse {
+
+  string accessToken = 1;
+  string refreshToken = 2;
+}
+
+
+message BaseRefreshTokenResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  RefreshTokenResponse tokens = 4;
+  ErrorPayload error = 5;
+
+
 }

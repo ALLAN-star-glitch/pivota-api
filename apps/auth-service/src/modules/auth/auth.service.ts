@@ -306,22 +306,36 @@ export class AuthService implements OnModuleInit {
 
 
   // ------------------ Refresh Token ------------------
-  async refreshToken(refreshToken: string): Promise<TokenPairDto> {
+  async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>> {
     if (!refreshToken) throw new UnauthorizedException('Refresh token is required');
+
+     const userGrpcService = this.getGrpcService();
 
     const payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken);
 
-    const user$ = this.userGrpcService.getUserProfileByUuid({ userUuid: payload.userUuid });
+    const user$ = userGrpcService.getUserProfileByUuid({ userUuid: payload.userUuid });
     const user: BaseUserResponseGrpc<UserResponseDto> = await firstValueFrom(user$);
 
     const sessions = await this.prisma.session.findMany({
       where: { userUuid: payload.userUuid, revoked: false },
+      
     });
 
     const validSession = sessions.find((s) => bcrypt.compareSync(refreshToken, s.hashedToken));
     if (!validSession) throw new UnauthorizedException('Invalid or revoked refresh token');
 
-    return this.generateTokens({ uuid: user.user.uuid, email: user.user.email });
+    const response = this.generateTokens({ uuid: user.user.uuid, email: user.user.email });
+
+    const grpcResponse = {
+      success: true,
+      message: "Token Generated Successfully",
+      code: "OK",
+      tokens: response,
+      error: null
+      
+    }
+
+    return grpcResponse;
   }
 
   // ------------------ Logout ------------------

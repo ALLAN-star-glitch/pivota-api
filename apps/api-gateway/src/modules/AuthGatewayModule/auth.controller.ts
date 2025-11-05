@@ -8,7 +8,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { ClientInfo } from '../decorators/client-info.decorator';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt.guard';
 import {
@@ -19,6 +18,7 @@ import {
   BaseResponseDto,
   SignupResponseDto,
 } from '@pivota-api/dtos';
+import { ClientInfo } from '../../decorators/client-info.decorator';
 
 
 @Controller('auth-service')

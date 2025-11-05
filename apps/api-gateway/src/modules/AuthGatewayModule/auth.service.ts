@@ -11,8 +11,9 @@ import {
   BaseResponseDto,
   SignupResponseDto,
   GetUserByUserUuidDto,
+  TokenPairDto,
 } from '@pivota-api/dtos';
-import { BaseUserResponseGrpc, JwtPayload } from '@pivota-api/interfaces';
+import { BaseUserResponseGrpc, BaseRefreshTokenResponseGrpc, JwtPayload } from '@pivota-api/interfaces';
 
 
 // Updated gRPC interface for AuthService (signup now returns BaseResponse)
@@ -21,7 +22,7 @@ interface AuthServiceGrpc {
   login(
     data: LoginRequestDto & { clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'> }
   ): Observable<BaseUserResponseGrpc<LoginResponseDto>>;
-  refresh(data: { refreshToken: string }): Observable<LoginResponseDto>;
+  refresh(data: { refreshToken: string }): Observable<BaseRefreshTokenResponseGrpc<TokenPairDto>>;
   logout(data: { userId: string }): Observable<{ message: string }>;
 }
 
@@ -99,23 +100,25 @@ export class AuthService {
   }
 
   /** ------------------ Refresh ------------------ */
-  async refresh(refreshToken: string, res: Response): Promise<LoginResponseDto> {
+  async refresh(refreshToken: string, res: Response): Promise<BaseResponseDto<TokenPairDto>> {
     const refreshResp = await firstValueFrom(this.authGrpc.refresh({ refreshToken }));
 
-    res.cookie('access_token', refreshResp.accessToken, {
+    res.cookie('access_token', refreshResp.tokens.accessToken, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       maxAge: 15 * 60 * 1000,
     });
-    res.cookie('refresh_token', refreshResp.refreshToken, {
+    res.cookie('refresh_token', refreshResp.tokens.refreshToken, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    return refreshResp;
+    if(refreshResp.success){
+      return BaseResponseDto.ok(refreshResp.tokens, refreshResp.message, refreshResp.code)
+    }
   }
 
   /** ------------------ Logout ------------------ */

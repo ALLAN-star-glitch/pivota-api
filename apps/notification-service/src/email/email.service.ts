@@ -19,7 +19,7 @@ export class EmailService {
 
     this.logger.debug(
       `Loaded Mailjet API Key: ${
-        process.env.MAILJET_API_KEY ? '✅ Present' : '❌ Missing'
+        process.env.MAILJET_API_KEY ? ' Present' : ' Missing'
       }`,
     );
   }
@@ -98,7 +98,7 @@ export class EmailService {
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Unknown error while sending email';
-      this.logger.error(`❌ Failed to send email to ${recipient}: ${message}`);
+      this.logger.error(`Failed to send email to ${recipient}: ${message}`);
     }
   }
 }

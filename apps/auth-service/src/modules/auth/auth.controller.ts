@@ -27,7 +27,7 @@ import {
 
 
     // ------------------ Login ------------------
-    @GrpcMethod('AuthService', 'Login')
+  @GrpcMethod('AuthService', 'Login')
   async handleLoginGrpc(
     loginDto: LoginRequestDto & { 
       clientInfo?: { 
@@ -62,7 +62,7 @@ import {
   // ------------------ Refresh Token ------------------
   // ------------------ Refresh Token ------------------
   @GrpcMethod('AuthService', 'Refresh')
-  async handleRefreshGrpc(data: { refreshToken: string }): Promise<TokenPairDto> {
+  async handleRefreshGrpc(data: { refreshToken: string }): Promise<BaseResponseDto<TokenPairDto>> {
     if (!data.refreshToken) {
       this.logger.warn('Refresh token not provided in gRPC request');
       throw new Error('Refresh token is required');
