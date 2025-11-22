@@ -1,8 +1,15 @@
-import pkg from '../generated/prisma/index.js';
-const { PrismaClient } = pkg;
-type Permission = pkg.Permission;
+import 'dotenv/config';
+import { PrismaClient } from '../generated/prisma/client.js'; // path to your generated client
+import { PrismaPg } from '@prisma/adapter-pg';
 
-const prisma = new PrismaClient();
+type Permission = import('../generated/prisma/index.js').Permission;
+
+// Use adapter for Postgres
+const adapter = new PrismaPg({
+  connectionString: process.env.ADMIN_SERVICE_DATABASE_URL!,
+});
+
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log('🌱 Seeding RBAC...');
@@ -25,25 +32,16 @@ async function main() {
 
   // ------------------ 2️⃣ Permissions ------------------
   const permissionData = [
-    // User management
     { action: 'user.view', description: 'View user details' },
     { action: 'user.suspend', description: 'Suspend user accounts' },
     { action: 'user.verify', description: 'Verify service providers' },
-
-    // Listing management
     { action: 'listing.create', description: 'Create listings' },
     { action: 'listing.update', description: 'Update listings' },
     { action: 'listing.delete', description: 'Delete listings' },
     { action: 'listing.approve', description: 'Approve/reject listings' },
-
-    // Payments
     { action: 'payment.view', description: 'View payments' },
     { action: 'payment.refund', description: 'Refund customer payments' },
-
-    // Analytics
     { action: 'analytics.view', description: 'View analytics dashboards' },
-
-    // Audit
     { action: 'audit.view', description: 'View audit logs' },
   ];
 
@@ -63,7 +61,6 @@ async function main() {
     'RootGuardian',
   ];
 
-  // Minimal permissions for each role (only new ones introduced)
   const rolePermissions: Record<string, string[]> = {
     RegisteredUser: ['listing.create'],
     ServiceProvider: ['listing.update', 'listing.delete'],
@@ -72,18 +69,17 @@ async function main() {
     FraudAdmin: ['audit.view', 'user.suspend'],
     ComplianceAdmin: ['user.verify', 'user.view'],
     ContentManagerAdmin: ['listing.delete', 'listing.approve', 'user.suspend'],
-    RootGuardian: permissions.map((p: Permission) => p.action), // all permissions
+    RootGuardian: permissions.map((p: Permission) => p.action),
   };
 
-  // ------------------ 4️⃣ Seed role-permissions with inheritance ------------------
+  // ------------------ 4️⃣ Seed role-permissions ------------------
   for (let i = 0; i < roleHierarchy.length; i++) {
     const roleName = roleHierarchy[i];
     const role = roles.find(r => r.name === roleName);
     if (!role) continue;
 
-    // Inherit permissions from all lower roles
     const inheritedActions = roleHierarchy
-      .slice(0, i + 1) // include this role + all lower roles
+      .slice(0, i + 1)
       .flatMap(rn => rolePermissions[rn] || []);
 
     const uniqueActions = Array.from(new Set(inheritedActions));

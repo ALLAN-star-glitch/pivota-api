@@ -5,33 +5,29 @@ import { PrismaClient } from '../../generated/prisma';
 
 //  Load environment variables from .env.dev before anything else
 dotenv.config({ path: '.env.dev' });
+import { PrismaPg } from '@prisma/adapter-pg';
+
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
   constructor(private readonly configService: ConfigService) {
-    //  You cannot access `this.configService` before calling super(),
-    // so we extract the value safely first
-    const databaseUrl =
-      process.env.USER_SERVICE_DATABASE_URL ??
-      configService.get<string>('USER_SERVICE_DATABASE_URL');
 
-    if (!databaseUrl) {
-      throw new Error('❌ USER_SERVICE_DATABASE_URL is not defined.');
-    }
+   const adapter = new PrismaPg({
+      connectionString: configService.get<string>('ADMIN_SERVICE_DATABASE_URL'),
+    });
+
+
+   
     
     // Call super() with the resolved database URL
     super({
-      datasources: {
-        db: {
-          url: databaseUrl,
-        },
-      },
+
+      adapter
+      
     });
 
-    // ✅\ Log the initialization
-    console.log(`✅ PrismaService initialized with USER_SERVICE_DATABASE_URL`);
   }
 
   async onModuleInit() {

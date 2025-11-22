@@ -13,7 +13,6 @@ import {
 } from '@pivota-api/dtos';
 import { User } from '../../../generated/prisma';
 import { ClientKafka, ClientProxy, RpcException } from '@nestjs/microservices';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { randomUUID } from 'crypto';
 
 @Injectable()
@@ -131,15 +130,12 @@ export class UserService implements OnModuleInit {
     return payload;
 
   } catch (error: unknown) {
-    // Handle Prisma duplicate entry (email/phone)
-    if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
-      const target = (error.meta?.target as string[]) || [];
-      const conflictField = target.includes('email')
-        ? 'Email'
-        : target.includes('phone')
-        ? 'Phone'
-        : 'Field';
-
+  if (error instanceof Error) {
+    // Optional: detect unique constraint errors by message/code
+    const message = (error as any).message || '';
+    if (message.includes('Unique constraint failed')) {
+      const conflictField = message.includes('email') ? 'Email' :
+                            message.includes('phone') ? 'Phone' : 'Field';
       this.logger.warn(`⚠️ ${conflictField} already registered`);
       throw new RpcException({
         code: 'ALREADY_EXISTS',
@@ -147,24 +143,19 @@ export class UserService implements OnModuleInit {
       });
     }
 
-    
-    // Handle unexpected errors
-    if (error instanceof Error) {
-      this.logger.error(`❌ Unexpected error during signup: ${error.message}`, error.stack);
-    } else {
-      this.logger.error('❌ Unknown error during signup', JSON.stringify(error));
-    }
-
-    const failedResponse = {
-      success: false,
-      message: 'Failed to create user',
-      code: 'INTERNAL',
-      user: null,
-      error: { code: 'INTERNAL', message: 'Failed to create user' },
-    };
-
-    return failedResponse;
+    this.logger.error(`❌ Unexpected error during signup: ${error.message}`, error.stack);
+  } else {
+    this.logger.error('❌ Unknown error during signup', JSON.stringify(error));
   }
+
+  return {
+    success: false,
+    message: 'Failed to create user',
+    code: 'INTERNAL',
+    error: { code: 'INTERNAL', message: 'Failed to create user' },
+  };
+}
+
 }
 
   /** ------------------ gRPC-friendly Profile Fetch ------------------ */

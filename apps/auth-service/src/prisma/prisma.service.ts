@@ -4,16 +4,20 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '../../generated/prisma';
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.dev' });
+import { PrismaPg } from '@prisma/adapter-pg'
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor(configService: ConfigService) {
+
+    const adapter = new PrismaPg({
+
+      connectionString: configService.get<string>('AUTH_SERVICE_DATABASE_URL')
+      
+    })
+
     super({
-      datasources: {
-        db: {
-          url: configService.get<string>('AUTH_SERVICE_DATABASE_URL'),
-        },
-      },
+      adapter
     });
   }
 
