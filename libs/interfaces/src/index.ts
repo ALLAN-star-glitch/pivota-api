@@ -12,3 +12,4 @@ export * from './lib/BaseRolePermissionResponseGrpc.interface';
 export * from './lib/BaseGetUserRoleReponseGrpc';
 export * from './lib/BaseUserRoleResponseGrpc';
 export * from './lib/BaseRefreshTokenResponseGrpc.interface';
+export * from './lib/BaseRoleIdResponse.interface';

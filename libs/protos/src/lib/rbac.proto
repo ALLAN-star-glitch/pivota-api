@@ -9,11 +9,18 @@ service RbacService {
   rpc AssignPermissionToRole (AssignPermissionToRoleRequest) returns (BasePermissionRoleResponse);
   rpc AssignRoleToUser (AssignRoleToUserRequest) returns (BaseUserRoleResponse);
   rpc GetUserRole (GetUserRolesRequest) returns (BaseGetUserRolesResponse);
+  rpc GetRoleIdByType (RoleIdRequest) returns (BaseGetRoleIdByTypeResponse);
 }
+
+
 
 // ---------------------------
 // Requests
 // ---------------------------
+
+message RoleIdRequest {
+  string roleType = 1;
+}
 
 message CreateRoleRequest {
   string name = 1;
@@ -101,6 +108,15 @@ message BaseGetUserRolesResponse {
   ErrorPayload error = 5;
 }
 
+message BaseGetRoleIdByTypeResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  RoleIdResponse data = 4;
+  ErrorPayload error = 5;
+}
+
+
 // ---------------------------
 // Entities
 // ---------------------------
@@ -131,4 +147,9 @@ message PermissionRoleResponse {
   int32 id = 1;
   int32 roleId = 2;
   int32 permissionId = 3;
+}
+
+
+message RoleIdResponse {
+  int32 roleId = 1;
 }

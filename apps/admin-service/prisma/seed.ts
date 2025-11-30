@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { PrismaClient } from '../generated/prisma/client.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 
+// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 const adapter = new PrismaPg({ connectionString: process.env.ADMIN_SERVICE_DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
@@ -11,20 +12,20 @@ async function main() {
 
   // ---------- 1) ROLES ----------
   const roles = [
-    { name: 'Root Guardian', description: 'Full system access', scope: 'SYSTEM', type: 'RootGuardian', status: 'Active', immutable: true },
-    { name: 'System Admin', description: 'System administrative tasks', scope: 'SYSTEM', type: 'SystemAdmin', status: 'Active', immutable: true },
-    { name: 'Content ManagerAdmin', description: 'Platform-wide content moderation', scope: 'SYSTEM', type: 'ContentManagerAdmin', status: 'Active', immutable: true },
-    { name: 'Compliance Admin', description: 'KYC and verification', scope: 'SYSTEM', type: 'ComplianceAdmin', status: 'Active', immutable: true },
-    { name: 'Fraud Admin', description: 'Fraud monitoring and actions', scope: 'SYSTEM', type: 'FraudAdmin', status: 'Active', immutable: true },
-    { name: 'Analytics Admin', description: 'Access analytics & metrics', scope: 'SYSTEM', type: 'AnalyticsAdmin', status: 'Active', immutable: true },
-    { name: 'Category Manager', description: 'Manage modules', scope: 'SYSTEM', type: 'CategoryManager', status: 'Active', immutable: true },
+    { name: 'Root Guardian', description: 'Full system access', scope: 'SYSTEM', roleType: 'RootGuardian', status: 'Active', immutable: true },
+    { name: 'System Admin', description: 'System administrative tasks', scope: 'SYSTEM', roleType: 'SystemAdmin', status: 'Active', immutable: true },
+    { name: 'Content ManagerAdmin', description: 'Platform-wide content moderation', scope: 'SYSTEM', roleType: 'ContentManagerAdmin', status: 'Active', immutable: true },
+    { name: 'Compliance Admin', description: 'KYC and verification', scope: 'SYSTEM', roleType: 'ComplianceAdmin', status: 'Active', immutable: true },
+    { name: 'Fraud Admin', description: 'Fraud monitoring and actions', scope: 'SYSTEM', roleType: 'FraudAdmin', status: 'Active', immutable: true },
+    { name: 'Analytics Admin', description: 'Access analytics & metrics', scope: 'SYSTEM', roleType: 'AnalyticsAdmin', status: 'Active', immutable: true },
+    { name: 'Category Manager', description: 'Manage modules', scope: 'SYSTEM', roleType: 'CategoryManager', status: 'Active', immutable: true },
 
     // Business roles
-    { name: 'Business System Admin', description: 'Primary client admin', scope: 'BUSINESS', type: 'BusinessSystemAdmin', status: 'Active', immutable: false },
-    { name: 'Business Content Manager', description: 'Module-scoped moderator', scope: 'BUSINESS', type: 'BusinessContentManager', status: 'Active', immutable: false },
+    { name: 'Business System Admin', description: 'Primary client admin', scope: 'BUSINESS', roleType: 'BusinessSystemAdmin', status: 'Active', immutable: false },
+    { name: 'Business Content Manager', description: 'Module-scoped moderator', scope: 'BUSINESS', roleType: 'BusinessContentManager', status: 'Active', immutable: false },
 
     // General
-    { name: 'GeneralUser', description: 'Default free-tier user', scope: 'GENERAL', type: 'GeneralUser', status: 'Active', immutable: false },
+    { name: 'General User', description: 'Default free-tier user', scope: 'GENERAL', roleType: 'GeneralUser', status: 'Active', immutable: false },
   ];
 
   await prisma.role.createMany({ data: roles, skipDuplicates: true });

@@ -22,7 +22,12 @@ import {
     async handleSignupGrpc(
       signupDto: SignupRequestDto,
     ): Promise<BaseResponseDto<UserResponseDto>> {
-      return this.authService.signup(signupDto);
+      const response = this.authService.signup(signupDto);
+
+      this.logger.debug(`Signup successful for email: ${signupDto.email}`);
+      this.logger.debug(`Signup response: ${JSON.stringify(response)}`);
+
+      return response;
     }
 
 

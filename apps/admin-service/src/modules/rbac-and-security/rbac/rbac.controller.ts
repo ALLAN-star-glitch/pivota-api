@@ -1,5 +1,5 @@
 import { Controller, Logger } from '@nestjs/common';
-import { EventPattern, GrpcMethod, Payload } from '@nestjs/microservices';
+import {GrpcMethod } from '@nestjs/microservices';
 import { RbacService } from './rbac.service';
 import {
   RoleResponseDto,
@@ -14,12 +14,14 @@ import {
   AssignRoleToUserRequestDto,
   UserRoleResponseDto,
   GetUserByUserUuidDto,
+  RoleIdRequestDto, RoleIdResponse,
 } from '@pivota-api/dtos';
+import { BaseRoleIdGrpcResponse } from '@pivota-api/interfaces';
 
 
 type UserAssignDefaultRoleEvent = {
   userUuid: string;
-  defaultRole: string;
+  defaultRoleType: string;
 };
 @Controller()
 export class RbacController {
@@ -76,46 +78,35 @@ export class RbacController {
   // User ↔ Role Management
   // -------------------------
   @GrpcMethod('RbacService', 'AssignRoleToUser')
-async assignRoleToUser(
-  data: AssignRoleToUserRequestDto,
-): Promise<BaseResponseDto<UserRoleResponseDto>> {
-  this.logger.log(`Received Payload: ${JSON.stringify(data, null, 2)}`);
+  async assignRoleToUser(
+    data: AssignRoleToUserRequestDto,
+  ): Promise<BaseResponseDto<UserRoleResponseDto>> {
+    this.logger.log(`Received Payload: ${JSON.stringify(data, null, 2)}`);
 
-  try {
-    const result = await this.rbacService.assignRoleToUser(data);
-    return result;
-  } catch (error) {
-    this.logger.error('❌ Error in assignRoleToUser:', error);
-  }
-}
-
-  // -------------------------
-  // Kafka Listener for default role assignment
-  // -------------------------
-  @EventPattern('user.assign.default.role')
-  async handleAssignDefaultRole(
-    @Payload() message: UserAssignDefaultRoleEvent, 
-
-  ) {
-
-    this.logger.log(`Payload received: ${JSON.stringify(message)}`);
-
-    const { userUuid, defaultRole } = message;
-
-    this.logger.log(`Received Kafka event: assign default role '${defaultRole}' for userUuid=${userUuid}`);
-
-    const assignDto: AssignRoleToUserRequestDto = {
-      userUuid,
-      roleId: (await this.rbacService.getRoleIdByName(defaultRole)),
-    };
     try {
-      const result = await this.rbacService.assignRoleToUser(assignDto);
-      this.logger.log(`Default role assigned successfully: ${JSON.stringify(result)}`);
+      const result = await this.rbacService.assignRoleToUser(data);
+      return result;
     } catch (error) {
-      this.logger.error(`Failed to assign default role: ${error.message}`, error.stack);
+      this.logger.error('❌ Error in assignRoleToUser:', error);
     }
   }
 
+
+  @GrpcMethod('RbacService', 'GetRoleIdByType') // Fix: BaseRoleIdGrpcResponse is a generic type
+  async getRoleIdByType(data: RoleIdRequestDto): Promise<BaseResponseDto<RoleIdResponse>> {
+    this.logger.log(`gRPC GetRoleIdByType called with type: ${data.roleType}`);
+    try {
+      
+      const result = await this.rbacService.getRoleIdByType(data);
+       this.logger.debug(`gRPC GetRoleIdByType full response: ${JSON.stringify(result, null, 2)}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to get role ID by type: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  
   // -------------------------
 // Get roles for user
 // -------------------------
@@ -125,5 +116,6 @@ async getRoleForUser(
 ) {
   this.logger.log(`gRPC GetUserRole called with userUuid: ${JSON.stringify(data)}`);
   return this.rbacService.getRoleForUser(data);
+
 }
 }

@@ -25,5 +25,7 @@ export * from './lib/AssignPermissionToRoleRequestDto.dto';
 export * from './lib/AssignRoleToUserRequestDto.dto';
 export * from './lib/GetUserByUserCodeDto.dto'; 
 export * from './lib/GetUserByUserUuidDto.dto';
+export * from './lib/RoleIdResponse.dto';
+export * from './lib/RoleIdRequest.dto';
 
 

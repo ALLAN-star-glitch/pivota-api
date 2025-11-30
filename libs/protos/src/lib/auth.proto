@@ -23,7 +23,7 @@ message SignupResponse {
   bool success = 1;
   string message = 2;
   string code = 3;
-  AuthUserResponse user = 4;     // populated only on success
+  UserResponse user = 4;     // populated only on success
   ErrorPayload error = 5;        // structured error object
 }
 
@@ -77,6 +77,29 @@ message AuthUserResponse {
   string refreshToken = 17;
   string createdAt = 18;
   string updatedAt = 19;
+}
+
+
+message UserResponse {
+  string id = 1;
+  string uuid = 2;
+  string userCode = 3;
+  string email = 4;
+  string firstName = 5;
+  string lastName = 6;
+  string phone = 7;
+  string profileImage = 8;
+  string status = 9;
+  string role = 10;
+  string currentSubscription = 11;
+  string subscriptionStatus = 12;
+  string subscriptionExpiresAt = 13;
+  string planId = 14;
+  string categoryId = 15;
+  string createdAt = 16;
+  string updatedAt = 17;
+
+ 
 }
 
 

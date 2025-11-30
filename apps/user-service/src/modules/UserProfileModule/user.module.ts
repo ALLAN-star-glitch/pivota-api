@@ -3,6 +3,7 @@ import { UserController } from './user.controller';
 import { UserService } from './user.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { RBAC_PROTO_PATH } from '@pivota-api/protos';
 
 
 
@@ -24,6 +25,18 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
           },
         },
       },
+
+       // gRPC client for RBAC service
+      {
+        name: 'RBAC_PACKAGE',
+        transport: Transport.GRPC,
+        options: {
+          package: 'rbac',
+          protoPath: RBAC_PROTO_PATH,
+          url: process.env.RBAC_GRPC_URL || 'localhost:50055',
+        },
+      },
+      
       {
         // 🔹 RabbitMQ client for notifications/jobs
         name: 'USER_RMQ',

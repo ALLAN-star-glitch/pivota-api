@@ -17,7 +17,11 @@ import {
   AssignPermissionToRoleRequestDto,
   AssignRoleToUserRequestDto,
   GetUserByUserUuidDto,
+  RoleIdResponse,
+  RoleIdRequestDto,
 } from '@pivota-api/dtos';
+
+
 
 import {
   BaseUserResponseGrpc,
@@ -27,6 +31,7 @@ import {
   BaseGetUserRoleReponseGrpc,
   BaseRolePermissionResponseGrpc,
   BaseUserRoleResponseGrpc,
+  BaseRoleIdGrpcResponse,
 } from '@pivota-api/interfaces';
 
 // ------------------ gRPC User Service Interface ------------------
@@ -63,7 +68,7 @@ export class RbacService implements OnModuleInit {
   // ------------------ Role Management ------------------
   async createRole(dto: CreateRoleRequestDto): Promise<BaseResponseDto<RoleResponseDto>> {
     const role = await this.prisma.role.create({
-      data: { name: dto.name, type: dto.type, description: dto.description, scope: dto.scope},
+      data: { name: dto.name, roleType: dto.type, description: dto.description, scope: dto.scope},
     });
 
     const roleResponse: BaseRoleResponseGrpc<RoleResponseDto> = {
@@ -215,6 +220,7 @@ async getRoleForUser(
     code: 'Ok',
     role,
   };
+
 }
 
 
@@ -248,7 +254,7 @@ async assignRoleToUser(
     where: { userUuid: dto.userUuid },
   });
 
-  let userRole;
+  let userRole: { id: number; userUuid: string; roleId: number; };
   if (existingRole) {
     // Update existing role
     userRole = await this.prisma.userRole.update({
@@ -274,12 +280,25 @@ async assignRoleToUser(
 }
 
 
+ async getRoleIdByType(
+  roleIdRequestDto: RoleIdRequestDto,
+): Promise<BaseResponseDto<RoleIdResponse>> {
+  const role = await this.prisma.role.findFirst({
+    where: { roleType: roleIdRequestDto.roleType },
+  });
+  if (!role) throw new Error(`Role '${roleIdRequestDto.roleType}' not found`);
 
+  const response: BaseResponseDto<RoleIdResponse> = {
+    success: true,
+    message: 'Role ID fetched successfully',
+    code: 'Ok',
+    data: { roleId: role.id }, 
+  };
 
-  async getRoleIdByName(name: string): Promise<number> {
-  const role = await this.prisma.role.findUnique({ where: { name } });
-  if (!role) throw new Error(`Role '${name}' not found`);
-  return role.id;
+  return response;
 }
+
+
+
 
 }
