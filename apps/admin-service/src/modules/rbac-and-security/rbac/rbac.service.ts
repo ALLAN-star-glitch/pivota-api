@@ -63,7 +63,7 @@ export class RbacService implements OnModuleInit {
   // ------------------ Role Management ------------------
   async createRole(dto: CreateRoleRequestDto): Promise<BaseResponseDto<RoleResponseDto>> {
     const role = await this.prisma.role.create({
-      data: { name: dto.name, description: dto.description },
+      data: { name: dto.name, type: dto.type, description: dto.description, scope: dto.scope},
     });
 
     const roleResponse: BaseRoleResponseGrpc<RoleResponseDto> = {
@@ -145,7 +145,7 @@ export class RbacService implements OnModuleInit {
     dto: CreatePermissionRequestDto,
   ): Promise<BaseResponseDto<PermissionResponseDto>> {
     const permission = await this.prisma.permission.create({
-      data: { action: dto.action, description: dto.description },
+      data: { action: dto.action, name: dto.name, description: dto.description },
     });
 
     const permissionResponse: BasePermissionResponseGrpc<PermissionResponseDto> = {

@@ -1,8 +1,7 @@
-// Admin Service Prisma Schema
-// https://pris.ly/d/prisma-schema
+// ===================== GENERATOR & DATASOURCE =====================
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
   output   = "../generated/prisma"
 }
 
@@ -10,39 +9,60 @@ datasource db {
   provider = "postgresql"
 }
 
-// ================== Role Management ==================
+// ===================== ROLES =====================
+// Matches Frontend: SystemRole interface
+
 model Role {
   id          Int       @id @default(autoincrement())
-  name        String    @unique
+  name        String    @unique                       // Custom label (e.g., Landlord Manager)
   description String?
+
+  type        String                                    // e.g., "SystemAdmin", "RootGuardian"
+  scope       String                                    // "system" | "business" | "general"
+  status      String    @default("Active")             // "Active" | "Inactive"
+  immutable   Boolean   @default(false)
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  userRoles       UserRole[]       // 1-to-many users (each user only has one role)
-  rolePermissions RolePermission[] // many-to-many with permissions
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+  roleModules     RoleModule[]
 }
+
+// ===================== PERMISSIONS =====================
+// Matches frontend SystemPermission interface
 
 model Permission {
   id          Int       @id @default(autoincrement())
+  name        String
   action      String    @unique
   description String?
+
+  moduleId    Int?
+  module      Module?   @relation(fields: [moduleId], references: [id])
+
+  system      Boolean   @default(false) // system-level permission
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  rolePermissions RolePermission[] // many-to-many with roles
+  rolePermissions RolePermission[]
 }
 
-// ================== Single Role Per User ==================
+// ===================== USER → ROLE =====================
+// User can only have ONE role
+
 model UserRole {
   id       Int    @id @default(autoincrement())
-  userUuid String @unique   // <-- ensures a user can only have one role
+  userUuid String  @unique
   roleId   Int
 
   role Role @relation(fields: [roleId], references: [id])
-  @@index([roleId])
 }
 
-// ================== Role-Permission Mapping ==================
+// ===================== ROLE → PERMISSION =====================
+
 model RolePermission {
   id           Int   @id @default(autoincrement())
   roleId       Int
@@ -50,51 +70,110 @@ model RolePermission {
 
   role       Role       @relation(fields: [roleId], references: [id])
   permission Permission @relation(fields: [permissionId], references: [id])
+
   @@unique([roleId, permissionId])
 }
 
-// ================== User Categories ==================
-model UserCategory {
+// ===================== MODULES =====================
+
+model Module {
   id          Int      @id @default(autoincrement())
-  userUuid    String
-  categoryId  String
-  verified    Boolean  @default(false)
-  approvedBy  String?   // UUID of admin approving
-  entityType  String   // "individual" | "organization"
-  orgName     String?
+  slug        String   @unique
+  name        String
+  description String?
+  system      Boolean  @default(false) // true = platform-wide module
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@index([userUuid])
-  @@index([createdAt])
+  permissions   Permission[]
+  planModules   PlanModule[]
+  roleModules   RoleModule[]
+  userModules   UserModule[]           // relation for users linked to this module
 }
 
-// ================== Subscriptions ==================
-model Subscription {
+// ===================== PLANS =====================
+
+model Plan {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  planModules PlanModule[]
+}
+
+// ===================== PLAN → MODULE (with listingLimit) =====================
+
+model PlanModule {
+  id           Int     @id @default(autoincrement())
+  planId       Int
+  moduleId     Int
+  listingLimit Int      @default(0)
+
+  plan   Plan   @relation(fields: [planId], references: [id])
+  module Module @relation(fields: [moduleId], references: [id])
+
+  @@unique([planId, moduleId])
+}
+
+// ===================== ROLE → MODULE =====================
+
+model RoleModule {
+  id         Int     @id @default(autoincrement())
+  roleId     Int
+  moduleId   Int
+  assignable Boolean @default(false) // whether super admin can toggle
+
+  role   Role   @relation(fields: [roleId], references: [id])
+  module Module @relation(fields: [moduleId], references: [id])
+
+  @@unique([roleId, moduleId])
+}
+
+// ===================== USER → MODULE =====================
+// Tracks which business modules a user is active in
+
+model UserModule {
   id         Int      @id @default(autoincrement())
   userUuid   String
+  moduleId   Int
+  verified   Boolean  @default(false)  // whether the user is verified for this module
+  approvedBy String?                 // admin who approved the user
+  entityType String?                 // 'individual' | 'business'
+  orgName    String?                 // organization name if applicable
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  module Module @relation(fields: [moduleId], references: [id])
+}
+
+// ===================== SUBSCRIPTIONS =====================
+
+model Subscription {
+  id         Int      @id @default(autoincrement())
+  userUuid   String   @unique
   plan       String
   premium    Boolean  @default(false)
   status     String
   expiresAt  DateTime
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-
-  @@index([userUuid])
-  @@index([createdAt])
 }
 
-// ================== Audit Logs ==================
+
+// ===================== AUDIT LOGS =====================
+
 model AuditLog {
   id          Int      @id @default(autoincrement())
-  userUuid    String?  // optional if action not tied to a user
+  userUuid    String?
   action      String
   entity      String
   entityId    Int?
-  performedBy String?  // UUID of admin performing action
+  performedBy String?
   createdAt   DateTime @default(now())
-
-  @@index([userUuid])
-  @@index([createdAt])
 }

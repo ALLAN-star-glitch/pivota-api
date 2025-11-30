@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as dotenv from 'dotenv';
-import { PrismaClient } from '../../generated/prisma';
+import { PrismaClient } from '../../generated/prisma/client'
 
 //  Load environment variables from .env.dev before anything else
 dotenv.config({ path: '.env.dev' });
@@ -15,7 +15,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   constructor(private readonly configService: ConfigService) {
 
    const adapter = new PrismaPg({
-      connectionString: configService.get<string>('ADMIN_SERVICE_DATABASE_URL'),
+      connectionString: configService.get<string>('USER_SERVICE_DATABASE_URL'),
     });
 
 

@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
   output   = "../generated/prisma"
 }
 
@@ -12,7 +12,7 @@ model User {
   email                 String    @unique
   firstName             String
   lastName              String
-  phone                 String?
+  phone                 String?   @unique
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
   userCode              String    @unique

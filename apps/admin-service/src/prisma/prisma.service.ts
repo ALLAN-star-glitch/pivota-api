@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.dev' }); // MUST come before importing PrismaClient
 
-import { PrismaClient } from '../../generated/prisma'; // correct named import
+import { PrismaClient } from '../../generated/prisma/client'; // correct named import
 import { PrismaPg } from '@prisma/adapter-pg';
 
 @Injectable()

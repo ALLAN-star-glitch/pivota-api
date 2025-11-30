@@ -45,172 +45,111 @@ import {
   UserRoleResponseDto
 )
 @Controller('admin-service')
+@ApiTags('RBAC')
+@ApiExtraModels(
+  BaseResponseDto,
+  RoleResponseDto,
+  PermissionResponseDto,
+  RolePermissionResponseDto,
+  UserRoleResponseDto
+)
 export class RbacGatewayController {
   private readonly logger = new Logger(RbacGatewayController.name);
 
   constructor(private readonly rbacGatewayService: RbacGatewayService) {}
 
-  // ===================== CREATE ROLE =====================
+  // =========================================
+  // CREATE ROLE
+  // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('RootGuardian')
   @Version('1')
-  @Post('roles/create')
-  @ApiBearerAuth()
+  @Post('roles')
   @ApiOperation({ summary: 'Create a new role' })
   @ApiBody({ type: CreateRoleRequestDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Role created successfully',
-    schema: {
-      allOf: [
-        { $ref: getSchemaPath(BaseResponseDto) },
-        { properties: { data: { $ref: getSchemaPath(RoleResponseDto) } } },
-      ],
-    },
-  })
   async createRole(
     @Body() body: CreateRoleRequestDto
   ): Promise<BaseResponseDto<RoleResponseDto>> {
-    this.logger.debug(`📩 Create role request: ${JSON.stringify(body)}`);
     return this.rbacGatewayService.createRole(body);
   }
 
-  // ===================== UPDATE ROLE =====================
+  // =========================================
+  // UPDATE ROLE
+  // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('RootGuardian')
   @Version('1')
-  @Put('roles/:id/update')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update an existing role' })
-  @ApiParam({ name: 'id', type: String, description: 'Role ID to update' })
+  @Put('roles/:id')
+  @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: UpdateRoleRequestDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Role updated successfully',
-    schema: {
-      allOf: [
-        { $ref: getSchemaPath(BaseResponseDto) },
-        { properties: { data: { $ref: getSchemaPath(RoleResponseDto) } } },
-      ],
-    },
-  })
   async updateRole(
     @Param('id') id: string,
     @Body() body: UpdateRoleRequestDto
   ): Promise<BaseResponseDto<RoleResponseDto>> {
-    const payload = { ...body, id };
-    this.logger.debug(`📩 Update role request for id=${id}: ${JSON.stringify(payload)}`);
-    return this.rbacGatewayService.updateRole(payload);
+    return this.rbacGatewayService.updateRole({ ...body, id });
   }
 
-  // ===================== CREATE PERMISSION =====================
+  // =========================================
+  // CREATE PERMISSION
+  // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('RootGuardian')
   @Version('1')
-  @Post('permissions/create')
-  @ApiBearerAuth()
+  @Post('permissions')
   @ApiOperation({ summary: 'Create a new permission' })
-  @ApiBody({ type: CreatePermissionRequestDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Permission created successfully',
-    schema: {
-      allOf: [
-        { $ref: getSchemaPath(BaseResponseDto) },
-        { properties: { data: { $ref: getSchemaPath(PermissionResponseDto) } } },
-      ],
-    },
-  })
   async createPermission(
     @Body() body: CreatePermissionRequestDto
   ): Promise<BaseResponseDto<PermissionResponseDto>> {
-    this.logger.debug(`📩 Create permission request: ${JSON.stringify(body)}`);
     return this.rbacGatewayService.createPermission(body);
   }
 
-  // ===================== ASSIGN PERMISSION TO ROLE =====================
+  // =========================================
+  // ASSIGN PERMISSION TO ROLE
+  // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('RootGuardian')
   @Version('1')
-  @Post('roles/:roleId/permissions/assign')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Assign a permission to a role' })
-  @ApiParam({ name: 'roleId', type: String, description: 'Role ID' })
-  @ApiBody({ type: AssignPermissionToRoleRequestDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Permission assigned successfully',
-    schema: {
-      allOf: [
-        { $ref: getSchemaPath(BaseResponseDto) },
-        { properties: { data: { $ref: getSchemaPath(RolePermissionResponseDto) } } },
-      ],
-    },
-  })
+  @Post('roles/:roleId/permissions')
+  @ApiParam({ name: 'roleId', type: String })
   async assignPermissionToRole(
     @Param('roleId') roleId: string,
     @Body() body: AssignPermissionToRoleRequestDto
   ): Promise<BaseResponseDto<RolePermissionResponseDto>> {
-    const payload: AssignPermissionToRoleRequestDto = { ...body, roleId };
-    this.logger.debug(`📩 Assign permission to role request for roleId=${roleId}: ${JSON.stringify(payload)}`);
-    return this.rbacGatewayService.assignPermissionToRole(payload);
+    return this.rbacGatewayService.assignPermissionToRole({
+      ...body,
+      roleId,
+    });
   }
 
-  // ===================== ASSIGN ROLE TO USER =====================
+  // =========================================
+  // ASSIGN ROLE TO USER
+  // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('RootGuardian')
   @Version('1')
-  @Post('users/:userUuid/role/assign')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Assign a role to a user' })
-  @ApiParam({ name: 'userUuid', type: String, description: 'User UUID' })
-  @ApiBody({ type: AssignRoleToUserRequestDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Role assigned successfully',
-    schema: {
-      allOf: [
-        { $ref: getSchemaPath(BaseResponseDto) },
-        { properties: { data: { $ref: getSchemaPath(UserRoleResponseDto) } } },
-      ],
-    },
-  })
+  @Post('users/:userUuid/roles')
+  @ApiParam({ name: 'userUuid', type: String })
   async assignRoleToUser(
     @Param('userUuid') userUuid: string,
     @Body() body: AssignRoleToUserRequestDto
   ): Promise<BaseResponseDto<UserRoleResponseDto>> {
-    const payload = { ...body, userUuid };
-    this.logger.debug(`📩 Assign role request for userUuid=${userUuid}: ${JSON.stringify(payload)}`);
-    return this.rbacGatewayService.assignRoleToUser(payload);
+    return this.rbacGatewayService.assignRoleToUser({
+      ...body,
+      userUuid,
+    });
   }
 
-  // ===================== GET ROLES FOR USER =====================
+  // =========================================
+  // GET ROLE FOR USER
+  // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('RootGuardian', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
-@Version('1')
-@Get('users/:userUuid/role')
-@ApiBearerAuth()
-@ApiOperation({ summary: 'Get the role assigned to a user' })
-@ApiParam({ name: 'userUuid', type: String, description: 'User UUID' })
-@ApiResponse({
-  status: 200,
-  description: 'Role retrieved successfully',
-  schema: {
-    allOf: [
-      { $ref: getSchemaPath(BaseResponseDto) },
-      {
-        properties: {
-          data: { $ref: getSchemaPath(RoleResponseDto) }, // single role
-        },
-      },
-    ],
-  },
-})
-async getRolesForUser(
-  @Param('userUuid') userUuid: string
-): Promise<BaseResponseDto<RoleResponseDto>> {
-  this.logger.debug(`📩 Get role request for userUuid=${userUuid}`);
-  return this.rbacGatewayService.getRoleForUser(userUuid);
-}
-
+  @Roles('RootGuardian', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
+  @Version('1')
+  @Get('users/:userUuid/roles')
+  @ApiParam({ name: 'userUuid', type: String })
+  async getRolesForUser(
+    @Param('userUuid') userUuid: string
+  ): Promise<BaseResponseDto<RoleResponseDto>> {
+    return this.rbacGatewayService.getRoleForUser(userUuid);
+  }
 }

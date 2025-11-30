@@ -60,7 +60,7 @@ export class RbacGatewayService implements OnModuleInit {
 
     const grpcService = this.getGrpcService()
 
-    const response$ = grpcService.createRole({ name: dto.name, description: dto.description });
+    const response$ = grpcService.createRole({ name: dto.name, scope: dto.scope, type: dto.type, description: dto.description });
     const response = await firstValueFrom(response$);
 
     if (response.success) {
@@ -86,7 +86,7 @@ export class RbacGatewayService implements OnModuleInit {
 
   //Create Permission
   async createPermission(dto: CreatePermissionRequestDto): Promise<BaseResponseDto<PermissionResponseDto>> {
-    const response$ = this.rbacServiceGrpc.createPermission({ action: dto.action, description: dto.description });
+    const response$ = this.rbacServiceGrpc.createPermission({ action: dto.action, name: dto.name, description: dto.description });
     const response = await firstValueFrom(response$);
 
     if (response.success) {

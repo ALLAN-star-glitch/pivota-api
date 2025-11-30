@@ -11,7 +11,7 @@ import {
   SignupRequestDto,
   UserResponseDto,
 } from '@pivota-api/dtos';
-import { User } from '../../../generated/prisma';
+import { User } from '../../../generated/prisma/client';
 import { ClientKafka, ClientProxy, RpcException } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
 
