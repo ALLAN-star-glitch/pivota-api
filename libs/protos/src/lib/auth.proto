@@ -19,6 +19,7 @@ message SignupRequest {
   string phone = 5;
 }
 
+
 message SignupResponse {
   bool success = 1;
   string message = 2;

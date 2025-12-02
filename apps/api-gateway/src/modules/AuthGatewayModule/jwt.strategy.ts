@@ -37,12 +37,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     this.logger.debug(
-      `✅ Authenticated user ${user.email} (UUID: ${payload.userUuid}) with role: ${payload.role}`,
+      ` Authenticated user ${user.email} (UUID: ${payload.userUuid}) with role: ${payload.role}`,
     );
 
     return {
       ...user,
-      role: payload.role, // ✅ single role
+      role: payload.role, //  single role
       planId: payload.planId,
       categoryId: payload.categoryId,
     };

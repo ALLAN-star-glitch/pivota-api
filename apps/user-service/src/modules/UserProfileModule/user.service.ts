@@ -67,18 +67,20 @@ export class UserService implements OnModuleInit {
 
   /** ------------------ User Signup ------------------ */
   async createUserProfile(
-    signupDto: SignupRequestDto,
-  ): Promise<BaseResponseDto<UserResponseDto>> {
-    this.logger.log(' Starting user signup', signupDto);
+  signupDto: SignupRequestDto,
+): Promise<BaseResponseDto<UserResponseDto>> {
+  this.logger.log(' Starting user signup', signupDto);
 
-    try {
-      // Generate UUID + Custom User Code
-      const uuid = randomUUID();
-      const userCode = this.generateUserCode();
-      this.logger.debug(`Generated UUID: ${uuid}, UserCode: ${userCode}`);
+  try {
+    // Generate UUID + Custom User Code
+    const uuid = randomUUID();
+    const userCode = this.generateUserCode();
+    this.logger.debug(`Generated UUID: ${uuid}, UserCode: ${userCode}`);
 
-      // Create user record in DB
-      const user = await this.prisma.user.create({
+    // Use Prisma transaction to create user and assign default role atomically
+    const user = await this.prisma.$transaction(async (tx) => {
+      // 1️⃣ Create user record in DB
+      const createdUser = await tx.user.create({
         data: {
           uuid,
           userCode,
@@ -88,104 +90,101 @@ export class UserService implements OnModuleInit {
           ...(signupDto.phone ? { phone: signupDto.phone } : {}),
         },
       });
-      
-      this.logger.debug(`User Profile Created in DB: ${JSON.stringify(user, null, 2)}`);
 
-      // Emit Kafka user.created event (non-critical)
-      try {
-        this.kafkaClient.emit('user.created', {
-          id: user.id,
-          uuid: user.uuid,
-          userCode: user.userCode,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          phone: user.phone,
-          createdAt: user.createdAt,
-        });
-        this.logger.log('📤 Kafka event emitted: user.created');
-      } catch (err) {
-        this.logger.warn('⚠️ Kafka event emission failed', err);
-      }
+      this.logger.debug(`User Profile Created in Transaction: ${JSON.stringify(createdUser, null, 2)}`);
 
-      // ------------------ Assign default role via gRPC (non-critical) ------------------
-      try {
-        const rbacGrpcService = this.getRbacGrpcService();
-        const roleResponse = await lastValueFrom(
-          rbacGrpcService.GetRoleIdByType({ roleType: 'GeneralUser' }),
+      // 2️⃣ Assign default role via gRPC
+      const rbacGrpcService = this.getRbacGrpcService();
+      const roleResponse = await lastValueFrom(
+        rbacGrpcService.GetRoleIdByType({ roleType: 'GeneralUser' }),
+      );
+
+      this.logger.debug(`gRPC GetRoleIdByType response: ${JSON.stringify(roleResponse, null, 2)}`);
+
+      if (roleResponse.data.roleId) {
+        await lastValueFrom(
+          rbacGrpcService.AssignRoleToUser({
+            userUuid: createdUser.uuid,
+            roleId: roleResponse.data.roleId,
+          }),
         );
-
-        this.logger.debug(`gRPC GetRoleIdByType response: ${JSON.stringify(roleResponse, null, 2)}`);
-
-        if (roleResponse.data.roleId) {
-          await lastValueFrom(
-            rbacGrpcService.AssignRoleToUser({
-              userUuid: user.uuid,
-              roleId: roleResponse.data.roleId,
-            }),
-          
-          );
-          this.logger.log(`✅ Default role assigned to user ${user.uuid} via gRPC`);
-        } else {
-          this.logger.warn('⚠️ Role ID not found, skipping default role assignment');
-        }
-      } catch (err) {
-        this.logger.error('⚠️ gRPC default role assignment failed', err);
-      }
-
-      // Emit RabbitMQ email event (non-critical)
-      try {
-        this.rabbitClient.emit('user.signup.email', {
-          to: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-        });
-        this.logger.log('📤 RabbitMQ event emitted: user.signup.email');
-      } catch (err) {
-        this.logger.warn('⚠️ RabbitMQ email event failed', err);
-      }
-
-      // Return success
-      const user_profile =  {
-        success: true,
-        message: 'Signup successful',
-        code: 'OK',
-        user: this.toUserResponse(user),
-        error: null,
-      };
-
-      return user_profile;
-
-    } catch (error: unknown) {
-      // Handle known errors (e.g., unique constraint violations)
-      if (error instanceof Error) {
-        const message = (error as any).message || '';
-        if (message.includes('Unique constraint failed')) {
-          const conflictField = message.includes('email')
-            ? 'Email'
-            : message.includes('phone')
-            ? 'Phone'
-            : 'Field';
-          this.logger.warn(`⚠️ ${conflictField} already registered`);
-
-          throw new RpcException({
-            code: 'ALREADY_EXISTS',
-            message: `${conflictField} already registered`,
-            details: error,
-          });
-        }
-        this.logger.error(`❌ Unexpected error during signup: ${error.message}`, error.stack);
+        this.logger.log(`✅ Default role assigned to user ${createdUser.uuid} via gRPC`);
       } else {
-        this.logger.error('❌ Unknown error during signup', JSON.stringify(error));
+        this.logger.warn('⚠️ Role ID not found, skipping default role assignment');
       }
 
-      throw new RpcException({
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to create user',
-        details: error,
+      return createdUser;
+    });
+
+    // Emit Kafka user.created event (non-critical, outside transaction)
+    try {
+      this.kafkaClient.emit('user.created', {
+        id: user.id,
+        uuid: user.uuid,
+        userCode: user.userCode,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phone: user.phone,
+        createdAt: user.createdAt,
       });
+      this.logger.log('📤 Kafka event emitted: user.created');
+    } catch (err) {
+      this.logger.warn('⚠️ Kafka event emission failed', err);
     }
+
+    // Emit RabbitMQ email event (non-critical, outside transaction)
+    try {
+      this.rabbitClient.emit('user.signup.email', {
+        to: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      });
+      this.logger.log('📤 RabbitMQ event emitted: user.signup.email');
+    } catch (err) {
+      this.logger.warn('⚠️ RabbitMQ email event failed', err);
+    }
+
+    // Return success
+    const signup_success = {
+      success: true,
+      message: 'Signup successful',
+      code: 'OK',
+      user: this.toUserResponse(user),
+      error: null,
+    };
+    return signup_success;
+  } catch (error: unknown) {
+    // Handle known errors (e.g., unique constraint violations)
+    if (error instanceof Error) {
+      const message = (error as any).message || '';
+      if (message.includes('Unique constraint failed')) {
+        const conflictField = message.includes('email')
+          ? 'Email'
+          : message.includes('phone')
+          ? 'Phone'
+          : 'Field';
+        this.logger.warn(`⚠️ ${conflictField} already registered`);
+
+        throw new RpcException({
+          code: 'ALREADY_EXISTS',
+          message: `${conflictField} already registered`,
+          details: error,
+        });
+      }
+      this.logger.error(`❌ Unexpected error during signup: ${error.message}`, error.stack);
+    } else {
+      this.logger.error('❌ Unknown error during signup', JSON.stringify(error));
+    }
+
+    throw new RpcException({
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to create user',
+      details: error,
+    });
   }
+}
+
 
   /** ------------------ Fetch user by UUID ------------------ */
   async getUserProfileByUuid(
@@ -197,7 +196,15 @@ export class UserService implements OnModuleInit {
       throw new RpcException({ code: 'USER_NOT_FOUND', message: 'User not found' });
     }
 
-    return BaseResponseDto.ok(this.toUserResponse(user), 'User retrieved successfully', 'OK');
+    const user_profile = {  
+      success: true,
+      message: "User retrieved successfully",
+      code: "OK",
+      user: this.toUserResponse(user),
+      error: null,
+    }
+
+    return user_profile;
   }
 
   /** ------------------ Fetch user by email ------------------ */
@@ -208,7 +215,16 @@ export class UserService implements OnModuleInit {
       throw new RpcException({ code: 'USER_NOT_FOUND', message: 'User not found' });
     }
 
-    return BaseResponseDto.ok(this.toUserResponse(user), 'User retrieved successfully', 'OK');
+
+    const user_profile = {
+      success: true,
+      message: 'User retrieved successfully',
+      code: 'OK',
+      user: this.toUserResponse(user),
+      error: null,
+    
+    }
+    return user_profile;
   }
 
   /** ------------------ Fetch user by userCode ------------------ */
@@ -219,13 +235,28 @@ export class UserService implements OnModuleInit {
       throw new RpcException({ code: 'USER_NOT_FOUND', message: 'User not found' });
     }
 
-    return BaseResponseDto.ok(this.toUserResponse(user), 'User retrieved successfully', 'OK');
+    const user_profile = {
+      success: true,
+      message: "User retrieved successfully",
+      code: "OK",
+      user: this.toUserResponse(user),
+      error: null,
+      
+    }
+    return user_profile;
   }
 
   /** ------------------ Get all users ------------------ */
   async getAllUsers(): Promise<BaseResponseDto<UserResponseDto[]>> {
     const users = await this.prisma.user.findMany();
-    return BaseResponseDto.ok(users.map((u) => this.toUserResponse(u)), 'Users retrieved successfully', 'OK');
+    const userResponse = {
+      success: true,
+      message: 'Users retrieved successfully',
+      code: 'OK',
+      users: users.map((u) => this.toUserResponse(u)),
+      error: null,  
+    }
+    return userResponse;
   }
 
   /** ------------------ Map User entity to DTO ------------------ */

@@ -85,17 +85,26 @@ export class AuthService implements OnModuleInit {
       const userProfileGrpcResponse: BaseUserResponseGrpc<UserResponseDto> | null =
         await firstValueFrom(userGrpcService.getUserProfileByEmail({ email }));
 
+        this.logger.debug(`Profile Response: ${JSON.stringify(userProfileGrpcResponse)}`)
+
+
       if (!userProfileGrpcResponse?.success || !userProfileGrpcResponse.user) return null;
 
       const userProfile = userProfileGrpcResponse.user;
 
+      this.logger.debug(`Profile Response: ${JSON.stringify(userProfile)}`)
+
       const credential = await this.prisma.credential.findUnique({
         where: { userUuid: userProfile.uuid },
       });
+
+      this.logger.debug(`Credential Response: ${JSON.stringify(credential)}`)
+
       if (!credential) return null;
 
       const isValid = await bcrypt.compare(password, credential.passwordHash);
       if (!isValid) return null;
+
 
       return userProfile;
     } catch (err: unknown) {
@@ -233,18 +242,27 @@ export class AuthService implements OnModuleInit {
     }
   }
 
+
+
   // ------------------ Login ------------------
   async login(
     loginDto: LoginRequestDto,
     clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
   ): Promise<BaseResponseDto<LoginResponseDto>> {
+    this.logger.debug(`Login request received: ${JSON.stringify(loginDto)}`)
+    this.logger.debug(`Client Info: ${JSON.stringify(clientInfo)}`)
+
+
     try {
       const user = await this.validateUser(loginDto.email, loginDto.password);
+      this.logger.debug(`Validated user: ${JSON.stringify(user)}`)
+
       if (!user) throw new UnauthorizedException('Invalid credentials');
+
 
       const rbacService = this.getRbacGrpcService();
       const userRoleResponse = await firstValueFrom(rbacService.getUserRole({ userUuid: user.uuid }));
-      const roleName = userRoleResponse?.role?.name ?? 'RegisteredUser';
+      const roleName = userRoleResponse?.role?.name ?? 'ERROR - USER ROLE NOT FETCHED';
 
       const { accessToken, refreshToken } = await this.generateTokens(
         { uuid: user.uuid, email: user.email },

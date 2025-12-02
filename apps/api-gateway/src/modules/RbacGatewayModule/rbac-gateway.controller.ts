@@ -125,7 +125,7 @@ export class RbacGatewayController {
   // ASSIGN ROLE TO USER
   // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('RootGuardian')
+  @Roles('SuperAdmin')
   @Version('1')
   @Post('users/:userUuid/roles')
   @ApiParam({ name: 'userUuid', type: String })
@@ -147,7 +147,7 @@ export class RbacGatewayController {
   @Version('1')
   @Get('users/:userUuid/roles')
   @ApiParam({ name: 'userUuid', type: String })
-  async getRolesForUser(
+  async getRoleForUser(
     @Param('userUuid') userUuid: string
   ): Promise<BaseResponseDto<RoleResponseDto>> {
     return this.rbacGatewayService.getRoleForUser(userUuid);

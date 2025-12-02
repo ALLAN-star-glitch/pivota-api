@@ -264,9 +264,13 @@ async assignRoleToUser(
   // 4. Map role to response
   const role = {
     id: roleEntity.id.toString(),
+    userUuid: dto.userUuid,
+    roleId: dto.roleId,
     name: roleEntity.name,
+    scope: roleEntity.scope,
     roleType: roleEntity.roleType,
     description: roleEntity.description,
+    status: roleEntity.status,
     createdAt: roleEntity.createdAt.toISOString(),
     updatedAt: roleEntity.updatedAt.toISOString(),
   };

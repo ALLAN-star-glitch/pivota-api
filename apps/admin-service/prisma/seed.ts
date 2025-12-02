@@ -12,7 +12,7 @@ async function main() {
 
   // ---------- 1) ROLES ----------
   const roles = [
-    { name: 'Root Guardian', description: 'Full system access', scope: 'SYSTEM', roleType: 'RootGuardian', status: 'Active', immutable: true },
+    { name: 'Super Admin', description: 'Full system access', scope: 'SYSTEM', roleType: 'SuperAdmin', status: 'Active', immutable: true },
     { name: 'System Admin', description: 'System administrative tasks', scope: 'SYSTEM', roleType: 'SystemAdmin', status: 'Active', immutable: true },
     { name: 'Content ManagerAdmin', description: 'Platform-wide content moderation', scope: 'SYSTEM', roleType: 'ContentManagerAdmin', status: 'Active', immutable: true },
     { name: 'Compliance Admin', description: 'KYC and verification', scope: 'SYSTEM', roleType: 'ComplianceAdmin', status: 'Active', immutable: true },
@@ -30,7 +30,7 @@ async function main() {
 
   await prisma.role.createMany({ data: roles, skipDuplicates: true });
   const dbRoles = await prisma.role.findMany();
-  console.log(`✅ Roles seeded: ${dbRoles.length}`);
+  console.log(`Roles seeded: ${dbRoles.length}`);
 
   // ---------- 2) MODULES ----------
   const modules = [
@@ -168,11 +168,11 @@ async function main() {
       });
     }
   }
-  console.log('✅ Plan module limits seeded');
+  console.log('Plan module limits seeded');
 
   // ---------- 6) SYSTEM ROLE → PERMISSIONS ----------
   const sysRolePermMapping = {
-    RootGuardian: dbPermissions.map(p => p.action),
+    SuperAdmin: dbPermissions.map(p => p.action),
     SystemAdmin: ['role.create', 'role.update', 'role.assign', 'user.view', 'user.suspend', 'system.manage-settings'],
     ContentManagerAdmin: dbPermissions.filter(p => p.action.includes('moderate') || p.action.includes('approve')).map(p => p.action),
     ComplianceAdmin: ['user.view', 'user.suspend', 'audit.view'],

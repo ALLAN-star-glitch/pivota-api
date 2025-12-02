@@ -68,7 +68,7 @@ export class RolesGuard implements CanActivate {
     }
 
     this.logger.debug(
-      `✅ Access granted for user ${user.userCode || user.id || 'unknown'} with role: ${userRole}`,
+      ` Access granted for user ${user.userCode || user.id || 'unknown'} with role: ${userRole}`,
     );
 
     return true;
