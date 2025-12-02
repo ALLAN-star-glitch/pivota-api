@@ -16,7 +16,7 @@ import {
   GetUserByUserUuidDto,
   RoleIdRequestDto, RoleIdResponse,
 } from '@pivota-api/dtos';
-import { BaseRoleIdGrpcResponse } from '@pivota-api/interfaces';
+
 
 
 type UserAssignDefaultRoleEvent = {
@@ -110,7 +110,7 @@ export class RbacController {
   // -------------------------
 // Get roles for user
 // -------------------------
-@GrpcMethod('RbacService', 'getUserRole')
+@GrpcMethod('RbacService', 'GetUserRole')
 async getRoleForUser(
   data: GetUserByUserUuidDto,
 ) {

@@ -1,4 +1,4 @@
 export class AssignRoleToUserRequestDto {
-  userUuid!: string;  // changed from userId
+  userUuid!: string; 
   roleId!: number;
 }

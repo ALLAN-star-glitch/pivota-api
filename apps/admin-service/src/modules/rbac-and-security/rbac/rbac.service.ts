@@ -31,7 +31,6 @@ import {
   BaseGetUserRoleReponseGrpc,
   BaseRolePermissionResponseGrpc,
   BaseUserRoleResponseGrpc,
-  BaseRoleIdGrpcResponse,
 } from '@pivota-api/interfaces';
 
 // ------------------ gRPC User Service Interface ------------------
@@ -77,6 +76,7 @@ export class RbacService implements OnModuleInit {
       role: {
         id: role.id.toString(),
         name: role.name,
+        roleType: role.roleType,  
         description: role.description,
         createdAt: role.createdAt.toISOString(),
         updatedAt: role.updatedAt.toISOString(),
@@ -100,6 +100,7 @@ export class RbacService implements OnModuleInit {
       role: {
         id: role.id.toString(),
         name: role.name,
+        roleType: role.roleType,
         description: role.description,
         createdAt: role.createdAt.toISOString(),
         updatedAt: role.updatedAt.toISOString(),
@@ -134,6 +135,7 @@ export class RbacService implements OnModuleInit {
       roles: roles.map((r) => ({
         id: r.id.toString(),
         name: r.name,
+        roleType: r.roleType,
         description: r.description,
         createdAt: r.createdAt.toISOString(),
         updatedAt: r.updatedAt.toISOString(),
@@ -144,6 +146,7 @@ export class RbacService implements OnModuleInit {
 
     return response;
   }
+  
 
   // ------------------ Permission Management ------------------
   async createPermission(
@@ -193,6 +196,9 @@ export class RbacService implements OnModuleInit {
 async getRoleForUser(
   userUuid: GetUserByUserUuidDto,
 ): Promise<BaseGetUserRoleReponseGrpc<RoleResponseDto | null>> {
+
+  this.logger.debug(`[getRoleForUser] Fetching userRole for UUID: "${userUuid.userUuid}"`);
+
   // Fetch the single role linked to the user
   const userRole = await this.prisma.userRole.findUnique({
     where: { userUuid: userUuid.userUuid },
@@ -204,13 +210,12 @@ async getRoleForUser(
     ? {
         id: userRole.role.id.toString(),
         name: userRole.role.name,
+        roleType: userRole.role.roleType,
         description: userRole.role.description,
         createdAt: userRole.role.createdAt.toISOString(),
         updatedAt: userRole.role.updatedAt.toISOString(),
       }
     : null;
-
-    
 
   this.logger.debug(`Mapped role: ${JSON.stringify(role, null, 2)}`);
 
@@ -227,57 +232,56 @@ async getRoleForUser(
 // ------------------ Assign role to a user ------------------
 async assignRoleToUser(
   dto: AssignRoleToUserRequestDto,
-): Promise<BaseResponseDto<UserRoleResponseDto>> {
-  const userServiceGrpc = this.getGrpcService();
+): Promise<BaseGetUserRoleReponseGrpc<RoleResponseDto>> {
 
-  // Fetch user by UUID
-  const userResponse = await lastValueFrom(
-    userServiceGrpc.getUserProfileByUuid({ userUuid: dto.userUuid }),
-  );
+  this.logger.log(`[AssignRoleToUser] Request received: ${JSON.stringify(dto)}`);
 
-  if (!userResponse || !userResponse.success || !userResponse.user) {
-    const failedResponse: BaseUserRoleResponseGrpc<UserRoleResponseDto> = {
-      success: false,
-      message: 'User not found or unavailable',
-      userRole: null,
-      error: {
-        code: 'USER_NOT_FOUND',
-        message: 'User not found or unavailable',
-      },
-      code: 'NotFound',
-    };
-    return failedResponse;
-  }
-
-  // Check if the user already has a role
-  const existingRole = await this.prisma.userRole.findUnique({
-    where: { userUuid: dto.userUuid },
+  //  Validate role exists
+  const roleEntity = await this.prisma.role.findUnique({
+    where: { id: Number(dto.roleId) },
   });
 
-  let userRole: { id: number; userUuid: string; roleId: number; };
-  if (existingRole) {
-    // Update existing role
-    userRole = await this.prisma.userRole.update({
-      where: { id: existingRole.id },
-      data: { roleId: Number(dto.roleId) },
-    });
-  } else {
-    // Assign new role
-    userRole = await this.prisma.userRole.create({
-      data: { userUuid: dto.userUuid, roleId: Number(dto.roleId) },
-    });
+  this.logger.debug(`Role Entity: ${JSON.stringify(roleEntity, null, 2)}  `);
+
+  if (!roleEntity) {
+    this.logger.error(`Role with ID ${dto.roleId} not found`);
+    return {
+      success: false,
+      message: 'Role not found',
+      code: 'NotFound',
+      role: null,
+    };
   }
 
-  const userRoleResponse: BaseUserRoleResponseGrpc<UserRoleResponseDto> = {
-    success: true,
-    message: existingRole ? 'User role updated successfully' : 'Role assigned to user successfully',
-    userRole: userRole,
-    error: undefined,
-    code: 'Ok',
+  // 3. Upsert user role (create if doesn't exist, update if exists)
+  await this.prisma.userRole.upsert({
+    where: { userUuid: dto.userUuid },
+    update: { roleId: Number(dto.roleId) },
+    create: { userUuid: dto.userUuid, roleId: Number(dto.roleId) },
+  });
+  
+
+  // 4. Map role to response
+  const role = {
+    id: roleEntity.id.toString(),
+    name: roleEntity.name,
+    roleType: roleEntity.roleType,
+    description: roleEntity.description,
+    createdAt: roleEntity.createdAt.toISOString(),
+    updatedAt: roleEntity.updatedAt.toISOString(),
   };
 
-  return userRoleResponse;
+  this.logger.log(`[AssignRoleToUser] Upserted userRole: ${JSON.stringify(role)}`);
+
+  return {
+    success: true,
+    message: 'Role assigned/updated successfully',
+    code: 'Ok',
+    role,
+  };
 }
+
+
 
 
  async getRoleIdByType(

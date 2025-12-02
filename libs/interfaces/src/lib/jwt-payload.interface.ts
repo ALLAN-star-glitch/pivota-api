@@ -1,7 +1,7 @@
 export interface JwtPayload {
   userUuid: string;
   email: string;
-  // User roles (can be single or multiple)
+  // User role 
   role: string; 
   /** Optional metadata */
   planId?: string;

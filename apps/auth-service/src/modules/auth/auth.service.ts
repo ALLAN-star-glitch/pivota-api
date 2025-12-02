@@ -113,9 +113,9 @@ export class AuthService implements OnModuleInit {
     const userRoleResponse = await firstValueFrom(
       rbacService.getUserRole({ userUuid: user.uuid }),
     );
-    const roleName = userRoleResponse?.role?.name ?? 'Guest';
+    const roleType = userRoleResponse?.role?.roleType ?? 'GeneralUser';
 
-    const payload: JwtPayload = { userUuid: user.uuid, email: user.email, role: roleName };
+    const payload: JwtPayload = { userUuid: user.uuid, email: user.email, role: roleType };
     const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
     const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
 
@@ -178,9 +178,13 @@ export class AuthService implements OnModuleInit {
         data: { userUuid: user.uuid, passwordHash: hashedPassword },
       });
 
+      //Credentials Created
+      this.logger.log(`Credentials created for user ${user.uuid}`)
+      this.logger.debug(`The credentials include: $userUuid: ${user.uuid}, passwordHash: ${hashedPassword} `)
+
       const rbacService = this.getRbacGrpcService();
       const userRoleResponse = await firstValueFrom(rbacService.getUserRole({ userUuid: user.uuid }));
-      const roleName = userRoleResponse?.role?.name ?? 'General User';
+      const roleName = userRoleResponse?.role?.name ?? ' ERROR - USER ROLE NOT FETCHED ';
 
       const user_signup_success = {
 
@@ -189,7 +193,6 @@ export class AuthService implements OnModuleInit {
         code: 'CREATED',
         user: { ...user, role: roleName },
         error: null,
-
 
       }
 

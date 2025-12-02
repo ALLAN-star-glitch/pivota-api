@@ -61,9 +61,8 @@ export class UserService implements OnModuleInit {
 
   /** ------------------ Helper: Generate Custom User Code ------------------ */
   private generateUserCode(): string {
-    const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
     const random = Math.random().toString(36).substring(2, 10).toUpperCase(); // X8F4C92A
-    return `PVTCNT-${date}-${random}`;
+    return `PVTCNT-${random}`;
   }
 
   /** ------------------ User Signup ------------------ */
@@ -118,12 +117,13 @@ export class UserService implements OnModuleInit {
 
         this.logger.debug(`gRPC GetRoleIdByType response: ${JSON.stringify(roleResponse, null, 2)}`);
 
-        if (roleResponse?.data?.roleId) {
+        if (roleResponse.data.roleId) {
           await lastValueFrom(
             rbacGrpcService.AssignRoleToUser({
               userUuid: user.uuid,
               roleId: roleResponse.data.roleId,
             }),
+          
           );
           this.logger.log(`✅ Default role assigned to user ${user.uuid} via gRPC`);
         } else {
@@ -155,7 +155,7 @@ export class UserService implements OnModuleInit {
       };
 
       return user_profile;
-      
+
     } catch (error: unknown) {
       // Handle known errors (e.g., unique constraint violations)
       if (error instanceof Error) {

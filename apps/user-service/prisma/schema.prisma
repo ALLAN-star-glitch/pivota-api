@@ -26,3 +26,5 @@ model User {
   categoryId            Int?      @ignore
   planId                Int?      @ignore
 }
+
+

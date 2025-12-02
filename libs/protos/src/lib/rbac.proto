@@ -121,12 +121,14 @@ message BaseGetRoleIdByTypeResponse {
 // Entities
 // ---------------------------
 
+
 message RoleResponse {
   string id = 1;
   string name = 2;
-  string description = 3;
-  string createdAt = 4;
-  string updatedAt = 5;
+  string roleType = 3;
+  string description = 4;
+  string createdAt = 5;
+  string updatedAt = 6;
 }
 
 
