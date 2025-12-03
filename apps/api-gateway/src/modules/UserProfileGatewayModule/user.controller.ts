@@ -38,7 +38,7 @@ export class UserController {
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
-    'RootGuardian',
+    'SuperAdmin',
     'ContentManagerAdmin',
     'ComplianceAdmin',
     'AnalyticsAdmin',
@@ -80,7 +80,7 @@ export class UserController {
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
-    'RootGuardian',
+    'SuperAdmin',
     'ContentManagerAdmin',
     'ComplianceAdmin',
     'AnalyticsAdmin',
@@ -122,7 +122,7 @@ export class UserController {
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
-    'RootGuardian',
+    'SuperAdmin',
     'ContentManagerAdmin',
     'ComplianceAdmin',
     'AnalyticsAdmin',

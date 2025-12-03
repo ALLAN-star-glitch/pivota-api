@@ -9,15 +9,18 @@ import {
   RoleIdResponse,
   UserRoleResponseDto,
   RoleIdRequestDto,
+  RoleResponseDto,
 } from '@pivota-api/dtos';
 import { User } from '../../../generated/prisma/client';
 import { ClientKafka, ClientProxy, RpcException, ClientGrpc } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
 import { lastValueFrom, Observable } from 'rxjs';
+import { BaseGetUserRoleReponseGrpc } from '@pivota-api/interfaces';
 
 interface RbacServiceGrpc {
   AssignRoleToUser(data: AssignRoleToUserRequestDto): Observable<BaseResponseDto<UserRoleResponseDto>>;
   GetRoleIdByType(data: RoleIdRequestDto): Observable<BaseResponseDto<RoleIdResponse>>;
+  getUserRole(data: GetUserByUserUuidDto): Observable<BaseGetUserRoleReponseGrpc<RoleResponseDto> | null>;
 }
 
 
@@ -235,11 +238,14 @@ export class UserService implements OnModuleInit {
       throw new RpcException({ code: 'USER_NOT_FOUND', message: 'User not found' });
     }
 
+    const role = await this.fetchUserRole(user.uuid);
+
+
     const user_profile = {
       success: true,
       message: "User retrieved successfully",
       code: "OK",
-      user: this.toUserResponse(user),
+      user: this.toUserResponse(user, { role }),
       error: null,
       
     }
@@ -249,6 +255,7 @@ export class UserService implements OnModuleInit {
   /** ------------------ Get all users ------------------ */
   async getAllUsers(): Promise<BaseResponseDto<UserResponseDto[]>> {
     const users = await this.prisma.user.findMany();
+  
     const userResponse = {
       success: true,
       message: 'Users retrieved successfully',
@@ -281,4 +288,18 @@ export class UserService implements OnModuleInit {
       categoryId: extras?.categoryId,
     };
   }
+
+  private async fetchUserRole(userUuid: string): Promise<string | null> {
+  const rbacGrpcService = this.getRbacGrpcService();
+  try {
+    const roleResponse = await lastValueFrom(
+      rbacGrpcService.getUserRole({ userUuid }),
+    );
+    return roleResponse?.role?.name || null;
+  } catch (err) {
+    this.logger.warn(`Could not fetch role for user ${userUuid}: ${err.message}`);
+    return null;
+  }
+}
+
 }

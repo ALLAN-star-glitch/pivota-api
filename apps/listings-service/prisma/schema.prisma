@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// === JOB TYPES ===
+enum JobType {
+  INFORMAL
+  FORMAL
+}
+
+/// === JOB REQUEST & POST STATUS ===
+enum JobRequestStatus {
+  PENDING
+  CANCELLED
+  COMPLETED
+  IN_PROGRESS
+}
+
+enum JobPostStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COMPLETED
+}
+
+/// === JOB CATEGORIES ===
+model JobCategory {
+  id            String       @id @default(cuid())
+  name          String
+  type          JobType
+  parentId      String?      
+  parent        JobCategory? @relation("Subcategories", fields: [parentId], references: [id])
+  subcategories JobCategory[] @relation("Subcategories")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  informalJobs  InformalJobRequest[]
+  formalJobs    FormalJobPosting[]
+  providerJobs  ProviderJob[]   
+}
+
+
+/// === INFORMAL JOB REQUESTS ===
+model InformalJobRequest {
+  id          String       @id @default(cuid())
+  title       String
+  description String
+  categoryId  String
+  category    JobCategory  @relation(fields: [categoryId], references: [id])
+  userId      String       // reference User Service ID
+  location    String
+  budget      Float
+  status      JobRequestStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  applications InformalApplication[]
+  bookings     Booking[]
+}
+
+/// === PROVIDER SERVICES (Informal Jobs) ===
+model ProviderJob {
+  id          String       @id @default(cuid())
+  providerId  String       // reference User Service ID
+  title       String
+  description String
+  categoryId  String
+  category    JobCategory @relation(fields: [categoryId], references: [id])
+  price       Float
+  location    String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+/// === INFORMAL APPLICATIONS ===
+model InformalApplication {
+  id              String             @id @default(cuid())
+  jobRequestId    String
+  jobRequest      InformalJobRequest @relation(fields: [jobRequestId], references: [id])
+  providerId      String             // reference User Service ID
+  status          ApplicationStatus  @default(PENDING)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+/// === FORMAL JOB POSTINGS ===
+model FormalJobPosting {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  categoryId  String
+  category    JobCategory @relation(fields: [categoryId], references: [id])
+  employerId  String      // reference User Service ID
+  location    String
+  salary      Float
+  status      JobPostStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  applications FormalApplication[]
+}
+
+/// === FORMAL APPLICATIONS ===
+model FormalApplication {
+  id           String           @id @default(cuid())
+  jobId        String
+  job          FormalJobPosting @relation(fields: [jobId], references: [id])
+  applicantId  String           // reference User Service ID
+  status       ApplicationStatus @default(PENDING)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}
+
+/// === INFORMAL BOOKINGS (Direct Hire) ===
+model Booking {
+  id            String             @id @default(cuid())
+  jobRequestId  String
+  jobRequest    InformalJobRequest @relation(fields: [jobRequestId], references: [id])
+  providerId    String             // reference User Service ID
+  status        BookingStatus      @default(PENDING)
+  scheduledDate DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+/// === RATINGS & REVIEWS ===
+model Rating {
+  id          String   @id @default(cuid())
+  jobId       String?  // optional
+  providerId  String?  // reference User Service ID
+  employerId  String?  // reference User Service ID
+  userId      String   // reviewer, reference User Service ID
+  rating      Int
+  review      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

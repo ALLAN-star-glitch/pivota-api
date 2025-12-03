@@ -143,7 +143,7 @@ export class RbacGatewayController {
   // GET ROLE FOR USER
   // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('RootGuardian', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
+  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
   @Version('1')
   @Get('users/:userUuid/roles')
   @ApiParam({ name: 'userUuid', type: String })
