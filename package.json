@@ -14,7 +14,7 @@
     "user:prisma:generate:uat": "cross-env NODE_ENV=uat prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
     "user:prisma:generate:pilot": "cross-env NODE_ENV=pilot prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
     "user:prisma:generate:prod": "cross-env NODE_ENV=prod prisma generate --no-engine --schema=apps/user-service/prisma/schema.prisma",
-    "start:dev:listings": "cross-env NODE_ENV=dev nx service listings-service",
+    "start:dev:listings": "cross-env NODE_ENV=dev nx serve listings-service",
     "start:dev:admin": "cross-env NODE_ENV=dev nx serve admin-service ",
     "start:dev:notification": "cross-env NODE_ENV=dev nx serve notification-service",
     "start:dev:auth": "cross-env NODE_ENV=dev nx serve auth-service",
