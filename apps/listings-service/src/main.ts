@@ -23,7 +23,7 @@ async function bootstrap() {
 
     transport: Transport.GRPC,
     options: {
-      package: 'listings',
+      package: 'categories',
       protoPath: LISTINGS_PROTO_PATH,
       url: process.env.LISTINGS_GRPC_URL || '0.0.0.0:50056'
 

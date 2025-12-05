@@ -27,5 +27,8 @@ export * from './lib/GetUserByUserCodeDto.dto';
 export * from './lib/GetUserByUserUuidDto.dto';
 export * from './lib/RoleIdResponse.dto';
 export * from './lib/RoleIdRequest.dto';
+export * from './lib/CreateCategoryRequestDto.dto';
+export * from './lib/CreateCategoryResponseDto.dto';
+
 
 

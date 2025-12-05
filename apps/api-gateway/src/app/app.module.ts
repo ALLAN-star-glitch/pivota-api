@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { UserModule } from '../modules/UserProfileGatewayModule/user.module';
+import { CategoriesModule } from '../modules/CategoriesGatewayModule/categories.module';
 import { RbacGatewayModule } from '../modules/RbacGatewayModule/rbac-gateway.module';
 import { AuthModule } from '../modules/AuthGatewayModule/auth.module';
 
@@ -16,7 +17,8 @@ import { AuthModule } from '../modules/AuthGatewayModule/auth.module';
 
     AuthModule,
     UserModule,
-    RbacGatewayModule
+    RbacGatewayModule,
+    CategoriesModule,
     
   ],
   controllers: [AppController],

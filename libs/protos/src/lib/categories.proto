@@ -1,14 +1,31 @@
 syntax = "proto3";
 
-package listings;
+package categories;
 
 
 service CategoriesService {
-  rpc CreateCategory (CreateCategoryRequest) returns (CategoryResponse);
-  rpc UpdateCategory (UpdateCategoryRequest) returns (CategoryResponse);
+  rpc CreateCategory (CreateCategoryRequest) returns (BaseCategoryResponse);
+  rpc UpdateCategory (UpdateCategoryRequest) returns (BaseCategoryResponse);
   rpc DeleteCategory (DeleteCategoryRequest) returns (DeleteCategoryResponse);
   rpc ListCategories (ListCategoriesRequest) returns (ListCategoriesResponse);
 }
+
+
+message BaseCategoryResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  CategoryResponse category = 4;
+  ErrorPayload error = 5;
+}
+
+message ErrorPayload {
+  string code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+
 
 // ----------------------
 // CATEGORY MESSAGES
@@ -19,7 +36,7 @@ message Category {
   string name = 2;
   string description = 3;
   string parentId = 4; // nullable hierarchy
-  string type = 5; // FORMAL or INFORMAL
+  string categoryType = 5; // FORMAL or INFORMAL
   string createdAt = 6;
   string updatedAt = 7;
 }
@@ -28,7 +45,7 @@ message CreateCategoryRequest {
   string name = 1;
   string description = 2;
   string parentId = 3;
-  string type = 4; // FORMAL or INFORMAL
+  string categoryType = 4; // FORMAL or INFORMAL
 }
 
 message UpdateCategoryRequest {
@@ -36,7 +53,7 @@ message UpdateCategoryRequest {
   string name = 2;
   string description = 3;
   string parentId = 4;
-  string type = 5;
+  string categoryType = 5;
 }
 
 message CategoryResponse {

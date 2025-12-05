@@ -13,25 +13,21 @@ enum JobType {
   FORMAL
 }
 
-/// === JOB REQUEST & POST STATUS ===
-enum JobRequestStatus {
-  PENDING
-  CANCELLED
-  COMPLETED
-  IN_PROGRESS
-}
-
+/// === JOB POST STATUS ===
 enum JobPostStatus {
   ACTIVE
   CLOSED
+  DRAFT
 }
-
+ 
+/// === APPLICATION STATUS ===
 enum ApplicationStatus {
   PENDING
   ACCEPTED
   REJECTED
 }
 
+/// === BOOKING STATUS ===
 enum BookingStatus {
   PENDING
   ACCEPTED
@@ -39,115 +35,116 @@ enum BookingStatus {
   COMPLETED
 }
 
-/// === JOB CATEGORIES ===
+/// =====================================================================
+///                            JOB CATEGORIES
+/// =====================================================================
 model JobCategory {
-  id            String       @id @default(cuid())
+  id            String   @id @default(cuid())        // internal ID
+  externalId    String   @default(uuid())           // public/external ID
   name          String
-  type          JobType
-  parentId      String?      
-  parent        JobCategory? @relation("Subcategories", fields: [parentId], references: [id])
+  description   String?     
+  categoryType  JobType
+  parentId      String?
+  parent        JobCategory?  @relation("Subcategories", fields: [parentId], references: [id])
   subcategories JobCategory[] @relation("Subcategories")
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  informalJobs  InformalJobRequest[]
-  formalJobs    FormalJobPosting[]
-  providerJobs  ProviderJob[]   
+  /// Relations to jobs
+  informalJobPosts  JobPost[]
+  formalJobPosts    JobPost[]
+  providerJobs      ProviderJob[]
 }
 
-
-/// === INFORMAL JOB REQUESTS ===
-model InformalJobRequest {
-  id          String       @id @default(cuid())
+/// =====================================================================
+///                            JOB POSTS
+/// =====================================================================
+model JobPost {
+  id          String   @id @default(cuid())
+  externalId  String   @default(uuid())
   title       String
   description String
   categoryId  String
   category    JobCategory  @relation(fields: [categoryId], references: [id])
-  userId      String       // reference User Service ID
-  location    String
-  budget      Float
-  status      JobRequestStatus @default(PENDING)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-
-  applications InformalApplication[]
-  bookings     Booking[]
-}
-
-/// === PROVIDER SERVICES (Informal Jobs) ===
-model ProviderJob {
-  id          String       @id @default(cuid())
-  providerId  String       // reference User Service ID
-  title       String
-  description String
-  categoryId  String
-  category    JobCategory @relation(fields: [categoryId], references: [id])
-  price       Float
-  location    String
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-}
-
-/// === INFORMAL APPLICATIONS ===
-model InformalApplication {
-  id              String             @id @default(cuid())
-  jobRequestId    String
-  jobRequest      InformalJobRequest @relation(fields: [jobRequestId], references: [id])
-  providerId      String             // reference User Service ID
-  status          ApplicationStatus  @default(PENDING)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-}
-
-/// === FORMAL JOB POSTINGS ===
-model FormalJobPosting {
-  id          String   @id @default(cuid())
-  title       String
-  description String
-  categoryId  String
-  category    JobCategory @relation(fields: [categoryId], references: [id])
-  employerId  String      // reference User Service ID
-  location    String
-  salary      Float
+  creatorId   String       // reference User Service ID
+  jobType     JobType
+  locationCity         String
+  locationNeighborhood String?
+  isRemote             Boolean @default(false)
+  payAmount            Float?
+  payRate              String? // daily | weekly | hourly | fixed
+  skills               String[] @default([])
+  experienceLevel      String?
+  employmentType       String?
+  documentsNeeded      String[] @default([])
+  equipmentRequired    String[] @default([])
+  additionalNotes      String?
   status      JobPostStatus @default(ACTIVE)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  applications FormalApplication[]
+  applications JobPostApplication[]
+  bookings     Booking[]
 }
 
-/// === FORMAL APPLICATIONS ===
-model FormalApplication {
-  id           String           @id @default(cuid())
-  jobId        String
-  job          FormalJobPosting @relation(fields: [jobId], references: [id])
-  applicantId  String           // reference User Service ID
-  status       ApplicationStatus @default(PENDING)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+/// =====================================================================
+///                        JOB POST APPLICATIONS
+/// =====================================================================
+model JobPostApplication {
+  id         String      @id @default(cuid())
+  externalId String      @default(uuid())
+  jobPostId  String
+  jobPost    JobPost     @relation(fields: [jobPostId], references: [id])
+  applicantId String     // reference User Service ID
+  status      ApplicationStatus @default(PENDING)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @default(updatedAt)
 }
 
-/// === INFORMAL BOOKINGS (Direct Hire) ===
+/// =====================================================================
+///                        PROVIDER SERVICE LISTINGS
+/// =====================================================================
+model ProviderJob {
+  id          String   @id @default(cuid())
+  externalId  String   @default(uuid())
+  providerId  String       // reference User Service ID
+  title       String
+  description String
+  categoryId  String
+  category    JobCategory  @relation(fields: [categoryId], references: [id])
+  price       Float
+  location    String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(updatedAt)
+}
+
+/// =====================================================================
+///                            BOOKINGS
+/// =====================================================================
 model Booking {
-  id            String             @id @default(cuid())
-  jobRequestId  String
-  jobRequest    InformalJobRequest @relation(fields: [jobRequestId], references: [id])
-  providerId    String             // reference User Service ID
-  status        BookingStatus      @default(PENDING)
+  id          String   @id @default(cuid())
+  externalId  String   @default(uuid())
+  jobPostId   String
+  jobPost     JobPost   @relation(fields: [jobPostId], references: [id])
+  providerId  String    // reference User Service ID
+  status      BookingStatus @default(PENDING)
   scheduledDate DateTime?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(updatedAt)
 }
 
-/// === RATINGS & REVIEWS ===
+/// =====================================================================
+///                           RATINGS & REVIEWS
+/// =====================================================================
 model Rating {
   id          String   @id @default(cuid())
-  jobId       String?  // optional
+  externalId  String   @default(uuid())
+  jobPostId   String?
   providerId  String?  // reference User Service ID
   employerId  String?  // reference User Service ID
-  userId      String   // reviewer, reference User Service ID
+  userId      String   // reviewer (User ID)
   rating      Int
   review      String?
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime @default(updatedAt)
 }

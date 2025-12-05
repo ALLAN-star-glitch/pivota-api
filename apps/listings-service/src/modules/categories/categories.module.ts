@@ -14,7 +14,7 @@ import { LISTINGS_PROTO_PATH } from '@pivota-api/protos';
             name: 'USER_PACKAGE',
             transport: Transport.GRPC,
             options: {
-                package: 'listings',
+                package: 'categories',
                 protoPath: LISTINGS_PROTO_PATH,
                 url: process.env.LISTINGS_GRPC_URL || 'localhost:50056'
             }

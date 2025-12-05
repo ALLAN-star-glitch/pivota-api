@@ -4,6 +4,6 @@ import { join } from 'path';
 export const AUTH_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/auth.proto');
 export const USER_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/user.proto');
 export const RBAC_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/rbac.proto'); 
-export const LISTINGS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/listings.proto')
+export const LISTINGS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/categories.proto')
 
 
