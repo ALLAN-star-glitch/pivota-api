@@ -22,15 +22,6 @@ export class CategoriesController {
     return this.categoriesService.createJobCategory(data);
   }
 
-//   // ===================== UPDATE =====================
-//   @GrpcMethod('CategoriesService', 'UpdateCategory')
-//   async updateCategory(
-//     data: { id: string; dto: UpdateCategoryRequestDto },
-//   ): Promise<BaseResponseDto<UpdateCategoryResponseDto>> {
-//     this.logger.debug(`UpdateCategory request: ${JSON.stringify(data)}`);
-//     return this.categoriesService.updateJobCategory(data.id, data.dto);
-//   }
-
   // ===================== DELETE =====================
   @GrpcMethod('CategoriesService', 'DeleteCategory')
   async deleteCategory(data: { id: string }): Promise<BaseResponseDto<null>> {
@@ -40,15 +31,38 @@ export class CategoriesController {
 
   // ===================== FETCH ALL =====================
   @GrpcMethod('CategoriesService', 'GetCategories')
-  async getCategories(): Promise<BaseResponseDto<unknown>> {
+  async getCategories(): Promise<BaseResponseDto<CreateCategoryResponseDto[]>> {
     this.logger.debug(`GetCategories request`);
     return this.categoriesService.getCategoriesWithStats();
   }
 
-  // ===================== FETCH SINGLE =====================
-  @GrpcMethod('CategoriesService', 'GetCategory')
-  async getCategory(data: { id: string }): Promise<BaseResponseDto<unknown>> {
+  // ===================== FETCH SINGLE BY ID =====================
+  @GrpcMethod('CategoriesService', 'GetCategoryById')
+  async getCategory(data: { id: string }): Promise<BaseResponseDto<CreateCategoryResponseDto>> {
     this.logger.debug(`GetCategory request: ${JSON.stringify(data)}`);
     return this.categoriesService.getCategoryById(data.id);
+  }
+
+  // ===================== FETCH SINGLE BY NAME =====================
+  @GrpcMethod('CategoriesService', 'GetCategoryByName')
+  async getCategoryByName(
+    data: { name: string },
+  ): Promise<BaseResponseDto<CreateCategoryResponseDto>> {
+    this.logger.debug(`GetCategoryByName request: ${JSON.stringify(data)}`);
+    return this.categoriesService.getCategoryByName(data.name);
+  }
+
+  // ===================== FETCH SUBCATEGORY BY NAME =====================
+  @GrpcMethod('CategoriesService', 'GetSubcategoryByName')
+  async getSubcategoryByName(
+    data: { categoryId: string; name: string },
+  ): Promise<BaseResponseDto<CreateCategoryResponseDto>> {
+    this.logger.debug(
+      `GetSubcategoryByName request: ${JSON.stringify(data)}`,
+    );
+    return this.categoriesService.getSubcategoryByName(
+      data.categoryId,
+      data.name,
+    );
   }
 }

@@ -39,9 +39,9 @@ enum BookingStatus {
 ///                            JOB CATEGORIES
 /// =====================================================================
 model JobCategory {
-  id            String   @id @default(cuid())        // internal ID
-  externalId    String   @default(uuid())           // public/external ID
-  name          String
+  id            String   @id @default(cuid())
+  externalId    String   @default(uuid())
+  name          String   @unique
   description   String?     
   categoryType  JobType
   parentId      String?
@@ -50,9 +50,13 @@ model JobCategory {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  /// Boolean helpers
+  hasSubcategories Boolean @default(false)
+  hasParent        Boolean @default(false)
+
   /// Relations to jobs
-  informalJobPosts  JobPost[]
-  formalJobPosts    JobPost[]
+  informalJobPosts  JobPost[] @relation("InformalCategoryPosts")
+  formalJobPosts    JobPost[] @relation("FormalCategoryPosts")
   providerJobs      ProviderJob[]
 }
 
@@ -65,12 +69,21 @@ model JobPost {
   title       String
   description String
   categoryId  String
-  category    JobCategory  @relation(fields: [categoryId], references: [id])
+  category    JobCategory  @relation("InformalCategoryPosts", fields: [categoryId], references: [id])
+  
+  formalCategoryId String?
+  formalCategory   JobCategory? @relation("FormalCategoryPosts", fields: [formalCategoryId], references: [id])
+  
   creatorId   String       // reference User Service ID
   jobType     JobType
   locationCity         String
   locationNeighborhood String?
   isRemote             Boolean @default(false)
+
+  /// Boolean helpers
+  requiresDocuments    Boolean @default(false)
+  requiresEquipment    Boolean @default(false)
+
   payAmount            Float?
   payRate              String? // daily | weekly | hourly | fixed
   skills               String[] @default([])
@@ -98,7 +111,7 @@ model JobPostApplication {
   applicantId String     // reference User Service ID
   status      ApplicationStatus @default(PENDING)
   createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @default(updatedAt)
+  updatedAt   DateTime   @updatedAt
 }
 
 /// =====================================================================
@@ -115,7 +128,7 @@ model ProviderJob {
   price       Float
   location    String
   createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @default(updatedAt)
+  updatedAt   DateTime      @updatedAt
 }
 
 /// =====================================================================
@@ -130,7 +143,7 @@ model Booking {
   status      BookingStatus @default(PENDING)
   scheduledDate DateTime?
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(updatedAt)
+  updatedAt   DateTime @updatedAt
 }
 
 /// =====================================================================
@@ -146,5 +159,5 @@ model Rating {
   rating      Int
   review      String?
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(updatedAt)
+  updatedAt   DateTime @updatedAt
 }

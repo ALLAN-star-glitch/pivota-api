@@ -3,35 +3,61 @@ import { PrismaClient } from '../generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { ROOT_CATEGORIES, SUB_CATEGORIES } from './categories.constants';
 
+const adapter = new PrismaPg({
+  connectionString: process.env.LISTINGS_SERVICE_DATABASE_URL!,
+});
 
-// Initialize Prisma
-const adapter = new PrismaPg({ connectionString: process.env.LISTINGS_SERVICE_DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log('Seeding root categories...');
+  console.log('🌱 Starting category seeding...');
 
   const rootIds: Record<string, string> = {};
 
-  // Seed root categories
+  // ===============================
+  // 1. Seed ROOT categories
+  // ===============================
+  console.log('➡️ Seeding root categories...');
+
   for (const category of ROOT_CATEGORIES) {
-    const created = await prisma.jobCategory.create({ data: category });
-    rootIds[category.name] = created.id; // Save IDs for subcategories
+    const created = await prisma.jobCategory.upsert({
+      where: { name: category.name },
+      update: {},
+      create: {
+        ...category,
+        hasParent: false,
+        hasSubcategories: true, // roots normally have subcategories
+      },
+    });
+
+    rootIds[category.name] = created.id;
   }
 
-  console.log('Seeding subcategories...');
+  console.log('✅ Root categories seeded.');
 
-  // Seed subcategories
-  const subCategoriesData = SUB_CATEGORIES(rootIds);
-  await prisma.jobCategory.createMany({ data: subCategoriesData });
+  // ===============================
+  // 2. Seed SUBCATEGORIES
+  // ===============================
+  console.log('➡️ Seeding subcategories...');
 
-  console.log('Seeding completed successfully!');
+  const subCategoriesData = SUB_CATEGORIES(rootIds).map((sub) => ({
+    ...sub,
+    hasParent: true,
+    hasSubcategories: false,
+  }));
+
+  await prisma.jobCategory.createMany({
+    data: subCategoriesData,
+    skipDuplicates: true, // prevent re-seed conflicts
+  });
+
+  console.log('✅ Subcategories seeded.');
+  console.log('🎉 Seeding completed successfully!');
 }
 
-// Run the seeder
 main()
-  .catch((e) => {
-    console.error('Seeding failed:', e);
+  .catch((err) => {
+    console.error('❌ Seeding failed:', err);
     process.exit(1);
   })
   .finally(async () => {

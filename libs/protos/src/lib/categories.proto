@@ -2,75 +2,106 @@ syntax = "proto3";
 
 package categories;
 
-
+// ----------------------
+// SERVICE DEFINITION
+// ----------------------
 service CategoriesService {
   rpc CreateCategory (CreateCategoryRequest) returns (BaseCategoryResponse);
-  rpc UpdateCategory (UpdateCategoryRequest) returns (BaseCategoryResponse);
   rpc DeleteCategory (DeleteCategoryRequest) returns (DeleteCategoryResponse);
-  rpc ListCategories (ListCategoriesRequest) returns (ListCategoriesResponse);
+  rpc GetCategories (Empty) returns (ListCategoriesResponse);
+  rpc GetCategoryById (GetCategoryByIdRequest) returns (BaseCategoryResponse);
+  rpc GetCategoryByName (GetCategoryByNameRequest) returns (BaseCategoryResponse);
+  rpc GetSubcategoryByName (GetSubcategoryByNameRequest) returns (BaseCategoryResponse);
 }
 
-
-message BaseCategoryResponse {
-  bool success = 1;
-  string code = 2;
-  string message = 3;
-  CategoryResponse category = 4;
-  ErrorPayload error = 5;
-}
-
+// ----------------------
+// ERROR PAYLOAD
+// ----------------------
 message ErrorPayload {
   string code = 1;
   string message = 2;
   string details = 3;
 }
 
-
+// ----------------------
+// BASE CATEGORY RESPONSE
+// ----------------------
+message BaseCategoryResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  Category category = 4;
+  ErrorPayload error = 5;
+}
 
 // ----------------------
 // CATEGORY MESSAGES
 // ----------------------
-
 message Category {
   string id = 1;
   string name = 2;
   string description = 3;
-  string parentId = 4; // nullable hierarchy
-  string categoryType = 5; // FORMAL or INFORMAL
-  string createdAt = 6;
-  string updatedAt = 7;
+  string parentId = 4;
+  string categoryType = 5;       // FORMAL or INFORMAL
+
+  int32 informalJobsCount = 6;
+  int32 formalJobsCount = 7;
+  int32 providerJobsCount = 8;
+  int32 subCategoriesCount = 9;
+
+
+  bool hasSubcategories = 10;
+  bool hasParent = 11;
+  repeated Category subcategories = 12;
+
+  string createdAt = 13;
+  string updatedAt = 14;
 }
 
+// ----------------------
+// REQUEST MESSAGES
+// ----------------------
 message CreateCategoryRequest {
   string name = 1;
   string description = 2;
   string parentId = 3;
-  string categoryType = 4; // FORMAL or INFORMAL
-}
-
-message UpdateCategoryRequest {
-  string id = 1;
-  string name = 2;
-  string description = 3;
-  string parentId = 4;
-  string categoryType = 5;
-}
-
-message CategoryResponse {
-  Category category = 1;
-}
-
-message ListCategoriesRequest {}
-
-message ListCategoriesResponse {
-  repeated Category categories = 1;
+  string categoryType = 4;
 }
 
 message DeleteCategoryRequest {
   string id = 1;
 }
 
-message DeleteCategoryResponse {
-  bool success = 1;
+message GetCategoryByIdRequest {
+  string id = 1;
 }
 
+message GetCategoryByNameRequest {
+  string name = 1;
+}
+
+message GetSubcategoryByNameRequest {
+  string categoryId = 1;
+  string name = 2;
+}
+
+// ----------------------
+// LIST & GET CATEGORY RESPONSES
+// ----------------------
+message ListCategoriesResponse {
+  repeated Category categories = 1;
+}
+
+// ----------------------
+// DELETE CATEGORY RESPONSE
+// ----------------------
+message DeleteCategoryResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+}
+
+// ----------------------
+// EMPTY MESSAGE (for ListCategories)
+// ----------------------
+message Empty {}
