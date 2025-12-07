@@ -22,7 +22,8 @@ import {
   BaseUserRoleResponseGrpc,
   BasePermissionResponseGrpc,
   BaseRolePermissionResponseGrpc,
-  BaseGetUserRoleReponseGrpc
+  BaseGetUserRoleReponseGrpc,
+  BaseRoleResponsesGrpc
 } from '@pivota-api/interfaces';
 
 interface RbacServiceGrpc {
@@ -32,8 +33,7 @@ interface RbacServiceGrpc {
   assignPermissionToRole(data: AssignPermissionToRoleRequestDto): Observable<BaseRolePermissionResponseGrpc<RolePermissionResponseDto>>
   assignRoleToUser(data: AssignRoleToUserRequestDto): Observable<BaseUserRoleResponseGrpc<UserRoleResponseDto>>;
   getUserRole(data: GetUserByUserUuidDto): Observable<BaseGetUserRoleReponseGrpc<RoleResponseDto>>;
-
-  
+  getAllRoles(data: object): Observable<BaseRoleResponsesGrpc<RoleResponseDto[]>>; 
 }
 
 @Injectable()
@@ -145,6 +145,20 @@ export class RbacGatewayService implements OnModuleInit {
     } else {
       return BaseResponseDto.fail(response.message, response.code);
     }
+  }
+
+
+  // -----------------------
+  // Get All Roles
+  // -----------------------
+  async getAllRoles(): Promise<BaseResponseDto<RoleResponseDto[]>> {
+    const response$ = this.getGrpcService().getAllRoles({});
+    const response = await firstValueFrom(response$); 
+        if (response.success) {
+          return BaseResponseDto.ok(response.roles, response.message, response.code);
+        } else {  
+          return BaseResponseDto.fail(response.message, response.code);
+        }
   }
 
 

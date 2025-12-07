@@ -30,9 +30,9 @@ import {
   ApiExtraModels,
 } from '@nestjs/swagger';
 
-@ApiTags('Auth') // Group all endpoints under "Auth"
+@ApiTags('AuthModule - ((Auth-Service) - MICROSERVICE)') // Group all endpoints under "Auth"
 @ApiExtraModels(BaseResponseDto, LoginResponseDto, SignupResponseDto, TokenPairDto)
-@Controller('auth-service')
+@Controller('auth-module')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 

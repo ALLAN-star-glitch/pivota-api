@@ -4,7 +4,7 @@ import {
   CreateCategoryRequestDto,
   CreateCategoryResponseDto,
 } from '@pivota-api/dtos';
-import { BaseCategoryGrpcResponse } from '@pivota-api/interfaces';
+import { BaseCategoryGrpcResponse, BaseCategoriesGrpcResponse } from '@pivota-api/interfaces';
 import { firstValueFrom, Observable } from 'rxjs';
 import { ClientGrpc } from '@nestjs/microservices';
 
@@ -18,7 +18,7 @@ interface CategoriesServiceGrpc {
   ): Observable<BaseCategoryGrpcResponse<null>>;
 
   GetCategories(data: object): Observable<
-    BaseCategoryGrpcResponse<CreateCategoryResponseDto[]>
+    BaseCategoriesGrpcResponse<CreateCategoryResponseDto[]>
   >;
 
   GetCategoryById(
@@ -54,7 +54,6 @@ export class CategoriesService {
     dto: CreateCategoryRequestDto,
   ): Promise<BaseResponseDto<CreateCategoryResponseDto>> {
     const res = await firstValueFrom(this.grpcService.CreateCategory(dto));
-    this.logger.debug(`CreateCategory gRPC response: ${JSON.stringify(res)}`);
 
     if (res?.success) {
       return BaseResponseDto.ok(res.category, res.message, res.code);
@@ -62,6 +61,7 @@ export class CategoriesService {
 
     return BaseResponseDto.fail(res?.message, res?.code);
   }
+  
 
   // ===========================================================
   // DELETE CATEGORY
@@ -86,14 +86,14 @@ export class CategoriesService {
   // ===========================================================
   async getCategories(): Promise<BaseResponseDto<CreateCategoryResponseDto[]>> {
     const res = await firstValueFrom(this.grpcService.GetCategories({}));
-    this.logger.debug(`GetCategories gRPC response: ${JSON.stringify(res)}`);
 
     if (res?.success) {
-      return BaseResponseDto.ok(res.category, res.message, res.code);
+      return BaseResponseDto.ok(res.categories || [],  res.message, res.code);
     }
 
     return BaseResponseDto.fail(res?.message, res?.code);
   }
+ 
 
   // ===========================================================
   // GET CATEGORY BY ID

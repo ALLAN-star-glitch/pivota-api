@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
-import { PassportModule } from '@nestjs/passport';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { RBAC_PROTO_PATH, USER_PROTO_PATH } from '@pivota-api/protos';
 import { PrismaModule } from '../../prisma/prisma.module';
@@ -10,7 +9,6 @@ import { PrismaModule } from '../../prisma/prisma.module';
 @Module({
   imports: [
     PrismaModule,
-    PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '3600s' }, // 1 hour

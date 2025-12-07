@@ -25,16 +25,16 @@ import {
   ApiExtraModels,
 } from '@nestjs/swagger';
 
-@ApiTags('Users')
+@ApiTags('UserProfile Module - ((User-Service) - MICROSERVICE)')
 @ApiExtraModels(BaseResponseDto, UserResponseDto, AuthUserDto)
-@Controller('user-service')
+@Controller('users-module')
 export class UserController {
   private readonly logger = new Logger(UserController.name);
 
   constructor(private readonly userService: UserService) {}
 
   /**
-   * 🔒 Get user by UserCode
+   *  Get user by UserCode
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
@@ -118,7 +118,7 @@ export class UserController {
   }
 
   /**
-   * 🔒 Get all users
+   *  Get all users
    */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(

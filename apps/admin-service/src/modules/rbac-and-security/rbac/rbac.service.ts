@@ -129,7 +129,7 @@ export class RbacService implements OnModuleInit {
   async getAllRoles(): Promise<BaseResponseDto<RoleResponseDto[]>> {
     const roles = await this.prisma.role.findMany();
 
-    const response: BaseRoleResponsesGrpc<RoleResponseDto> = {
+    const response: BaseRoleResponsesGrpc<RoleResponseDto[]> = {
       success: true,
       message: 'Roles fetched successfully',
       roles: roles.map((r) => ({

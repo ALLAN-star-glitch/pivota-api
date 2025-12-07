@@ -28,15 +28,12 @@ import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
 import {
   ApiTags,
   ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
   ApiBody,
   ApiParam,
-  getSchemaPath,
   ApiExtraModels,
 } from '@nestjs/swagger';
 
-@ApiTags('RBAC')
+@ApiTags('RBAC Module - ((Admin-Service) - MICROSERVICE)')
 @ApiExtraModels(
   BaseResponseDto,
   RoleResponseDto,
@@ -44,8 +41,7 @@ import {
   RolePermissionResponseDto,
   UserRoleResponseDto
 )
-@Controller('admin-service')
-@ApiTags('RBAC')
+@Controller('rbac-module')
 @ApiExtraModels(
   BaseResponseDto,
   RoleResponseDto,
@@ -80,6 +76,7 @@ export class RbacGatewayController {
   @Roles('RootGuardian')
   @Version('1')
   @Put('roles/:id')
+  @ApiOperation({ summary: 'Update a role' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: UpdateRoleRequestDto })
   async updateRole(
@@ -110,6 +107,7 @@ export class RbacGatewayController {
   @Roles('RootGuardian')
   @Version('1')
   @Post('roles/:roleId/permissions')
+   @ApiOperation({ summary: 'Assign a permission to a role' })
   @ApiParam({ name: 'roleId', type: String })
   async assignPermissionToRole(
     @Param('roleId') roleId: string,
@@ -128,6 +126,7 @@ export class RbacGatewayController {
   @Roles('SuperAdmin')
   @Version('1')
   @Post('users/:userUuid/roles')
+   @ApiOperation({ summary: 'Assign Role to a user' })
   @ApiParam({ name: 'userUuid', type: String })
   async assignRoleToUser(
     @Param('userUuid') userUuid: string,
@@ -146,10 +145,26 @@ export class RbacGatewayController {
   @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
   @Version('1')
   @Get('users/:userUuid/roles')
+  @ApiOperation({ summary: 'Get Role for a user' })
   @ApiParam({ name: 'userUuid', type: String })
   async getRoleForUser(
     @Param('userUuid') userUuid: string
   ): Promise<BaseResponseDto<RoleResponseDto>> {
     return this.rbacGatewayService.getRoleForUser(userUuid);
   }
+
+
+  // -------------------------------------------
+  // GET ALL ROLES
+  // -------------------------------------------
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
+  @Version('1')
+  @Get('roles')
+  @ApiOperation({ summary: 'Get all roles' })
+  async getAllRoles(  ): Promise<BaseResponseDto<RoleResponseDto[]>> {
+    return this.rbacGatewayService.getAllRoles();
+  }
+
+
 }

@@ -37,6 +37,7 @@ export class RbacController {
   ): Promise<BaseResponseDto<RoleResponseDto>> {
     return this.rbacService.createRole(data);
   }
+  
 
   @GrpcMethod('RbacService', 'UpdateRole')
   async updateRole(

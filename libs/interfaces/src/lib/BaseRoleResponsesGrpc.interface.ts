@@ -5,7 +5,7 @@ export interface BaseRoleResponsesGrpc <T>{
     success: boolean;
     code: string;
     message: string;
-    roles?: T[];
+    roles?: T;
     error?: ErrorPayload;
  
 }

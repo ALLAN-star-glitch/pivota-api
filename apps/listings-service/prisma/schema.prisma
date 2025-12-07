@@ -7,34 +7,6 @@ datasource db {
   provider = "postgresql"
 }
 
-/// === JOB TYPES ===
-enum JobType {
-  INFORMAL
-  FORMAL
-}
-
-/// === JOB POST STATUS ===
-enum JobPostStatus {
-  ACTIVE
-  CLOSED
-  DRAFT
-}
- 
-/// === APPLICATION STATUS ===
-enum ApplicationStatus {
-  PENDING
-  ACCEPTED
-  REJECTED
-}
-
-/// === BOOKING STATUS ===
-enum BookingStatus {
-  PENDING
-  ACCEPTED
-  REJECTED
-  COMPLETED
-}
-
 /// =====================================================================
 ///                            JOB CATEGORIES
 /// =====================================================================
@@ -42,23 +14,21 @@ model JobCategory {
   id            String   @id @default(cuid())
   externalId    String   @default(uuid())
   name          String   @unique
-  description   String?     
-  categoryType  JobType
+  description   String?
   parentId      String?
   parent        JobCategory?  @relation("Subcategories", fields: [parentId], references: [id])
   subcategories JobCategory[] @relation("Subcategories")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  /// Boolean helpers
   hasSubcategories Boolean @default(false)
   hasParent        Boolean @default(false)
 
-  /// Relations to jobs
-  informalJobPosts  JobPost[] @relation("InformalCategoryPosts")
-  formalJobPosts    JobPost[] @relation("FormalCategoryPosts")
-  providerJobs      ProviderJob[]
+  jobPosts     JobPost[]          // main category posts
+  subCategoryPosts JobPost[] @relation("SubcategoryPosts") // posts under this subcategory
+  providerJobs ProviderJob[]
 }
+
 
 /// =====================================================================
 ///                            JOB POSTS
@@ -69,36 +39,36 @@ model JobPost {
   title       String
   description String
   categoryId  String
-  category    JobCategory  @relation("InformalCategoryPosts", fields: [categoryId], references: [id])
-  
-  formalCategoryId String?
-  formalCategory   JobCategory? @relation("FormalCategoryPosts", fields: [formalCategoryId], references: [id])
-  
-  creatorId   String       // reference User Service ID
-  jobType     JobType
-  locationCity         String
+  category    JobCategory @relation(fields: [categoryId], references: [id])
+
+  subCategoryId  String?
+  subCategory    JobCategory? @relation("SubcategoryPosts", fields: [subCategoryId], references: [id])
+
+  creatorId   String
+  jobType     String
+  locationCity String
   locationNeighborhood String?
-  isRemote             Boolean @default(false)
+  isRemote   Boolean @default(false)
 
-  /// Boolean helpers
-  requiresDocuments    Boolean @default(false)
-  requiresEquipment    Boolean @default(false)
+  requiresDocuments Boolean @default(false)
+  requiresEquipment Boolean @default(false)
 
-  payAmount            Float?
-  payRate              String? // daily | weekly | hourly | fixed
-  skills               String[] @default([])
-  experienceLevel      String?
-  employmentType       String?
-  documentsNeeded      String[] @default([])
-  equipmentRequired    String[] @default([])
-  additionalNotes      String?
-  status      JobPostStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  payAmount Float?
+  payRate   String?
+  skills    String[] @default([])
+  experienceLevel String?
+  employmentType String?
+  documentsNeeded String[] @default([])
+  equipmentRequired String[] @default([])
+  additionalNotes String?
+  status String @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   applications JobPostApplication[]
   bookings     Booking[]
 }
+
 
 /// =====================================================================
 ///                        JOB POST APPLICATIONS
@@ -109,7 +79,7 @@ model JobPostApplication {
   jobPostId  String
   jobPost    JobPost     @relation(fields: [jobPostId], references: [id])
   applicantId String     // reference User Service ID
-  status      ApplicationStatus @default(PENDING)
+  status      String     @default("PENDING") // was enum
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 }
@@ -127,6 +97,7 @@ model ProviderJob {
   category    JobCategory  @relation(fields: [categoryId], references: [id])
   price       Float
   location    String
+  additionalNotes    String
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 }
@@ -140,7 +111,7 @@ model Booking {
   jobPostId   String
   jobPost     JobPost   @relation(fields: [jobPostId], references: [id])
   providerId  String    // reference User Service ID
-  status      BookingStatus @default(PENDING)
+  status      String    @default("PENDING") // was enum
   scheduledDate DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

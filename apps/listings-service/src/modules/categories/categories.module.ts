@@ -3,7 +3,7 @@ import { CategoriesService } from './categories.service';
 import { CategoriesController } from './categories.controller';
 import { PrismaModule } from '../../../src/prisma/prisma.module'
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { LISTINGS_PROTO_PATH } from '@pivota-api/protos';
+import { LISTINGS_CATEGORIES_PROTO_PATH } from '@pivota-api/protos';
 
 @Module({
   imports: [
@@ -15,7 +15,7 @@ import { LISTINGS_PROTO_PATH } from '@pivota-api/protos';
             transport: Transport.GRPC,
             options: {
                 package: 'categories',
-                protoPath: LISTINGS_PROTO_PATH,
+                protoPath: LISTINGS_CATEGORIES_PROTO_PATH,
                 url: process.env.LISTINGS_GRPC_URL || 'localhost:50056'
             }
         },

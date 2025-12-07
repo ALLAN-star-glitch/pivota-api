@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { LISTINGS_PROTO_PATH } from '@pivota-api/protos';
+import { LISTINGS_CATEGORIES_PROTO_PATH} from '@pivota-api/protos';
 
 
 @Module({
@@ -13,12 +13,12 @@ import { LISTINGS_PROTO_PATH } from '@pivota-api/protos';
             name: 'CATEGORIES_PACKAGE',
             transport: Transport.GRPC,
             options: {
-                url: process.env.LISTINGS_SERVICE_URL || 'localhost:50056',
+                url: process.env.LISTINGS_CATEGORIES_SERVICE_URL || 'localhost:50056',
                 package: 'categories',
-                protoPath: LISTINGS_PROTO_PATH,
+                protoPath: LISTINGS_CATEGORIES_PROTO_PATH,
             }
 
-        }
+        },
     ])
   ],
   controllers: [CategoriesController],

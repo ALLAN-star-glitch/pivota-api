@@ -14,10 +14,10 @@ import {
   ProviderJob,
 } from '../../../generated/prisma/client';
 
+
 type FullCategory = JobCategory & {
   subcategories: JobCategory[];
-  informalJobPosts: JobPost[];
-  formalJobPosts: JobPost[];
+  jobPosts: JobPost[];
   providerJobs: ProviderJob[];
 };
 
@@ -32,8 +32,7 @@ export class CategoriesService {
    *  One recursive mapper for ALL responses
    * ----------------------------------------------- */
   private mapCategory(cat: FullCategory): CreateCategoryResponseDto {
-    const informalJobPosts = cat.informalJobPosts || [];
-    const formalJobPosts = cat.formalJobPosts || [];
+    const jobPosts = cat.jobPosts || [];
     const providerJobs = cat.providerJobs || [];
     const subcategories = cat.subcategories || [];
 
@@ -42,10 +41,9 @@ export class CategoriesService {
       name: cat.name,
       description: cat.description ?? null,
       parentId: cat.parentId ?? null,
-      categoryType: cat.categoryType,
 
-      informalJobsCount: informalJobPosts.length,
-      formalJobsCount: formalJobPosts.length,
+     
+      jobPostsCount: jobPosts.length,
       providerJobsCount: providerJobs.length,
       subcategoriesCount: subcategories.length,
 
@@ -88,15 +86,6 @@ export class CategoriesService {
           };
         }
 
-        if (parent.categoryType !== dto.categoryType.toUpperCase()) {
-          return {
-            success: false,
-            message: 'Category type must match parent category type',
-            code: 'CATEGORY_TYPE_MISMATCH',
-            data: null,
-            error: { message: 'Child category type differs from parent.', details: null },
-          };
-        }
 
         hasParent = true;
       }
@@ -106,7 +95,6 @@ export class CategoriesService {
         where: {
           name: dto.name,
           parentId: dto.parentId || null,
-          categoryType: dto.categoryType.toUpperCase() as 'INFORMAL' | 'FORMAL',
         },
       });
 
@@ -125,14 +113,12 @@ export class CategoriesService {
           name: dto.name,
           description: dto.description,
           parentId: dto.parentId || null,
-          categoryType: dto.categoryType.toUpperCase() as 'INFORMAL' | 'FORMAL',
           hasParent,
           hasSubcategories: false,
         },
         include: {
           subcategories: true,
-          informalJobPosts: true,
-          formalJobPosts: true,
+          jobPosts: true,
           providerJobs: true,
         },
       });
@@ -182,8 +168,7 @@ export class CategoriesService {
       const categories = await this.prisma.jobCategory.findMany({
         include: {
           subcategories: true,
-          informalJobPosts: true,
-          formalJobPosts: true,
+          jobPosts: true,
           providerJobs: true,
         },
       });
@@ -192,7 +177,7 @@ export class CategoriesService {
         success: true,
         message: 'Categories fetched successfully',
         code: 'FETCHED',
-        category: categories.map((cat) =>
+        categories: categories.map((cat) =>
           this.mapCategory(cat as FullCategory),
         ),
         error: null,
@@ -201,7 +186,7 @@ export class CategoriesService {
       }
 
       return success_response;
-      
+
     } catch (error) {
       const err = error as Error;
       this.logger.error('Fetch categories failed', err.stack);
@@ -227,8 +212,7 @@ export class CategoriesService {
         where: { id },
         include: {
           subcategories: true,
-          informalJobPosts: true,
-          formalJobPosts: true,
+          jobPosts: true,
           providerJobs: true,
         },
       });
@@ -276,8 +260,7 @@ export class CategoriesService {
         where: { id },
         include: {
           subcategories: true,
-          informalJobPosts: true,
-          formalJobPosts: true,
+          jobPosts: true,
           providerJobs: true,
         },
       });
@@ -303,8 +286,7 @@ export class CategoriesService {
       }
 
       if (
-        category.informalJobPosts.length > 0 ||
-        category.formalJobPosts.length > 0 ||
+        category.jobPosts.length > 0 ||
         category.providerJobs.length > 0
       ) {
         return {
@@ -356,8 +338,7 @@ async deleteSubcategory(subcategoryId: string): Promise<BaseResponseDto<null>> {
       where: { id: subcategoryId },
       include: {
         subcategories: true,
-        informalJobPosts: true,
-        formalJobPosts: true,
+        jobPosts: true,
         providerJobs: true,
       },
     });
@@ -396,8 +377,7 @@ async deleteSubcategory(subcategoryId: string): Promise<BaseResponseDto<null>> {
 
     // ❌ Cannot delete if linked to job posts
     if (
-      subcat.informalJobPosts.length > 0 ||
-      subcat.formalJobPosts.length > 0 ||
+      subcat.jobPosts.length > 0 ||
       subcat.providerJobs.length > 0
     ) {
       return {
@@ -468,8 +448,7 @@ async getCategoryByName(
       },
       include: {
         subcategories: true,
-        informalJobPosts: true,
-        formalJobPosts: true,
+        jobPosts: true,
         providerJobs: true,
       },
     });
@@ -532,8 +511,7 @@ async getSubcategoryByName(
       },
       include: {
         subcategories: true,
-        informalJobPosts: true,
-        formalJobPosts: true,
+        jobPosts: true,
         providerJobs: true,
       },
     });

@@ -29,6 +29,10 @@ export * from './lib/RoleIdResponse.dto';
 export * from './lib/RoleIdRequest.dto';
 export * from './lib/CreateCategoryRequestDto.dto';
 export * from './lib/CreateCategoryResponseDto.dto';
+export * from './lib/CreateJobPostDto.dto';
+export * from './lib/CreateProviderJobDto.dto';
+export * from './lib/JobPostResponseDto.dto';
+export * from './lib/ProviderJobResponseDto.dto';
 
 
 

@@ -13,4 +13,10 @@ export * from './lib/BaseGetUserRoleReponseGrpc';
 export * from './lib/BaseUserRoleResponseGrpc';
 export * from './lib/BaseRefreshTokenResponseGrpc.interface';
 export * from './lib/BaseRoleIdResponse.interface';
-export * from './lib/BaseCategoryGrpcResponse.interface'
+export * from './lib/BaseCategoryGrpcResponse.interface';
+export * from './lib/BaseCategoriesGrpcResponse.interface';
+export * from './lib/BaseJobPostResponseGrpc.interface';
+export * from './lib/BaseJobPostsResponseGrpc.interface';
+export * from './lib/BaseProviderJobResponseGrpc.interface';
+export * from './lib/BaseProviderJobsResponseGrpc.interface';
+export * from './lib/jwt-request.interface';

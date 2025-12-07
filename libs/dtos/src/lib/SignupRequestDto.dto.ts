@@ -20,12 +20,12 @@ export class SignupRequestDto {
   lastName!: string;
 
   @IsEmail({}, { message: 'Invalid email address' })
-  @ApiProperty({ example: 'john.doe@example.com', description: 'User email address' })
+  @ApiProperty({ example: 'allanmathenge67@gmail.com', description: 'User email address' })
   email!: string;
 
   @IsString()
   @MinLength(8, { message: 'Password must be at least 8 characters' })
-  @ApiProperty({ example: 'StrongPassword123!', description: 'User password' })
+  @ApiProperty({ example: 'Brav1997@#', description: 'User password' })
   password!: string;
 
   @IsOptional()

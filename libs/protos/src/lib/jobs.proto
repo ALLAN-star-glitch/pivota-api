@@ -1,0 +1,187 @@
+syntax = "proto3";
+
+package jobs;
+
+// ===================================================
+// SERVICE DEFINITION
+// ===================================================
+service JobsService {
+  rpc CreateJobPost (CreateJobPostRequest) returns (BaseJobPostResponse);
+  rpc GetJobPostById (GetJobPostByIdRequest) returns (BaseJobPostResponse);
+  rpc GetJobsByCategory (GetJobsByCategoryRequest) returns (ListJobPostsResponse);
+
+  rpc CreateProviderJob (CreateProviderJobRequest) returns (BaseProviderJobResponse);
+  rpc GetProviderJobsByProvider (GetProviderJobsByProviderRequest) returns (ListProviderJobsResponse);
+}
+
+// ===================================================
+// ERROR PAYLOAD
+// ===================================================
+message ErrorPayload {
+  string code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+// ===================================================
+// BASE RESPONSES
+// ===================================================
+message BaseJobPostResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  JobPost jobPost = 4;
+  ErrorPayload error = 5;
+}
+
+message BaseProviderJobResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  ProviderJob providerJob = 4;
+  ErrorPayload error = 5;
+}
+
+// ===================================================
+// ENTITIES
+// ===================================================
+message UserBasic {
+  string id = 1;
+  string fullName = 2;
+  string email = 3;
+}
+
+message CategoryBasic {
+  string id = 1;
+  string name = 2;
+}
+
+message JobPost {
+  string id = 1;
+  string externalId = 2;
+
+  string title = 3;
+  string description = 4;
+
+  CategoryBasic category = 5;
+  CategoryBasic subCategory = 6; // optional
+
+  UserBasic creator = 7;
+
+  string jobType = 8; // "INFORMAL" | "FORMAL"
+
+  string locationCity = 9;
+  string locationNeighborhood = 10;
+  bool isRemote = 11;
+
+  bool requiresDocuments = 12;
+  bool requiresEquipment = 13;
+
+  double payAmount = 14;
+  string payRate = 15; // hourly | daily | weekly | fixed
+
+  repeated string skills = 16;
+  string experienceLevel = 17;
+  string employmentType = 18;
+  repeated string documentsNeeded = 19;
+  repeated string equipmentRequired = 20;
+  string additionalNotes = 21;
+
+  string status = 22; // "ACTIVE" | "CLOSED" | "DRAFT"
+
+  int32 applicationsCount = 23;
+  int32 bookingsCount = 24;
+
+  string createdAt = 25;
+  string updatedAt = 26;
+}
+
+message ProviderJob {
+  string id = 1;
+
+  string providerId = 2;
+  string title = 3;
+  string description = 4;
+  CategoryBasic category = 5;
+  double price = 6;
+  string location = 7;
+  string additionalNotes = 8;
+
+  string createdAt = 9;
+  string updatedAt = 10;
+}
+
+// ===================================================
+// REQUEST MESSAGES
+// ===================================================
+message CreateJobPostRequest {
+  string title = 1;
+  string description = 2;
+
+  string categoryId = 3;
+  string subCategoryId = 4; // optional
+  string creatorId = 5; // enforced by gateway
+
+  string jobType = 6; // "INFORMAL" | "FORMAL"
+
+  string locationCity = 7;
+  string locationNeighborhood = 8;
+  bool isRemote = 9;
+
+  bool requiresDocuments = 10;
+  bool requiresEquipment = 11;
+
+  double payAmount = 12;
+  string payRate = 13;
+
+  repeated string skills = 14;
+  string experienceLevel = 15;
+  string employmentType = 16;
+  repeated string documentsNeeded = 17;
+  repeated string equipmentRequired = 18;
+  string additionalNotes = 19;
+
+  string status = 20; // "ACTIVE" | "CLOSED" | "DRAFT"
+}
+
+message GetJobPostByIdRequest {
+  string id = 1;
+}
+
+message GetJobsByCategoryRequest {
+  string categoryId = 1;
+}
+
+message CreateProviderJobRequest {
+  string providerId = 1; // gateway overrides
+  string title = 2;
+  string description = 3;
+  string categoryId = 4;
+
+  double price = 5;
+  string location = 6;
+  string additionalNotes = 7;
+}
+
+message GetProviderJobsByProviderRequest {
+  string providerId = 1;
+}
+
+// ===================================================
+// LIST RESPONSES
+// ===================================================
+message ListJobPostsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated JobPost jobPosts = 4;
+  ErrorPayload error = 5;
+}
+
+message ListProviderJobsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated ProviderJob providerJobs = 4;
+  ErrorPayload error = 5;
+}

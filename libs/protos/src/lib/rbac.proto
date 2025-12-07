@@ -10,6 +10,7 @@ service RbacService {
   rpc AssignRoleToUser (AssignRoleToUserRequest) returns (BaseUserRoleResponse);
   rpc GetUserRole (GetUserRolesRequest) returns (BaseGetUserRolesResponse);
   rpc GetRoleIdByType (RoleIdRequest) returns (BaseGetRoleIdByTypeResponse);
+  rpc GetAllRoles (Empty) returns (ListRoleResponse);
 }
 
 
@@ -115,6 +116,16 @@ message BaseGetRoleIdByTypeResponse {
   RoleIdResponse data = 4;
   ErrorPayload error = 5;
 }
+
+message ListRoleResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated RoleResponse roles = 4;
+  ErrorPayload error = 5;
+}
+
+message Empty {}  
 
 
 // ---------------------------

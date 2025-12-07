@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { PassportModule } from '@nestjs/passport';
-import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AUTH_PROTO_PATH, USER_PROTO_PATH } from '@pivota-api/protos';
 import { AuthService } from './auth.service';
@@ -9,10 +8,7 @@ import { JwtStrategy } from './jwt.strategy';
 
 @Module({
   imports: [
-    PassportModule.register({ defaultStrategy: 'jwt' }),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET
-    }),
+    PassportModule.register({ defaultStrategy: 'jwt' }), 
     ClientsModule.register([
       {
         name: 'AUTH_PACKAGE',

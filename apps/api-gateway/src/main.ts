@@ -1,4 +1,4 @@
-import { Logger, VersioningType } from '@nestjs/common';
+import { Logger, VersioningType, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
@@ -9,7 +9,7 @@ import compression from 'compression';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 import { AppModule } from './app/app.module';
-import { GlobalHttpExceptionFilter } from '@pivota-api/filters'; // adjust path
+import { GlobalHttpExceptionFilter } from '@pivota-api/filters';
 
 // Load environment variables
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
@@ -18,15 +18,26 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   logger.log(' Starting API Gateway...');
 
-  // create app (express adapter required for cookie-parser)
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   logger.log(' Nest application instance created');
+
+  
+  // -----------------------------
+  // 1️⃣ Enable Validation Pipe
+  // -----------------------------
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,               // strip unknown properties
+      forbidNonWhitelisted: true,    // throw error on unknown props
+      transform: true,               // convert payloads to DTO instances
+    }),
+  );
+  logger.log(' ✅ Global ValidationPipe enabled');
 
   // enable API versioning (URI)
   app.enableVersioning({ type: VersioningType.URI });
   logger.log(' API versioning enabled (URI-based)');
 
-  // get config service
   const configService = app.get(ConfigService);
 
   // global prefix
@@ -54,7 +65,6 @@ async function bootstrap() {
   app.useGlobalFilters(new GlobalHttpExceptionFilter());
   logger.log(' GlobalHttpExceptionFilter registered');
 
-  // enable shutdown hooks
   app.enableShutdownHooks();
   logger.log('🔌 Shutdown hooks enabled');
 
@@ -65,7 +75,7 @@ async function bootstrap() {
     .setTitle('Pivota API Gateway')
     .setDescription('Documentation for Auth and other services')
     .setVersion('1.0')
-    .addBearerAuth() // JWT auth in Swagger UI
+    .addBearerAuth()
     .build();
 
   const swaggerOptions = {
@@ -76,17 +86,14 @@ async function bootstrap() {
     SwaggerModule.createDocument(app, swaggerConfig, swaggerOptions);
 
   SwaggerModule.setup('api', app, documentFactory, {
-    explorer: true, // allows tag-based navigation
+    explorer: true,
     swaggerOptions: {
-      persistAuthorization: true, // JWT stays after refresh
+      persistAuthorization: true,
     },
     customSiteTitle: 'Pivota API Docs',
   });
 
   logger.log(`📖 Swagger docs available at http://localhost:${configService.get<number>('API_GATEWAY_PORT') || 3000}/api`);
-  // ========================
-  // Swagger integration end
-  // ========================
 
   // start listening
   const port = configService.get<number>('API_GATEWAY_PORT') || 3000;

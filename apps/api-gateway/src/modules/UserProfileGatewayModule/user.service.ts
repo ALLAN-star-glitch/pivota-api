@@ -70,7 +70,7 @@ export class UserService {
     this.logger.log('Fetching all users');
     
     const res = await firstValueFrom(this.grpcService.GetAllUsers({}));
-    this.logger.debug(`gRPC response from user service: ${JSON.stringify(res)}`);
+    
 
     if (res.success) {
       return BaseResponseDto.ok(res.users || [], res.message, res.code);
@@ -79,3 +79,4 @@ export class UserService {
     return BaseResponseDto.fail(res.message, res.code);
   }
 }
+

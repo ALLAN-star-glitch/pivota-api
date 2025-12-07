@@ -42,20 +42,18 @@ message Category {
   string name = 2;
   string description = 3;
   string parentId = 4;
-  string categoryType = 5;       // FORMAL or INFORMAL
 
-  int32 informalJobsCount = 6;
-  int32 formalJobsCount = 7;
-  int32 providerJobsCount = 8;
-  int32 subCategoriesCount = 9;
+  int32 jobPostsCount = 5;
+  int32 providerJobsCount = 6;
+  int32 subcategoriesCount = 7;
 
 
-  bool hasSubcategories = 10;
-  bool hasParent = 11;
-  repeated Category subcategories = 12;
+  bool hasSubcategories = 8;
+  bool hasParent = 9;
+  repeated Category subcategories = 10;
 
-  string createdAt = 13;
-  string updatedAt = 14;
+  string createdAt = 11;
+  string updatedAt = 12;
 }
 
 // ----------------------
@@ -65,7 +63,6 @@ message CreateCategoryRequest {
   string name = 1;
   string description = 2;
   string parentId = 3;
-  string categoryType = 4;
 }
 
 message DeleteCategoryRequest {
@@ -89,8 +86,14 @@ message GetSubcategoryByNameRequest {
 // LIST & GET CATEGORY RESPONSES
 // ----------------------
 message ListCategoriesResponse {
-  repeated Category categories = 1;
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated Category categories = 4;
+  ErrorPayload error = 5;
+
 }
+
 
 // ----------------------
 // DELETE CATEGORY RESPONSE
