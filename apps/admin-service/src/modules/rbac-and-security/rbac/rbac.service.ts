@@ -1,7 +1,7 @@
 import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ClientGrpc } from '@nestjs/microservices';
-import { lastValueFrom, Observable } from 'rxjs';
+import {  Observable } from 'rxjs';
 
 import {
   RoleResponseDto,
@@ -9,7 +9,6 @@ import {
   UserResponseDto,
   BaseResponseDto,
   RolePermissionResponseDto,
-  UserRoleResponseDto,
   CreateRoleRequestDto,
   UpdateRoleRequestDto,
   IdRequestDto,
@@ -29,9 +28,7 @@ import {
   BaseRoleResponsesGrpc,
   BasePermissionResponseGrpc,
   BaseGetUserRoleReponseGrpc,
-  BaseRolePermissionResponseGrpc,
-  BaseUserRoleResponseGrpc,
-} from '@pivota-api/interfaces';
+  BaseRolePermissionResponseGrpc} from '@pivota-api/interfaces';
 
 // ------------------ gRPC User Service Interface ------------------
 interface UserServiceGrpc {
@@ -90,7 +87,7 @@ export class RbacService implements OnModuleInit {
 
   async updateRole(dto: UpdateRoleRequestDto): Promise<BaseResponseDto<RoleResponseDto>> {
     const role = await this.prisma.role.update({
-      where: { id: Number(dto.id) },
+      where: { id: dto.id },
       data: { description: dto.description, name: dto.name },
     });
 
@@ -113,7 +110,7 @@ export class RbacService implements OnModuleInit {
   }
 
   async deleteRole(dto: IdRequestDto): Promise<BaseResponseDto<null>> {
-    await this.prisma.role.delete({ where: { id: Number(dto.id) } });
+    await this.prisma.role.delete({ where: { id: dto.id } });
 
     const response: BaseRoleResponseGrpc<null> = {
       success: true,
@@ -172,8 +169,8 @@ export class RbacService implements OnModuleInit {
   ): Promise<BaseResponseDto<RolePermissionResponseDto>> {
     const rolePermission = await this.prisma.rolePermission.create({
       data: {
-        roleId: Number(dto.roleId),
-        permissionId: Number(dto.permissionId),
+        roleId: dto.roleId,
+        permissionId: dto.permissionId,
       },
     });
 
@@ -238,7 +235,7 @@ async assignRoleToUser(
 
   //  Validate role exists
   const roleEntity = await this.prisma.role.findUnique({
-    where: { id: Number(dto.roleId) },
+    where: { id: dto.roleId },
   });
 
   this.logger.debug(`Role Entity: ${JSON.stringify(roleEntity, null, 2)}  `);
@@ -256,8 +253,8 @@ async assignRoleToUser(
   // 3. Upsert user role (create if doesn't exist, update if exists)
   await this.prisma.userRole.upsert({
     where: { userUuid: dto.userUuid },
-    update: { roleId: Number(dto.roleId) },
-    create: { userUuid: dto.userUuid, roleId: Number(dto.roleId) },
+    update: { roleId: dto.roleId },
+    create: { userUuid: dto.userUuid, roleId: dto.roleId },
   });
   
 
@@ -306,7 +303,7 @@ async assignRoleToUser(
   return response;
 }
 
-
-
+ 
+x
 
 }

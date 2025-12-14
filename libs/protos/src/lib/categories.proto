@@ -11,7 +11,6 @@ service CategoriesService {
   rpc GetCategories (Empty) returns (ListCategoriesResponse);
   rpc GetCategoryById (GetCategoryByIdRequest) returns (BaseCategoryResponse);
   rpc GetCategoryByName (GetCategoryByNameRequest) returns (BaseCategoryResponse);
-  rpc GetSubcategoryByName (GetSubcategoryByNameRequest) returns (BaseCategoryResponse);
 }
 
 // ----------------------
@@ -77,10 +76,6 @@ message GetCategoryByNameRequest {
   string name = 1;
 }
 
-message GetSubcategoryByNameRequest {
-  string categoryId = 1;
-  string name = 2;
-}
 
 // ----------------------
 // LIST & GET CATEGORY RESPONSES

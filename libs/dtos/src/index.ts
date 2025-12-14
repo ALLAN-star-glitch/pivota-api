@@ -33,6 +33,10 @@ export * from './lib/CreateJobPostDto.dto';
 export * from './lib/CreateProviderJobDto.dto';
 export * from './lib/JobPostResponseDto.dto';
 export * from './lib/ProviderJobResponseDto.dto';
-
+export * from './lib/PlansDto.dto';
+export * from './lib/plan-response.dto';
+export * from './lib/ModuleRestrictionsDto.dto';
+export * from './lib/PlanFeaturesDto.dto';
+export * from './lib/ModuleWithRestrictionsDto.dto';
 
 

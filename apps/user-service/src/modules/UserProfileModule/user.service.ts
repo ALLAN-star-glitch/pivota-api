@@ -82,7 +82,7 @@ export class UserService implements OnModuleInit {
 
     // Use Prisma transaction to create user and assign default role atomically
     const user = await this.prisma.$transaction(async (tx) => {
-      // 1️⃣ Create user record in DB
+      // 1️ Create user record in DB
       const createdUser = await tx.user.create({
         data: {
           uuid,
@@ -96,7 +96,7 @@ export class UserService implements OnModuleInit {
 
       this.logger.debug(`User Profile Created in Transaction: ${JSON.stringify(createdUser, null, 2)}`);
 
-      // 2️⃣ Assign default role via gRPC
+      // 2 Assign default role via gRPC
       const rbacGrpcService = this.getRbacGrpcService();
       const roleResponse = await lastValueFrom(
         rbacGrpcService.GetRoleIdByType({ roleType: 'GeneralUser' }),

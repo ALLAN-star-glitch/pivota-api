@@ -58,7 +58,7 @@ export class RbacGatewayController {
   // CREATE ROLE
   // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('RootGuardian')
+  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
   @Version('1')
   @Post('roles')
   @ApiOperation({ summary: 'Create a new role' })
@@ -73,7 +73,7 @@ export class RbacGatewayController {
   // UPDATE ROLE
   // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('RootGuardian')
+  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
   @Version('1')
   @Put('roles/:id')
   @ApiOperation({ summary: 'Update a role' })
@@ -90,7 +90,7 @@ export class RbacGatewayController {
   // CREATE PERMISSION
   // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('RootGuardian')
+  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
   @Version('1')
   @Post('permissions')
   @ApiOperation({ summary: 'Create a new permission' })
@@ -104,7 +104,7 @@ export class RbacGatewayController {
   // ASSIGN PERMISSION TO ROLE
   // =========================================
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('RootGuardian')
+  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
   @Version('1')
   @Post('roles/:roleId/permissions')
    @ApiOperation({ summary: 'Assign a permission to a role' })

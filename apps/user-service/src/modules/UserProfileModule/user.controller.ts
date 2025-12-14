@@ -35,7 +35,6 @@ async handleCreateUserProfile(
 
   /** ------------------ Get User Profile by UserCode ------------------ */
   @GrpcMethod('UserService', 'GetUserProfileByUserCode')
-
   async handleGetUserProfileByUserCode(
     @Payload() data: { userCode: string },
   ): Promise<BaseResponseDto<UserResponseDto> | null> {

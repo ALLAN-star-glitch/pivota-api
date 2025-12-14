@@ -85,24 +85,6 @@ export class CategoriesController {
   }
 
   // ===========================================================
-  // GET SUBCATEGORY BY NAME (Public)
-  // ===========================================================
-  @ApiParam({ name: 'categoryId', type: String })
-  @ApiParam({ name: 'name', type: String })
-  @Version('1')
-  @Get('categories/:categoryId/subcategories/:name')
-  @ApiOperation({summary: 'Get a subcategory by name'})
-  async getSubcategoryByName(
-    @Param('categoryId') categoryId: string,
-    @Param('name') name: string,
-  ): Promise<BaseResponseDto<CreateCategoryResponseDto>> {
-    this.logger.debug(
-      `REST getSubcategoryByName request: categoryId=${categoryId}, name=${name}`,
-    );
-    return this.categoriesService.getSubcategoryByName(categoryId, name);
-  }
-
-  // ===========================================================
   // DELETE CATEGORY (Admins Only)
   // ===========================================================
   @UseGuards(JwtAuthGuard, RolesGuard)

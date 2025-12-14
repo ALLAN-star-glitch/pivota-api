@@ -51,18 +51,4 @@ export class CategoriesController {
     this.logger.debug(`GetCategoryByName request: ${JSON.stringify(data)}`);
     return this.categoriesService.getCategoryByName(data.name);
   }
-
-  // ===================== FETCH SUBCATEGORY BY NAME =====================
-  @GrpcMethod('CategoriesService', 'GetSubcategoryByName')
-  async getSubcategoryByName(
-    data: { categoryId: string; name: string },
-  ): Promise<BaseResponseDto<CreateCategoryResponseDto>> {
-    this.logger.debug(
-      `GetSubcategoryByName request: ${JSON.stringify(data)}`,
-    );
-    return this.categoriesService.getSubcategoryByName(
-      data.categoryId,
-      data.name,
-    );
-  }
 }

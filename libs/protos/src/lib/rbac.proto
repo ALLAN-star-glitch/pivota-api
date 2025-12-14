@@ -29,7 +29,7 @@ message CreateRoleRequest {
 }
 
 message UpdateRoleRequest {
-  int32 id = 1;
+  string id = 1;
   string name = 2;
   string description = 3;
 }
@@ -47,7 +47,7 @@ message AssignPermissionToRoleRequest {
 //  Updated: use UUID instead of numeric userId
 message AssignRoleToUserRequest {
   string userUuid = 1;
-  int32 roleId = 2;
+  string roleId = 2;
 }
 
 // Updated: also use UUID for querying user roles
@@ -144,16 +144,16 @@ message RoleResponse {
 
 
 message PermissionResponse {
-  int32 id = 1;
+  string id = 1;
   string action = 2;
   string description = 3;
 }
 
 // Updated: userUuid instead of numeric userId
 message UserRoleResponse {
-  int32 id = 1;
+  string id = 1;
   string userUuid = 2;
-  int32 roleId = 3;
+  string roleId = 3;
   string name = 4;
   string roleType = 5;
   string scope = 6;
@@ -164,12 +164,12 @@ message UserRoleResponse {
 }
 
 message PermissionRoleResponse {
-  int32 id = 1;
-  int32 roleId = 2;
-  int32 permissionId = 3;
+  string id = 1;
+  string roleId = 2;
+  string permissionId = 3;
 }
 
 
 message RoleIdResponse {
-  int32 roleId = 1;
+  string roleId = 1;
 }

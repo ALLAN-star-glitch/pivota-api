@@ -39,6 +39,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(
     'SuperAdmin',
+    'Landlord',
     'ContentManagerAdmin',
     'ComplianceAdmin',
     'AnalyticsAdmin',

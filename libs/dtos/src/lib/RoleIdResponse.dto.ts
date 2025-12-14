@@ -1,5 +1,5 @@
 export class RoleIdResponse {
 
-  roleId!: number;
+  roleId!: string;
 
 }

@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class UserResponseDto {
   // Core user fields
-  @ApiProperty({ example: '1', description: 'Internal numeric ID (stringified)' })
+  @ApiProperty({ example: '550e8400-e29b-41d4', description: 'Internal cuid' })
   id!: string;
 
   @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000', description: 'Global unique identifier for internal services' })

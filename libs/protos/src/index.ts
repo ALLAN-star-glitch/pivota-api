@@ -6,6 +6,7 @@ export const USER_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/use
 export const RBAC_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/rbac.proto'); 
 export const LISTINGS_CATEGORIES_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/categories.proto');
 export const LISTINGS_JOBS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/jobs.proto');
+export const PLANS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/plans.proto');    
 
 
 

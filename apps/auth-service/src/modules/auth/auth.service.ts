@@ -315,7 +315,6 @@ export class AuthService implements OnModuleInit {
       const userGrpcService = this.getGrpcService();
       const user$ = userGrpcService.getUserProfileByUuid({ userUuid: payload.userUuid });
       const user: BaseUserResponseGrpc<UserResponseDto> = await firstValueFrom(user$);
-
       const sessions = await this.prisma.session.findMany({
         where: { userUuid: payload.userUuid, revoked: false },
       });

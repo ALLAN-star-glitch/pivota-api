@@ -6,6 +6,7 @@ import { UserModule } from '../modules/UserProfileGatewayModule/user.module';
 import { CategoriesModule } from '../modules/CategoriesGatewayModule/categories.module';
 import { RbacGatewayModule } from '../modules/RbacGatewayModule/rbac-gateway.module';
 import { AuthModule } from '../modules/AuthGatewayModule/auth.module';
+import { PlansGatewayModule } from '../modules/PlansGatewayModule/plans-gateway.module';
 import { JobsModule } from '../modules/JobsGatewayModule/jobs.module';
 
 
@@ -20,7 +21,8 @@ import { JobsModule } from '../modules/JobsGatewayModule/jobs.module';
     UserModule,
     RbacGatewayModule,
     CategoriesModule,
-    JobsModule
+    JobsModule,
+    PlansGatewayModule
     
   ],
   controllers: [AppController],

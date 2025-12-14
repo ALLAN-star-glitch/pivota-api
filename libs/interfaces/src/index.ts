@@ -20,3 +20,6 @@ export * from './lib/BaseJobPostsResponseGrpc.interface';
 export * from './lib/BaseProviderJobResponseGrpc.interface';
 export * from './lib/BaseProviderJobsResponseGrpc.interface';
 export * from './lib/jwt-request.interface';
+export * from './lib/plan-features.interface';
+export * from './lib/BasePlanResponseGrpc.interface';
+export * from './lib/BasePlansResponseGrpc.interface';  

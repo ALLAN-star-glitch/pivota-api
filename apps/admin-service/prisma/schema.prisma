@@ -10,20 +10,19 @@ datasource db {
 }
 
 // ===================== ROLES =====================
-// Matches Frontend: SystemRole interface
 
 model Role {
-  id          Int       @id @default(autoincrement())
-  name        String                           // Custom label (e.g., Landlord Manager)
+  id          String   @id @default(cuid())
+  name        String
   description String?
 
-  roleType    String    @unique                                   // e.g., "SystemAdmin", "RootGuardian"
-  scope       String                                    // "system" | "business" | "general"
-  status      String    @default("Active")             // "Active" | "Inactive"
-  immutable   Boolean   @default(false)
+  roleType    String   @unique
+  scope       String
+  status      String   @default("Active")
+  immutable   Boolean  @default(false)
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   userRoles       UserRole[]
   rolePermissions RolePermission[]
@@ -31,32 +30,30 @@ model Role {
 }
 
 // ===================== PERMISSIONS =====================
-// Matches frontend SystemPermission interface
 
 model Permission {
-  id          Int       @id @default(autoincrement())
+  id          String   @id @default(cuid())
   name        String
-  action      String    @unique
+  action      String   @unique
   description String?
 
-  moduleId    Int?
+  moduleId    String?
   module      Module?   @relation(fields: [moduleId], references: [id])
 
-  system      Boolean   @default(false) // system-level permission
+  system      Boolean   @default(false)
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   rolePermissions RolePermission[]
 }
 
 // ===================== USER → ROLE =====================
-// User can only have ONE role
 
 model UserRole {
-  id       Int    @id @default(autoincrement())
-  userUuid String  @unique
-  roleId   Int
+  id       String   @id @default(cuid())
+  userUuid String   @unique
+  roleId   String
 
   role Role @relation(fields: [roleId], references: [id])
 }
@@ -64,9 +61,9 @@ model UserRole {
 // ===================== ROLE → PERMISSION =====================
 
 model RolePermission {
-  id           Int   @id @default(autoincrement())
-  roleId       Int
-  permissionId Int
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
 
   role       Role       @relation(fields: [roleId], references: [id])
   permission Permission @relation(fields: [permissionId], references: [id])
@@ -77,11 +74,11 @@ model RolePermission {
 // ===================== MODULES =====================
 
 model Module {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @default(cuid())
   slug        String   @unique
   name        String
   description String?
-  system      Boolean  @default(false) // true = platform-wide module
+  system      Boolean  @default(false)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -89,43 +86,53 @@ model Module {
   permissions   Permission[]
   planModules   PlanModule[]
   roleModules   RoleModule[]
-  userModules   UserModule[]           // relation for users linked to this module
+  userModules   UserModule[]
 }
 
 // ===================== PLANS =====================
 
 model Plan {
-  id          Int       @id @default(autoincrement())
-  name        String    @unique
-  description String?
+  id            String      @id @default(cuid())
+  name          String      @unique
+  description   String?
+  totalListings Int         @default(0)
+  features      String?
+  creatorId     String
 
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  planModules PlanModule[]
+  planModules   PlanModule[]
+
+  @@index([creatorId])
 }
 
 // ===================== PLAN → MODULE (with listingLimit) =====================
 
 model PlanModule {
-  id           Int     @id @default(autoincrement())
-  planId       Int
-  moduleId     Int
-  listingLimit Int      @default(0)
+  id           String   @id @default(cuid())
+  planId       String
+  moduleId     String
+  restrictions String? // Store all restrictions (listing limits, isAllowed, etc.) in JSON
 
   plan   Plan   @relation(fields: [planId], references: [id])
   module Module @relation(fields: [moduleId], references: [id])
 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([planId, moduleId])
 }
+
+
 
 // ===================== ROLE → MODULE =====================
 
 model RoleModule {
-  id         Int     @id @default(autoincrement())
-  roleId     Int
-  moduleId   Int
-  assignable Boolean @default(false) // whether super admin can toggle
+  id         String  @id @default(cuid())
+  roleId     String
+  moduleId   String
+  assignable Boolean @default(false)
 
   role   Role   @relation(fields: [roleId], references: [id])
   module Module @relation(fields: [moduleId], references: [id])
@@ -134,16 +141,15 @@ model RoleModule {
 }
 
 // ===================== USER → MODULE =====================
-// Tracks which business modules a user is active in
 
 model UserModule {
-  id         Int      @id @default(autoincrement())
+  id         String  @id @default(cuid())
   userUuid   String
-  moduleId   Int
-  verified   Boolean  @default(false)  // whether the user is verified for this module
-  approvedBy String?                 // admin who approved the user
-  entityType String?                 // 'individual' | 'business'
-  orgName    String?                 // organization name if applicable
+  moduleId   String
+  verified   Boolean  @default(false)
+  approvedBy String?
+  entityType String?
+  orgName    String?
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -154,7 +160,7 @@ model UserModule {
 // ===================== SUBSCRIPTIONS =====================
 
 model Subscription {
-  id         Int      @id @default(autoincrement())
+  id         String   @id @default(cuid())
   userUuid   String   @unique
   plan       String
   premium    Boolean  @default(false)
@@ -165,15 +171,14 @@ model Subscription {
   updatedAt  DateTime @updatedAt
 }
 
-
 // ===================== AUDIT LOGS =====================
 
 model AuditLog {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @default(cuid())
   userUuid    String?
   action      String
   entity      String
-  entityId    Int?
+  entityId    String?
   performedBy String?
   createdAt   DateTime @default(now())
 }

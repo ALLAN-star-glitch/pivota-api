@@ -1,7 +1,7 @@
 export class RolePermissionResponseDto {
 
-    id!: number;
-    roleId!: number;
-    permissionId!: number;
+    id!: string;
+    roleId!: string;
+    permissionId!: string;
 
 }

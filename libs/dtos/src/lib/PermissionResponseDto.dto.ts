@@ -1,5 +1,5 @@
 export class PermissionResponseDto {
-  id!: number;
+  id!: string;
   action!: string;
   description?: string;
   createdAt?: Date;

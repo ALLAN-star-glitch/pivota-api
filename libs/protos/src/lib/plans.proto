@@ -1,0 +1,141 @@
+syntax = "proto3";
+
+package plans;
+
+// ===================================================
+// SERVICE DEFINITION
+// ===================================================
+service PlanService {
+  rpc CreatePlan (CreatePlanRequest) returns (BasePlanResponse);
+  rpc UpdatePlan (UpdatePlanRequest) returns (BasePlanResponse);
+  rpc GetPlanById (GetPlanByIdRequest) returns (BasePlanResponse);
+  rpc GetAllPlans (EmptyRequest) returns (ListPlansResponse);
+  rpc DeletePlan (DeletePlanRequest) returns (BaseDeletePlanResponse);
+}
+
+// ===================================================
+// ERROR PAYLOAD
+// ===================================================
+message ErrorPayload {
+  string code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+// ===================================================
+// BASE RESPONSES
+// ===================================================
+message BasePlanResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  Plan plan = 4;
+  ErrorPayload error = 5;
+}
+
+message BaseDeletePlanResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  ErrorPayload error = 4;
+}
+
+message ListPlansResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated Plan plans = 4;
+  ErrorPayload error = 5;
+}
+
+// ===================================================
+// ENTITIES
+// ===================================================
+message Plan {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+
+  int32 totalListings = 4;
+
+  
+  PlanFeatures features = 5;
+  UserBasic user = 6;
+
+  repeated PlanModule planModules = 7;
+
+  string createdAt = 8;
+  string updatedAt = 9;
+}
+
+
+message PlanFeatures {
+  Prices prices = 1;
+  string support = 2;
+  string boost = 3;
+  bool analytics = 4;
+}
+
+message Prices {
+  int32 monthly = 1;
+  int32 quarterly = 2;
+  int32 halfYearly = 3;
+  int32 annually = 4;
+}
+
+message UserBasic {
+  string id = 1;
+  string fullName = 2;
+  string email = 3;
+} 
+
+
+message PlanModule {
+  string moduleId = 1;
+  string moduleSlug = 2;
+  string moduleName = 3;
+  Restrictions restrictions = 4;
+  
+}
+
+message Restrictions {
+  string listingLimit = 1;
+  bool isAllowed = 2;
+  bool approvalRequired = 3;
+  int32 maxPostsPerMonth = 4;
+}
+
+// ===================================================
+// REQUEST MESSAGES
+// ===================================================
+message CreatePlanRequest {
+  string name = 1;
+  string description = 2;
+  string userId = 3;
+  int32 totalListings = 4;
+  PlanFeatures features = 5;
+  repeated PlanModule planModules = 6; 
+}
+
+
+message UpdatePlanRequest {
+  string name = 1;
+  string description = 2;
+  string userId = 3;
+  int32 totalListings = 4;
+  PlanFeatures features = 5;
+  repeated PlanModule planModules = 6; 
+}
+
+message GetPlanByIdRequest {
+  string planId = 1;
+}
+
+message DeletePlanRequest {
+  string planId = 1;
+}
+
+// ===================================================
+// EMPTY REQUEST
+// ===================================================
+message EmptyRequest {}

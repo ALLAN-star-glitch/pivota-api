@@ -130,26 +130,4 @@ export class CategoriesService {
 
     return BaseResponseDto.fail(res?.message, res?.code);
   }
-
-  // ===========================================================
-  // GET SUBCATEGORY BY NAME
-  // ===========================================================
-  async getSubcategoryByName(
-    categoryId: string,
-    name: string,
-  ): Promise<BaseResponseDto<CreateCategoryResponseDto>> {
-    const res = await firstValueFrom(
-      this.grpcService.GetSubcategoryByName({ categoryId, name }),
-    );
-
-    this.logger.debug(
-      `GetSubcategoryByName gRPC response: ${JSON.stringify(res)}`,
-    );
-
-    if (res?.success) {
-      return BaseResponseDto.ok(res.category, res.message, res.code);
-    }
-
-    return BaseResponseDto.fail(res?.message, res?.code);
-  }
 }
