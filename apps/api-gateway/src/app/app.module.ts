@@ -8,6 +8,7 @@ import { RbacGatewayModule } from '../modules/RbacGatewayModule/rbac-gateway.mod
 import { AuthModule } from '../modules/AuthGatewayModule/auth.module';
 import { PlansGatewayModule } from '../modules/PlansGatewayModule/plans-gateway.module';
 import { JobsModule } from '../modules/JobsGatewayModule/jobs.module';
+import { SubscriptionsGatewayModule } from '../modules/SubscriptionsGatewayModule/subscriptions-gateway.module';
 
 
 @Module({
@@ -22,7 +23,8 @@ import { JobsModule } from '../modules/JobsGatewayModule/jobs.module';
     RbacGatewayModule,
     CategoriesModule,
     JobsModule,
-    PlansGatewayModule
+    PlansGatewayModule,
+    SubscriptionsGatewayModule,
     
   ],
   controllers: [AppController],

@@ -38,5 +38,10 @@ export * from './lib/plan-response.dto';
 export * from './lib/ModuleRestrictionsDto.dto';
 export * from './lib/PlanFeaturesDto.dto';
 export * from './lib/ModuleWithRestrictionsDto.dto';
+export * from './lib/AssignPlanDto.dto';
+export * from './lib/SubscriptionResponseDto.dto';
+export * from './lib/PlanIdRequestDto.dto';
+export * from './lib/PlanIdResponseDto.dto';
+
 
 

@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package subscriptions;
+
+// ===================================================
+// SERVICE DEFINITION
+// ===================================================
+service SubscriptionService {
+  rpc AssignPlanToUser (AssignPlanRequest) returns (BaseSubscriptionResponse);
+  rpc GetSubscriptionByUser (GetSubscriptionByUserRequest) returns (BaseSubscriptionResponse);
+}
+
+// ===================================================
+// ERROR PAYLOAD
+// ===================================================
+message ErrorPayload {
+  string code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+// ===================================================
+// BASE RESPONSES
+// ===================================================
+message BaseSubscriptionResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  Subscription subscription = 4;
+  ErrorPayload error = 5;
+}
+
+// ===================================================
+// ENTITIES
+// ===================================================
+message Subscription {
+  string id = 1;
+  string userUuid = 2;
+  string plan = 3;
+  string status = 4;
+  string billingCycle = 5;
+  string expiresAt = 6;
+  string createdAt = 7;
+  string updatedAt = 8;
+  UserBasic user = 9; 
+}
+
+message UserBasic {
+  string id = 1;
+  string fullName = 2;
+  string email = 3;
+}
+
+// ===================================================
+// REQUEST MESSAGES
+// ===================================================
+message AssignPlanRequest {
+  string subscriberUuid = 1;
+  string planId = 2;          // Free, Starter, Professional, Enterprise
+  string billingCycle = 3;      // monthly, quarterly, halfYearly, annually
+  bool isPremium = 4;
+  string status = 5;            // ACTIVE, INACTIVE, etc.
+}
+
+message GetSubscriptionByUserRequest {
+  string userUuid = 1;
+}
+
+// ===================================================
+// EMPTY REQUEST
+// ===================================================
+message EmptyRequest {}

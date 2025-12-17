@@ -162,6 +162,186 @@ async function main() {
       });
     }
   }
+// ---------- 6) PLANS & PLAN MODULES ----------
+console.log('🌱 Seeding Plans & PlanModules');
+
+const plans = [
+  {
+    name: 'Free',
+    slug: 'free',
+    isPremium: false,
+    totalListings: 5,
+    description: 'Basic access for new users',
+    features: {
+      prices: { monthly: 0 },
+      support: 'community',
+      boost: false,
+      analytics: false,
+    },
+    modules: [
+      {
+        slug: 'houses',
+        restrictions: {
+          isAllowed: true,
+          listingLimit: 3,
+          approvalRequired: true,
+          maxPostsPerMonth: 2,
+        },
+      },
+      {
+        slug: 'jobs',
+        restrictions: { isAllowed: false, listingLimit: 0 },
+      },
+    ],
+  },
+  {
+    name: 'Starter',
+    slug: 'starter',
+    isPremium: true,
+    totalListings: 20,
+    description: 'For individuals & small teams',
+    features: {
+      prices: { monthly: 500 },
+      support: 'email',
+      boost: false,
+      analytics: true,
+    },
+    modules: [
+      {
+        slug: 'houses',
+        restrictions: {
+          isAllowed: true,
+          listingLimit: 10,
+          approvalRequired: false,
+          maxPostsPerMonth: 10,
+        },
+      },
+      {
+        slug: 'jobs',
+        restrictions: {
+          isAllowed: true,
+          listingLimit: 5,
+          approvalRequired: true,
+        },
+      },
+    ],
+  },
+  {
+    name: 'Pro',
+    slug: 'pro',
+    isPremium: true,
+    totalListings: 80,
+    description: 'For growing businesses',
+    features: {
+      prices: { monthly: 2000, annually: 22000 },
+      support: 'priority',
+      boost: true,
+      analytics: true,
+    },
+    modules: [
+      {
+        slug: 'houses',
+        restrictions: {
+          isAllowed: true,
+          listingLimit: 40,
+          approvalRequired: false,
+          maxPostsPerMonth: 30,
+        },
+      },
+      {
+        slug: 'jobs',
+        restrictions: {
+          isAllowed: true,
+          listingLimit: 25,
+          approvalRequired: false,
+        },
+      },
+      {
+        slug: 'social-support',
+        restrictions: {
+          isAllowed: true,
+          listingLimit: 15,
+        },
+      },
+    ],
+  },
+  {
+    name: 'Enterprise',
+    slug: 'enterprise',
+    isPremium: true,
+    totalListings: 200,
+    description: 'Full access plan for large organizations',
+    features: {
+      prices: { monthly: 5000, quarterly: 14000, annually: 55000 },
+      support: 'dedicated',
+      boost: true,
+      analytics: true,
+    },
+    modules: [
+      {
+        slug: 'houses',
+        restrictions: {
+          isAllowed: true,
+          listingLimit: 100,
+          approvalRequired: false,
+          maxPostsPerMonth: 50,
+        },
+      },
+      {
+        slug: 'jobs',
+        restrictions: {
+          isAllowed: true,
+          listingLimit: 60,
+          approvalRequired: false,
+        },
+      },
+      {
+        slug: 'social-support',
+        restrictions: {
+          isAllowed: true,
+          listingLimit: 40,
+        },
+      },
+    ],
+  },
+];
+
+// Loop through each plan
+for (const plan of plans) {
+  // Create or update plan
+  const createdPlan = await prisma.plan.upsert({
+    where: { slug: plan.slug },
+    update: {},
+    create: {
+      name: plan.name,
+      slug: plan.slug,
+      description: plan.description,
+      isPremium: plan.isPremium,
+      totalListings: plan.totalListings,
+      creatorId: 'system',
+      features: JSON.stringify(plan.features), // store JSON as string
+    },
+  });
+
+  // Seed PlanModules
+  for (const mod of plan.modules) {
+    const module = await prisma.module.findUnique({ where: { slug: mod.slug } });
+    if (!module) continue;
+
+    await prisma.planModule.upsert({
+      where: { planId_moduleId: { planId: createdPlan.id, moduleId: module.id } },
+      update: { restrictions: JSON.stringify(mod.restrictions) },
+      create: {
+        planId: createdPlan.id,
+        moduleId: module.id,
+        restrictions: JSON.stringify(mod.restrictions),
+      },
+    });
+  }
+}
+
+console.log('✅ Plans & PlanModules seeded with module IDs');
+
 
   console.log('✅ RoleModule assignments seeded');
   console.log('🌱 PivotaConnect RBAC seeding complete (no plans or module rules)');

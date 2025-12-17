@@ -94,15 +94,19 @@ model Module {
 model Plan {
   id            String      @id @default(cuid())
   name          String      @unique
+  slug          String        @unique
   description   String?
   totalListings Int         @default(0)
   features      String?
   creatorId     String
 
+  isPremium     Boolean  @default(false)
+
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
   planModules   PlanModule[]
+  subscriptions Subscription[]
 
   @@index([creatorId])
 }
@@ -159,17 +163,27 @@ model UserModule {
 
 // ===================== SUBSCRIPTIONS =====================
 
+// ===================== SUBSCRIPTIONS =====================
 model Subscription {
-  id         String   @id @default(cuid())
-  userUuid   String   @unique
-  plan       String
-  premium    Boolean  @default(false)
-  status     String
-  expiresAt  DateTime
+  id           String   @id @default(cuid())
+  userUuid     String   @unique    // Reference to user in user service
+  planId       String                 // FK to Plan
+  status       String                 // ACTIVE, CANCELLED, EXPIRED, etc.
+  billingCycle String   @default("monthly")
+  startedAt    DateTime @default(now())
+  expiresAt    DateTime
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  plan         Plan     @relation(fields: [planId], references: [id])
 }
+
+
+// ===================== PLAN SUBSCRIPTIONS =====================
+
+
+
 
 // ===================== AUDIT LOGS =====================
 

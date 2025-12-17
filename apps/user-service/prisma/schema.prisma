@@ -8,23 +8,19 @@ datasource db {
 }
 
 model User {
-  id                    String    @id @default(cuid())
-  email                 String    @unique
-  firstName             String
-  lastName              String
-  phone                 String?   @unique
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  userCode              String    @unique
-  uuid                  String    @unique @default(uuid())
-  currentSubscription   String?   @ignore
-  profileImage          String?
-  role                  String?   @ignore
-  status                String    @default("active")
-  subscriptionExpiresAt DateTime? @ignore
-  subscriptionStatus    String?   @ignore
-  categoryId            Int?      @ignore
-  planId                Int?      @ignore
+  id             String   @id @default(cuid())
+  email          String   @unique
+  firstName      String
+  lastName       String
+  phone          String?  @unique
+  profileImage   String?
+  country        String?  // optional, for location-based personalization
+  county         String?  // optional, for MVP1 Kenya
+  dateOfBirth    DateTime? // optional, for future AI recommendations
+  gender         String?  // optional, for future personalization
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  userCode       String   @unique
+  uuid           String   @unique @default(uuid())
+  status         String   @default("active")
 }
-
-

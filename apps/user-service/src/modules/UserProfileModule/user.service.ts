@@ -9,18 +9,34 @@ import {
   RoleIdResponse,
   UserRoleResponseDto,
   RoleIdRequestDto,
-  RoleResponseDto,
+  AssignPlanDto,
+  SubscriptionResponseDto,
+  PlanIdRequestDto,
+  PlanIdDtoResponse,
 } from '@pivota-api/dtos';
 import { User } from '../../../generated/prisma/client';
 import { ClientKafka, ClientProxy, RpcException, ClientGrpc } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
 import { lastValueFrom, Observable } from 'rxjs';
-import { BaseGetUserRoleReponseGrpc } from '@pivota-api/interfaces';
+import { BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
+
 
 interface RbacServiceGrpc {
   AssignRoleToUser(data: AssignRoleToUserRequestDto): Observable<BaseResponseDto<UserRoleResponseDto>>;
   GetRoleIdByType(data: RoleIdRequestDto): Observable<BaseResponseDto<RoleIdResponse>>;
-  getUserRole(data: GetUserByUserUuidDto): Observable<BaseGetUserRoleReponseGrpc<RoleResponseDto> | null>;
+}
+
+interface SubscriptionServiceGrpc {
+  AssignPlanToUser(
+    data: AssignPlanDto,
+  ): Observable<BaseSubscriptionResponseGrpc<SubscriptionResponseDto>>;
+}
+
+//interface - get plan id by slug
+interface PlansServiceGrpc {
+  GetPlanIdBySlug(
+    data: PlanIdRequestDto,
+  ): Observable<BaseResponseDto<PlanIdDtoResponse>>;
 }
 
 
@@ -28,12 +44,17 @@ interface RbacServiceGrpc {
 export class UserService implements OnModuleInit {
   private readonly logger = new Logger(UserService.name);
   private rbacGrpcService: RbacServiceGrpc;
+  private subscriptionGrpcService: SubscriptionServiceGrpc;
+  private plansGrpcService: PlansServiceGrpc;
+
 
   constructor(
     private readonly prisma: PrismaService,
     @Inject('USER_KAFKA') private readonly kafkaClient: ClientKafka,
     @Inject('USER_RMQ') private readonly rabbitClient: ClientProxy,
     @Inject('RBAC_PACKAGE') private readonly rbacClient: ClientGrpc,
+    @Inject('SUBSCRIPTIONS_PACKAGE') private readonly subscriptionsClient: ClientGrpc,
+    @Inject('PLANS_PACKAGE') private readonly plansClient: ClientGrpc,
   ) {}
 
   async onModuleInit() {
@@ -53,6 +74,16 @@ export class UserService implements OnModuleInit {
 
     // Initialize gRPC service
     this.rbacGrpcService = this.rbacClient.getService<RbacServiceGrpc>('RbacService');
+
+    this.subscriptionGrpcService = this.subscriptionsClient.getService<SubscriptionServiceGrpc>('SubscriptionService');
+
+    this.plansGrpcService = this.plansClient.getService<PlansServiceGrpc>('PlanService');
+
+    this.logger.log('✅ UserService initialized (gRPC)' 
+
+
+  );
+
   }
 
   private getRbacGrpcService(): RbacServiceGrpc {
@@ -62,6 +93,20 @@ export class UserService implements OnModuleInit {
     return this.rbacGrpcService;
   }
 
+  private getSubscriptionsGrpcService(): SubscriptionServiceGrpc {
+    if (!this.subscriptionGrpcService) {
+      this.subscriptionGrpcService = this.subscriptionsClient.getService<SubscriptionServiceGrpc>('SubscriptionService');
+    }
+    return this.subscriptionGrpcService;
+  }
+
+  private getPlansGrpcService(): PlansServiceGrpc {
+    if (!this.plansGrpcService) {
+      this.plansGrpcService = this.plansClient.getService<PlansServiceGrpc>('PlanService');
+  }
+  return this.plansGrpcService;
+}
+
   /** ------------------ Helper: Generate Custom User Code ------------------ */
   private generateUserCode(): string {
     const random = Math.random().toString(36).substring(2, 10).toUpperCase(); // X8F4C92A
@@ -69,97 +114,148 @@ export class UserService implements OnModuleInit {
   }
 
   /** ------------------ User Signup ------------------ */
-  async createUserProfile(
+async createUserProfile(
   signupDto: SignupRequestDto,
 ): Promise<BaseResponseDto<UserResponseDto>> {
-  this.logger.log(' Starting user signup', signupDto);
+  this.logger.log('Starting user signup', signupDto);
+
+  // Generate UUID + Custom User Code
+  const uuid = randomUUID();
+  const userCode = this.generateUserCode();
+  this.logger.debug(`Generated UUID: ${uuid}, UserCode: ${userCode}`);
+
+  let createdUser: User;
 
   try {
-    // Generate UUID + Custom User Code
-    const uuid = randomUUID();
-    const userCode = this.generateUserCode();
-    this.logger.debug(`Generated UUID: ${uuid}, UserCode: ${userCode}`);
-
-    // Use Prisma transaction to create user and assign default role atomically
-    const user = await this.prisma.$transaction(async (tx) => {
-      // 1️ Create user record in DB
-      const createdUser = await tx.user.create({
-        data: {
-          uuid,
-          userCode,
-          email: signupDto.email,
-          firstName: signupDto.firstName,
-          lastName: signupDto.lastName,
-          ...(signupDto.phone ? { phone: signupDto.phone } : {}),
-        },
-      });
-
-      this.logger.debug(`User Profile Created in Transaction: ${JSON.stringify(createdUser, null, 2)}`);
-
-      // 2 Assign default role via gRPC
-      const rbacGrpcService = this.getRbacGrpcService();
-      const roleResponse = await lastValueFrom(
-        rbacGrpcService.GetRoleIdByType({ roleType: 'GeneralUser' }),
-      );
-
-      this.logger.debug(`gRPC GetRoleIdByType response: ${JSON.stringify(roleResponse, null, 2)}`);
-
-      if (roleResponse.data.roleId) {
-        await lastValueFrom(
-          rbacGrpcService.AssignRoleToUser({
-            userUuid: createdUser.uuid,
-            roleId: roleResponse.data.roleId,
-          }),
-        );
-        this.logger.log(`✅ Default role assigned to user ${createdUser.uuid} via gRPC`);
-      } else {
-        this.logger.warn('⚠️ Role ID not found, skipping default role assignment');
-      }
-
-      return createdUser;
+    // 1️ Create user record in DB (atomic)
+    createdUser = await this.prisma.user.create({
+      data: {
+        uuid,
+        userCode,
+        email: signupDto.email,
+        firstName: signupDto.firstName,
+        lastName: signupDto.lastName,
+        ...(signupDto.phone ? { phone: signupDto.phone } : {}),
+      },
     });
 
-    // Emit Kafka user.created event (non-critical, outside transaction)
+    this.logger.debug(
+      `User profile created: ${JSON.stringify(createdUser, null, 2)}`
+    );
+
+    // 2️ Assign default role via gRPC
+    const rbacGrpcService = this.getRbacGrpcService();
+    const roleIdResponse = await lastValueFrom(
+      rbacGrpcService.GetRoleIdByType({ roleType: 'GeneralUser' }),
+    );
+
+    if (!roleIdResponse.data.roleId) {
+      throw new Error('Default role ID not found');
+    }
+
+    await lastValueFrom(
+      rbacGrpcService.AssignRoleToUser({
+        userUuid: createdUser.uuid,
+        roleId: roleIdResponse.data.roleId,
+      }),
+    );
+    this.logger.log(`✅ Default role with Id: ${roleIdResponse.data.roleId} assigned to user ${createdUser.uuid}`);
+
+
+
+    const planIdGrpcService = this.getPlansGrpcService();
+    const planIdResponse = await lastValueFrom(
+      planIdGrpcService.GetPlanIdBySlug({ slug: 'free' }),
+    );
+
+    this.logger.debug(`Fetched plan ID response: ${JSON.stringify(planIdResponse, null, 2)}`)
+
+    this.logger.debug(`Fetched Plan Id: ${planIdResponse.data.planId} `)
+    
+    
+
+    if (!planIdResponse.data?.planId) {
+      throw new Error('Default plan ID not found');
+    }
+
+    this.logger.debug(`Subscriber UUID: ${createdUser.uuid}`)
+    this.logger.debug(`Plan ID: ${planIdResponse.data.planId}`)
+
+    // 3️ Assign default FREE subscription via gRPC
+    const subscriptionsGrpcService = this.getSubscriptionsGrpcService();
+    const subscriptionResponse = await lastValueFrom(
+      subscriptionsGrpcService.AssignPlanToUser({
+        subscriberUuid: createdUser.uuid,
+        planId: planIdResponse.data.planId,
+        status: 'active',
+        billingCycle: 'monthly',
+      }),
+    );
+
+    this.logger.debug(`Subscription response: ${JSON.stringify(subscriptionResponse, null, 2)}`)
+
+
+    if (!subscriptionResponse.success) {
+      throw new Error(
+        `Failed to assign default subscription: ${subscriptionResponse.message}`,
+      );
+    }
+    this.logger.log(`✅ Default FREE plan assigned to user ${createdUser.uuid}`);
+
+    // 4️ Emit non-critical events (outside main flow)
     try {
       this.kafkaClient.emit('user.created', {
-        id: user.id,
-        uuid: user.uuid,
-        userCode: user.userCode,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        phone: user.phone,
-        createdAt: user.createdAt,
+        id: createdUser.id,
+        uuid: createdUser.uuid,
+        userCode: createdUser.userCode,
+        email: createdUser.email,
+        firstName: createdUser.firstName,
+        lastName: createdUser.lastName,
+        phone: createdUser.phone,
+        createdAt: createdUser.createdAt,
       });
       this.logger.log('📤 Kafka event emitted: user.created');
     } catch (err) {
       this.logger.warn('⚠️ Kafka event emission failed', err);
     }
 
-    // Emit RabbitMQ email event (non-critical, outside transaction)
     try {
       this.rabbitClient.emit('user.signup.email', {
-        to: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        to: createdUser.email,
+        firstName: createdUser.firstName,
+        lastName: createdUser.lastName,
+        planName: 'Free',
+        status: subscriptionResponse.subscription?.status || 'active',
+        billingCycle: 'monthly',
       });
-      this.logger.log('📤 RabbitMQ event emitted: user.signup.email');
+      this.logger.log('📤 RabbitMQ event emitted: user.signup + subscription email');
     } catch (err) {
       this.logger.warn('⚠️ RabbitMQ email event failed', err);
     }
 
-    // Return success
-    const signup_success = {
+    //  Return success
+    const success =  {
       success: true,
       message: 'Signup successful',
       code: 'OK',
-      user: this.toUserResponse(user),
+      user: this.toUserResponse(createdUser),
       error: null,
     };
-    return signup_success;
+    return success
   } catch (error: unknown) {
-    // Handle known errors (e.g., unique constraint violations)
+    // If user was created but role or subscription failed, rollback user
+    if (createdUser?.uuid) {
+      try {
+        await this.prisma.user.delete({ where: { uuid: createdUser.uuid } });
+        this.logger.log(`Rolled back user creation due to failure: ${createdUser.uuid}`);
+      } catch (rollbackErr) {
+        this.logger.error(`Failed to rollback user: ${rollbackErr.message}`, rollbackErr.stack);
+      }
+    }
+
+    // Handle known errors
     if (error instanceof Error) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const message = (error as any).message || '';
       if (message.includes('Unique constraint failed')) {
         const conflictField = message.includes('email')
@@ -187,6 +283,7 @@ export class UserService implements OnModuleInit {
     });
   }
 }
+
 
 
   /** ------------------ Fetch user by UUID ------------------ */
@@ -238,14 +335,13 @@ export class UserService implements OnModuleInit {
       throw new RpcException({ code: 'USER_NOT_FOUND', message: 'User not found' });
     }
 
-    const role = await this.fetchUserRole(user.uuid);
 
 
     const user_profile = {
       success: true,
       message: "User retrieved successfully",
       code: "OK",
-      user: this.toUserResponse(user, { role }),
+      user: this.toUserResponse(user),
       error: null,
       
     }
@@ -267,7 +363,7 @@ export class UserService implements OnModuleInit {
   }
 
   /** ------------------ Map User entity to DTO ------------------ */
-  private toUserResponse(user: User, extras?: Partial<UserResponseDto>): UserResponseDto {
+  private toUserResponse(user: User): UserResponseDto {
     return {
       id: user.id?.toString(),
       uuid: user.uuid,
@@ -280,26 +376,7 @@ export class UserService implements OnModuleInit {
       profileImage: user.profileImage,
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
-      role: extras?.role,
-      currentSubscription: extras?.currentSubscription,
-      subscriptionStatus: extras?.subscriptionStatus,
-      subscriptionExpiresAt: extras?.subscriptionExpiresAt,
-      planId: extras?.planId,
-      categoryId: extras?.categoryId,
     };
   }
-
-  private async fetchUserRole(userUuid: string): Promise<string | null> {
-  const rbacGrpcService = this.getRbacGrpcService();
-  try {
-    const roleResponse = await lastValueFrom(
-      rbacGrpcService.getUserRole({ userUuid }),
-    );
-    return roleResponse?.role?.name || null;
-  } catch (err) {
-    this.logger.warn(`Could not fetch role for user ${userUuid}: ${err.message}`);
-    return null;
-  }
-}
 
 }

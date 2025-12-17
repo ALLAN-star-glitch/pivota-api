@@ -3,6 +3,8 @@ import { GrpcMethod } from '@nestjs/microservices';
 import {
   BaseResponseDto,
   CreatePlanDto,
+  PlanIdDtoResponse,
+  PlanIdRequestDto,
   PlanResponseDto,
   UpdatePlanDto,
 } from '@pivota-api/dtos';
@@ -59,6 +61,19 @@ export class PlanController {
     this.logger.debug(`GetPlanByName Request: ${JSON.stringify(data)}`);
     return this.planService.getPlanByName(data.name);
   }
+
+  // ---------------------------------------
+    // GET PLAN BY SLUG
+    // ---------------------------------------
+    @GrpcMethod('PlanService', 'GetPlanIdBySlug')
+    getPlanIdBySlug(
+      data: PlanIdRequestDto,
+    ): Promise<BaseResponseDto<PlanIdDtoResponse>> {
+      this.logger.debug(`GetPlanBySlug Request: ${JSON.stringify(data)}`);
+      return this.planService.getPlanIdBySlug(data);
+    }
+
+    
 
   // ---------------------------------------
   // GET ALL PLANS

@@ -284,7 +284,6 @@ async assignRoleToUser(
 
 
 
-
  async getRoleIdByType(
   roleIdRequestDto: RoleIdRequestDto,
 ): Promise<BaseResponseDto<RoleIdResponse>> {

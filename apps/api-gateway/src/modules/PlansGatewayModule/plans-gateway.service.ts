@@ -7,9 +7,12 @@ import {
   CreatePlanDto,
   UpdatePlanDto,
   PlanResponseDto,
+  PlanIdDtoResponse,
+  PlanIdRequestDto,
 } from '@pivota-api/dtos';
 
 import {
+  BasePlanIdResponseGrpc,
   BasePlanResponseGrpc,
   BasePlansResponseGrpc,
 } from '@pivota-api/interfaces';
@@ -30,6 +33,10 @@ interface PlansServiceGrpc {
   UpdatePlan(
     data: { planId: string; dto: UpdatePlanDto },
   ): Observable<BasePlanResponseGrpc<PlanResponseDto>>;
+
+  GetPlanIdBySlug(
+    data: PlanIdRequestDto,
+  ): Observable<BasePlanIdResponseGrpc<PlanIdDtoResponse>>;
 
   DeletePlan(
     data: { id: string },
@@ -111,6 +118,20 @@ export class PlansGatewayService implements OnModuleInit {
 
     if (res?.success) {
       return BaseResponseDto.ok(res.plan, res.message, res.code);
+    }
+    return BaseResponseDto.fail(res?.message, res?.code);
+  }
+
+
+  //===========================================================
+  // GET PLAN ID BY SLUG
+  //===========================================================
+  async getPlanIdBySlug(slug: string): Promise<BaseResponseDto<PlanIdDtoResponse>> {
+    const res = await firstValueFrom(this.grpcService.GetPlanIdBySlug({ slug }));
+    this.logger.debug(`GetPlanIdBySlug gRPC: ${JSON.stringify(res)}`);
+
+    if (res?.success) {
+      return BaseResponseDto.ok(res.planId, res.message, res.code);
     }
     return BaseResponseDto.fail(res?.message, res?.code);
   }

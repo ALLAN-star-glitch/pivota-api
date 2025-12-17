@@ -17,11 +17,10 @@ import {
   CreatePlanDto,
   UpdatePlanDto,
   PlanResponseDto,
+  PlanIdDtoResponse,
 } from '@pivota-api/dtos';
 
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
-import { RolesGuard } from '@pivota-api/guards';
-import { Roles } from '@pivota-api/decorators';
 import { JwtRequest } from '@pivota-api/interfaces';
 
 import {
@@ -32,6 +31,8 @@ import {
 } from '@nestjs/swagger';
 
 import { PlansGatewayService } from './plans-gateway.service';
+import { RolesGuard } from '../../guards/role.guard';
+import { Roles } from '../../decorators/roles.decorator';
 
 @ApiTags('Pricing Plans Module - ((Plans-Service) - MICROSERVICE)')
 @ApiBearerAuth()
@@ -110,6 +111,20 @@ export class PlansGatewayController {
 
     return this.plansService.updatePlan(planId, dto);
   }
+
+  // ===========================================================
+  // GET PLAN ID BY SLUG
+  // ===========================================================
+  @ApiParam({ name: 'slug', type: String, description: 'Slug of the plan to fetch' })
+  @Version('1')
+  @Get('/slug/:slug')
+  @ApiOperation({ summary: 'Get plan ID by slug' })
+  async getPlanIdBySlug(
+    @Param('slug') slug: string): Promise<BaseResponseDto<PlanIdDtoResponse>> {
+       this.logger.debug(`REST getPlanIdBySlug request: ${slug}`);
+       return this.plansService.getPlanIdBySlug(slug);
+  }
+
 
   // ===========================================================
   // DELETE PLAN (Admin Only)

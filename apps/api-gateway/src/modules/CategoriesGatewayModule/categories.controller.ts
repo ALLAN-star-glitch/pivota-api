@@ -15,10 +15,9 @@ import {
 } from '@pivota-api/dtos';
 import { CategoriesService } from './categories.service';
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
-
-import { RolesGuard } from '@pivota-api/guards';
-import { Roles } from '@pivota-api/decorators';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../../decorators/roles.decorator';
+import { RolesGuard } from '../../guards/role.guard';
 
 @ApiTags('JobCategories Module - ((Listings-Service) - MICROSERVICE)')
 @ApiBearerAuth()

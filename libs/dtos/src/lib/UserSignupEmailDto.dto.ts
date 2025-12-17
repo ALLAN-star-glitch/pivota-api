@@ -1,4 +1,3 @@
-// user-signup-email.dto.ts
 import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class UserSignupEmailDto {
@@ -25,4 +24,17 @@ export class UserSignupEmailDto {
   @IsString()
   @IsOptional()
   createdAt?: string; // Optional account creation date
+
+  // ---------- New fields for subscription info ----------
+  @IsString()
+  @IsOptional()
+  planName?: string; // Plan assigned to the user (e.g., 'Free')
+
+  @IsString()
+  @IsOptional()
+  status?: string; // Subscription status (e.g., 'active')
+
+  @IsString()
+  @IsOptional()
+  billingCycle?: string; // Billing cycle (e.g., 'monthly')
 }

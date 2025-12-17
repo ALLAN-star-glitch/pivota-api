@@ -24,33 +24,43 @@ export class EmailService {
     );
   }
 
+  /** ------------------ Send combined signup + subscription email ------------------ */
   async sendWelcomeEmail(dto: UserSignupEmailDto) {
-    const createdAt = dto.createdAt
-      ? format(new Date(dto.createdAt), 'PPpp')
-      : format(new Date(), 'PPpp');
+  const createdAt = dto.createdAt
+    ? format(new Date(dto.createdAt), 'PPpp')
+    : format(new Date(), 'PPpp');
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [
-        {
-          From: {
-            Email: process.env.MJ_SENDER_EMAIL || 'info@acop.co.ke',
-            Name: process.env.MJ_SENDER_NAME || 'Pivota Connect',
-          },
-          To: [{ Email: dto.to, Name: dto.firstName }],
-          Subject: dto.subject || 'Welcome to Pivota!',
-          TextPart: `Hello ${dto.firstName}, welcome to Pivota!`,
-          HTMLPart: `
-            <h4>Hello ${dto.firstName}, welcome to Pivota!</h4>
-            <p>Your account has been successfully created at ${createdAt}</p>
-            <p>If this wasn’t you, please contact support.</p>
-          `,
+  const body: SendEmailV3_1.Body = {
+    Messages: [
+      {
+        From: {
+          Email: process.env.MJ_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MJ_SENDER_NAME || 'Pivota Connect',
         },
-      ],
-    };
+        To: [{ Email: dto.to, Name: dto.firstName }],
 
-    await this.sendEmail(body, dto.to);
-  }
+        Subject: dto.subject || 'Welcome to Pivota!',
 
+        //  Use Mailjet template
+        TemplateID: 7587355,
+        TemplateLanguage: true,
+
+        Variables: {
+          firstName: dto.firstName,
+          createdAt,
+          planName: dto.planName || 'Free',
+          status: dto.status || 'active',
+          billingCycle: dto.billingCycle || 'monthly',
+        },
+      },
+    ],
+  };
+
+  await this.sendEmail(body, dto.to);
+}
+
+
+  /** ------------------ Send login notification email ------------------ */
   async sendLoginEmail(dto: UserLoginEmailDto) {
     const timestamp = dto.timestamp
       ? format(new Date(dto.timestamp), 'PPpp')
@@ -85,6 +95,7 @@ export class EmailService {
     await this.sendEmail(body, dto.to);
   }
 
+  /** ------------------ Internal Mailjet sender ------------------ */
   private async sendEmail(
     body: SendEmailV3_1.Body,
     recipient: string,

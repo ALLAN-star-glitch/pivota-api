@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsArray, ValidateNested, IsBoolean } from 'class-validator';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { PlanFeaturesDto } from './PlanFeaturesDto.dto';
@@ -8,6 +8,16 @@ export class CreatePlanDto {
   @ApiProperty({ example: 'Premium Plan', description: 'Name of the plan' })
   @IsString()
   name!: string;
+
+  @ApiProperty({
+  description: 'Unique slug for the plan', example: 'free-plan',})
+  @IsString()
+  slug!: string;
+
+  @ApiProperty({description: 'Whether the plan is premium or not', example: true })
+  @IsBoolean()
+  isPremium!: boolean;
+
 
   @ApiPropertyOptional({ example: 'Full access to all modules', description: 'Optional description of the plan' })
   @IsOptional()
@@ -47,6 +57,10 @@ export class UpdatePlanDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @ApiProperty({description: 'Whether the plan is premium or not', example: true })
+  @IsBoolean()
+  isPremium!: boolean;
 
   @ApiPropertyOptional({ example: 'Updated description' })
   @IsOptional()

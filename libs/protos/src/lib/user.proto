@@ -20,7 +20,6 @@ message CreateUserProfileRequest {
   string lastName = 2;
   string email = 3;
   string phone = 4;
-  string profileImage = 5; // optional
 }
 
 message GetUserByUuidRequest {

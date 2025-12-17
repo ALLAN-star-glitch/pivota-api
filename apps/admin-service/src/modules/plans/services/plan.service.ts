@@ -9,6 +9,8 @@ import {
   UpdatePlanDto,
   UserResponseDto,
   GetUserByUserUuidDto,
+  PlanIdDtoResponse,
+  PlanIdRequestDto,
 } from '@pivota-api/dtos';
 import { BaseUserResponseGrpc } from '@pivota-api/interfaces';
 
@@ -47,6 +49,8 @@ export class PlanService implements OnModuleInit {
       const plan = await this.prisma.plan.create({
         data: {
           name: dto.name,
+          slug: dto.slug,
+          isPremium: dto.isPremium,
           description: dto.description,
           totalListings: dto.totalListings,
           features: dto.features ? JSON.stringify(dto.features) : undefined,
@@ -257,21 +261,13 @@ export class PlanService implements OnModuleInit {
         return failure;
       }
 
-      const userGrpcService = this.getGrpcService();
-      const creator$ = userGrpcService.getUserProfileByUuid({ userUuid: plan.creatorId });
-      const creatorRes: BaseUserResponseGrpc<UserResponseDto> = await firstValueFrom(creator$);
-
+    
       const planResponse: PlanResponseDto = {
         id: plan.id,
         name: plan.name,
         description: plan.description ?? undefined,
         totalListings: plan.totalListings,
         features: plan.features ? JSON.parse(plan.features) : undefined,
-        user: {
-          id: creatorRes.user.uuid,
-          fullName: `${creatorRes.user.firstName} ${creatorRes.user.lastName}`.trim(),
-          email: creatorRes.user.email ?? undefined,
-        },
         planModules: plan.planModules.map(pm => ({
           moduleId: pm.moduleId,
           moduleSlug: pm.module.slug,
@@ -360,6 +356,46 @@ export class PlanService implements OnModuleInit {
       return failure;
     }
   }
+
+  // =========================================================
+// GET PLAN ID BY SLUG
+// =========================================================
+async getPlanIdBySlug(planIdRequestDto: PlanIdRequestDto): Promise<BaseResponseDto<PlanIdDtoResponse>> {
+  try {
+
+    this.logger.log(`Fetching plan ID by slug: ${planIdRequestDto.slug}`);
+
+    const plan = await this.prisma.plan.findUnique({
+      where: { slug: planIdRequestDto.slug }
+    });
+
+    this.logger.debug(`Fetched plan: ${JSON.stringify(plan, null, 2)}`);
+  
+
+    if (!plan) {
+      this.logger.warn(`Plan with slug '${planIdRequestDto.slug}' not found`);
+      return null;
+    }
+
+
+    this.logger.debug(`Plan ID FETCHED: ${plan.id}`);
+
+    const success = {
+      success: true,
+      message: 'Plan ID fetched successfully',
+      code: 'FETCHED',
+      data: { planId: plan.id },
+      error: null,
+    };
+    return success;
+;
+  } catch (err) {
+    const error = err as Error;
+    this.logger.error(`Failed to fetch plan ID by slug '${planIdRequestDto}': ${error.message}`, error.stack);
+    return null;
+  }
+}
+
 
   // =========================================================
   // DELETE PLAN

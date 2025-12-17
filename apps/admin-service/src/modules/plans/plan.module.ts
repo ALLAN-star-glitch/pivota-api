@@ -21,8 +21,9 @@ import { PrismaModule } from '../../prisma/prisma.module';
             protoPath: USER_PROTO_PATH,
             url: process.env.USER_GRPC_URL || 'localhost:50052',
           },
-        }
+        },
       ]),
+
     ],
   controllers: [PlanController, PricingController],
   providers: [PricingService, PlanService, PlanFeatureService],

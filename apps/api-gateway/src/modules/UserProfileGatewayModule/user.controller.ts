@@ -12,8 +12,6 @@ import {
   BaseResponseDto,
   UserResponseDto,
 } from '@pivota-api/dtos';
-import { RolesGuard } from '@pivota-api/guards';
-import { Roles } from '@pivota-api/decorators';
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
 import {
   ApiTags,
@@ -24,6 +22,8 @@ import {
   getSchemaPath,
   ApiExtraModels,
 } from '@nestjs/swagger';
+import { Roles } from '../../decorators/roles.decorator';
+import { RolesGuard } from '../../guards/role.guard';
 
 @ApiTags('UserProfile Module - ((User-Service) - MICROSERVICE)')
 @ApiExtraModels(BaseResponseDto, UserResponseDto, AuthUserDto)

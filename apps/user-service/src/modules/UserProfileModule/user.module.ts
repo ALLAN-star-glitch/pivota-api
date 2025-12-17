@@ -3,7 +3,7 @@ import { UserController } from './user.controller';
 import { UserService } from './user.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { RBAC_PROTO_PATH } from '@pivota-api/protos';
+import { PLANS_PROTO_PATH, RBAC_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH } from '@pivota-api/protos';
 
 
 
@@ -49,6 +49,25 @@ import { RBAC_PROTO_PATH } from '@pivota-api/protos';
           },
         },
       },
+
+      {
+        name: 'SUBSCRIPTIONS_PACKAGE',
+        transport: Transport.GRPC,
+        options: {
+          package: 'subscriptions',
+          protoPath: SUBSCRIPTIONS_PROTO_PATH,
+          url: process.env.ADMIN_SERVICE_GRPC_URL || 'localhost:50040',
+        },
+      },
+      {
+        name: 'PLANS_PACKAGE',
+        transport: Transport.GRPC,
+        options: {
+          package: 'plans',
+          protoPath: PLANS_PROTO_PATH,
+          url: process.env.ADMIN_SERVICE_GRPC_URL || 'localhost:50050',
+        },
+      }
     ]),
   ],
   controllers: [UserController],

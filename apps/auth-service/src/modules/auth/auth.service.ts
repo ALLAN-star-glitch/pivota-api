@@ -191,16 +191,12 @@ export class AuthService implements OnModuleInit {
       this.logger.log(`Credentials created for user ${user.uuid}`)
       this.logger.debug(`The credentials include: $userUuid: ${user.uuid}, passwordHash: ${hashedPassword} `)
 
-      const rbacService = this.getRbacGrpcService();
-      const userRoleResponse = await firstValueFrom(rbacService.getUserRole({ userUuid: user.uuid }));
-      const roleName = userRoleResponse?.role?.name ?? ' ERROR - USER ROLE NOT FETCHED ';
-
       const user_signup_success = {
 
         success: true,
         message: 'Signup successful',
         code: 'CREATED',
-        user: { ...user, role: roleName },
+        user: user,
         error: null,
 
       }
@@ -209,36 +205,23 @@ export class AuthService implements OnModuleInit {
       
     } catch (err: unknown) {
       if (err instanceof RpcException) {
-        const rpcError = (err as RpcException).getError() as { code?: string; message?: string; details?: unknown };
-        const failure_response = {
-
-          success: false,
-          message: rpcError.message || 'User profile creation failed',
-          code: rpcError.code || 'INTERNAL',
-          user: null,
-          error: {
-            code: rpcError.code || 'INTERNAL',
-            message: rpcError.message || 'User creation failed',
-            details: rpcError.details ?? null,
-          },
-
-        }
-        return failure_response;
+          const rpcError = (err as RpcException).getError() as {
+            code?: string;
+            message?: string;
+            details?: unknown;
+          };
+              const failure =  {
+                success: false,
+                message: rpcError.message,
+                code: rpcError.code,
+                error: {
+                  code: rpcError.code,
+                  message: rpcError.message,
+                  details: rpcError.details ?? null,
+                },
+              }
+        return failure;
       }
-
-      const unknownErr = err as Error;
-
-      const failure = {
-
-        success: false,
-        message: 'User profile creation failed',
-        code: 'INTERNAL',
-        user: null,
-        error: { code: 'INTERNAL', message: unknownErr?.message || 'User creation failed' },
-
-
-      }
-      return failure;
     }
   }
 
@@ -259,10 +242,6 @@ export class AuthService implements OnModuleInit {
 
       if (!user) throw new UnauthorizedException('Invalid credentials');
 
-
-      const rbacService = this.getRbacGrpcService();
-      const userRoleResponse = await firstValueFrom(rbacService.getUserRole({ userUuid: user.uuid }));
-      const roleName = userRoleResponse?.role?.name ?? 'ERROR - USER ROLE NOT FETCHED';
 
       const { accessToken, refreshToken } = await this.generateTokens(
         { uuid: user.uuid, email: user.email },
@@ -285,7 +264,7 @@ export class AuthService implements OnModuleInit {
         success: true,
         message: 'Login successful',
         code: 'OK',
-        user: { ...user, role: roleName, accessToken, refreshToken },
+        user: { ...user, accessToken, refreshToken },
         error: null,
 
 

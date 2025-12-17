@@ -11,7 +11,10 @@ service PlanService {
   rpc GetPlanById (GetPlanByIdRequest) returns (BasePlanResponse);
   rpc GetAllPlans (EmptyRequest) returns (ListPlansResponse);
   rpc DeletePlan (DeletePlanRequest) returns (BaseDeletePlanResponse);
+  rpc GetPlanIdBySlug (GetPlanIdBySlugRequest) returns (BasePlanIdResponse);
 }
+
+
 
 // ===================================================
 // ERROR PAYLOAD
@@ -45,6 +48,14 @@ message ListPlansResponse {
   string code = 2;
   string message = 3;
   repeated Plan plans = 4;
+  ErrorPayload error = 5;
+}
+
+message BasePlanIdResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  PlanIdResponse data = 4;
   ErrorPayload error = 5;
 }
 
@@ -105,26 +116,34 @@ message Restrictions {
   int32 maxPostsPerMonth = 4;
 }
 
+message PlanIdResponse{
+  string planId = 1;
+}
+
 // ===================================================
 // REQUEST MESSAGES
 // ===================================================
 message CreatePlanRequest {
   string name = 1;
-  string description = 2;
-  string userId = 3;
-  int32 totalListings = 4;
-  PlanFeatures features = 5;
-  repeated PlanModule planModules = 6; 
+  string slug = 2;
+  bool isPremium = 3;
+  string description = 4;
+  string userId = 5;
+  int32 totalListings = 6;
+  PlanFeatures features = 7;
+  repeated PlanModule planModules = 8; 
 }
 
 
 message UpdatePlanRequest {
   string name = 1;
-  string description = 2;
-  string userId = 3;
-  int32 totalListings = 4;
-  PlanFeatures features = 5;
-  repeated PlanModule planModules = 6; 
+  string slug = 2;
+  bool isPremium = 3;
+  string description = 4;
+  string userId = 5;
+  int32 totalListings = 6;
+  PlanFeatures features = 7;
+  repeated PlanModule planModules = 8; 
 }
 
 message GetPlanByIdRequest {
@@ -133,6 +152,10 @@ message GetPlanByIdRequest {
 
 message DeletePlanRequest {
   string planId = 1;
+}
+
+message GetPlanIdBySlugRequest {
+  string slug = 1;  
 }
 
 // ===================================================

@@ -19,12 +19,11 @@ import {
 } from '@pivota-api/dtos';
 
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
-import { RolesGuard } from '@pivota-api/guards';
-import { Roles } from '@pivota-api/decorators';
-
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
 import { JwtRequest } from '@pivota-api/interfaces';
+import { Roles } from '../../decorators/roles.decorator';
+import { RolesGuard } from '../../guards/role.guard';
 
 
 
@@ -40,7 +39,7 @@ export class JobsController {
   // CREATE JOB POST (Authenticated User)
   // ===========================================================
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemsAdmin')
+  @Roles('SuperAdmin', 'SystemAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'ModuleManager' , 'BusinessSystemAdmin', "BusinessContentAdmin", "GeneralUser")
   @Version('1')
   @Post('jobs')
   @ApiOperation({summary: 'Create a new job post'})
@@ -92,7 +91,7 @@ export class JobsController {
   // CREATE PROVIDER JOB (Only Service Providers)
   // ===========================================================
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'PremiumUser')
+  @Roles('SuperAdmin', 'SystemAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'ModuleManager' , 'BusinessSystemAdmin', "BusinessContentAdmin", "GeneralUser")
   @Version('1')
   @Post('provider-jobs')
   @ApiOperation({summary: 'Create a new provider job'}) 

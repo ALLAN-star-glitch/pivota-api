@@ -1,14 +1,9 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
-import { firstValueFrom, Observable } from 'rxjs';
-import {
-  AuthUserDto,
-  BaseResponseDto,
-  GetUserByEmailDto,
-  GetUserByUserCodeDto, 
-  UserResponseDto,
-} from '@pivota-api/dtos';
+import { AuthUserDto, BaseResponseDto, GetUserByEmailDto, GetUserByUserCodeDto, UserResponseDto } from '@pivota-api/dtos';
 import { BaseUserResponseGrpc, BaseUsersResponseGrpc } from '@pivota-api/interfaces';
+import { firstValueFrom, Observable } from 'rxjs';
+
 
 
 // ---------------- gRPC Interface ----------------

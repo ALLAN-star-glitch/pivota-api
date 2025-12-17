@@ -22,8 +22,6 @@ import {
   AssignRoleToUserRequestDto,
   UserRoleResponseDto,
 } from '@pivota-api/dtos';
-import { Roles } from '@pivota-api/decorators';
-import { RolesGuard } from '@pivota-api/guards';
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
 import {
   ApiTags,
@@ -32,6 +30,8 @@ import {
   ApiParam,
   ApiExtraModels,
 } from '@nestjs/swagger';
+import { Roles } from '../../decorators/roles.decorator';
+import { RolesGuard } from '../../guards/role.guard';
 
 @ApiTags('RBAC Module - ((Admin-Service) - MICROSERVICE)')
 @ApiExtraModels(

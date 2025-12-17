@@ -9,7 +9,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app/app.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { RBAC_PROTO_PATH, PLANS_PROTO_PATH } from '@pivota-api/protos';
+import { RBAC_PROTO_PATH, PLANS_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH } from '@pivota-api/protos';
 
 
 async function bootstrap() {
@@ -25,7 +25,7 @@ async function bootstrap() {
     options: {
       package: 'rbac',
       protoPath: RBAC_PROTO_PATH,
-      url: process.env.RBAC_GRPC_URL || '0.0.0.0:5005',
+      url:  '0.0.0.0:50055',
     },
   });
 
@@ -34,11 +34,22 @@ async function bootstrap() {
     options: {
       package: 'plans',
       protoPath: PLANS_PROTO_PATH,
-      url: process.env.PLANS_GRPC_URL || '0.0.0.0:50059',
+      url: '0.0.0.0:50050',
     },
   });
 
-  
+
+
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.GRPC,
+    options: { 
+      package: 'subscriptions',
+      protoPath: SUBSCRIPTIONS_PROTO_PATH,
+      url: '0.0.0.0:50040',
+    },
+  }); 
+      
+
   // -------------------------------
   // Kafka Microservice (Events)
   // -------------------------------
