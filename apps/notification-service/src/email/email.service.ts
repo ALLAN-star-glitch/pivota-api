@@ -51,6 +51,7 @@ export class EmailService {
           planName: dto.planName || 'Free',
           status: dto.status || 'active',
           billingCycle: dto.billingCycle || 'monthly',
+          expiresAt: dto.expiresAt || 'N/A',  
         },
       },
     ],

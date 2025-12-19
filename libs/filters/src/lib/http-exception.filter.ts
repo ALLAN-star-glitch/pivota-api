@@ -6,20 +6,43 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
-import { BaseResponseDto } from '@pivota-api/dtos';
+
+/**
+ * Generic response shape used across the platform
+ * (DO NOT import DTOs in filters)
+ */
+interface BaseResponseShape {
+  success: boolean;
+  message: string;
+  code: string;
+  error?: unknown;
+  [key: string]: unknown;
+}
 
 interface ExceptionResponse {
   message?: string | string[];
   code?: string;
   details?: unknown;
   httpStatus?: number;
-  [key: string]: unknown;
 }
 
-// Map your response codes to HTTP status
+/**
+ * Type guard for platform response objects
+ */
+function isBaseResponse(obj: unknown): obj is BaseResponseShape {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'success' in obj &&
+    'message' in obj &&
+    'code' in obj
+  );
+}
+
+// Map internal codes → HTTP status
 const httpStatusMap: Record<string, number> = {
-  OK: HttpStatus.OK,                 // 200
-  CREATED: HttpStatus.CREATED,       // 201
+  OK: HttpStatus.OK,
+  CREATED: HttpStatus.CREATED,
   BAD_REQUEST: HttpStatus.BAD_REQUEST,
   UNAUTHORIZED: HttpStatus.UNAUTHORIZED,
   FORBIDDEN: HttpStatus.FORBIDDEN,
@@ -34,37 +57,44 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse();
 
-    let status: number;
-    let message: string;
-    let code: string;
-    let details: unknown;
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let message = 'Internal server error';
+    let code = 'INTERNAL_ERROR';
+    let details: unknown = null;
 
-    // --- BaseResponseDto returned from service ---
-    if (exception instanceof BaseResponseDto) {
-      code = exception.code;
-      status = httpStatusMap[code] ?? HttpStatus.INTERNAL_SERVER_ERROR;
-      message = exception.message;
-      details = exception.error ?? null;
+    // ---------------------------------------------------------
+    // 1. Service already returned a BaseResponse-like object
+    // ---------------------------------------------------------
+    if (isBaseResponse(exception)) {
+      status =
+        httpStatusMap[exception.code] ??
+        HttpStatus.INTERNAL_SERVER_ERROR;
 
       response.status(status).json(exception);
       return;
     }
 
-    // --- HTTP exceptions ---
+    // ---------------------------------------------------------
+    // 2. HTTP Exceptions (REST layer)
+    // ---------------------------------------------------------
     if (exception instanceof HttpException) {
       const excResponse = exception.getResponse() as ExceptionResponse;
+
       status = exception.getStatus();
       message = Array.isArray(excResponse?.message)
         ? excResponse.message.join(', ')
-        : excResponse?.message || (exception as Error)?.message || 'Error';
-      code = excResponse?.code || String(status);
+        : excResponse?.message ?? exception.message;
+
+      code = excResponse?.code ?? String(status);
       details = excResponse?.details ?? excResponse ?? null;
-    } 
-    // --- Microservice RPC exceptions ---
+    }
+
+    // ---------------------------------------------------------
+    // 3. RPC Exceptions (gRPC / Kafka)
+    // ---------------------------------------------------------
     else if (exception instanceof RpcException) {
       const rpcError = exception.getError() as ExceptionResponse;
 
-      // Map RPC codes to HTTP status
       switch (rpcError?.code) {
         case 'USER_NOT_FOUND':
           status = HttpStatus.NOT_FOUND;
@@ -72,8 +102,8 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
         case 'ALREADY_EXISTS':
           status = HttpStatus.CONFLICT;
           break;
-        case 'KAFKA_EVENT_FAILED':
         case 'INTERNAL_ERROR':
+        case 'KAFKA_EVENT_FAILED':
           status = HttpStatus.INTERNAL_SERVER_ERROR;
           break;
         default:
@@ -82,20 +112,25 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
 
       message = Array.isArray(rpcError?.message)
         ? rpcError.message.join(', ')
-        : rpcError?.message || 'Internal server error';
-      code = rpcError?.code || String(status);
+        : rpcError?.message ?? message;
+
+      code = rpcError?.code ?? code;
       details = rpcError?.details ?? rpcError ?? null;
-    } 
-    // --- Unknown exceptions ---
-    else {
-      status = HttpStatus.INTERNAL_SERVER_ERROR;
-      message = (exception as Error)?.message || 'Internal server error';
-      code = 'INTERNAL_ERROR';
-      details = exception ?? null;
     }
 
-    response
-      .status(status)
-      .json(BaseResponseDto.fail(message, code, details));
+    // ---------------------------------------------------------
+    // 4. Unknown runtime errors
+    // ---------------------------------------------------------
+    else if (exception instanceof Error) {
+      message = exception.message;
+      details = exception.stack;
+    }
+
+    response.status(status).json({
+      success: false,
+      message,
+      code,
+      error: details,
+    });
   }
 }

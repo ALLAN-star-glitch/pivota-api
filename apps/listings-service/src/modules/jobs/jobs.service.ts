@@ -7,10 +7,12 @@ import {
   CreateProviderJobDto,
   BaseResponseDto,
   UserResponseDto,
-  GetUserByUserUuidDto
+  GetUserByUserUuidDto,
+  ValidateJobPostIdsReponseDto,
+  ValidateJobPostIdsRequestDto
 } from '@pivota-api/dtos';
 import { firstValueFrom, Observable } from 'rxjs';
-import { BaseUserResponseGrpc  } from '@pivota-api/interfaces';
+import { BaseUserResponseGrpc,   } from '@pivota-api/interfaces';
 import { ClientGrpc } from '@nestjs/microservices';
 
 interface UserServiceGrpc {
@@ -361,4 +363,39 @@ async getJobsByCategory(categoryId: string): Promise<BaseResponseDto<JobPostResp
       return failure;
     }
   }
+
+
+  // Validate if job posts exist
+async validateJobPostIds(dto: ValidateJobPostIdsRequestDto): Promise<BaseResponseDto<ValidateJobPostIdsReponseDto>> {
+  try {
+    const existingJobs = await this.prisma.jobPost.findMany({
+      where: { id: { in: dto.ids } },
+      select: { id: true },
+    });
+
+    const existingIds = existingJobs.map(j => j.id);
+    const invalidIds = dto.ids.filter(id => !existingIds.includes(id));
+
+    const failure =   {
+      success: true,
+      message: 'Validation completed',
+      code: 'VALIDATION_DONE',
+      jobIds: { validIds: existingIds, invalidIds },
+      error: null,
+    };
+    return failure;
+  } catch (err) {
+    const error = err as Error;
+    this.logger.error(`Failed to validate job IDs: ${error.message}`, error.stack);
+    const success_resp= {
+      success: false,
+      message: 'Validation failed',
+      code: 'VALIDATION_FAILED',
+      jobIds: { validIds: [], invalidIds: dto.ids },
+      error: { message: error.message, details: error.stack },
+    };
+    return success_resp;
+  }
+}
+
 }

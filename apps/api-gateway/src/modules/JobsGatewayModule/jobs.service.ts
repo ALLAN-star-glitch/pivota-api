@@ -5,9 +5,11 @@ import {
   JobPostResponseDto,
   CreateProviderJobDto,
   ProviderJobResponseDto,
+  ValidateJobPostIdsRequestDto,
+  ValidateJobPostIdsReponseDto,
 } from '@pivota-api/dtos';
 
-import { BaseJobPostResponseGrpc, BaseJobPostsResponseGrpc, BaseProviderJobResponseGrpc } from '@pivota-api/interfaces';
+import { BaseJobPostResponseGrpc, BaseJobPostsResponseGrpc, BaseProviderJobResponseGrpc, BaseValidateJobPostIdsReponseGrpc } from '@pivota-api/interfaces';
 
 import { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom, Observable } from 'rxjs';
@@ -28,6 +30,9 @@ interface JobsServiceGrpc {
   CreateProviderJob(
     data: CreateProviderJobDto,
   ): Observable<BaseProviderJobResponseGrpc<ProviderJobResponseDto>>;
+
+  ValidateJobPostIds(data: ValidateJobPostIdsRequestDto): Observable<BaseValidateJobPostIdsReponseGrpc<ValidateJobPostIdsReponseDto>>;
+
 }
 
 @Injectable()
@@ -121,4 +126,25 @@ export class JobsService {
 
     return BaseResponseDto.fail(res?.message, res?.code);
   }
+
+  // ===========================================================
+  // VALIDATE JOB POST IDS
+  // ===========================================================
+  async validateJobPostIds(
+    dto: ValidateJobPostIdsRequestDto
+  ): Promise<BaseResponseDto<ValidateJobPostIdsReponseDto>>{
+    const response = await firstValueFrom(
+      this.grpcService.ValidateJobPostIds(dto),
+    );
+
+    this.logger.debug(`ValidatedJobIds: ${JSON.stringify(response)}`);
+
+    if(response?.success){
+      return BaseResponseDto.ok(response.jobIds, response.message, response.code)
+    }
+
+    return BaseResponseDto.fail(response?.message, response?.code)
+  }
+
+
 }

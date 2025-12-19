@@ -97,7 +97,7 @@ model Plan {
   slug          String        @unique
   description   String?
   totalListings Int         @default(0)
-  features      String?
+  features      String
   creatorId     String
 
   isPremium     Boolean  @default(false)
@@ -166,18 +166,26 @@ model UserModule {
 // ===================== SUBSCRIPTIONS =====================
 model Subscription {
   id           String   @id @default(cuid())
-  userUuid     String   @unique    // Reference to user in user service
-  planId       String                 // FK to Plan
-  status       String                 // ACTIVE, CANCELLED, EXPIRED, etc.
-  billingCycle String   @default("monthly")
+  userUuid     String               // Reference to user in user service
+  planId       String?              // FK to Plan, optional for listing-specific subscriptions
+  type         String   @default("PLAN") // PLAN, LISTING, LISTING_GROUP, MODULE
+  entityIds    String[]             // can have 0, 1 or more entity IDs ... for PLAN type, ofcourse the entity entry is zero
+  totalAmount  Float?               // total cost of subscription (for groups or modules)
+  currency     String?              // currency code, e.g., KES, USD
+  status       String   @default("ACTIVE") // ACTIVE, PARTIALLY_PAID, CANCELLED, EXPIRED
+  billingCycle String?
+  amountPaid   Float?               // optional partial payment
   startedAt    DateTime @default(now())
   expiresAt    DateTime
+  endedAt      DateTime? 
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  plan         Plan     @relation(fields: [planId], references: [id])
+  plan         Plan?    @relation(fields: [planId], references: [id])
 }
+
+
 
 
 // ===================== PLAN SUBSCRIPTIONS =====================

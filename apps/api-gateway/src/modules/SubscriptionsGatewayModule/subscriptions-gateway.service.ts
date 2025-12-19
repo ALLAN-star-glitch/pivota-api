@@ -3,19 +3,19 @@ import { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom, Observable } from 'rxjs';
 import {
   BaseResponseDto,
+  SubscribeToPlanDto,
   SubscriptionResponseDto,
-  AssignPlanDto,
 } from '@pivota-api/dtos';
-import { BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
+import { BaseSubscriptionsResponseGrpc, BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
 
 interface SubscriptionsServiceGrpc {
-  AssignPlanToUser(
-    data: AssignPlanDto,
+  SubscribeToPlan(
+    data: SubscribeToPlanDto,
   ): Observable<BaseSubscriptionResponseGrpc<SubscriptionResponseDto>>;
 
-  GetSubscriptionByUser(
+  GetSubscriptionsByUser(
     data: { userUuid: string },
-  ): Observable<BaseSubscriptionResponseGrpc<SubscriptionResponseDto>>;
+  ): Observable<BaseSubscriptionsResponseGrpc<SubscriptionResponseDto>>;
 }
 
 @Injectable()
@@ -37,10 +37,10 @@ export class SubscriptionsGatewayService implements OnModuleInit {
   // ===========================================================
   // ASSIGN PLAN
   // ===========================================================
-  async assignPlan(
-    dto: AssignPlanDto,
+  async subscribeToPlan(
+    dto: SubscribeToPlanDto,
   ): Promise<BaseResponseDto<SubscriptionResponseDto>> {
-    const res = await firstValueFrom(this.grpcService.AssignPlanToUser(dto));
+    const res = await firstValueFrom(this.grpcService.SubscribeToPlan(dto));
     this.logger.debug(`AssignPlan gRPC: ${JSON.stringify(res)}`);
 
     if (res?.success) {
@@ -52,16 +52,16 @@ export class SubscriptionsGatewayService implements OnModuleInit {
   // ===========================================================
   // GET SUBSCRIPTION BY USER
   // ===========================================================
-  async getSubscriptionByUser(
+  async getSubscriptionsByUser(
     userUuid: string,
   ): Promise<BaseResponseDto<SubscriptionResponseDto>> {
     const res = await firstValueFrom(
-      this.grpcService.GetSubscriptionByUser({ userUuid }),
+      this.grpcService.GetSubscriptionsByUser({ userUuid }),
     );
     this.logger.debug(`GetSubscriptionByUser gRPC: ${JSON.stringify(res)}`);
 
     if (res?.success) {
-      return BaseResponseDto.ok(res.subscription, res.message, res.code);
+      return BaseResponseDto.ok(res.subscriptions, res.message, res.code);
     }
     return BaseResponseDto.fail(res?.message, res?.code);
   }

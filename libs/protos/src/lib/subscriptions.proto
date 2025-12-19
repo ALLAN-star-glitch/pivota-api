@@ -6,8 +6,8 @@ package subscriptions;
 // SERVICE DEFINITION
 // ===================================================
 service SubscriptionService {
-  rpc AssignPlanToUser (AssignPlanRequest) returns (BaseSubscriptionResponse);
-  rpc GetSubscriptionByUser (GetSubscriptionByUserRequest) returns (BaseSubscriptionResponse);
+  rpc SubscribeToPlan (SubscribeToPlanRequest) returns (BaseSubscriptionResponse);
+  rpc GetSubscriptionsByUser (GetSubscriptionByUserRequest) returns (BaseSubscriptionsResponse);
 }
 
 // ===================================================
@@ -30,6 +30,15 @@ message BaseSubscriptionResponse {
   ErrorPayload error = 5;
 }
 
+
+message BaseSubscriptionsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated Subscription subscriptions = 4;
+  ErrorPayload error = 5;
+}
+
 // ===================================================
 // ENTITIES
 // ===================================================
@@ -37,12 +46,18 @@ message Subscription {
   string id = 1;
   string userUuid = 2;
   string plan = 3;
-  string status = 4;
-  string billingCycle = 5;
-  string expiresAt = 6;
-  string createdAt = 7;
-  string updatedAt = 8;
-  UserBasic user = 9; 
+  string type = 4;
+  repeated string entityIds = 5; 
+  string status = 6;
+  string billingCycle = 7;
+  int32  totalAmount = 8;     
+  int32  amountPaid = 9;
+  string currency = 10;
+  string startedAt = 11;
+  string expiresAt = 12;    
+  string createdAt = 13;
+  string updatedAt = 14;
+  UserBasic user = 15; 
 }
 
 message UserBasic {
@@ -54,12 +69,18 @@ message UserBasic {
 // ===================================================
 // REQUEST MESSAGES
 // ===================================================
-message AssignPlanRequest {
+message SubscribeToPlanRequest {
   string subscriberUuid = 1;
   string planId = 2;          // Free, Starter, Professional, Enterprise
-  string billingCycle = 3;      // monthly, quarterly, halfYearly, annually
-  bool isPremium = 4;
+  repeated string entityIds = 3; // <-- updated to array
+  string billingCycle = 4;      // monthly, quarterly, halfYearly, annually
   string status = 5;            // ACTIVE, INACTIVE, etc.
+  int32  amountPaid = 6;
+  string currency = 7;
+  string totalAmount = 8;
+  string type = 9;
+
+  
 }
 
 message GetSubscriptionByUserRequest {

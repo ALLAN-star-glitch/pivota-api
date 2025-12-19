@@ -23,6 +23,8 @@ export * from './lib/jwt-request.interface';
 export * from './lib/plan-features.interface';
 export * from './lib/BasePlanResponseGrpc.interface';
 export * from './lib/BasePlansResponseGrpc.interface';  
+export * from './lib/BaseSubscriptionsResponseGrpc.interface';
 export * from './lib/BaseSubscriptionResponseGrpc.interface';
 export * from './lib/SubscriptionAssignedEvent.interface';
 export * from './lib/BasePlanIdResponseGrpc.interface';
+export * from './lib/BaseValidateJobPostIdsReponseGrpc.interface';

@@ -37,4 +37,8 @@ export class UserSignupEmailDto {
   @IsString()
   @IsOptional()
   billingCycle?: string; // Billing cycle (e.g., 'monthly')
+
+  @IsString()
+  @IsOptional()
+  expiresAt?: string; // Subscription expiration date 
 }

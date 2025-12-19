@@ -11,7 +11,7 @@ import { SUBSCRIPTIONS_PROTO_PATH } from '@pivota-api/protos';
         name: 'SUBSCRIPTIONS_PACKAGE',
         transport: Transport.GRPC,
         options: {
-          url: process.env.SUBSCRIPTIONS_SERVICE_URL || 'localhost:50060',
+          url: process.env.SUBSCRIPTIONS_SERVICE_URL || 'localhost:50040',
           package: 'subscriptions',
           protoPath: SUBSCRIPTIONS_PROTO_PATH,
         },

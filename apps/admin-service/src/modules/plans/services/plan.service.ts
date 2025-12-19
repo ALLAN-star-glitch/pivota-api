@@ -339,7 +339,7 @@ export class PlanService implements OnModuleInit {
         success: true,
         message: `Plans retrieved successfully. Total plans: ${plans.length}`,
         code: 'FETCHED',
-        plan: plansResponse,
+        plans: plansResponse,
         error: null,
       };
       return success;
@@ -350,7 +350,7 @@ export class PlanService implements OnModuleInit {
         success: false,
         message: 'Failed to fetch plans',
         code: 'FETCH_FAILED',
-        plan: null,
+        plans: null,
         error: { message: error.message, details: error.stack },
       };
       return failure;

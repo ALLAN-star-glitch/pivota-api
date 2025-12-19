@@ -16,10 +16,11 @@ import {
   JobPostResponseDto,
   CreateProviderJobDto,
   ProviderJobResponseDto,
+  ValidateJobPostIdsRequestDto,
 } from '@pivota-api/dtos';
 
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
 import { JwtRequest } from '@pivota-api/interfaces';
 import { Roles } from '../../decorators/roles.decorator';
@@ -111,4 +112,34 @@ export class JobsController {
 
     return this.jobsService.createProviderJob(dto);
   }
+
+  // ===========================================================
+// Validate Job Post IDs
+// ===========================================================
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(
+  'SuperAdmin',
+  'SystemAdmin',
+  'ComplianceAdmin',
+  'AnalyticsAdmin',
+  'ModuleManager',
+  'BusinessSystemAdmin',
+  'BusinessContentAdmin',
+  'GeneralUser',
+)
+@Version('1')
+@Post('jobs/validate-ids')
+@ApiOperation({ summary: 'Validate Job Post IDs' })
+@ApiBody({ type: ValidateJobPostIdsRequestDto })
+@ApiOkResponse({ description: 'Validation result returned successfully' })
+async validateJobIds(
+  @Body() dto: ValidateJobPostIdsRequestDto,
+) {
+  this.logger.debug(
+    `Validate Job Ids Request: ${JSON.stringify(dto)}`,
+  );
+
+  return this.jobsService.validateJobPostIds(dto);
+}
+
 }

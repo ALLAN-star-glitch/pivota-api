@@ -23,3 +23,4 @@ export class EmailController {
     await this.emailService.sendLoginEmail(data);
   }
 }
+

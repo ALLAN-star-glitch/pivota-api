@@ -12,6 +12,8 @@ service JobsService {
 
   rpc CreateProviderJob (CreateProviderJobRequest) returns (BaseProviderJobResponse);
   rpc GetProviderJobsByProvider (GetProviderJobsByProviderRequest) returns (ListProviderJobsResponse);
+
+  rpc ValidateJobPostIds(ValidateJobPostIdsRequest) returns (BaseValidateJobPostIdsResponse);
 }
 
 // ===================================================
@@ -111,6 +113,14 @@ message ProviderJob {
   string updatedAt = 10;
 }
 
+message ValidateJobPostIdsRequest {
+  repeated string ids = 1;
+}
+
+message ValidateJobIdsResponse {
+   repeated string validIds = 1;
+   repeated string invalidIds = 2;
+}
 // ===================================================
 // REQUEST MESSAGES
 // ===================================================
@@ -167,6 +177,7 @@ message GetProviderJobsByProviderRequest {
   string providerId = 1;
 }
 
+
 // ===================================================
 // LIST RESPONSES
 // ===================================================
@@ -183,5 +194,14 @@ message ListProviderJobsResponse {
   string code = 2;
   string message = 3;
   repeated ProviderJob providerJobs = 4;
+  ErrorPayload error = 5;
+}
+
+//Validate job ids response
+message BaseValidateJobPostIdsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  ValidateJobIdsResponse jobIds = 4;
   ErrorPayload error = 5;
 }

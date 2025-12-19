@@ -9,10 +9,10 @@ import {
   RoleIdResponse,
   UserRoleResponseDto,
   RoleIdRequestDto,
-  AssignPlanDto,
   SubscriptionResponseDto,
   PlanIdRequestDto,
   PlanIdDtoResponse,
+  SubscribeToPlanDto,
 } from '@pivota-api/dtos';
 import { User } from '../../../generated/prisma/client';
 import { ClientKafka, ClientProxy, RpcException, ClientGrpc } from '@nestjs/microservices';
@@ -27,8 +27,8 @@ interface RbacServiceGrpc {
 }
 
 interface SubscriptionServiceGrpc {
-  AssignPlanToUser(
-    data: AssignPlanDto,
+  SubscribeToPlan(
+    data: SubscribeToPlanDto,
   ): Observable<BaseSubscriptionResponseGrpc<SubscriptionResponseDto>>;
 }
 
@@ -184,11 +184,9 @@ async createUserProfile(
     // 3️ Assign default FREE subscription via gRPC
     const subscriptionsGrpcService = this.getSubscriptionsGrpcService();
     const subscriptionResponse = await lastValueFrom(
-      subscriptionsGrpcService.AssignPlanToUser({
+      subscriptionsGrpcService.SubscribeToPlan({
         subscriberUuid: createdUser.uuid,
-        planId: planIdResponse.data.planId,
-        status: 'active',
-        billingCycle: 'monthly',
+        planId: planIdResponse.data.planId || process.env.DEFAULT_PLAN_ID,
       }),
     );
 
@@ -226,7 +224,8 @@ async createUserProfile(
         lastName: createdUser.lastName,
         planName: 'Free',
         status: subscriptionResponse.subscription?.status || 'active',
-        billingCycle: 'monthly',
+        expiresAt: subscriptionResponse.subscription?.expiresAt,
+        billingCycle: 'Free Month Trial',
       });
       this.logger.log('📤 RabbitMQ event emitted: user.signup + subscription email');
     } catch (err) {

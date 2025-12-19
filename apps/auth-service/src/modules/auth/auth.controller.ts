@@ -17,6 +17,7 @@ import {
 
     private readonly logger = new Logger(AuthController.name);
 
+    
     // ------------------ Signup ------------------
    @GrpcMethod('AuthService', 'Signup')
     async handleSignupGrpc(

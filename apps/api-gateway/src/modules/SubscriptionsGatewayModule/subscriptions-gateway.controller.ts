@@ -14,7 +14,7 @@ import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
 import { JwtRequest } from '@pivota-api/interfaces';
 import {
   BaseResponseDto,
-  AssignPlanDto,
+  SubscribeToPlanDto,
   SubscriptionResponseDto,
 } from '@pivota-api/dtos';
 import { SubscriptionsGatewayService } from './subscriptions-gateway.service';
@@ -35,10 +35,10 @@ export class SubscriptionsGatewayController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SuperAdmin', 'SystemsAdmin')
   @Version('1')
-  @Post('/assign-plan')
+  @Post('/subscription')
   @ApiOperation({ summary: 'Assign a subscription plan to a user' })
   async assignPlan(
-    @Body() dto: AssignPlanDto,
+    @Body() dto: SubscribeToPlanDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<SubscriptionResponseDto>> {
     const userUuid = req.user.userUuid;
@@ -46,23 +46,25 @@ export class SubscriptionsGatewayController {
       `REST assignPlan request by user=${userUuid}: ${JSON.stringify(dto)}`,
     );
 
-    const response = await this.subscriptionsService.assignPlan(dto);
+    const response = await this.subscriptionsService.subscribeToPlan(dto);
     return response;
   }
 
   // ===========================================================
   // GET SUBSCRIPTION BY USER UUID (Public / Admin)
   // ===========================================================
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SuperAdmin', 'SystemsAdmin')
   @ApiParam({ name: 'userUuid', type: String, description: 'UUID of the user' })
   @Version('1')
   @Get('/user/:userUuid')
   @ApiOperation({ summary: 'Get subscription details by user UUID' })
-  async getSubscriptionByUser(
+  async getSubscriptionsByUser(
     @Param('userUuid') userUuid: string,
   ): Promise<BaseResponseDto<SubscriptionResponseDto>> {
     this.logger.debug(`REST getSubscriptionByUser request: userUuid=${userUuid}`);
 
-    const response = await this.subscriptionsService.getSubscriptionByUser(userUuid);
+    const response = await this.subscriptionsService.getSubscriptionsByUser(userUuid);
     return response;
   }
 }
