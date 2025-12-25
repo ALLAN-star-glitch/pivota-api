@@ -28,3 +28,4 @@ export * from './lib/BaseSubscriptionResponseGrpc.interface';
 export * from './lib/SubscriptionAssignedEvent.interface';
 export * from './lib/BasePlanIdResponseGrpc.interface';
 export * from './lib/BaseValidateJobPostIdsReponseGrpc.interface';
+export * from './lib/BaseTokenResponseGrpc.interface';

@@ -58,7 +58,7 @@ export class AuthController {
     },
   })
   async signup(
-    @Body() signupDto: SignupRequestDto
+    @Body() signupDto: SignupRequestDto  
   ): Promise<BaseResponseDto<SignupResponseDto>> {
     this.logger.log(`📩 Signup request: ${JSON.stringify(signupDto)}`);
     return this.authService.signup(signupDto);

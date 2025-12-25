@@ -342,4 +342,51 @@ export class AuthService implements OnModuleInit {
   }
 
 
+  // ------------------ Dev Token Generation ------------------
+async generateDevToken(userUuid: string, email: string, role: string): Promise<BaseResponseDto<TokenPairDto>> {
+
+  try {
+  const payload: JwtPayload = { 
+    userUuid, 
+    email, 
+    role 
+  };
+
+  const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '1h' });
+  const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
+
+  // Optional: Create a session in DB if your guards check for session existence
+  await this.prisma.session.create({
+    data: {
+      userUuid,
+      tokenId: `dev-${userUuid}-${Date.now()}`,
+      hashedToken: await bcrypt.hash(refreshToken, 10),
+      device: 'Postman-Dev',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  });
+
+  const success_response = {
+    message: 'Dev tokens generated successfully',
+    code: 'OK',
+    success: true,
+    tokens: { accessToken, refreshToken },
+    error: null,
+  };
+
+  return success_response;  
+
+    
+}  catch (err: unknown) {
+    const unknownErr = err as Error;
+    const failure_response =  {
+      success: false,
+      message: 'Dev token generation failed',
+      code: 'INTERNAL',
+      error: { code: 'INTERNAL', message: unknownErr?.message || 'Dev token generation failed' },
+    };
+    return failure_response;
+  } 
+
+}
 }

@@ -13,7 +13,7 @@ import {
   GetUserByUserUuidDto,
   TokenPairDto,
 } from '@pivota-api/dtos';
-import { BaseUserResponseGrpc, BaseRefreshTokenResponseGrpc, JwtPayload } from '@pivota-api/interfaces';
+import { BaseUserResponseGrpc, BaseRefreshTokenResponseGrpc, JwtPayload, BaseTokenResponseGrpc } from '@pivota-api/interfaces';
 
 
 // Updated gRPC interface for AuthService (signup now returns BaseResponse)
@@ -24,6 +24,9 @@ interface AuthServiceGrpc {
   ): Observable<BaseUserResponseGrpc<LoginResponseDto>>;
   refresh(data: { refreshToken: string }): Observable<BaseRefreshTokenResponseGrpc<TokenPairDto>>;
   logout(data: { userId: string }): Observable<{ message: string }>;
+
+
+  generateDevToken(data: { userUuid: string; email: string; role: string }): Observable<BaseTokenResponseGrpc<TokenPairDto>>;
 }
 
 
@@ -140,6 +143,48 @@ export class AuthService {
     return userResponse.user;
   }
   
+  /** ------------------ Generate Dev Token (Testing Only) ------------------ */
+async generateDevTokenOnly(
+  userUuid: string,
+  email: string,
+  role: string,
+  res: Response
+): Promise<BaseResponseDto<TokenPairDto>> {
+  try {
+    // Call microservice via gRPC
+    const grpcResponse = await firstValueFrom(
+      this.authGrpc.generateDevToken({ userUuid, email, role })
+    );
+
+    if (!grpcResponse.success || !grpcResponse.tokens) {
+      return BaseResponseDto.fail(grpcResponse.message, grpcResponse.code);
+    }
+
+    const { accessToken, refreshToken } = grpcResponse.tokens;
+
+    // Set Cookies (Matches your login behavior)
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 15 * 60 * 1000,
+    });
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    // Return only the tokens in the data envelope
+    const tokenData: TokenPairDto = { accessToken, refreshToken };
+    return BaseResponseDto.ok(tokenData, 'Dev tokens generated', 'OK');
+  } catch (error) {
+    this.logger.error('gRPC Dev Token Failure:', error);
+    return BaseResponseDto.fail('Failed to generate dev token', 'INTERNAL');
+  }
+}
 
 
 }

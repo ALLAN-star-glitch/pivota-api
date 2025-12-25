@@ -8,6 +8,8 @@ service AuthService {
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Refresh(RefreshRequest) returns (BaseRefreshTokenResponse);
   rpc ValidateUser(ValidateUserRequest) returns (LoginResponse);
+
+  rpc GenerateDevToken(GenerateDevTokenRequest) returns (BaseDevTokenResponse);
 }
 
 // ------------------ Signup ------------------
@@ -127,4 +129,19 @@ message BaseRefreshTokenResponse {
   ErrorPayload error = 5;
 
 
+}
+
+message GenerateDevTokenRequest {
+  string userUuid = 1;
+  string email = 2;
+  string role = 3;
+}
+
+
+message BaseDevTokenResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  RefreshTokenResponse tokens = 4; // Reusing the message that has accessToken and refreshToken
+  ErrorPayload error = 5;
 }

@@ -5,6 +5,7 @@ import { AuthController } from './auth.controller';
 import { AUTH_PROTO_PATH, USER_PROTO_PATH } from '@pivota-api/protos';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { AuthDevController } from './auth.dev.controller';
 
 @Module({
   imports: [
@@ -30,7 +31,7 @@ import { JwtStrategy } from './jwt.strategy';
       },
     ]),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AuthDevController],
   providers: [AuthService, JwtStrategy],
   exports: [PassportModule, JwtStrategy],
 })
