@@ -43,16 +43,15 @@ message Category {
   string parentId = 4;
 
   int32 jobPostsCount = 5;
-  int32 providerJobsCount = 6;
-  int32 subcategoriesCount = 7;
+  int32 subcategoriesCount = 6;
 
 
-  bool hasSubcategories = 8;
-  bool hasParent = 9;
-  repeated Category subcategories = 10;
+  bool hasSubcategories = 7;
+  bool hasParent = 8;
+  repeated Category subcategories = 9;
 
-  string createdAt = 11;
-  string updatedAt = 12;
+  string createdAt = 10;
+  string updatedAt = 11;
 }
 
 // ----------------------

@@ -7,18 +7,16 @@ import {
   CreateCategoryResponseDto,
 } from '@pivota-api/dtos';
 
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 import {
   JobCategory,
-  JobPost,
-  ProviderJob,
-} from '../../../generated/prisma/client';
+  JobPost
+} from '../../../../generated/prisma/client';
 
 
 type FullCategory = JobCategory & {
   subcategories: JobCategory[];
   jobPosts: JobPost[];
-  providerJobs: ProviderJob[];
 };
 
 @Injectable()
@@ -33,7 +31,6 @@ export class CategoriesService {
    * ----------------------------------------------- */
   private mapCategory(cat: FullCategory): CreateCategoryResponseDto {
     const jobPosts = cat.jobPosts || [];
-    const providerJobs = cat.providerJobs || [];
     const subcategories = cat.subcategories || [];
 
     return {
@@ -44,7 +41,6 @@ export class CategoriesService {
 
      
       jobPostsCount: jobPosts.length,
-      providerJobsCount: providerJobs.length,
       subcategoriesCount: subcategories.length,
 
       hasSubcategories: subcategories.length > 0,
@@ -119,7 +115,7 @@ export class CategoriesService {
         include: {
           subcategories: true,
           jobPosts: true,
-          providerJobs: true,
+
         },
       });
 
@@ -169,7 +165,7 @@ export class CategoriesService {
         include: {
           subcategories: true,
           jobPosts: true,
-          providerJobs: true,
+
         },
       });
 
@@ -213,7 +209,7 @@ export class CategoriesService {
         include: {
           subcategories: true,
           jobPosts: true,
-          providerJobs: true,
+      
         },
       });
 
@@ -261,7 +257,7 @@ export class CategoriesService {
         include: {
           subcategories: true,
           jobPosts: true,
-          providerJobs: true,
+      
         },
       });
 
@@ -286,8 +282,8 @@ export class CategoriesService {
       }
 
       if (
-        category.jobPosts.length > 0 ||
-        category.providerJobs.length > 0
+        category.jobPosts.length > 0 
+    
       ) {
         return {
           success: false,
@@ -339,7 +335,7 @@ async deleteSubcategory(subcategoryId: string): Promise<BaseResponseDto<null>> {
       include: {
         subcategories: true,
         jobPosts: true,
-        providerJobs: true,
+    
       },
     });
 
@@ -377,8 +373,7 @@ async deleteSubcategory(subcategoryId: string): Promise<BaseResponseDto<null>> {
 
     // ❌ Cannot delete if linked to job posts
     if (
-      subcat.jobPosts.length > 0 ||
-      subcat.providerJobs.length > 0
+      subcat.jobPosts.length > 0 
     ) {
       return {
         success: false,
@@ -449,7 +444,7 @@ async getCategoryByName(
       include: {
         subcategories: true,
         jobPosts: true,
-        providerJobs: true,
+       
       },
     });
 

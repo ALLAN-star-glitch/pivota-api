@@ -4,8 +4,6 @@ import {
   BaseResponseDto,
   CreateJobPostDto,
   JobPostResponseDto,
-  CreateProviderJobDto,
-  ProviderJobResponseDto,
   ValidateJobPostIdsRequestDto,
 } from '@pivota-api/dtos';
 import { JobsService } from './jobs.service';
@@ -50,17 +48,6 @@ export class JobsController {
   ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
     this.logger.debug(`GetJobsByCategory Request: ${JSON.stringify(data)}`);
     return this.jobsService.getJobsByCategory(data.categoryId);
-  }
-
-  // -----------------------------
-  // CREATE PROVIDER JOB
-  // -----------------------------
-  @GrpcMethod('JobsService', 'CreateProviderJob')
-  createProviderJob(
-    data: CreateProviderJobDto,
-  ): Promise<BaseResponseDto<ProviderJobResponseDto>> {
-    this.logger.debug(`CreateProviderJob RequestDto: ${JSON.stringify(data)}`);
-    return this.jobsService.createProviderJob(data);
   }
 
   // -----------------------------

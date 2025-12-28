@@ -344,49 +344,61 @@ export class AuthService implements OnModuleInit {
 
   // ------------------ Dev Token Generation ------------------
 async generateDevToken(userUuid: string, email: string, role: string): Promise<BaseResponseDto<TokenPairDto>> {
-
   try {
-  const payload: JwtPayload = { 
-    userUuid, 
-    email, 
-    role 
-  };
+    const payload: JwtPayload = { 
+      userUuid, 
+      email, 
+      role 
+    };
 
-  const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '1h' });
-  const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
+    const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '1h' });
+    const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
 
-  // Optional: Create a session in DB if your guards check for session existence
-  await this.prisma.session.create({
-    data: {
-      userUuid,
-      tokenId: `dev-${userUuid}-${Date.now()}`,
-      hashedToken: await bcrypt.hash(refreshToken, 10),
-      device: 'Postman-Dev',
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    },
-  });
+    /**
+     *  PREVENTION: CLEANUP BEFORE CREATE
+     * We delete any previous dev sessions for THIS specific user/role 
+     * before creating a new one. This keeps the DB at a constant size.
+     */
+    await this.prisma.session.deleteMany({
+      where: {
+        userUuid: userUuid,
+        device: 'Postman-Dev', // Only targets sessions created by this tool
+      },
+    });
 
-  const success_response = {
-    message: 'Dev tokens generated successfully',
-    code: 'OK',
-    success: true,
-    tokens: { accessToken, refreshToken },
-    error: null,
-  };
+    // Create the fresh session
+    await this.prisma.session.create({
+      data: {
+        userUuid,
+        tokenId: `dev-${userUuid}-${Date.now()}`,
+        hashedToken: await bcrypt.hash(refreshToken, 10),
+        device: 'Postman-Dev',
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
 
-  return success_response;  
+    const success= {
+      success: true,
+      message: 'Dev tokens generated successfully',
+      code: 'OK',
+      tokens: { accessToken, refreshToken }, // Use 'data' if that matches your DTO
+      error: null,
+    };
 
-    
-}  catch (err: unknown) {
+    return success;
+
+  } catch (err: unknown) {
     const unknownErr = err as Error;
-    const failure_response =  {
+    this.logger.error(`Dev Token Error: ${unknownErr.message}`);
+    return {
       success: false,
       message: 'Dev token generation failed',
       code: 'INTERNAL',
-      error: { code: 'INTERNAL', message: unknownErr?.message || 'Dev token generation failed' },
+      error: { 
+        code: 'INTERNAL', 
+        message: unknownErr?.message || 'Internal Server Error' 
+      },
     };
-    return failure_response;
-  } 
-
+  }
 }
 }

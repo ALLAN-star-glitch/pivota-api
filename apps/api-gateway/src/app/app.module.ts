@@ -9,6 +9,7 @@ import { AuthModule } from '../modules/AuthGatewayModule/auth.module';
 import { PlansGatewayModule } from '../modules/PlansGatewayModule/plans-gateway.module';
 import { JobsModule } from '../modules/JobsGatewayModule/jobs.module';
 import { SubscriptionsGatewayModule } from '../modules/SubscriptionsGatewayModule/subscriptions-gateway.module';
+import { ProvidersGatewayModule } from '../modules/ProviderGatewayModule/providers-gateway.module';
 
 
 @Module({
@@ -25,6 +26,7 @@ import { SubscriptionsGatewayModule } from '../modules/SubscriptionsGatewayModul
     JobsModule,
     PlansGatewayModule,
     SubscriptionsGatewayModule,
+    ProvidersGatewayModule
     
   ],
   controllers: [AppController],

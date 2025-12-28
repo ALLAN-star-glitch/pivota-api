@@ -45,4 +45,7 @@ export * from './lib/PlanIdResponseDto.dto';
 export * from './lib/BasicUserDto.dto';
 export * from './lib/ValidateJobPostIdsResponse.dto';
 export * from './lib/ValidateJobPostIdsRequestDto.dto';
-
+export * from './lib/CreateServiceOfferingDto.dto';
+export * from './lib/ServiceOfferingResponseDto.dto';
+export * from './lib/GetOfferingByVerticalRequestDto.dto';
+export * from './lib/AvailabilityDto.dto';  

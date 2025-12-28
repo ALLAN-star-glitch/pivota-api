@@ -1,10 +1,8 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 import {
   CreateJobPostDto,
   JobPostResponseDto,
-  ProviderJobResponseDto,
-  CreateProviderJobDto,
   BaseResponseDto,
   UserResponseDto,
   GetUserByUserUuidDto,
@@ -296,73 +294,6 @@ async getJobsByCategory(categoryId: string): Promise<BaseResponseDto<JobPostResp
     return failure;
   }
 }
-
-
-  // ======================================================
-  // CREATE PROVIDER JOB
-  // ======================================================
-  async createProviderJob(dto: CreateProviderJobDto): Promise<BaseResponseDto<ProviderJobResponseDto>> {
-    try {
-      const category = await this.prisma.jobCategory.findUnique({
-        where: { id: dto.categoryId },
-      });
-
-      if (!category) {
-        const response =  {
-          success: false,
-          message: 'Invalid category ID',
-          code: 'CATEGORY_NOT_FOUND',
-          providerJob: null,
-          error: { message: 'No category exists with this ID', details: null },
-        };
-        return response;
-      }
-
-      const created = await this.prisma.providerJob.create({
-        data: {
-          providerId: dto.providerId,
-          title: dto.title,
-          description: dto.description,
-          categoryId: dto.categoryId,
-          price: dto.price,
-          location: dto.location,
-          additionalNotes: dto.additionalNotes ?? '',
-        },
-        include: {
-          category: true,
-        },
-      });
-
-      const providerJob: ProviderJobResponseDto = {
-        ...created,
-        createdAt: created.createdAt.toISOString(),
-        updatedAt: created.updatedAt.toISOString(),
-        category: created.category
-          ? { id: created.category.id, name: created.category.name }
-          : null,
-      };
-
-      const success =  {
-        success: true,
-        message: 'Provider job created successfully',
-        code: 'CREATED',
-        providerJob,
-        error: null,
-      };
-      return success;
-    } catch (error) {
-      const err = error as Error;
-      this.logger.error(`Create provider job failed: ${err.message}`, err.stack);
-      const failure =  {
-        success: false,
-        message: 'Failed to create provider job',
-        code: 'CREATION_FAILED',
-        providerJob: null,
-        error: { message: err.message, details: err.stack },
-      };
-      return failure;
-    }
-  }
 
 
   // Validate if job posts exist

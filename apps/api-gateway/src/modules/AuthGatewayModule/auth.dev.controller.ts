@@ -25,10 +25,20 @@ export class AuthDevController {
 
   constructor(private readonly authService: AuthService) {}
 
-  @Version('1')
-  @Get('generate-token')
-  @ApiOperation({ summary: 'Bypass login to generate tokens for testing (Dev Only)' })
-  @ApiResponse({
+  /**
+   * Shared validation logic to protect production environments
+   */
+  private validateDevMode() {
+    if (process.env.NODE_ENV === 'production') {
+      this.logger.error('CRITICAL: Dev bypass blocked in production!');
+      throw new ForbiddenException('Bypass disabled in production');
+    }
+  }
+
+  /**
+   * Reusable Swagger Response definition to keep code clean
+   */
+  private static readonly TokenResponseSchema = {
     status: 200,
     description: 'Tokens generated successfully',
     schema: {
@@ -41,32 +51,141 @@ export class AuthDevController {
         },
       ],
     },
-  })
-  async generateDevToken(
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<BaseResponseDto<TokenPairDto>> {
-    // 🛡️ Strict environment check
-    if (process.env.NODE_ENV === 'production') {
-      this.logger.error('CRITICAL: Attempt to use dev-token in production blocked!');
-      throw new ForbiddenException('Bypass disabled in production');
-    }
+  };
 
-    /**
-     * Hardcoded Test Data: 
-     * The person testing no longer needs to provide these.
-     */
-    const TEST_USER_UUID = '27ce02f2-ac01-4f7c-b7bb-95eebc43cbd7';
-    const TEST_EMAIL = 'allanmathenge67@gmail.com';
-    const TEST_ROLE = 'SuperAdmin';
-
-    this.logger.warn(` BYPASS: Generating tokens for ${TEST_EMAIL} as ${TEST_ROLE}`);
-    
-    // Call the method in your AuthService with hardcoded data
+  // =========================================================
+  // 1. SYSTEM ADMIN
+  // =========================================================
+  @Version('1')
+  @Get('token/system-admin')
+  @ApiOperation({ summary: 'Login as SystemAdmin' })
+  @ApiResponse(AuthDevController.TokenResponseSchema)
+  async loginSystemAdmin(@Res({ passthrough: true }) res: Response) {
+    this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      TEST_USER_UUID, 
-      TEST_EMAIL, 
-      TEST_ROLE, 
-      res
+      'sys-admin-uuid-1111',
+      'system.admin@pivota-dev.com',
+      'SystemAdmin',
+      res,
+    );
+  }
+
+  // =========================================================
+  // 2. COMPLIANCE ADMIN
+  // =========================================================
+  @Version('1')
+  @Get('token/compliance-admin')
+  @ApiOperation({ summary: 'Login as ComplianceAdmin' })
+  @ApiResponse(AuthDevController.TokenResponseSchema)
+  async loginComplianceAdmin(@Res({ passthrough: true }) res: Response) {
+    this.validateDevMode();
+    return this.authService.generateDevTokenOnly(
+      'comp-admin-uuid-2222',
+      'compliance.admin@pivota-dev.com',
+      'ComplianceAdmin',
+      res,
+    );
+  }
+
+  // =========================================================
+  // 3. ANALYTICS ADMIN
+  // =========================================================
+  @Version('1')
+  @Get('token/analytics-admin')
+  @ApiOperation({ summary: 'Login as AnalyticsAdmin' })
+  @ApiResponse(AuthDevController.TokenResponseSchema)
+  async loginAnalyticsAdmin(@Res({ passthrough: true }) res: Response) {
+    this.validateDevMode();
+    return this.authService.generateDevTokenOnly(
+      'analyt-admin-uuid-3333',
+      'analytics.admin@pivota-dev.com',
+      'AnalyticsAdmin',
+      res,
+    );
+  }
+
+  // =========================================================
+  // 4. MODULE MANAGER
+  // =========================================================
+  @Version('1')
+  @Get('token/module-manager')
+  @ApiOperation({ summary: 'Login as ModuleManager' })
+  @ApiResponse(AuthDevController.TokenResponseSchema)
+  async loginModuleManager(@Res({ passthrough: true }) res: Response) {
+    this.validateDevMode();
+    return this.authService.generateDevTokenOnly(
+      'mod-manager-uuid-4444',
+      'module.manager@pivota-dev.com',
+      'ModuleManager',
+      res,
+    );
+  }
+
+  // =========================================================
+  // 5. BUSINESS SYSTEM ADMIN
+  // =========================================================
+  @Version('1')
+  @Get('token/business-system-admin')
+  @ApiOperation({ summary: 'Login as BusinessSystemAdmin' })
+  @ApiResponse(AuthDevController.TokenResponseSchema)
+  async loginBusinessSystemAdmin(@Res({ passthrough: true }) res: Response) {
+    this.validateDevMode();
+    return this.authService.generateDevTokenOnly(
+      'biz-sys-uuid-5555',
+      'biz.system@pivota-dev.com',
+      'BusinessSystemAdmin',
+      res,
+    );
+  }
+
+  // =========================================================
+  // 6. BUSINESS CONTENT MANAGER
+  // =========================================================
+  @Version('1')
+  @Get('token/business-content-manager')
+  @ApiOperation({ summary: 'Login as BusinessContentManager' })
+  @ApiResponse(AuthDevController.TokenResponseSchema)
+  async loginBusinessContentManager(@Res({ passthrough: true }) res: Response) {
+    this.validateDevMode();
+    return this.authService.generateDevTokenOnly(
+      'biz-cont-uuid-6666',
+      'biz.content@pivota-dev.com',
+      'BusinessContentManager',
+      res,
+    );
+  }
+
+  // =========================================================
+  // 7. GENERAL USER
+  // =========================================================
+  @Version('1')
+  @Get('token/general-user')
+  @ApiOperation({ summary: 'Login as GeneralUser' })
+  @ApiResponse(AuthDevController.TokenResponseSchema)
+  async loginGeneralUser(@Res({ passthrough: true }) res: Response) {
+    this.validateDevMode();
+    return this.authService.generateDevTokenOnly(
+      '0892c11c-1fb2-4a5e-948e-075c9c11231a',
+      'janenyambura4272@gmail.com',
+      'GeneralUser',
+      res,
+    );
+  }
+
+  // =========================================================
+  // 8. SUPER ADMIN
+  // =========================================================
+  @Version('1')
+  @Get('token/super-admin')
+  @ApiOperation({ summary: 'Login as SuperAdmin' })
+  @ApiResponse(AuthDevController.TokenResponseSchema)
+  async loginSuperAdmin(@Res({ passthrough: true }) res: Response) {
+    this.validateDevMode();
+    return this.authService.generateDevTokenOnly(
+      '27ce02f2-ac01-4f7c-b7bb-95eebc43cbd7',
+      'allanmathenge67@gmail.com',
+      'SuperAdmin',
+      res,
     );
   }
 }

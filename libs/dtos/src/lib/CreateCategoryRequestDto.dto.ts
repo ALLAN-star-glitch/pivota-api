@@ -17,6 +17,14 @@ export class CreateCategoryRequestDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({ 
+    example: 'Monday - Friday, 9 AM - 6 PM', 
+    description: 'The days and times the provider is available to work.' 
+  })
+  @IsString()
+  @IsOptional()
+  availability?: string;
+
   @ApiPropertyOptional({
     description: 'ID of the parent category, if this is a subcategory',
     example: 'cl3k1n4fj0000xyz123abc',

@@ -32,12 +32,6 @@ export class CreateCategoryResponseDto {
   jobPostsCount!: number;
 
   @ApiProperty({
-    description: 'Number of provider jobs associated with this category',
-    example: 8,
-  })
-  providerJobsCount!: number;
-
-  @ApiProperty({
     description: 'Number of subcategories under this category',
     example: 3,
   })

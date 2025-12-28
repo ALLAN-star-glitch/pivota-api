@@ -26,7 +26,6 @@ model JobCategory {
 
   jobPosts     JobPost[]          // main category posts
   subCategoryPosts JobPost[] @relation("SubcategoryPosts") // posts under this subcategory
-  providerJobs ProviderJob[]
 }
 
 
@@ -67,6 +66,12 @@ model JobPost {
 
   applications JobPostApplication[]
   bookings     Booking[]
+  ratings     Rating[]
+
+  @@index([locationCity])
+  @@index([status])
+  @@index([creatorId]) // Good for "My Posts" dashboard
+  @@index([categoryId])
 }
 
 
@@ -87,19 +92,47 @@ model JobPostApplication {
 /// =====================================================================
 ///                        PROVIDER SERVICE LISTINGS
 /// =====================================================================
-model ProviderJob {
-  id          String   @id @default(cuid())
-  externalId  String   @default(uuid())
-  providerId  String       // reference User Service ID
-  title       String
-  description String
-  categoryId  String
-  category    JobCategory  @relation(fields: [categoryId], references: [id])
-  price       Float
-  location    String
-  additionalNotes    String
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+/// =====================================================================
+///                        PROVIDER SERVICE OFFERINGS (The Storefront)
+/// =====================================================================
+model ServiceOffering {
+  id           String   @id @default(cuid())
+  externalId   String   @default(uuid())
+  providerId   String   // Reference to User/Provider UUID from Identity Service
+  
+  title        String   // e.g., "Professional Plumbing & Leak Repair"
+  description  String
+  
+  // Cross-Vertical Tagging
+  // Using String[] to act as an array of tags (e.g., ["JOBS", "HOUSING"])
+  // This allows one offering to show up in multiple modules.
+  verticals    String[] @default(["JOBS"]) 
+  
+  categoryLabel String?  // e.g., "Handyman", "Consultant", "Legal Aid"
+  
+  // Supply-side pricing logic
+  basePrice    Float
+  priceUnit    String      @default("FIXED") // e.g., "PER_HOUR", "PER_SQFT", "FIXED"
+  
+  locationCity         String
+  locationNeighborhood String?
+  
+  // Professional specific fields
+  yearsExperience Int?
+  isVerified      Boolean  @default(false)
+  availability    String?  // Could be a JSON string of working hours
+  
+  additionalNotes String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relationships
+ reviews     Rating[] @relation("ServiceReviews")
+
+
+  @@index([locationCity])
+  @@index([verticals])   // Extremely important for cross-vertical discovery
+  @@index([providerId])
 }
 
 /// =====================================================================
@@ -121,14 +154,126 @@ model Booking {
 ///                           RATINGS & REVIEWS
 /// =====================================================================
 model Rating {
-  id          String   @id @default(cuid())
-  externalId  String   @default(uuid())
-  jobPostId   String?
-  providerId  String?  // reference User Service ID
-  employerId  String?  // reference User Service ID
-  userId      String   // reviewer (User ID)
-  rating      Int
-  review      String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String           @id @default(cuid())
+  externalId      String           @default(uuid())
+  
+  // Relation to JobPost (Optional, for employer reviews)
+  jobPostId       String?
+  jobPost         JobPost?         @relation(fields: [jobPostId], references: [id])
+
+  // Relation to ServiceOffering (Optional, for provider reviews)
+  serviceId       String?
+  serviceOffering ServiceOffering? @relation("ServiceReviews", fields: [serviceId], references: [id])
+
+  userId          String   // The person writing the review (Reviewer)
+  rating          Int      // e.g., 1-5
+  review          String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+/// =====================================================================
+///                            HOUSING (Asset-Driven)
+/// =====================================================================
+model HouseListing {
+  id           String   @id @default(cuid())
+  externalId   String   @default(uuid())
+  ownerId      String   // Reference to User/Owner UUID
+  
+  title        String
+  description  String
+  type         String   // e.g., "APARTMENT", "HOUSE", "STUDIO"
+  listingType  String   // e.g., "RENTAL", "SALE"
+  
+  price        Float
+  currency     String   @default("KES")
+  
+  // Property details
+  bedrooms     Int?
+  bathrooms    Int?
+  amenities    String[] @default([])
+  isFurnished  Boolean  @default(false)
+  
+  // Location
+  locationCity         String
+  locationNeighborhood String?
+  address              String?
+  
+  status       String   @default("AVAILABLE") // e.g., AVAILABLE, BOOKED, SOLD
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  images       HouseImage[]
+  viewings     HouseViewing[]
+
+
+  @@index([locationCity])
+  @@index([type])        // e.g. "APARTMENT"
+  @@index([listingType]) // e.g. "RENTAL"
+  @@index([status])
+}
+
+model HouseImage {
+  id           String       @id @default(cuid())
+  url          String
+  isMain       Boolean      @default(false)
+  houseId      String
+  house        HouseListing @relation(fields: [houseId], references: [id])
+}
+
+model HouseViewing {
+  id           String       @id @default(cuid())
+  houseId      String
+  house        HouseListing @relation(fields: [houseId], references: [id])
+  viewerId     String       // User ID
+  viewingDate  DateTime
+  status       String       @default("SCHEDULED")
+}
+
+/// =====================================================================
+///                       SOCIAL SUPPORT (Impact-Driven)
+/// =====================================================================
+model SupportProgram {
+  id           String   @id @default(cuid())
+  externalId   String   @default(uuid())
+  organizationId String // Reference to NGO/Gov/Partner UUID
+  
+  title        String
+  description  String
+  
+  // Programs are often eligibility-based
+  eligibilityCriteria String?
+  targetAudience      String[] @default([]) // e.g., "Youth", "Refugees"
+  
+  // Support Type
+  category     String   // e.g., "FOOD_AID", "LEGAL_AID", "MENTAL_HEALTH"
+  isFree       Boolean  @default(true)
+  
+  locationCity         String?
+  locationNeighborhood String?
+  
+  status       String   @default("ACTIVE")
+  expiresAt    DateTime?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  applications SupportApplication[]
+
+
+  @@index([locationCity])
+  @@index([category])
+  @@index([status])
+}
+
+model SupportApplication {
+  id           String         @id @default(cuid())
+  programId    String
+  program      SupportProgram @relation(fields: [programId], references: [id])
+  beneficiaryId String        // User ID
+  status       String         @default("PENDING") // PENDING, APPROVED, REJECTED
+  notes        String?
+  createdAt    DateTime       @default(now())
 }
