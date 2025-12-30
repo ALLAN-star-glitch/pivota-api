@@ -64,7 +64,7 @@ export class ProvidersGatewayController {
   // ===========================================================
   @Version('1')
   @Get('discovery')
-  @ApiOperation({ summary: 'Discover providers by life pillar (Jobs, Housing, Social Support)' })
+  @ApiOperation({ summary: 'Discover service offering by life pillar (Jobs, Housing, Social Support)' })
   @ApiOkResponse({ type: BaseResponseDto })
   async getOfferingsByVertical(
     @Query() dto: GetOfferingByVerticalRequestDto,

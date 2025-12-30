@@ -10,22 +10,36 @@ datasource db {
 /// =====================================================================
 ///                            JOB CATEGORIES
 /// =====================================================================
-model JobCategory {
+model Category {
   id            String   @id @default(cuid())
   externalId    String   @default(uuid())
-  name          String   @unique
+  
+  // NEW: Discriminator for which pillar this belongs to
+  vertical      String   // e.g., "JOBS", "HOUSING", "SOCIAL_SUPPORT"
+  
+  name          String   
+  slug          String   // e.g., "plumbing"
   description   String?
+  
+  // Hierarchy Logic
   parentId      String?
-  parent        JobCategory?  @relation("Subcategories", fields: [parentId], references: [id])
-  subcategories JobCategory[] @relation("Subcategories")
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  parent        Category?  @relation("Subcategories", fields: [parentId], references: [id])
+  subcategories Category[] @relation("Subcategories")
+  
+  // Relationships
+  jobPosts         JobPost[]          @relation("MainCategory")
+  subCategoryPosts JobPost[]          @relation("SubcategoryPosts")
+  serviceOfferings ServiceOffering[]
+  supportPrograms  SupportProgram[]
+  providerPricingRules ProviderPricingRule[]
 
   hasSubcategories Boolean @default(false)
   hasParent        Boolean @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
-  jobPosts     JobPost[]          // main category posts
-  subCategoryPosts JobPost[] @relation("SubcategoryPosts") // posts under this subcategory
+  @@unique([vertical, slug])
+  @@index([vertical])
 }
 
 
@@ -38,10 +52,10 @@ model JobPost {
   title       String
   description String
   categoryId  String
-  category    JobCategory @relation(fields: [categoryId], references: [id])
+  category    Category @relation("MainCategory", fields: [categoryId], references: [id])
 
   subCategoryId  String?
-  subCategory    JobCategory? @relation("SubcategoryPosts", fields: [subCategoryId], references: [id])
+  subCategory    Category? @relation("SubcategoryPosts", fields: [subCategoryId], references: [id])
 
   creatorId   String
   jobType     String
@@ -51,6 +65,9 @@ model JobPost {
 
   requiresDocuments Boolean @default(false)
   requiresEquipment Boolean @default(false)
+
+  allowReferrals    Boolean @default(true) 
+  referralBonus     Float?  // If the employer is offering money for a successful referral
 
   payAmount Float?
   payRate   String?
@@ -79,15 +96,147 @@ model JobPost {
 ///                        JOB POST APPLICATIONS
 /// =====================================================================
 model JobPostApplication {
-  id         String      @id @default(cuid())
-  externalId String      @default(uuid())
-  jobPostId  String
-  jobPost    JobPost     @relation(fields: [jobPostId], references: [id])
-  applicantId String     // reference User Service ID
-  status      String     @default("PENDING") // was enum
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id           String   @id @default(cuid())
+  externalId   String   @default(uuid())
+
+  // ======================
+  // Relations
+  // ======================
+  jobPostId    String
+  jobPost      JobPost  @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+
+  applicantId  String   // User ID from Identity Service
+  employerId   String   // Job owner snapshot (denormalized)
+
+  // ======================
+  // Referral Details (External & Internal)
+  // ======================
+  isReferral           Boolean @default(false)
+  referrerName         String?
+  referrerPhone        String?
+  referrerEmail        String?
+  referrerRelationship String? // e.g., "Former Manager", "Previous Client"
+  
+
+  // ======================
+  // Application Context
+  // ======================
+  applicationType String @default("FORMAL")
+  /*
+    FORMAL   -> Requires CV/Documents
+    INFORMAL -> Casual/Manual jobs (Quick Apply)
+  */
+
+  // ======================
+  // Applicant Intent
+  // ======================
+  expectedPay        Float?
+  availabilityDate   DateTime?
+  availabilityNotes  String?
+  isNegotiable       Boolean @default(false)
+
+  // ======================
+  // Status lifecycle
+  // ======================
+  status String @default("PENDING")
+
+  // ======================
+  // Employer Decisions
+  // ======================
+  employerNotes     String?
+  rejectionReason   String?
+  agreedPay         Float?
+  agreedStartDate   DateTime?
+
+  // ======================
+  // Lifecycle timestamps
+  // ======================
+  reviewedAt   DateTime?
+  decidedAt    DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // ======================
+  // Relations
+  // ======================
+  attachments   JobApplicationAttachment[]
+  statusHistory JobApplicationStatusHistory[]
+
+  // ======================
+  // Constraints & Indexes
+  // ======================
+  @@unique([jobPostId, applicantId])
+  @@index([applicantId])
+  @@index([employerId])
+  @@index([jobPostId])
+  @@index([status])
+  @@index([applicationType])
+  @@index([referrerPhone]) // Useful for searching applications by referrer
 }
+
+model JobApplicationAttachment {
+  id             String   @id @default(cuid())
+  externalId     String   @default(uuid())
+
+  applicationId  String
+  application    JobPostApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  // ======================
+  // Document Metadata
+  // ======================
+  type        String
+  /*
+    CV
+    COVER_LETTER
+    ID
+    CERTIFICATE
+    LICENSE
+    PORTFOLIO
+    OTHER
+  */
+
+  fileUrl     String
+  fileName    String?
+  mimeType    String?
+  fileSize    Int?
+
+  // Optional structured text (important!)
+  contentText String?
+  /*
+    Used when:
+    - Cover letter is typed, not uploaded
+    - Lightweight informal applications
+  */
+
+  isPrimary   Boolean @default(false)
+  isRequired  Boolean @default(false)
+
+  createdAt   DateTime @default(now())
+
+  @@index([applicationId])
+  @@index([type])
+}
+
+model JobApplicationStatusHistory {
+  id             String   @id @default(cuid())
+
+  applicationId  String
+  application    JobPostApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  oldStatus      String
+  newStatus      String
+  changedBy      String   // User/Admin/Employer ID
+  reason         String?
+
+  createdAt      DateTime @default(now())
+
+  @@index([applicationId])
+  @@index([newStatus])
+}
+
 
 /// =====================================================================
 ///                        PROVIDER SERVICE LISTINGS
@@ -108,7 +257,8 @@ model ServiceOffering {
   // This allows one offering to show up in multiple modules.
   verticals    String[] @default(["JOBS"]) 
   
-  categoryLabel String?  // e.g., "Handyman", "Consultant", "Legal Aid"
+  categoryId   String
+  category     Category @relation(fields: [categoryId], references: [id])
   
   // Supply-side pricing logic
   basePrice    Float
@@ -133,6 +283,7 @@ model ServiceOffering {
   @@index([locationCity])
   @@index([verticals])   // Extremely important for cross-vertical discovery
   @@index([providerId])
+  @@index([categoryId])
 }
 
 /// =====================================================================
@@ -243,18 +394,26 @@ model SupportProgram {
   title        String
   description  String
   
+  // CHANGED: Linked to the Unified Category system
+  categoryId   String
+  category     Category @relation(fields: [categoryId], references: [id])
+  
   // Programs are often eligibility-based
   eligibilityCriteria String?
-  targetAudience      String[] @default([]) // e.g., "Youth", "Refugees"
+  targetAudience      String[] @default([]) // e.g., ["Youth", "Refugees", "Widows"]
   
-  // Support Type
-  category     String   // e.g., "FOOD_AID", "LEGAL_AID", "MENTAL_HEALTH"
+  // Logistics
   isFree       Boolean  @default(true)
+  baseCost     Float?   @default(0) // For subsidized programs
   
   locationCity         String?
   locationNeighborhood String?
   
-  status       String   @default("ACTIVE")
+  // Capacity tracking
+  maxBeneficiaries     Int?     // Limit on intake
+  currentBeneficiaries Int      @default(0)
+  
+  status       String   @default("ACTIVE") // ACTIVE, FULL, COMPLETED
   expiresAt    DateTime?
   
   createdAt    DateTime @default(now())
@@ -262,18 +421,56 @@ model SupportProgram {
 
   applications SupportApplication[]
 
-
   @@index([locationCity])
-  @@index([category])
+  @@index([categoryId])
   @@index([status])
 }
 
 model SupportApplication {
   id           String         @id @default(cuid())
+  externalId   String         @default(uuid())
+  
   programId    String
   program      SupportProgram @relation(fields: [programId], references: [id])
-  beneficiaryId String        // User ID
-  status       String         @default("PENDING") // PENDING, APPROVED, REJECTED
-  notes        String?
+  
+  beneficiaryId String        // The User applying for help
+  
+  // Better status tracking for NGO workflows
+  status       String         @default("PENDING") // PENDING, UNDER_REVIEW, APPROVED, REJECTED
+  
+  userNotes    String?        // Statement of need from the user
+  adminNotes   String?        // Internal notes for the NGO
+  
   createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([beneficiaryId])
+  @@index([programId])
 }
+
+model ProviderPricingRule {
+  id                   String   @id @default(uuid())
+  vertical             String   
+  unit                 String   
+
+  // 1. Replace categorySlug string with categoryId
+  categoryId           String?
+
+  // 2. Define the relation with onDelete: Cascade
+  // This ensures if a Category is deleted, these rules are also removed automatically.
+  category             Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  // ISO 4217 Currency Code (e.g., KES, USD, NGN)
+  currency             String   @default("KES")
+
+  minPrice             Float?   @default(0)
+  maxPrice             Float?   
+  isExperienceRequired Boolean  @default(false)
+  isNotesRequired      Boolean  @default(false)
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+
+  // 3. Update the unique constraint to use the ID
+  @@unique([vertical, unit, currency, categoryId])
+}
+

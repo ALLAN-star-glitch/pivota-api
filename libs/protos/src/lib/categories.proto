@@ -7,14 +7,22 @@ package categories;
 // ----------------------
 service CategoriesService {
   rpc CreateCategory (CreateCategoryRequest) returns (BaseCategoryResponse);
+  rpc UpdateCategory (UpdateCategoryRequest) returns (BaseCategoryResponse);
   rpc DeleteCategory (DeleteCategoryRequest) returns (DeleteCategoryResponse);
-  rpc GetCategories (Empty) returns (ListCategoriesResponse);
+  
+  // Returns root categories with full recursive subcategories and stats
+  rpc GetCategoriesByVertical (GetCategoriesByVerticalRequest) returns (ListCategoriesResponse);
+  
+  // Returns a lightweight list for mobile/web filters
+  rpc GetDiscoveryMetadata (GetCategoriesByVerticalRequest) returns (ListDiscoveryResponse);
+  
   rpc GetCategoryById (GetCategoryByIdRequest) returns (BaseCategoryResponse);
+  rpc GetCategoryBySlug (GetCategoryBySlugRequest) returns (BaseCategoryResponse);
   rpc GetCategoryByName (GetCategoryByNameRequest) returns (BaseCategoryResponse);
 }
 
 // ----------------------
-// ERROR PAYLOAD
+// SHARED MESSAGES
 // ----------------------
 message ErrorPayload {
   string code = 1;
@@ -23,44 +31,60 @@ message ErrorPayload {
 }
 
 // ----------------------
-// BASE CATEGORY RESPONSE
+// ENTITY MESSAGES
 // ----------------------
-message BaseCategoryResponse {
-  bool success = 1;
-  string code = 2;
-  string message = 3;
-  Category category = 4;
-  ErrorPayload error = 5;
-}
 
-// ----------------------
-// CATEGORY MESSAGES
-// ----------------------
+// Perfectly aligned with CategoryResponseDto
 message Category {
   string id = 1;
+  string vertical = 2; 
+  string slug = 3;     
+  string name = 4;
+  optional string description = 5;
+  optional string parentId = 6;
+
+  // Unified Stats
+  int32 jobPostsCount = 7;
+  int32 servicesCount = 8;
+  int32 supportCount = 9;
+  
+  // Hierarchy Info
+  int32 subcategoriesCount = 10;
+  bool hasSubcategories = 11;
+  bool hasParent = 12;
+  repeated Category subcategories = 13; // Recursive nesting
+
+  string createdAt = 14;
+  string updatedAt = 15;
+}
+
+// Aligned with DiscoveryCategoryResponseDto
+message DiscoveryCategory {
+  string id = 1;
   string name = 2;
-  string description = 3;
-  string parentId = 4;
-
-  int32 jobPostsCount = 5;
-  int32 subcategoriesCount = 6;
-
-
-  bool hasSubcategories = 7;
-  bool hasParent = 8;
-  repeated Category subcategories = 9;
-
-  string createdAt = 10;
-  string updatedAt = 11;
+  string slug = 3;
+  string vertical = 4;
+  bool hasSubcategories = 5;
 }
 
 // ----------------------
 // REQUEST MESSAGES
 // ----------------------
 message CreateCategoryRequest {
-  string name = 1;
-  string description = 2;
-  string parentId = 3;
+  string vertical = 1;
+  string name = 2;
+  optional string slug = 3;
+  optional string description = 4;
+  optional string parentId = 5;
+}
+
+message UpdateCategoryRequest {
+  string id = 1;
+  optional string vertical = 2;
+  optional string name = 3;
+  optional string slug = 4;
+  optional string description = 5;
+  optional string parentId = 6;
 }
 
 message DeleteCategoryRequest {
@@ -71,34 +95,50 @@ message GetCategoryByIdRequest {
   string id = 1;
 }
 
-message GetCategoryByNameRequest {
-  string name = 1;
+message GetCategoryBySlugRequest {
+  string vertical = 1;
+  string slug = 2;
 }
 
+message GetCategoriesByVerticalRequest {
+  optional string vertical = 1;
+}
+
+message GetCategoryByNameRequest {
+  string name = 1;
+  optional string vertical = 2;
+}
 
 // ----------------------
-// LIST & GET CATEGORY RESPONSES
+// RESPONSE MESSAGES
 // ----------------------
+message BaseCategoryResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  Category data = 4; 
+  ErrorPayload error = 5;
+}
+
 message ListCategoriesResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-  repeated Category categories = 4;
+  repeated Category data = 4;
   ErrorPayload error = 5;
-
 }
 
+message ListDiscoveryResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated DiscoveryCategory data = 4;
+  ErrorPayload error = 5;
+}
 
-// ----------------------
-// DELETE CATEGORY RESPONSE
-// ----------------------
 message DeleteCategoryResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
+  ErrorPayload error = 4;
 }
-
-// ----------------------
-// EMPTY MESSAGE (for ListCategories)
-// ----------------------
-message Empty {}

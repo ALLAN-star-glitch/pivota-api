@@ -14,8 +14,6 @@ import {
   BaseResponseDto,
   CreateJobPostDto,
   JobPostResponseDto,
-  CreateProviderJobDto,
-  ProviderJobResponseDto,
   ValidateJobPostIdsRequestDto,
 } from '@pivota-api/dtos';
 
@@ -25,8 +23,6 @@ import { JobsService } from './jobs.service';
 import { JwtRequest } from '@pivota-api/interfaces';
 import { Roles } from '../../decorators/roles.decorator';
 import { RolesGuard } from '../../guards/role.guard';
-
-
 
 @ApiTags('Jobs Module - ((Listings-Service) - MICROSERVICE)')
 @ApiBearerAuth()
@@ -88,30 +84,6 @@ export class JobsController {
     return this.jobsService.getJobsByCategory(categoryId);
   }
 
-  // ===========================================================
-  // CREATE PROVIDER JOB (Only Service Providers)
-  // ===========================================================
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'ModuleManager' , 'BusinessSystemAdmin', "BusinessContentAdmin", "GeneralUser")
-  @Version('1')
-  @Post('provider-jobs')
-  @ApiOperation({summary: 'Create a new provider job'}) 
-  async createProviderJob(
-    @Body() dto: CreateProviderJobDto,
-    @Req() req: JwtRequest,
-  ): Promise<BaseResponseDto<ProviderJobResponseDto>> {
-    const providerId = req.user.userUuid;
-
-    dto.providerId = providerId;
-
-    this.logger.debug(
-      `REST createProviderJob request by provider=${providerId}: ${JSON.stringify(
-        dto,
-      )}`,
-    );
-
-    return this.jobsService.createProviderJob(dto);
-  }
 
   // ===========================================================
 // Validate Job Post IDs

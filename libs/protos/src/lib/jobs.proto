@@ -9,9 +9,6 @@ service JobsService {
   rpc CreateJobPost (CreateJobPostRequest) returns (BaseJobPostResponse);
   rpc GetJobPostById (GetJobPostByIdRequest) returns (BaseJobPostResponse);
   rpc GetJobsByCategory (GetJobsByCategoryRequest) returns (ListJobPostsResponse);
-
-  rpc CreateProviderJob (CreateProviderJobRequest) returns (BaseProviderJobResponse);
-
   rpc ValidateJobPostIds(ValidateJobPostIdsRequest) returns (BaseValidateJobPostIdsResponse);
 }
 
@@ -31,15 +28,7 @@ message BaseJobPostResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-  JobPost jobPost = 4;
-  ErrorPayload error = 5;
-}
-
-message BaseProviderJobResponse {
-  bool success = 1;
-  string code = 2;
-  string message = 3;
-  ProviderJob providerJob = 4;
+  JobPost data = 4;
   ErrorPayload error = 5;
 }
 
@@ -161,17 +150,6 @@ message GetJobsByCategoryRequest {
   string categoryId = 1;
 }
 
-message CreateProviderJobRequest {
-  string providerId = 1; // gateway overrides
-  string title = 2;
-  string description = 3;
-  string categoryId = 4;
-
-  double price = 5;
-  string location = 6;
-  string additionalNotes = 7;
-}
-
 
 
 // ===================================================
@@ -181,7 +159,7 @@ message ListJobPostsResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-  repeated JobPost jobPosts = 4;
+  repeated JobPost data = 4;
   ErrorPayload error = 5;
 }
 
@@ -191,6 +169,6 @@ message BaseValidateJobPostIdsResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-  ValidateJobIdsResponse jobIds = 4;
+  ValidateJobIdsResponse data = 4;
   ErrorPayload error = 5;
 }

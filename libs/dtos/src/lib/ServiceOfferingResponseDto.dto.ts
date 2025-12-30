@@ -24,11 +24,12 @@ export class ServiceOfferingResponseDto {
   })
   verticals!: string[];
 
+  // CHANGED: Replaced categoryLabel with categoryId to match your schema
   @ApiProperty({ 
-    example: 'Interior Decorator', 
-    description: 'Professional badge/title for the service provider' 
+    example: 'cl3k1n4fj0000xyz', 
+    description: 'The ID of the category this service belongs to' 
   })
-  categoryLabel!: string;
+  categoryId!: string;
 
   @ApiProperty({ example: 5000 })
   basePrice!: number;
@@ -42,7 +43,6 @@ export class ServiceOfferingResponseDto {
   @ApiPropertyOptional({ example: 'Westlands' })
   locationNeighborhood?: string;
 
-  // --- ADDED AVAILABILITY ---
   @ApiPropertyOptional({ 
     type: [DayAvailabilityDto], 
     description: 'Structured weekly working hours' 
@@ -64,9 +64,9 @@ export class ServiceOfferingResponseDto {
   @ApiPropertyOptional({ example: 'Available on weekends only', description: 'Extra provider notes' })
   additionalNotes?: string;
 
-  @ApiProperty({ example: '2023-10-01T12:00:00Z' })
+  @ApiProperty({ example: '2025-12-29T12:00:00Z' })
   createdAt!: Date;
 
-  @ApiProperty({ example: '2023-10-05T12:00:00Z' })
+  @ApiProperty({ example: '2025-12-29T12:00:00Z' })
   updatedAt!: Date;
 }

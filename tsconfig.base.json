@@ -16,6 +16,7 @@
     "typeRoots": ["./node_modules/@types"],
     "baseUrl": ".",
     "paths": {
+      "@pivota-api/constants": ["libs/constants/src/index.ts"],
       "@pivota-api/decorators": ["libs/decorators/src/index.ts"],
       "@pivota-api/dtos": ["libs/dtos/src/index.ts"],
       "@pivota-api/exceptions": ["libs/exceptions/src/index.ts"],

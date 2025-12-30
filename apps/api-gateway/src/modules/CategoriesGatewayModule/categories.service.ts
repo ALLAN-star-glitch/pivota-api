@@ -1,37 +1,56 @@
+"use strict";
+
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   BaseResponseDto,
+  CategoryIdParamDto,
+  CategoryResponseDto,
   CreateCategoryRequestDto,
-  CreateCategoryResponseDto,
+  DiscoveryCategoryResponseDto,
+  DiscoveryParamsDto,
+  GetCategoriesRequestDto,
+  GetCategoryByNameQueryDto,
+  GetCategoryBySlugParamsDto,
+  UpdateCategoryRequestDto,
 } from '@pivota-api/dtos';
-import { BaseCategoryGrpcResponse, BaseCategoriesGrpcResponse } from '@pivota-api/interfaces';
 import { firstValueFrom, Observable } from 'rxjs';
 import { ClientGrpc } from '@nestjs/microservices';
 
+/**
+ * Updated interface to match categories.proto exactly
+ */
 interface CategoriesServiceGrpc {
   CreateCategory(
     data: CreateCategoryRequestDto,
-  ): Observable<BaseCategoryGrpcResponse<CreateCategoryResponseDto>>;
+  ): Observable<BaseResponseDto<CategoryResponseDto>>;
+
+  UpdateCategory(
+    data: UpdateCategoryRequestDto,
+  ): Observable<BaseResponseDto<CategoryResponseDto>>;
 
   DeleteCategory(
-    data: { id: string },
-  ): Observable<BaseCategoryGrpcResponse<null>>;
+    data: CategoryIdParamDto,
+  ): Observable<BaseResponseDto<null>>;
 
-  GetCategories(data: object): Observable<
-    BaseCategoriesGrpcResponse<CreateCategoryResponseDto[]>
-  >;
+  GetCategoriesByVertical(
+    data: GetCategoriesRequestDto,
+  ): Observable<BaseResponseDto<CategoryResponseDto[]>>;
+
+  GetDiscoveryMetadata(
+    data: DiscoveryParamsDto,
+  ): Observable<BaseResponseDto<DiscoveryCategoryResponseDto[]>>;
 
   GetCategoryById(
-    data: { id: string },
-  ): Observable<BaseCategoryGrpcResponse<CreateCategoryResponseDto>>;
+    data: CategoryIdParamDto,
+  ): Observable<BaseResponseDto<CategoryResponseDto>>;
+
+  GetCategoryBySlug(
+    data: GetCategoryBySlugParamsDto,
+  ): Observable<BaseResponseDto<CategoryResponseDto>>;
 
   GetCategoryByName(
-    data: { name: string },
-  ): Observable<BaseCategoryGrpcResponse<CreateCategoryResponseDto>>;
-
-  GetSubcategoryByName(
-    data: { categoryId: string; name: string },
-  ): Observable<BaseCategoryGrpcResponse<CreateCategoryResponseDto>>;
+    data: GetCategoryByNameQueryDto,
+  ): Observable<BaseResponseDto<CategoryResponseDto>>;
 }
 
 @Injectable()
@@ -43,91 +62,82 @@ export class CategoriesService {
     @Inject('CATEGORIES_PACKAGE')
     private readonly grpcClient: ClientGrpc,
   ) {
-    this.grpcService =
-      this.grpcClient.getService<CategoriesServiceGrpc>('CategoriesService');
+    this.grpcService = this.grpcClient.getService<CategoriesServiceGrpc>('CategoriesService');
   }
 
   // ===========================================================
-  // CREATE CATEGORY
+  // CREATE & UPDATE
   // ===========================================================
-  async createCategory(
-    dto: CreateCategoryRequestDto,
-  ): Promise<BaseResponseDto<CreateCategoryResponseDto>> {
+  async createCategory(dto: CreateCategoryRequestDto): Promise<BaseResponseDto<CategoryResponseDto>> {
+    this.logger.log(`gRPC Request: CreateCategory - Name: ${dto.name}`);
     const res = await firstValueFrom(this.grpcService.CreateCategory(dto));
-
-    if (res?.success) {
-      return BaseResponseDto.ok(res.category, res.message, res.code);
-    }
-
-    return BaseResponseDto.fail(res?.message, res?.code);
+    return res?.success 
+      ? BaseResponseDto.ok(res.data, res.message, res.code) 
+      : BaseResponseDto.fail(res?.message, res?.code);
   }
-  
 
-  // ===========================================================
-  // DELETE CATEGORY
-  // ===========================================================
-  async deleteCategory(
-    id: string,
-  ): Promise<BaseResponseDto<null>> {
-    const res = await firstValueFrom(
-      this.grpcService.DeleteCategory({ id }),
-    );
-    this.logger.debug(`DeleteCategory gRPC response: ${JSON.stringify(res)}`);
-
-    if (res?.success) {
-      return BaseResponseDto.ok(null, res.message, res.code);
-    }
-
-    return BaseResponseDto.fail(res?.message, res?.code);
+  async updateCategory(dto: UpdateCategoryRequestDto): Promise<BaseResponseDto<CategoryResponseDto>> {
+    this.logger.log(`gRPC Request: UpdateCategory - ID: ${dto.id}`);
+    const res = await firstValueFrom(this.grpcService.UpdateCategory(dto));
+    return res?.success 
+      ? BaseResponseDto.ok(res.data, res.message, res.code) 
+      : BaseResponseDto.fail(res?.message, res?.code);
   }
 
   // ===========================================================
-  // GET ALL CATEGORIES
+  // DELETE
   // ===========================================================
-  async getCategories(): Promise<BaseResponseDto<CreateCategoryResponseDto[]>> {
-    const res = await firstValueFrom(this.grpcService.GetCategories({}));
-
-    if (res?.success) {
-      return BaseResponseDto.ok(res.categories || [],  res.message, res.code);
-    }
-
-    return BaseResponseDto.fail(res?.message, res?.code);
-  }
- 
-
-  // ===========================================================
-  // GET CATEGORY BY ID
-  // ===========================================================
-  async getCategory(
-    id: string,
-  ): Promise<BaseResponseDto<CreateCategoryResponseDto>> {
-    const res = await firstValueFrom(
-      this.grpcService.GetCategoryById({ id }),
-    );
-    this.logger.debug(`GetCategory gRPC response: ${JSON.stringify(res)}`);
-
-    if (res?.success) {
-      return BaseResponseDto.ok(res.category, res.message, res.code);
-    }
-
-    return BaseResponseDto.fail(res?.message, res?.code);
+  async deleteCategory(id: string): Promise<BaseResponseDto<null>> {
+    this.logger.warn(`gRPC Request: DeleteCategory - ID: ${id}`);
+    const res = await firstValueFrom(this.grpcService.DeleteCategory({ id }));
+    return res?.success 
+      ? BaseResponseDto.ok(null, res.message, res.code) 
+      : BaseResponseDto.fail(res?.message, res?.code);
   }
 
   // ===========================================================
-  // GET CATEGORY BY NAME
+  // FETCH METHODS (LISTS)
   // ===========================================================
-  async getCategoryByName(
-    name: string,
-  ): Promise<BaseResponseDto<CreateCategoryResponseDto>> {
-    const res = await firstValueFrom(
-      this.grpcService.GetCategoryByName({ name }),
-    );
-    this.logger.debug(`GetCategoryByName gRPC response: ${JSON.stringify(res)}`);
+  async getCategories(dto: GetCategoriesRequestDto): Promise<BaseResponseDto<CategoryResponseDto[]>> {
+    this.logger.debug(`gRPC Request: GetCategoriesByVertical - Vertical: ${dto.vertical || 'ALL'}`);
+    const res = await firstValueFrom(this.grpcService.GetCategoriesByVertical(dto));
+    return res?.success 
+      ? BaseResponseDto.ok(res.data || [], res.message, res.code) 
+      : BaseResponseDto.fail(res?.message, res?.code);
+  }
 
-    if (res?.success) {
-      return BaseResponseDto.ok(res.category, res.message, res.code);
-    }
+  async getDiscoveryMetadata(dto: DiscoveryParamsDto): Promise<BaseResponseDto<DiscoveryCategoryResponseDto[]>> {
+    this.logger.debug(`gRPC Request: GetDiscoveryMetadata - Vertical: ${dto.vertical}`);
+    const res = await firstValueFrom(this.grpcService.GetDiscoveryMetadata(dto));
+    return res?.success 
+      ? BaseResponseDto.ok(res.data || [], res.message, res.code) 
+      : BaseResponseDto.fail(res?.message, res?.code);
+  }
 
-    return BaseResponseDto.fail(res?.message, res?.code);
+  // ===========================================================
+  // FETCH METHODS (SINGLE)
+  // ===========================================================
+  async getCategory(id: string): Promise<BaseResponseDto<CategoryResponseDto>> {
+    this.logger.debug(`gRPC Request: GetCategoryById - ID: ${id}`);
+    const res = await firstValueFrom(this.grpcService.GetCategoryById({ id }));
+    return res?.success 
+      ? BaseResponseDto.ok(res.data, res.message, res.code) 
+      : BaseResponseDto.fail(res?.message, res?.code);
+  }
+
+  async getCategoryBySlug(dto: GetCategoryBySlugParamsDto): Promise<BaseResponseDto<CategoryResponseDto>> {
+    this.logger.debug(`gRPC Request: GetCategoryBySlug - Slug: ${dto.slug}`);
+    const res = await firstValueFrom(this.grpcService.GetCategoryBySlug(dto));
+    return res?.success 
+      ? BaseResponseDto.ok(res.data, res.message, res.code) 
+      : BaseResponseDto.fail(res?.message, res?.code);
+  }
+
+  async getCategoryByName(dto: GetCategoryByNameQueryDto): Promise<BaseResponseDto<CategoryResponseDto>> {
+    this.logger.debug(`gRPC Request: GetCategoryByName - Name: ${dto.name}`);
+    const res = await firstValueFrom(this.grpcService.GetCategoryByName(dto));
+    return res?.success 
+      ? BaseResponseDto.ok(res.data, res.message, res.code) 
+      : BaseResponseDto.fail(res?.message, res?.code);
   }
 }

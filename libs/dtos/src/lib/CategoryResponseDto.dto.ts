@@ -1,11 +1,24 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class CreateCategoryResponseDto {
+export class CategoryResponseDto {
   @ApiProperty({
     description: 'Unique ID of the category',
     example: 'cl3k1n4fj0000xyz123abc',
   })
   id!: string;
+
+  @ApiProperty({
+    description: 'The vertical this category belongs to',
+    example: 'JOBS',
+    enum: ['JOBS', 'HOUSING', 'SOCIAL_SUPPORT', 'LAND', 'FACILITIES'],
+  })
+  vertical!: string;
+
+  @ApiProperty({
+    description: 'URL-friendly identifier',
+    example: 'software-development',
+  })
+  slug!: string;
 
   @ApiProperty({
     description: 'Name of the category',
@@ -25,11 +38,27 @@ export class CreateCategoryResponseDto {
   })
   parentId?: string | null;
 
+  // --- Unified Stats ---
+
   @ApiProperty({
-    description: 'Number of job posts associated with this category',
+    description: 'Number of job posts in this category',
     example: 15,
   })
   jobPostsCount!: number;
+
+  @ApiProperty({
+    description: 'Number of service offerings (professionals) in this category',
+    example: 8,
+  })
+  servicesCount!: number;
+
+  @ApiProperty({
+    description: 'Number of social support programs in this category',
+    example: 2,
+  })
+  supportCount!: number;
+
+  // --- Hierarchy Info ---
 
   @ApiProperty({
     description: 'Number of subcategories under this category',
@@ -43,17 +72,19 @@ export class CreateCategoryResponseDto {
   })
   hasSubcategories!: boolean;
 
-  @ApiPropertyOptional({
-    description: 'Array of subcategories (nested categories)',
-    type: [CreateCategoryResponseDto],
-  })
-  subcategories?: CreateCategoryResponseDto[];
-
   @ApiProperty({
     description: 'Indicates if this category has a parent category',
     example: false,
   })
   hasParent!: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Array of subcategories (nested categories)',
+    type: [CategoryResponseDto],
+  })
+  subcategories?: CategoryResponseDto[];
+
+  // --- Timestamps ---
 
   @ApiProperty({
     description: 'ISO timestamp of creation',

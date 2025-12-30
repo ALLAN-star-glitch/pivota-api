@@ -1,33 +1,59 @@
-import { IsString, IsOptional } from 'class-validator';
+
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { VERTICALS } from '@pivota-api/constants';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+} from 'class-validator';
+
 
 export class CreateCategoryRequestDto {
   @ApiProperty({
-    description: 'Name of the category',
-    example: 'Software Development',
+    example: 'Plumbing',
+    description: 'Human readable category name',
   })
   @IsString()
+  @IsNotEmpty()
+  @Length(2, 100)
   name!: string;
 
   @ApiPropertyOptional({
-    description: 'Description of the category',
-    example: 'Jobs related to web, mobile, and software development',
+    example: 'plumbing',
+    description: 'URL-friendly slug (auto-generated if omitted)',
   })
   @IsOptional()
   @IsString()
-  description?: string;
-
-  @ApiPropertyOptional({ 
-    example: 'Monday - Friday, 9 AM - 6 PM', 
-    description: 'The days and times the provider is available to work.' 
+  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+    message: 'Slug must be lowercase kebab-case',
   })
-  @IsString()
-  @IsOptional()
-  availability?: string;
+  slug?: string;
 
   @ApiPropertyOptional({
-    description: 'ID of the parent category, if this is a subcategory',
-    example: 'cl3k1n4fj0000xyz123abc',
+    example: 'All plumbing-related jobs',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(0, 255)
+  description?: string;
+
+  @ApiProperty({
+    example: 'JOBS',
+    description: 'Which vertical this category belongs to',
+    enum: VERTICALS,
+  })
+  @IsString()
+  @IsIn(VERTICALS, {
+    message: `vertical must be one of: ${VERTICALS.join(', ')}`,
+  })
+  vertical!: string;
+
+  @ApiPropertyOptional({
+    example: 'ckxparent123',
+    description: 'Parent category ID (for subcategories)',
   })
   @IsOptional()
   @IsString()

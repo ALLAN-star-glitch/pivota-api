@@ -10,6 +10,7 @@ export const PLANS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/pl
 export const SUBSCRIPTIONS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/subscriptions.proto');   
 export const PROVIDERS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/providers.proto');
 export const NOTIFICATIONS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/notifications.proto'); 
+export const PROVIDERS_PRICING_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/providers_pricing.proto');    
 
 
 

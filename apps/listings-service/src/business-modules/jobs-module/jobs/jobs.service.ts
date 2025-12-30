@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
@@ -49,7 +50,7 @@ export class JobsService {
     dto: CreateJobPostDto,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
     try {
-      const category = await this.prisma.jobCategory.findUnique({
+      const category = await this.prisma.category.findUnique({
         where: { id: dto.categoryId },
       });
 
@@ -165,14 +166,14 @@ export class JobsService {
       });
 
       if (!job) {
-        const response =  {
+        return {
           success: false,
           message: 'Job post not found',
           code: 'JOB_NOT_FOUND',
-          jobPost: null,
+          data: null,
           error: { message: 'No job post exists with this ID', details: null },
         };
-        return response;
+    
       }
 
        const userGrpcService = this.getGrpcService();
@@ -206,25 +207,23 @@ export class JobsService {
         bookingsCount,
       };
 
-      const response = {
+      return {
         success: true,
         message: 'Job post fetched successfully',
         code: 'FETCHED',
-        jobPost,
+        data: jobPost,
         error: null,
       };
-      return response;
     } catch (error) {
       const err = error as Error;
       this.logger.error(`Fetch job post failed: ${err.message}`, err.stack);
-      const failure =  {
+      return {
         success: false,
         message: 'Failed to fetch job post',
         code: 'FETCH_FAILED',
-        jobPost: null,
+        data: null,
         error: { message: err.message, details: err.stack },
       };
-      return failure;
     }
   }
 
@@ -272,26 +271,24 @@ async getJobsByCategory(categoryId: string): Promise<BaseResponseDto<JobPostResp
       }),
     );
 
-    const response = {
+    return {
       success: true,
       message: `Jobs fetched successfully. Total jobs: ${jobsCount}`, 
       code: 'FETCHED',
-      jobPosts: jobsWithCounts,
+      data: jobsWithCounts,
       error: null,
     };
-
-    return response;
   } catch (error) {
     const err = error as Error;
     this.logger.error(`Fetch jobs by category failed: ${err.message}`, err.stack);
-    const failure = {
+    return {
       success: false,
       message: 'Failed to fetch jobs',
       code: 'FETCH_FAILED',
-      jobPosts: null,
+      data: null,
       error: { message: err.message, details: err.stack },
     };
-    return failure;
+    
   }
 }
 
@@ -307,26 +304,165 @@ async validateJobPostIds(dto: ValidateJobPostIdsRequestDto): Promise<BaseRespons
     const existingIds = existingJobs.map(j => j.id);
     const invalidIds = dto.ids.filter(id => !existingIds.includes(id));
 
-    const failure =   {
+    return {
       success: true,
       message: 'Validation completed',
       code: 'VALIDATION_DONE',
-      jobIds: { validIds: existingIds, invalidIds },
+      data: { validIds: existingIds, invalidIds },
       error: null,
     };
-    return failure;
   } catch (err) {
     const error = err as Error;
     this.logger.error(`Failed to validate job IDs: ${error.message}`, error.stack);
-    const success_resp= {
+    return {
       success: false,
       message: 'Validation failed',
       code: 'VALIDATION_FAILED',
-      jobIds: { validIds: [], invalidIds: dto.ids },
+      data: { validIds: [], invalidIds: dto.ids },
       error: { message: error.message, details: error.stack },
     };
-    return success_resp;
   }
 }
+
+// ======================================================
+// UPDATE JOB POST
+// ======================================================
+async updateJobPost(
+  id: string, 
+  creatorId: string, 
+  dto: Partial<CreateJobPostDto>
+): Promise<BaseResponseDto<JobPostResponseDto>> {
+  try {
+    const existing = await this.prisma.jobPost.findUnique({ where: { id } });
+    
+    if (!existing || existing.creatorId !== creatorId) {
+      return { success: false, message: 'Unauthorized or not found', code: 'UNAUTHORIZED', data: null, error: null };
+    }
+
+    const updated = await this.prisma.jobPost.update({
+      where: { id },
+      data: { ...dto },
+      include: { category: true, subCategory: true }
+    });
+
+    return this.getJobPostById(updated.id); // Reuse your detailed fetcher
+  } catch (error) {
+    return { success: false, message: 'Update failed', code: 'UPDATE_FAILED', data: null, error: null };
+  }
+}
+
+// ======================================================
+// CLOSE JOB POST (Soft Delete)
+// ======================================================
+async closeJobPost(id: string, creatorId: string): Promise<BaseResponseDto<boolean>> {
+  await this.prisma.jobPost.updateMany({
+    where: { id, creatorId },
+    data: { status: 'CLOSED' }
+  });
+  return { success: true, message: 'Job closed', code: 'CLOSED', data: true, error: null };
+}
+
+async applyToJobPost(dto: {
+  jobPostId: string;
+  applicantId: string;
+  employerId: string;
+  applicationType: string;
+  expectedPay?: number;
+  pitch?: string;
+  // Referral Fields
+  referrerName?: string;
+  referrerPhone?: string;
+  referrerEmail?: string;
+  referrerRelationship?: string;
+  attachments?: { type: string; fileUrl: string; fileName: string }[];
+}): Promise<BaseResponseDto<any>> {
+  return this.prisma.$transaction(async (tx) => {
+    
+    // 1. Determine if this is a referral based on provided details
+    const isReferral = !!(dto.referrerName || dto.referrerPhone);
+
+    // 2. Create the Main Application
+    const application = await tx.jobPostApplication.create({
+      data: {
+        jobPostId: dto.jobPostId,
+        applicantId: dto.applicantId,
+        employerId: dto.employerId,
+        applicationType: dto.applicationType,
+        expectedPay: dto.expectedPay,
+        status: 'PENDING',
+        // New Referral Mapping
+        isReferral: isReferral,
+        referrerName: dto.referrerName,
+        referrerPhone: dto.referrerPhone,
+        referrerEmail: dto.referrerEmail,
+        referrerRelationship: dto.referrerRelationship,
+      },
+    });
+
+    // 3. Create Attachments (including the pitch)
+    const attachmentData = [];
+    
+    if (dto.pitch) {
+      attachmentData.push({
+        applicationId: application.id,
+        type: 'COVER_LETTER',
+        contentText: dto.pitch,
+        isPrimary: true,
+      });
+    }
+
+    if (dto.attachments && dto.attachments.length > 0) {
+      dto.attachments.forEach(attr => {
+        attachmentData.push({
+          applicationId: application.id,
+          type: attr.type,
+          fileUrl: attr.fileUrl,
+          fileName: attr.fileName,
+        });
+      });
+    }
+
+    if (attachmentData.length > 0) {
+      await tx.jobApplicationAttachment.createMany({ 
+        data: attachmentData 
+      });
+    }
+
+    // 4. Initialize Status History (Crucial for your Audit Trail)
+    await tx.jobApplicationStatusHistory.create({
+      data: {
+        applicationId: application.id,
+        oldStatus: 'NONE',
+        newStatus: 'PENDING',
+        changedBy: dto.applicantId,
+        reason: isReferral 
+          ? `Application submitted with referral from ${dto.referrerName}` 
+          : 'Standard application submission',
+      },
+    });
+
+    return { 
+      success: true, 
+      message: 'Application submitted successfully', 
+      data: application 
+    };
+  });
+}
+
+    // 3. Initialize Status History
+    await tx.jobApplicationStatusHistory.create({
+      data: {
+        applicationId: application.id,
+        oldStatus: 'NONE',
+        newStatus: 'PENDING',
+        changedBy: dto.applicantId,
+        reason: 'Initial submission',
+      },
+    });
+
+    return { success: true, message: 'Application submitted successfully', code: 'CREATED' };
+  });
+}
+
 
 }

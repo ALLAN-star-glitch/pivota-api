@@ -3,13 +3,10 @@ import {
   BaseResponseDto,
   CreateJobPostDto,
   JobPostResponseDto,
-  CreateProviderJobDto,
-  ProviderJobResponseDto,
   ValidateJobPostIdsRequestDto,
   ValidateJobPostIdsReponseDto,
 } from '@pivota-api/dtos';
 
-import { BaseJobPostResponseGrpc, BaseJobPostsResponseGrpc, BaseProviderJobResponseGrpc, BaseValidateJobPostIdsReponseGrpc } from '@pivota-api/interfaces';
 
 import { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom, Observable } from 'rxjs';
@@ -17,22 +14,17 @@ import { firstValueFrom, Observable } from 'rxjs';
 interface JobsServiceGrpc {
   CreateJobPost(
     data: CreateJobPostDto,
-  ): Observable<BaseJobPostResponseGrpc<JobPostResponseDto>>;
+  ): Observable<BaseResponseDto<JobPostResponseDto>>;
 
   GetJobPostById(
     data: { id: string },
-  ): Observable<BaseJobPostResponseGrpc<JobPostResponseDto>>;
+  ): Observable<BaseResponseDto<JobPostResponseDto>>;
 
   GetJobsByCategory(
     data: { categoryId: string },
-  ): Observable<BaseJobPostsResponseGrpc<JobPostResponseDto[]>>;
+  ): Observable<BaseResponseDto<JobPostResponseDto[]>>;
 
-  CreateProviderJob(
-    data: CreateProviderJobDto,
-  ): Observable<BaseProviderJobResponseGrpc<ProviderJobResponseDto>>;
-
-  ValidateJobPostIds(data: ValidateJobPostIdsRequestDto): Observable<BaseValidateJobPostIdsReponseGrpc<ValidateJobPostIdsReponseDto>>;
-
+  ValidateJobPostIds(data: ValidateJobPostIdsRequestDto): Observable<BaseResponseDto<ValidateJobPostIdsReponseDto>>;
 }
 
 @Injectable()
@@ -64,11 +56,12 @@ export class JobsService {
   this.logger.debug(`CreateJobPost gRPC: ${JSON.stringify(res)}`);
 
   if (res?.success) {
-    return BaseResponseDto.ok(res.jobPost, res.message, res.code);
+    return BaseResponseDto.ok(res.data, res.message, res.code);
   }
 
   return BaseResponseDto.fail(res?.message, res?.code);
 }
+
 
   // ===========================================================
   // GET JOB POST BY ID
@@ -83,7 +76,7 @@ export class JobsService {
     this.logger.debug(`GetJobPostById gRPC: ${JSON.stringify(res)}`);
 
     if (res?.success) {
-      return BaseResponseDto.ok(res.jobPost, res.message, res.code);
+      return BaseResponseDto.ok(res.data, res.message, res.code);
     }
 
     return BaseResponseDto.fail(res?.message, res?.code);
@@ -102,26 +95,7 @@ export class JobsService {
     this.logger.debug(`GetJobsByCategory gRPC: ${JSON.stringify(res)}`);
 
     if (res?.success) {
-      return BaseResponseDto.ok(res.jobPosts || [], res.message, res.code);
-    }
-
-    return BaseResponseDto.fail(res?.message, res?.code);
-  }
-
-  // ===========================================================
-  // CREATE PROVIDER JOB
-  // ===========================================================
-  async createProviderJob(
-    dto: CreateProviderJobDto,
-  ): Promise<BaseResponseDto<ProviderJobResponseDto>> {
-    const res = await firstValueFrom(
-      this.grpcService.CreateProviderJob(dto),
-    );
-
-    this.logger.debug(`CreateProviderJob gRPC: ${JSON.stringify(res)}`);
-
-    if (res?.success) {
-      return BaseResponseDto.ok(res.providerJob, res.message, res.code);
+      return BaseResponseDto.ok(res.data || [], res.message, res.code);
     }
 
     return BaseResponseDto.fail(res?.message, res?.code);
@@ -140,7 +114,7 @@ export class JobsService {
     this.logger.debug(`ValidatedJobIds: ${JSON.stringify(response)}`);
 
     if(response?.success){
-      return BaseResponseDto.ok(response.jobIds, response.message, response.code)
+      return BaseResponseDto.ok(response.data, response.message, response.code)
     }
 
     return BaseResponseDto.fail(response?.message, response?.code)

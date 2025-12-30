@@ -1,34 +1,30 @@
 import { 
-  IsString, 
-  IsNotEmpty, 
-  IsArray, 
-  IsOptional, 
-  IsNumber, 
-  IsIn, 
-  Min, 
-  ArrayMinSize, 
-  ValidateNested
+  IsString, IsNotEmpty, IsArray, IsOptional, 
+  IsNumber, IsIn, Min, ArrayMinSize, ValidateNested 
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { DayAvailabilityDto } from './AvailabilityDto.dto';
 import { Type } from 'class-transformer';
+import { DayAvailabilityDto } from './AvailabilityDto.dto';
+import { PRICE_UNITS, VERTICALS } from '@pivota-api/constants';
 
-// Define valid values as constants for reuse
-const VERTICAL_TYPES = ['JOBS', 'HOUSING', 'SOCIAL_SUPPORT'];
-const PRICE_UNITS = ['FIXED', 'PER_HOUR', 'PER_DAY', 'PER_VISIT', 'PER_SQFT'];
+
+
 
 export class CreateServiceOfferingDto {
-  @ApiProperty({ example: '7b2a...', description: 'UUID of the provider (User) from Identity Service' })
-  @IsOptional()
+  @ApiProperty({ 
+    example: 'user_clv123abc', 
+    description: 'The UUID of the provider from Identity Service' 
+  })
   @IsString()
-  providerId?: string;
+  @IsOptional()
+  providerId?: string; 
 
-  @ApiProperty({ example: 'Professional House Painting', description: 'Title of the service offering' })
+  @ApiProperty({ example: 'Professional House Painting' })
   @IsString()
   @IsNotEmpty()
   title!: string;
 
-  @ApiProperty({ example: 'High-quality interior and exterior painting using premium materials.', description: 'Detailed service description' })
+  @ApiProperty({ example: 'High-quality interior and exterior painting services.' })
   @IsString()
   @IsNotEmpty()
   description!: string;
@@ -36,56 +32,58 @@ export class CreateServiceOfferingDto {
   @ApiProperty({
     example: ['JOBS', 'HOUSING'],
     type: [String],
-    description: 'The platform verticals where this service will be visible. Options: JOBS, HOUSING, SOCIAL_SUPPORT'
+    description: 'The platform verticals where this service will be visible.'
   })
   @IsArray()
   @IsString({ each: true })
-  @IsIn(VERTICAL_TYPES, { each: true })
+  @IsIn(VERTICALS, { each: true })
   @ArrayMinSize(1)
   verticals!: string[];
 
-  @ApiProperty({ 
-    example: 'Painter & Decorator', 
-    description: 'A professional badge or label describing the role. Replaces rigid category IDs for cross-vertical flexibility.' 
-  })
+  @ApiProperty({ description: 'The internal CUID/UUID of the category.' })
   @IsString()
   @IsNotEmpty()
-  categoryLabel!: string;
+  categoryId!: string;
 
-  @ApiProperty({ example: 5000, description: 'Base price for the service in local currency (KES)' })
+  @ApiProperty({ description: 'The slug of the category (e.g., painting-services).' })
+  @IsString()
+  @IsNotEmpty()
+  categorySlug!: string;
+
+  @ApiProperty({ example: 5000, description: 'Base price in KES' })
   @IsNumber()
   @Min(0)
   basePrice!: number;
 
-  @ApiProperty({
-    example: 'FIXED',
-    description: 'Pricing model. Options: FIXED, PER_HOUR, PER_DAY, PER_VISIT, PER_SQFT'
-  })
+  @ApiProperty({ example: 'FIXED', enum: PRICE_UNITS })
   @IsString()
   @IsIn(PRICE_UNITS)
   priceUnit!: string;
 
-  @ApiProperty({ example: 'Nairobi', description: 'City where the service is offered' })
+  @ApiProperty({ example: 'Nairobi' })
   @IsString()
   @IsNotEmpty()
   locationCity!: string;
 
-  @ApiPropertyOptional({ example: 'Westlands', description: 'Specific neighborhood or estate' })
+  @ApiPropertyOptional({ example: 'Westlands' })
   @IsString()
   @IsOptional()
   locationNeighborhood?: string;
 
-  @ApiPropertyOptional({ example: 5, description: 'Years of professional experience in this field' })
+  @ApiPropertyOptional({ example: 5, description: 'Years of professional experience.' })
   @IsNumber()
   @IsOptional()
   yearsExperience?: number;
 
-  @ApiPropertyOptional({ example: 'Available on weekends only. Tools included.', description: 'Additional notes for clients' })
+  @ApiPropertyOptional({ 
+    example: 'Includes all materials and cleanup.', 
+    description: 'Additional notes.' 
+  })
   @IsString()
   @IsOptional()
   additionalNotes?: string;
 
-  @ApiProperty({ type: [DayAvailabilityDto], description: 'Weekly schedule' })
+  @ApiPropertyOptional({ type: [DayAvailabilityDto], description: 'Weekly schedule' })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

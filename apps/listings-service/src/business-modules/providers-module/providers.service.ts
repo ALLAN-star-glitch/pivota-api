@@ -1,4 +1,6 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+"use strict";
+
+import { Injectable, Logger, Inject, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClientGrpc } from '@nestjs/microservices';
 import { 
@@ -6,10 +8,11 @@ import {
   CreateServiceOfferingDto, 
   ServiceOfferingResponseDto, 
   GetOfferingByVerticalRequestDto,
-  DayAvailabilityDto // Added this import
+  DayAvailabilityDto 
 } from '@pivota-api/dtos';
+import { ProvidersPricingService } from './providers-pricing.service';
 
-// Updated interface to include availability from Prisma
+// Define a strict interface for the Prisma return type to avoid 'any'
 interface ServiceOfferingWithReviews {
   id: string;
   externalId: string;
@@ -17,13 +20,13 @@ interface ServiceOfferingWithReviews {
   title: string;
   description: string;
   verticals: string[];
-  categoryLabel: string | null;
+  categoryId: string; // Changed from categoryLabel
   basePrice: number;
   priceUnit: string;
   locationCity: string;
   locationNeighborhood: string | null;
   yearsExperience: number | null;   
-  availability: string | null; // Prisma returns this as a string
+  availability: string | null;
   additionalNotes: string | null;
   isVerified: boolean;
   createdAt: Date;
@@ -37,18 +40,17 @@ export class ProvidersService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly pricingService: ProvidersPricingService, // Inject the new service
     @Inject('USER_GRPC') private readonly userService: ClientGrpc,
   ) {}
 
-  /**
-   * Safe parsing of availability JSON
-   */
   private parseAvailability(availabilityStr: string | null): DayAvailabilityDto[] | undefined {
     if (!availabilityStr) return undefined;
     try {
       return JSON.parse(availabilityStr) as DayAvailabilityDto[];
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
-      this.logger.error(`Failed to parse availability JSON: ${e.message}`);
+      this.logger.error(`Failed to parse availability JSON`);
       return undefined;
     }
   }
@@ -65,13 +67,12 @@ export class ProvidersService {
       title: item.title,
       description: item.description,
       verticals: item.verticals,
-      categoryLabel: item.categoryLabel ?? 'General',
+      categoryId: item.categoryId, // Matching schema
       basePrice: item.basePrice,
       priceUnit: item.priceUnit,
       locationCity: item.locationCity,
       locationNeighborhood: item.locationNeighborhood ?? undefined,
       yearsExperience: item.yearsExperience ?? undefined,
-      // Map the parsed JSON back to the DTO array
       availability: this.parseAvailability(item.availability),
       isVerified: item.isVerified,
       additionalNotes: item.additionalNotes ?? undefined,
@@ -86,21 +87,25 @@ export class ProvidersService {
     dto: CreateServiceOfferingDto,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
     try {
+      // 1. Dynamic Validation using the Pricing Service
+      // This checks database rules for min/max price, experience, and notes.
+      await this.pricingService.validateOfferingPricing(dto);
+
+      // 2. Persist to Database
       const created = await this.prisma.serviceOffering.create({
         data: {
-          providerId: dto.providerId,
+          providerId: dto.providerId ?? 'pending-auth', // Ensure you have a fallback or real ID
           title: dto.title,
           description: dto.description,
-          categoryLabel: dto.categoryLabel, 
-          verticals: dto.verticals ?? ["JOBS"], 
+          verticals: dto.verticals, 
+          categoryId: dto.categoryId, // MUST be included for your schema
           basePrice: dto.basePrice,
+          priceUnit: dto.priceUnit,
           yearsExperience: dto.yearsExperience ?? null,
-          priceUnit: dto.priceUnit ?? 'FIXED',
           locationCity: dto.locationCity,
-          locationNeighborhood: dto.locationNeighborhood,
-          // Stringify the array for Prisma storage
+          locationNeighborhood: dto.locationNeighborhood ?? null,
+          additionalNotes: dto.additionalNotes ?? null,
           availability: dto.availability ? JSON.stringify(dto.availability) : null,
-          additionalNotes: dto.additionalNotes,
           isVerified: false, 
         },
         include: {
@@ -118,11 +123,12 @@ export class ProvidersService {
     } catch (error) {
       const err = error as Error;
       this.logger.error(`Failed to create offering: ${err.message}`);
+      
       return {
         success: false,
-        message: 'Creation failed',
-        code: 'INTERNAL_ERROR',
-        error: { message: err.message, details: err.stack || null },
+        message: err.message || 'Creation failed',
+        code: error instanceof BadRequestException ? 'VALIDATION_ERROR' : 'INTERNAL_ERROR',
+        error: { message: err.message, details: null },
       };
     }
   }
@@ -146,10 +152,10 @@ export class ProvidersService {
 
       return {
         success: true,
-        message: `Found ${offerings.length} ${dto.vertical} providers`,
+        message: `Found ${offerings.length} ${dto.vertical} service offerings`,
         code: 'FETCH_SUCCESS',
         data: offerings.map(item => this.mapToResponseDto(item as unknown as ServiceOfferingWithReviews)),
-      };
+      }
     } catch (error) {
       const err = error as Error;
       this.logger.error(`Fetch error for vertical ${dto.vertical}: ${err.message}`);
