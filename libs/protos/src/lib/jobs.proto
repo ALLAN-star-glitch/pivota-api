@@ -10,10 +10,15 @@ service JobsService {
   rpc GetJobPostById (GetJobPostByIdRequest) returns (BaseJobPostResponse);
   rpc GetJobsByCategory (GetJobsByCategoryRequest) returns (ListJobPostsResponse);
   rpc ValidateJobPostIds(ValidateJobPostIdsRequest) returns (BaseValidateJobPostIdsResponse);
+  
+  // NEW METHODS
+  rpc UpdateJobPost (UpdateJobPostRequest) returns (BaseJobPostResponse);
+  rpc CloseJobPost (CloseJobPostRequest) returns (BaseCloseJobPostResponse);
+  rpc ApplyToJobPost (CreateJobApplicationRequest) returns (BaseJobApplicationResponse);
 }
 
 // ===================================================
-// ERROR PAYLOAD
+// SHARED PAYLOADS
 // ===================================================
 message ErrorPayload {
   string code = 1;
@@ -21,20 +26,6 @@ message ErrorPayload {
   string details = 3;
 }
 
-// ===================================================
-// BASE RESPONSES
-// ===================================================
-message BaseJobPostResponse {
-  bool success = 1;
-  string code = 2;
-  string message = 3;
-  JobPost data = 4;
-  ErrorPayload error = 5;
-}
-
-// ===================================================
-// ENTITIES
-// ===================================================
 message UserBasic {
   string id = 1;
   string fullName = 2;
@@ -46,115 +37,167 @@ message CategoryBasic {
   string name = 2;
 }
 
+// ===================================================
+// JOB APPLICATION ENTITIES
+// ===================================================
+message Attachment {
+  string type = 1;
+  string fileUrl = 2;
+  string fileName = 3;
+  string contentText = 4;
+  bool isPrimary = 5;
+}
+
+message StatusHistory {
+  string oldStatus = 1;
+  string newStatus = 2;
+  string changedBy = 3;
+  string reason = 4;
+  string createdAt = 5;
+}
+
+message JobApplication {
+  // --- Identification & Relationships ---
+  string id = 1;
+  string externalId = 2;
+  string jobPostId = 3;
+  string applicantId = 4;
+  string employerId = 5;
+  string status = 6;
+
+  // --- Financials & Logistics ---
+  double expectedPay = 7;
+  string availabilityDate = 8;
+  string availabilityNotes = 9;
+
+  // --- Referral Information ---
+  string referrerName = 10;
+  string referrerPhone = 11;
+  string referrerEmail = 12; // Added this as we discussed it for the formal pillar
+  string referrerRelationship = 13;
+
+  // --- Timestamps ---
+  string createdAt = 14;
+  string reviewedAt = 15;
+
+  // --- Nested Collections ---
+  repeated Attachment attachments = 16;
+  repeated StatusHistory statusHistory = 17;
+}
+
+// ===================================================
+// JOB POST ENTITY
+// ===================================================
 message JobPost {
   string id = 1;
   string externalId = 2;
-
   string title = 3;
   string description = 4;
-
   CategoryBasic category = 5;
-  CategoryBasic subCategory = 6; // optional
-
+  CategoryBasic subCategory = 6;
   UserBasic creator = 7;
-
-  string jobType = 8; // "INFORMAL" | "FORMAL"
-
+  string jobType = 8;
   string locationCity = 9;
   string locationNeighborhood = 10;
   bool isRemote = 11;
-
   bool requiresDocuments = 12;
   bool requiresEquipment = 13;
-
   double payAmount = 14;
-  string payRate = 15; // hourly | daily | weekly | fixed
-
+  string payRate = 15;
   repeated string skills = 16;
   string experienceLevel = 17;
   string employmentType = 18;
   repeated string documentsNeeded = 19;
   repeated string equipmentRequired = 20;
   string additionalNotes = 21;
-
-  string status = 22; // "ACTIVE" | "CLOSED" | "DRAFT"
-
+  string status = 22;
   int32 applicationsCount = 23;
   int32 bookingsCount = 24;
-
   string createdAt = 25;
   string updatedAt = 26;
 }
 
-message ProviderJob {
-  string id = 1;
-
-  string providerId = 2;
-  string title = 3;
-  string description = 4;
-  CategoryBasic category = 5;
-  double price = 6;
-  string location = 7;
-  string additionalNotes = 8;
-
-  string createdAt = 9;
-  string updatedAt = 10;
-}
-
-message ValidateJobPostIdsRequest {
-  repeated string ids = 1;
-}
-
-message ValidateJobIdsResponse {
-   repeated string validIds = 1;
-   repeated string invalidIds = 2;
-}
 // ===================================================
 // REQUEST MESSAGES
 // ===================================================
 message CreateJobPostRequest {
   string title = 1;
   string description = 2;
-
   string categoryId = 3;
-  string subCategoryId = 4; // optional
-  string creatorId = 5; // enforced by gateway
-
-  string jobType = 6; // "INFORMAL" | "FORMAL"
-
+  string subCategoryId = 4;
+  string creatorId = 5;
+  string jobType = 6;
   string locationCity = 7;
   string locationNeighborhood = 8;
   bool isRemote = 9;
-
   bool requiresDocuments = 10;
   bool requiresEquipment = 11;
-
   double payAmount = 12;
   string payRate = 13;
-
   repeated string skills = 14;
   string experienceLevel = 15;
   string employmentType = 16;
   repeated string documentsNeeded = 17;
   repeated string equipmentRequired = 18;
   string additionalNotes = 19;
-
-  string status = 20; // "ACTIVE" | "CLOSED" | "DRAFT"
+  string status = 20;
 }
 
-message GetJobPostByIdRequest {
+message UpdateJobPostRequest {
   string id = 1;
+  string creatorId = 2;
+  // Use optional for partial updates in proto3
+  optional string title = 3;
+  optional string description = 4;
+  optional string status = 5;
+  optional double payAmount = 6;
+  // Add other optional fields as needed based on your DTO
 }
 
-message GetJobsByCategoryRequest {
-  string categoryId = 1;
+message CloseJobPostRequest {
+  string id = 1;
+  string creatorId = 2;
+  string reason = 3;
 }
 
+message CreateJobApplicationRequest {
+  string jobPostId = 1;
+  string applicantId = 2;
+  
+  // Handshake field from your DTO logic
+  bool hasRequiredEquipment = 3; 
+  
+  // Note: We removed employerId because the Microservice 
+  // will fetch it from the database for security.
+  
+  double expectedPay = 4; // Re-indexed to 4
+  string availabilityDate = 5;
+  string availabilityNotes = 6;
+  
+  // Referral details
+  string referrerName = 7;
+  string referrerPhone = 8;
+  string referrerEmail = 9;
+  string referrerRelationship = 10;
+  
+  repeated Attachment attachments = 11;
+}
 
+message GetJobPostByIdRequest { string id = 1; }
+message GetJobsByCategoryRequest { string categoryId = 1; }
+message ValidateJobPostIdsRequest { repeated string ids = 1; }
 
 // ===================================================
-// LIST RESPONSES
+// RESPONSE MESSAGES
 // ===================================================
+message BaseJobPostResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  JobPost data = 4;
+  ErrorPayload error = 5;
+}
+
 message ListJobPostsResponse {
   bool success = 1;
   string code = 2;
@@ -163,12 +206,38 @@ message ListJobPostsResponse {
   ErrorPayload error = 5;
 }
 
+message CloseJobPostData {
+  string id = 1;
+  string status = 2;
+  bool isClosed = 3;
+  string closedAt = 4;
+}
 
-//Validate job ids response
+message BaseCloseJobPostResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  CloseJobPostData data = 4;
+  ErrorPayload error = 5;
+}
+
+message BaseJobApplicationResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  JobApplication data = 4;
+  ErrorPayload error = 5;
+}
+
+message ValidateJobIdsData {
+   repeated string validIds = 1;
+   repeated string invalidIds = 2;
+}
+
 message BaseValidateJobPostIdsResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-  ValidateJobIdsResponse data = 4;
+  ValidateJobIdsData data = 4;
   ErrorPayload error = 5;
 }

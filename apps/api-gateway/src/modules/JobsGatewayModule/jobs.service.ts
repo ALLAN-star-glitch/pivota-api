@@ -5,11 +5,21 @@ import {
   JobPostResponseDto,
   ValidateJobPostIdsRequestDto,
   ValidateJobPostIdsReponseDto,
+  CloseJobPostRequestDto,
+  CloseJobPostResponseDto,
+  CreateJobApplicationDto,
+  JobApplicationResponseDto,
+  UpdateJobPostRequestDto,
 } from '@pivota-api/dtos';
 
 
 import { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom, Observable } from 'rxjs';
+
+interface ApplyToJobPostGrpcRequest extends CreateJobApplicationDto {
+  jobPostId: string;
+  applicantId: string;
+}
 
 interface JobsServiceGrpc {
   CreateJobPost(
@@ -25,6 +35,10 @@ interface JobsServiceGrpc {
   ): Observable<BaseResponseDto<JobPostResponseDto[]>>;
 
   ValidateJobPostIds(data: ValidateJobPostIdsRequestDto): Observable<BaseResponseDto<ValidateJobPostIdsReponseDto>>;
+
+  UpdateJobPost(data: UpdateJobPostRequestDto): Observable<BaseResponseDto<JobPostResponseDto>>;
+  CloseJobPost(data: CloseJobPostRequestDto): Observable<BaseResponseDto<CloseJobPostResponseDto>>;
+  ApplyToJobPost(data: ApplyToJobPostGrpcRequest): Observable<BaseResponseDto<JobApplicationResponseDto>>;
 }
 
 @Injectable()
@@ -120,5 +134,57 @@ export class JobsService {
     return BaseResponseDto.fail(response?.message, response?.code)
   }
 
+  // ===========================================================
+  // UPDATE JOB POST
+  // ===========================================================
+  async updateJobPost(dto: UpdateJobPostRequestDto): Promise<BaseResponseDto<JobPostResponseDto>> {
+    const res = await firstValueFrom(this.grpcService.UpdateJobPost(dto));
+    this.logger.debug(`UpdateJobPost gRPC: ${JSON.stringify(res)}`);
 
+    if (res?.success) {
+      return BaseResponseDto.ok(res.data, res.message, res.code);
+    }
+    return BaseResponseDto.fail(res?.message, res?.code);
+  }
+
+  // ===========================================================
+  // CLOSE JOB POST
+  // ===========================================================
+  async closeJobPost(dto: CloseJobPostRequestDto): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
+    const res = await firstValueFrom(this.grpcService.CloseJobPost(dto));
+    this.logger.debug(`CloseJobPost gRPC: ${JSON.stringify(res)}`);
+
+    if (res?.success) {
+      return BaseResponseDto.ok(res.data, res.message, res.code);
+    }
+    return BaseResponseDto.fail(res?.message, res?.code);
+  }
+
+  
+// ===========================================================
+  // APPLY TO JOB POST (API Gateway Service)
+  // ===========================================================
+  async applyToJobPost(
+    jobPostId: string, 
+    applicantId: string, 
+    dto: CreateJobApplicationDto
+  ): Promise<BaseResponseDto<JobApplicationResponseDto>> {
+    
+    // 3. Assemble the full message. 
+    // TypeScript now knows this matches ApplyToJobPostGrpcRequest
+    const grpcRequest: ApplyToJobPostGrpcRequest = {
+      ...dto,
+      jobPostId,
+      applicantId,
+    };
+
+    const res = await firstValueFrom(this.grpcService.ApplyToJobPost(grpcRequest));
+    this.logger.debug(`ApplyToJobPost gRPC result: ${res?.success}`);
+
+    if (res?.success) {
+      return BaseResponseDto.ok(res.data, res.message, res.code);
+    }
+    return BaseResponseDto.fail(res?.message, res?.code);
+  }
 }
+

@@ -8,6 +8,7 @@ import {
   Version,
   UseGuards,
   Req,
+  Patch,
 } from '@nestjs/common';
 
 import {
@@ -15,10 +16,17 @@ import {
   CreateJobPostDto,
   JobPostResponseDto,
   ValidateJobPostIdsRequestDto,
+  UpdateJobPostRequestDto,
+  CloseJobPostRequestDto,
+  CloseJobPostResponseDto,
+  CreateJobApplicationDto,
+  JobApplicationResponseDto,
 } from '@pivota-api/dtos';
 
+import { ParseCuidPipe } from '@pivota-api/pipes';
+
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
-import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
 import { JwtRequest } from '@pivota-api/interfaces';
 import { Roles } from '../../decorators/roles.decorator';
@@ -33,7 +41,7 @@ export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
   // ===========================================================
-  // CREATE JOB POST (Authenticated User)
+  // CREATE JOB POST
   // ===========================================================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SuperAdmin', 'SystemAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'ModuleManager' , 'BusinessSystemAdmin', "BusinessContentAdmin", "GeneralUser")
@@ -45,16 +53,79 @@ export class JobsController {
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
     const userId = req.user.userUuid;
-
     dto.creatorId = userId;
 
-    this.logger.debug(
-      `REST createJobPost request by user=${userId}: ${JSON.stringify(dto)}`,
-    );
-
+    this.logger.debug(`REST createJobPost request by user=${userId}`);
     return this.jobsService.createJobPost(dto);
   }
 
+  // ===========================================================
+  // UPDATE JOB POST
+  // ===========================================================
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SuperAdmin', 'SystemAdmin', 'ModuleManager', 'GeneralUser')
+  @Version('1')
+  @Patch('jobs/:id')
+  @ApiOperation({ summary: 'Update an existing job post' })
+  @ApiParam({ name: 'id', type: String })
+  async updateJobPost(
+    @Param('id') id: string,
+    @Body() dto: UpdateJobPostRequestDto,
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<JobPostResponseDto>> {
+    const userId = req.user.userUuid;
+    
+    dto.id = id;
+    dto.creatorId = userId; // Identity enforcement
+
+    this.logger.debug(`REST updateJobPost request for id=${id} by user=${userId}`);
+    return this.jobsService.updateJobPost(dto);
+  }
+
+  // ===========================================================
+  // CLOSE JOB POST
+  // ===========================================================
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SuperAdmin', 'SystemAdmin', 'ModuleManager', 'GeneralUser')
+  @Version('1')
+  @Patch('jobs/:id/close')
+  @ApiOperation({ summary: 'Close a job post (Status Change)' })
+  @ApiParam({ name: 'id', type: String })
+  async closeJobPost(
+    @Param('id') id: string,
+    @Body() dto: CloseJobPostRequestDto,
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
+    const userId = req.user.userUuid;
+    
+    dto.id = id;
+    dto.creatorId = userId; // Identity enforcement
+
+    this.logger.debug(`REST closeJobPost request for id=${id} by user=${userId}`);
+    return this.jobsService.closeJobPost(dto);
+  }
+
+ // ===========================================================
+  // APPLY TO JOB POST
+  // ===========================================================
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('GeneralUser')
+  @Version('1')
+  @Post('jobs/:id/apply')
+  @ApiOperation({ summary: 'Apply for a job post' })
+  @ApiParam({ name: 'id', type: String, description: 'The CUID of the Job Post' })
+  async applyToJobPost(
+    // Validate the 'id' param using our new Pipe
+    @Param('id', ParseCuidPipe) id: string, 
+    @Body() dto: CreateJobApplicationDto,
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<JobApplicationResponseDto>> {
+    const userId = req.user.userUuid;
+
+    this.logger.debug(`REST applyToJobPost validated for job=${id} by user=${userId}`);
+
+    return this.jobsService.applyToJobPost(id, userId, dto);
+  }
 
   // ===========================================================
   // GET JOB BY ID (Public)
@@ -66,7 +137,6 @@ export class JobsController {
   async getJobPostById(
     @Param('id') id: string,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
-    this.logger.debug(`REST getJobPostById request: ${id}`);
     return this.jobsService.getJobPostById(id);
   }
 
@@ -80,38 +150,21 @@ export class JobsController {
   async getJobsByCategory(
     @Param('categoryId') categoryId: string,
   ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
-    this.logger.debug(`REST getJobsByCategory: ${categoryId}`);
     return this.jobsService.getJobsByCategory(categoryId);
   }
 
-
   // ===========================================================
-// Validate Job Post IDs
-// ===========================================================
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(
-  'SuperAdmin',
-  'SystemAdmin',
-  'ComplianceAdmin',
-  'AnalyticsAdmin',
-  'ModuleManager',
-  'BusinessSystemAdmin',
-  'BusinessContentAdmin',
-  'GeneralUser',
-)
-@Version('1')
-@Post('jobs/validate-ids')
-@ApiOperation({ summary: 'Validate Job Post IDs' })
-@ApiBody({ type: ValidateJobPostIdsRequestDto })
-@ApiOkResponse({ description: 'Validation result returned successfully' })
-async validateJobIds(
-  @Body() dto: ValidateJobPostIdsRequestDto,
-) {
-  this.logger.debug(
-    `Validate Job Ids Request: ${JSON.stringify(dto)}`,
-  );
-
-  return this.jobsService.validateJobPostIds(dto);
-}
-
+  // Validate Job Post IDs
+  // ===========================================================
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SuperAdmin', 'SystemAdmin', 'ModuleManager', 'GeneralUser')
+  @Version('1')
+  @Post('jobs/validate-ids')
+  @ApiOperation({ summary: 'Validate Job Post IDs' })
+  @ApiBody({ type: ValidateJobPostIdsRequestDto })
+  async validateJobIds(
+    @Body() dto: ValidateJobPostIdsRequestDto,
+  ) {
+    return this.jobsService.validateJobPostIds(dto);
+  }
 }

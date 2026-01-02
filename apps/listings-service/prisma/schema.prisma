@@ -69,6 +69,9 @@ model JobPost {
   allowReferrals    Boolean @default(true) 
   referralBonus     Float?  // If the employer is offering money for a successful referral
 
+  // NEW SOURCE OF TRUTH
+  isNegotiable    Boolean @default(false)
+
   payAmount Float?
   payRate   String?
   skills    String[] @default([])
@@ -82,7 +85,6 @@ model JobPost {
   updatedAt DateTime @updatedAt
 
   applications JobPostApplication[]
-  bookings     Booking[]
   ratings     Rating[]
 
   @@index([locationCity])
@@ -106,50 +108,37 @@ model JobPostApplication {
   jobPost      JobPost  @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
 
   applicantId  String   // User ID from Identity Service
-  employerId   String   // Job owner snapshot (denormalized)
+  employerId   String   // Denormalized for fast dashboard queries
 
   // ======================
-  // Referral Details (External & Internal)
+  // Referral Details
   // ======================
-  isReferral           Boolean @default(false)
   referrerName         String?
   referrerPhone        String?
-  referrerEmail        String?
-  referrerRelationship String? // e.g., "Former Manager", "Previous Client"
+  referrerEmail        String? // Kept for Formal Pillar background checks
+  referrerRelationship String? // e.g., "Former Manager", "Vouched Colleague"
+
+  // ======================
+  // Applicant Intent & Compliance
+  // ======================
+  expectedPay          Float?
+  availabilityDate     DateTime?
+  availabilityNotes    String?
   
+  // Handshake: Worker confirms they have the tools mentioned in JobPost
+  hasRequiredEquipment Boolean @default(false) 
 
   // ======================
-  // Application Context
+  // Status & Decisioning
   // ======================
-  applicationType String @default("FORMAL")
-  /*
-    FORMAL   -> Requires CV/Documents
-    INFORMAL -> Casual/Manual jobs (Quick Apply)
-  */
-
-  // ======================
-  // Applicant Intent
-  // ======================
-  expectedPay        Float?
-  availabilityDate   DateTime?
-  availabilityNotes  String?
-  isNegotiable       Boolean @default(false)
-
-  // ======================
-  // Status lifecycle
-  // ======================
-  status String @default("PENDING")
-
-  // ======================
-  // Employer Decisions
-  // ======================
+  status            String    @default("PENDING") 
   employerNotes     String?
   rejectionReason   String?
-  agreedPay         Float?
+  agreedPay         Float?    // The final negotiated rate
   agreedStartDate   DateTime?
 
   // ======================
-  // Lifecycle timestamps
+  // Lifecycle Timestamps
   // ======================
   reviewedAt   DateTime?
   decidedAt    DateTime?
@@ -173,8 +162,8 @@ model JobPostApplication {
   @@index([employerId])
   @@index([jobPostId])
   @@index([status])
-  @@index([applicationType])
-  @@index([referrerPhone]) // Useful for searching applications by referrer
+  @@index([referrerPhone])
+  @@index([referrerEmail]) // Added index for referral lookups
 }
 
 model JobApplicationAttachment {
@@ -293,7 +282,6 @@ model Booking {
   id          String   @id @default(cuid())
   externalId  String   @default(uuid())
   jobPostId   String
-  jobPost     JobPost   @relation(fields: [jobPostId], references: [id])
   providerId  String    // reference User Service ID
   status      String    @default("PENDING") // was enum
   scheduledDate DateTime?

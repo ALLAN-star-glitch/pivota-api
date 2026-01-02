@@ -24,6 +24,7 @@
       "@pivota-api/grpc-interfaces": ["libs/grpc-interfaces/src/index.ts"],
       "@pivota-api/guards": ["libs/guards/src/index.ts"],
       "@pivota-api/interfaces": ["libs/interfaces/src/index.ts"],
+      "@pivota-api/pipes": ["libs/pipes/src/index.ts"],
       "@pivota-api/protos": ["libs/protos/src/index.ts"],
       "@pivota-api/types": ["libs/types/src/index.ts"]
     }

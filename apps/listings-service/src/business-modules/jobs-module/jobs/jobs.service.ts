@@ -8,7 +8,12 @@ import {
   UserResponseDto,
   GetUserByUserUuidDto,
   ValidateJobPostIdsReponseDto,
-  ValidateJobPostIdsRequestDto
+  ValidateJobPostIdsRequestDto,
+  CreateJobApplicationDto,
+  JobApplicationResponseDto,
+  UpdateJobPostRequestDto,
+  CloseJobPostRequestDto,
+  CloseJobPostResponseDto
 } from '@pivota-api/dtos';
 import { firstValueFrom, Observable } from 'rxjs';
 import { BaseUserResponseGrpc,   } from '@pivota-api/interfaces';
@@ -328,19 +333,17 @@ async validateJobPostIds(dto: ValidateJobPostIdsRequestDto): Promise<BaseRespons
 // UPDATE JOB POST
 // ======================================================
 async updateJobPost(
-  id: string, 
-  creatorId: string, 
-  dto: Partial<CreateJobPostDto>
+    dto: UpdateJobPostRequestDto
 ): Promise<BaseResponseDto<JobPostResponseDto>> {
   try {
-    const existing = await this.prisma.jobPost.findUnique({ where: { id } });
+    const existing = await this.prisma.jobPost.findUnique({ where: { id: dto.id } });
     
-    if (!existing || existing.creatorId !== creatorId) {
+    if (!existing || existing.creatorId !== dto.creatorId) {
       return { success: false, message: 'Unauthorized or not found', code: 'UNAUTHORIZED', data: null, error: null };
     }
 
     const updated = await this.prisma.jobPost.update({
-      where: { id },
+      where: { id: dto.id },
       data: { ...dto },
       include: { category: true, subCategory: true }
     });
@@ -354,113 +357,180 @@ async updateJobPost(
 // ======================================================
 // CLOSE JOB POST (Soft Delete)
 // ======================================================
-async closeJobPost(id: string, creatorId: string): Promise<BaseResponseDto<boolean>> {
-  await this.prisma.jobPost.updateMany({
-    where: { id, creatorId },
-    data: { status: 'CLOSED' }
-  });
-  return { success: true, message: 'Job closed', code: 'CLOSED', data: true, error: null };
+async closeJobPost(dto: CloseJobPostRequestDto): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
+  try {
+    // 1. Verify ownership and current status
+    const job = await this.prisma.jobPost.findUnique({
+      where: { id: dto.id },
+      select: { creatorId: true, status: true }
+    });
+
+    if (!job || job.creatorId !== dto.creatorId) {
+      return { 
+        success: false, 
+        message: 'Job post not found or unauthorized', 
+        code: 'NOT_FOUND_OR_UNAUTHORIZED', 
+        data: null 
+      };
+    }
+
+    // 2. Perform the update to get the updated object back
+    const updatedJob = await this.prisma.jobPost.update({
+      where: { id: dto.id },
+      data: { 
+        status: 'CLOSED',
+        // updatedAt is handled by Prisma automatically
+      }
+    });
+
+    return { 
+      success: true, 
+      message: 'Job closed successfully', 
+      code: 'CLOSED', 
+      data: {
+        id: updatedJob.id,
+        status: updatedJob.status,
+        isClosed: updatedJob.status === 'CLOSED',
+        closedAt: updatedJob.updatedAt
+      }
+    };
+  } catch (error) {
+    return { 
+      success: false, 
+      message: 'An error occurred while closing the job', 
+      code: 'ERROR', 
+      data: null 
+    };
+  }
 }
 
-async applyToJobPost(dto: {
-  jobPostId: string;
-  applicantId: string;
-  employerId: string;
-  applicationType: string;
-  expectedPay?: number;
-  pitch?: string;
-  // Referral Fields
-  referrerName?: string;
-  referrerPhone?: string;
-  referrerEmail?: string;
-  referrerRelationship?: string;
-  attachments?: { type: string; fileUrl: string; fileName: string }[];
-}): Promise<BaseResponseDto<any>> {
-  return this.prisma.$transaction(async (tx) => {
-    
-    // 1. Determine if this is a referral based on provided details
-    const isReferral = !!(dto.referrerName || dto.referrerPhone);
+async applyToJobPost(
+  jobPostId: string, 
+  applicantId: string, 
+  dto: CreateJobApplicationDto
+): Promise<BaseResponseDto<JobApplicationResponseDto>> {
+  
+  this.logger.log(`[Job Application] Applicant ${applicantId} applying to ${jobPostId}`);
 
-    // 2. Create the Main Application
+  return this.prisma.$transaction(async (tx) => {
+    // 1. Fetch Job Post (Using explicit jobPostId)
+    const jobPost = await tx.jobPost.findUnique({
+      where: { id: jobPostId }, // Use parameter instead of dto
+      select: { 
+        status: true, 
+        requiresDocuments: true, 
+        requiresEquipment: true, 
+        allowReferrals: true,
+        creatorId: true,
+        jobType: true,
+        isNegotiable: true, 
+        payAmount: true     
+      }
+    });
+
+    if (!jobPost) return { success: false, message: 'Job post not found', code: 'NOT_FOUND' };
+    if (jobPost.status !== 'ACTIVE') return { success: false, message: 'This post is no longer accepting applications', code: 'JOB_CLOSED' };
+
+    // 2. VALIDATION GATES
+    
+    // A. Equipment Check (Handshake)
+    if (jobPost.requiresEquipment && !dto.hasRequiredEquipment) {
+      return { 
+        success: false, 
+        message: 'You must confirm that you have the required equipment for this job.', 
+        code: 'EQUIPMENT_REQUIRED' 
+      };
+    }
+
+    // B. Pay Validation (Enforcing Negotiability Rules)
+    if (!jobPost.isNegotiable && jobPost.payAmount && dto.expectedPay) {
+      if (dto.expectedPay > jobPost.payAmount) {
+        return {
+          success: false,
+          message: `This job has a fixed budget of ${jobPost.payAmount}. Your expected pay is too high.`,
+          code: 'PAY_EXCEEDS_BUDGET'
+        };
+      }
+    }
+
+    // C. Documents Check
+    if (jobPost.requiresDocuments && (!dto.attachments || dto.attachments.length === 0)) {
+      return { 
+        success: false, 
+        message: 'This job requires supporting documents.', 
+        code: 'DOCUMENTS_REQUIRED' 
+      };
+    }
+
+    // 3. DUPLICATION CHECK
+    const existing = await tx.jobPostApplication.findUnique({
+      where: { jobPostId_applicantId: { jobPostId, applicantId } }, // Clean shorthand
+    });
+    if (existing) return { success: false, message: 'You have already applied.', code: 'ALREADY_APPLIED' };
+
+    // 4. SECTOR-SPECIFIC DEFAULTS
+    const isInformal = jobPost.jobType === 'INFORMAL';
+    const defaultAvailability = isInformal ? new Date() : null; 
+
+    // 5. CREATE APPLICATION
     const application = await tx.jobPostApplication.create({
       data: {
-        jobPostId: dto.jobPostId,
-        applicantId: dto.applicantId,
-        employerId: dto.employerId,
-        applicationType: dto.applicationType,
+        jobPostId: jobPostId,
+        applicantId: applicantId,
+        employerId: jobPost.creatorId, // From DB (Secure)
+        
+        hasRequiredEquipment: dto.hasRequiredEquipment || false,
         expectedPay: dto.expectedPay,
+        availabilityDate: dto.availabilityDate ? new Date(dto.availabilityDate) : defaultAvailability,
+        availabilityNotes: dto.availabilityNotes,
+
+        // Referral details (saved only if job allows)
+        referrerName: jobPost.allowReferrals ? dto.referrerName : null,
+        referrerPhone: jobPost.allowReferrals ? dto.referrerPhone : null,
+        referrerEmail: jobPost.allowReferrals ? dto.referrerEmail : null,
+        referrerRelationship: jobPost.allowReferrals ? dto.referrerRelationship : null,
+        
         status: 'PENDING',
-        // New Referral Mapping
-        isReferral: isReferral,
-        referrerName: dto.referrerName,
-        referrerPhone: dto.referrerPhone,
-        referrerEmail: dto.referrerEmail,
-        referrerRelationship: dto.referrerRelationship,
       },
     });
 
-    // 3. Create Attachments (including the pitch)
-    const attachmentData = [];
-    
-    if (dto.pitch) {
-      attachmentData.push({
-        applicationId: application.id,
-        type: 'COVER_LETTER',
-        contentText: dto.pitch,
-        isPrimary: true,
-      });
-    }
-
+    // 6. Handle Attachments
     if (dto.attachments && dto.attachments.length > 0) {
-      dto.attachments.forEach(attr => {
-        attachmentData.push({
+      await tx.jobApplicationAttachment.createMany({ 
+        data: dto.attachments.map(attr => ({
           applicationId: application.id,
           type: attr.type,
-          fileUrl: attr.fileUrl,
-          fileName: attr.fileName,
-        });
+          fileUrl: attr.fileUrl || '', 
+          fileName: attr.fileName || null,
+          contentText: attr.contentText || null,
+          isPrimary: attr.isPrimary || false,
+        }))
       });
     }
 
-    if (attachmentData.length > 0) {
-      await tx.jobApplicationAttachment.createMany({ 
-        data: attachmentData 
-      });
-    }
-
-    // 4. Initialize Status History (Crucial for your Audit Trail)
+    // 7. Audit Trail
     await tx.jobApplicationStatusHistory.create({
       data: {
         applicationId: application.id,
         oldStatus: 'NONE',
         newStatus: 'PENDING',
-        changedBy: dto.applicantId,
-        reason: isReferral 
-          ? `Application submitted with referral from ${dto.referrerName}` 
-          : 'Standard application submission',
+        changedBy: applicantId,
+        reason: 'Initial application submission',
       },
+    });
+
+    // 8. Final Fetch
+    const completeApplication = await tx.jobPostApplication.findUnique({
+      where: { id: application.id },
+      include: { attachments: true, statusHistory: true },
     });
 
     return { 
       success: true, 
       message: 'Application submitted successfully', 
-      data: application 
+      data: completeApplication as unknown as JobApplicationResponseDto, 
+      code: 'SUCCESS' 
     };
-  });
-}
-
-    // 3. Initialize Status History
-    await tx.jobApplicationStatusHistory.create({
-      data: {
-        applicationId: application.id,
-        oldStatus: 'NONE',
-        newStatus: 'PENDING',
-        changedBy: dto.applicantId,
-        reason: 'Initial submission',
-      },
-    });
-
-    return { success: true, message: 'Application submitted successfully', code: 'CREATED' };
   });
 }
 
