@@ -65,3 +65,7 @@ export * from './lib/JobApplicationResponseDto.dto';
 export * from './lib/UpdateJobPostRequestDto.dto';
 export * from './lib/CloseJobPostRequestDto.dto';
 export * from './lib/CloseJobPostResponseDto.dto';
+export * from './lib/housing.requests.dto';
+export * from './lib/housing.responses.dto';
+
+

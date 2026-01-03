@@ -109,7 +109,7 @@ export class JobsController {
   // APPLY TO JOB POST
   // ===========================================================
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('GeneralUser')
+  @Roles('GeneralUser', 'ModuleManager', 'SystemAdmin', 'SuperAdmin')
   @Version('1')
   @Post('jobs/:id/apply')
   @ApiOperation({ summary: 'Apply for a job post' })
@@ -127,6 +127,7 @@ export class JobsController {
     return this.jobsService.applyToJobPost(id, userId, dto);
   }
 
+  
   // ===========================================================
   // GET JOB BY ID (Public)
   // ===========================================================

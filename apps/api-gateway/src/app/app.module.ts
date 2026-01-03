@@ -10,6 +10,7 @@ import { PlansGatewayModule } from '../modules/PlansGatewayModule/plans-gateway.
 import { JobsModule } from '../modules/JobsGatewayModule/jobs.module';
 import { SubscriptionsGatewayModule } from '../modules/SubscriptionsGatewayModule/subscriptions-gateway.module';
 import { ProvidersGatewayModule } from '../modules/ProviderGatewayModule/providers-gateway.module';
+import { HousingGatewayModule } from '../modules/HousingGatewayModule/housing-gateway.module';
 
 
 @Module({
@@ -18,7 +19,6 @@ import { ProvidersGatewayModule } from '../modules/ProviderGatewayModule/provide
       isGlobal: true, // Make config available across all modules
       envFilePath: [`.env.${process.env.NODE || 'dev'}`], // Loads .env.dev or .env.prod depending on NODE_ENV
     }),
-
     AuthModule,
     UserModule,
     RbacGatewayModule,
@@ -26,8 +26,9 @@ import { ProvidersGatewayModule } from '../modules/ProviderGatewayModule/provide
     JobsModule,
     PlansGatewayModule,
     SubscriptionsGatewayModule,
-    ProvidersGatewayModule
-    
+    ProvidersGatewayModule,
+    HousingGatewayModule
+  
   ],
   controllers: [AppController],
   providers: [AppService],

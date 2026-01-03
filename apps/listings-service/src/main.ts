@@ -7,7 +7,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app/app.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { LISTINGS_CATEGORIES_PROTO_PATH, LISTINGS_JOBS_PROTO_PATH, PROVIDERS_PRICING_PROTO_PATH, PROVIDERS_PROTO_PATH} from '@pivota-api/protos';
+import { LISTINGS_CATEGORIES_PROTO_PATH, LISTINGS_HOUSING_PROTO_PATH, LISTINGS_JOBS_PROTO_PATH, PROVIDERS_PRICING_PROTO_PATH, PROVIDERS_PROTO_PATH} from '@pivota-api/protos';
 import * as dotenv from 'dotenv'
 
 // Load environment
@@ -56,6 +56,15 @@ async function bootstrap() {
       url: process.env.PROVIDERS_PRICING_GRPC_URL || '0.0.0.0:50059', // separate port
     },
   }); 
+
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.GRPC,
+    options: {
+      package: 'housing',
+      protoPath: LISTINGS_HOUSING_PROTO_PATH,
+      url: process.env.HOUSING_GRPC_URL || '0.0.0.0:50060'
+    }
+  })
 
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.KAFKA,

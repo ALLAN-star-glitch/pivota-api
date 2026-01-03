@@ -5,6 +5,7 @@ import {ConfigModule} from '@nestjs/config';
 import { JobsModule } from '../business-modules/jobs-module/jobs/jobs.module';
 import { ProvidersModule } from '../business-modules/providers-module/providers.module';
 import { CategoriesModule } from '../business-modules/categories/categories.module';
+import { HousingModule } from '../business-modules/housing-module/housing.module';
 
 @Module({
   imports: [
@@ -14,8 +15,8 @@ import { CategoriesModule } from '../business-modules/categories/categories.modu
     }),
     CategoriesModule,
     JobsModule,
-    ProvidersModule
-    
+    ProvidersModule,
+    HousingModule
   ],
 
   controllers: [AppController],

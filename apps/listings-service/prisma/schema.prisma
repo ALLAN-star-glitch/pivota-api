@@ -32,6 +32,7 @@ model Category {
   serviceOfferings ServiceOffering[]
   supportPrograms  SupportProgram[]
   providerPricingRules ProviderPricingRule[]
+  houseListings    HouseListing[]
 
   hasSubcategories Boolean @default(false)
   hasParent        Boolean @default(false)
@@ -322,7 +323,13 @@ model HouseListing {
   
   title        String
   description  String
-  type         String   // e.g., "APARTMENT", "HOUSE", "STUDIO"
+
+  // UPDATED: Use Category relation instead of a raw String type
+  categoryId   String
+  category     Category @relation(fields: [categoryId], references: [id])
+  
+  // Optional: Keep 'type' if you want a secondary label, 
+  // but Category is now the source of truth for the pillar
   listingType  String   // e.g., "RENTAL", "SALE"
   
   price        Float
@@ -347,10 +354,8 @@ model HouseListing {
   images       HouseImage[]
   viewings     HouseViewing[]
 
-
-  @@index([locationCity])
-  @@index([type])        // e.g. "APARTMENT"
-  @@index([listingType]) // e.g. "RENTAL"
+  @@index([locationCity, listingType, categoryId])
+  @@index([ownerId])
   @@index([status])
 }
 
@@ -360,6 +365,8 @@ model HouseImage {
   isMain       Boolean      @default(false)
   houseId      String
   house        HouseListing @relation(fields: [houseId], references: [id])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt  
 }
 
 model HouseViewing {
@@ -368,7 +375,11 @@ model HouseViewing {
   house        HouseListing @relation(fields: [houseId], references: [id])
   viewerId     String       // User ID
   viewingDate  DateTime
+  notes        String?
+  bookedById   String       // User ID who booked the viewing
   status       String       @default("SCHEDULED")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt  
 }
 
 /// =====================================================================
