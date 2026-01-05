@@ -17,7 +17,7 @@ export class SubscriptionController {
   // Plan Subscription
   // ---------------------------------------
   @GrpcMethod('SubscriptionService', 'SubscribeToPlan')
-  upsertSubscription(
+  subscribeToPlan(
     data: SubscribeToPlanDto,
   ): Promise<BaseResponseDto<SubscriptionResponseDto>> {
     this.logger.debug(`RequestDto: ${JSON.stringify(data)}`);
@@ -26,16 +26,16 @@ export class SubscriptionController {
   
 
   // ---------------------------------------
-  // GET SUBSCRIPTION BY USER UUID
+  // GET SUBSCRIPTION BY Account UUID
   // ---------------------------------------
-  @GrpcMethod('SubscriptionService', 'GetSubscriptionsByUser')
+  @GrpcMethod('SubscriptionService', 'GetSubscriptionsByAccount')
   getSubscriptionsByUser(
-    data: { userUuid: string },
+    data: { accountUuid: string },
   ): Promise<BaseResponseDto<SubscriptionResponseDto[]>> {
 
-    this.logger.debug(`GetSubscriptionByUser Request: ${JSON.stringify(data)}`);
+    this.logger.debug(`GetSubscriptionByAccount Request: ${JSON.stringify(data)}`);
 
-    const response = this.subscriptionService.getSubscriptionsByUser(data.userUuid);
+    const response = this.subscriptionService.getSubscriptionsByAccount(data.accountUuid);
 
     this.logger.debug(`Subscription Response <Controller>: ${JSON.stringify(response)}`)
 

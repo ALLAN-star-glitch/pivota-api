@@ -67,5 +67,7 @@ export * from './lib/CloseJobPostRequestDto.dto';
 export * from './lib/CloseJobPostResponseDto.dto';
 export * from './lib/housing.requests.dto';
 export * from './lib/housing.responses.dto';
+export * from './lib/social-support-request.dto';
+export * from './lib/social-support-response.dto';
 
 

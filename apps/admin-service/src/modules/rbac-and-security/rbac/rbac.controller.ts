@@ -18,11 +18,6 @@ import {
 } from '@pivota-api/dtos';
 
 
-
-type UserAssignDefaultRoleEvent = {
-  userUuid: string;
-  defaultRoleType: string;
-};
 @Controller()
 export class RbacController {
   logger: Logger = new Logger(RbacController.name)  ;

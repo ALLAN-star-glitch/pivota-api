@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { SubscriptionService } from './services/subscription.service';
 import { SubscriptionController } from './controllers/subscription.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { USER_PROTO_PATH } from '@pivota-api/protos';
+import { PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { PrismaModule } from '../../prisma/prisma.module';
 
 @Module({
@@ -11,11 +11,11 @@ import { PrismaModule } from '../../prisma/prisma.module';
           ClientsModule.register([
             // GRPC client for User Service
             {
-              name: 'USER_PACKAGE',
+              name: 'PROFILE_PACKAGE',
               transport: Transport.GRPC,
               options: {
-                package: 'user', 
-                protoPath: USER_PROTO_PATH,
+                package: 'profile', 
+                protoPath: PROFILE_PROTO_PATH,
                 url: process.env.USER_GRPC_URL || 'localhost:50052',
               },
             },

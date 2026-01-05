@@ -227,10 +227,6 @@ model JobApplicationStatusHistory {
   @@index([newStatus])
 }
 
-
-/// =====================================================================
-///                        PROVIDER SERVICE LISTINGS
-/// =====================================================================
 /// =====================================================================
 ///                        PROVIDER SERVICE OFFERINGS (The Storefront)
 /// =====================================================================
@@ -385,44 +381,83 @@ model HouseViewing {
 /// =====================================================================
 ///                       SOCIAL SUPPORT (Impact-Driven)
 /// =====================================================================
+/// =====================================================================
+///                       SOCIAL SUPPORT (Impact-Driven)
+/// =====================================================================
 model SupportProgram {
   id           String   @id @default(cuid())
   externalId   String   @default(uuid())
-  organizationId String // Reference to NGO/Gov/Partner UUID
-  
+
+  // Ownership Logic: organizationId is the 'Brand/Entity', creatorId is the 'Author'
+  organizationId String // NGO / Gov / Partner UUID (or User UUID for Individuals)
+  creatorId      String // User UUID who actually created the listing
+
+  // NEW: Trust & Verification (Directly from Concept Note)
+  // INDIVIDUAL | ORGANIZATION | GOVERNMENT | RELIGIOUS_BODY
+  providerType       String   @default("ORGANIZATION")
+  isProviderVerified Boolean  @default(false) // For the "Verified" badge on listings
+
   title        String
   description  String
-  
-  // CHANGED: Linked to the Unified Category system
-  categoryId   String
-  category     Category @relation(fields: [categoryId], references: [id])
-  
-  // Programs are often eligibility-based
+
+  categoryId    String
+  category      Category @relation(fields: [categoryId], references: [id])
+
+  // Marketplace Discovery: Helps users filter by the kind of help they need
+  // e.g., "GRANT", "TRAINING", "FOOD_STAMP", "MEDICAL_COVER", "MENTORSHIP"
+  supportType   String   @default("GENERAL")
+
+  /// =====================================================
+  /// ELIGIBILITY & TARGETING
+  /// =====================================================
   eligibilityCriteria String?
-  targetAudience      String[] @default([]) // e.g., ["Youth", "Refugees", "Widows"]
+  targetAudience      String[] @default([]) 
   
-  // Logistics
-  isFree       Boolean  @default(true)
-  baseCost     Float?   @default(0) // For subsidized programs
+  // Handshake Requirements: Pre-conditions for the application
+  requiresIdVerification Boolean @default(false)
+  requiresIncomeProof    Boolean @default(false)
+
+  /// =====================================================
+  /// COST & ACCESS
+  /// =====================================================
+  isFree     Boolean @default(true)
+  baseCost   Float?  @default(0) // Used if there is a nominal fee for training/services
+  currency   String  @default("KES")
+
+  /// =====================================================
+  /// CAPACITY & IMPACT TRACKING
+  /// =====================================================
+  maxBeneficiaries     Int?   // Total slots available
+  currentBeneficiaries Int    @default(0) // Tracks how many people were approved
   
+  // Financial Tracking: For sponsored social impact listings
+  totalBudget          Float? // Initial donor/sponsor funding
+  remainingBudget      Float? // Decremented as benefits are issued
+
   locationCity         String?
   locationNeighborhood String?
-  
-  // Capacity tracking
-  maxBeneficiaries     Int?     // Limit on intake
-  currentBeneficiaries Int      @default(0)
-  
-  status       String   @default("ACTIVE") // ACTIVE, FULL, COMPLETED
-  expiresAt    DateTime?
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 
+  /// =====================================================
+  /// LIFECYCLE & METRICS
+  /// =====================================================
+  status    String    @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED | ARCHIVED
+  isActive  Boolean   @default(true)
+  expiresAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // RELATIONS
   applications SupportApplication[]
+  milestones   SupportMilestone[]
 
-  @@index([locationCity])
+  // INDEXES: Optimized for the "Unified Listing Platform" search requirements
   @@index([categoryId])
+  @@index([locationCity])
   @@index([status])
+  @@index([organizationId])
+  @@index([providerType])
+  @@index([supportType])
 }
 
 model SupportApplication {
@@ -432,18 +467,139 @@ model SupportApplication {
   programId    String
   program      SupportProgram @relation(fields: [programId], references: [id])
   
-  beneficiaryId String        // The User applying for help
+  beneficiaryId String        // The User UUID from Identity Service
   
-  // Better status tracking for NGO workflows
-  status       String         @default("PENDING") // PENDING, UNDER_REVIEW, APPROVED, REJECTED
+  // Status Management: Matches the lifecycle of an "Opportunity"
+  status       String         @default("PENDING") 
+  // PENDING | UNDER_REVIEW | WAITLISTED | APPROVED | REJECTED | DISBURSED | CLOSED
   
-  userNotes    String?        // Statement of need from the user
-  adminNotes   String?        // Internal notes for the NGO
+  /// =====================================================
+  /// BENEFICIARY SUBMISSION
+  /// =====================================================
+  statementOfNeed String?     
+  requestedValue  Float?      // What the user is asking for (if variable)
   
+  /// =====================================================
+  /// REVIEW & AUDIT (The NGO/Provider side)
+  /// =====================================================
+  internalNGOAudit String?    // Private internal notes (Transparency for Admin)
+  rejectionReason  String?
+  reviewedById     String?    // UUID of the staff member who made the decision
+
+  // Final Award Logic: The result of the "Connection"
+  awardedAmount   Float?      // Final approved financial grant
+  awardedQuantity Int?        // Final approved physical units (e.g., 2 bags of maize)
+  awardedDetails  String?     // Description (e.g., "Full Scholarship covering Tuition")
+
+  /// =====================================================
+  /// HANDSHAKE & COMPLIANCE
+  /// =====================================================
+  // Tracks if the user has completed the program's requirements (e.g., ID check)
+  isComplianceVerified Boolean @default(false)
+  
+  // Handshake: Beneficiary acknowledges the terms of the support
+  termsAccepted        Boolean @default(false)
+  acceptedAt           DateTime?
+
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
+  // RELATIONS
+  benefits      SupportBenefit[] 
+  documents     SupportDocument[]
+
+  // CONSTRAINTS
+  @@unique([programId, beneficiaryId]) // Prevents "Double Dipping" (Anti-fraud)
   @@index([beneficiaryId])
+  @@index([status])
+  @@index([programId])
+}
+
+model SupportBenefit {
+  id              String             @id @default(cuid())
+  applicationId   String
+  application     SupportApplication @relation(fields: [applicationId], references: [id])
+  
+  // Snapshotted from the program to ensure historical audit integrity
+  // e.g., "CASH_TRANSFER", "FOOD_BASKET", "VOUCHER", "EQUIPMENT"
+  type            String             
+  
+  value           Float?             // Monetary value (e.g., 5000.00)
+  quantity        Int?               @default(1) // For physical goods
+  description     String?            // e.g., "January 2026 Stipend" or "Solar Lamp Kit"
+  
+  // Lifecycle: PENDING -> DISBURSED -> RECEIVED -> FAILED
+  status          String             @default("PENDING") 
+  
+  /// =====================================================
+  /// THE HANDSHAKE (Anti-Fraud Pillar)
+  /// =====================================================
+  confirmedByUser Boolean            @default(false)     // True only when beneficiary clicks "Confirm"
+  confirmedAt     DateTime?
+  
+  // Optional: Reference to an external transaction (M-Pesa ID, Bank Ref, etc.)
+  // This supports your Phase 2 Financial Integration goals.
+  externalReference String?          @unique 
+
+  /// =====================================================
+  /// LOGISTICS & AUDIT
+  /// =====================================================
+  disbursedAt     DateTime?          // When the NGO sent the benefit
+  receivedAt      DateTime?          // When the user actually got it
+  
+  createdAt       DateTime           @default(now())
+
+  @@index([applicationId])
+  @@index([status])
+  @@index([externalReference])
+}
+
+model SupportDocument {
+  id              String             @id @default(cuid())
+  externalId      String             @default(uuid())
+  
+  applicationId   String
+  application     SupportApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  
+  // Document Classification
+  // ID_CARD | INCOME_PROOF | DISABILITY_CERT | RESIDENCY_LETTER | ACADEMIC_CERT
+  documentType    String             
+  
+  fileUrl         String             // S3/Cloud Storage link
+  fileName        String?            // Original name (e.g., "ID_Front.jpg")
+  
+  // Verification Workflow
+  isVerified      Boolean            @default(false)
+  verifiedAt      DateTime?
+  verifiedBy      String?            // Admin/Staff User UUID who approved the doc
+  rejectionReason String?            // If verification fails, why?
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([applicationId])
+  @@index([documentType])
+}
+
+model SupportMilestone {
+  id          String         @id @default(cuid())
+  externalId  String         @default(uuid())
+  
+  programId   String
+  program     SupportProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  
+  title       String         // e.g., "Orientation Meeting" or "Week 1 Skills Assessment"
+  description String?
+  
+  // Sequencing
+  order       Int            @default(0)
+  
+  // Required for Completion?
+  isRequired  Boolean        @default(true)
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
   @@index([programId])
 }
 

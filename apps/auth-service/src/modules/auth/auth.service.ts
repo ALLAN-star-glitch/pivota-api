@@ -52,13 +52,13 @@ export class AuthService implements OnModuleInit {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
-    @Inject('USER_GRPC') private readonly grpcClient: ClientGrpc,
-    @Inject('USER_RMQ') private readonly rabbitClient: ClientProxy,
+    @Inject('PROFILE_GRPC') private readonly grpcClient: ClientGrpc,
+    @Inject('PROFILE_RMQ') private readonly rabbitClient: ClientProxy,
     @Inject('RBAC_PACKAGE') private readonly rbacClient: ClientGrpc,
   ) {}
 
   onModuleInit() {
-    this.userGrpcService = this.grpcClient.getService<UserServiceGrpc>('UserService');
+    this.userGrpcService = this.grpcClient.getService<UserServiceGrpc>('ProfileService');
     this.logger.log('AuthService initialized (gRPC)');
     this.rbacGrpcService = this.rbacClient.getService<RbacServiceGrpc>('RbacService');
     this.logger.log('RbacService initialized (gRPC)');
@@ -66,7 +66,7 @@ export class AuthService implements OnModuleInit {
 
   private getGrpcService(): UserServiceGrpc {
     if (!this.userGrpcService) {
-      this.userGrpcService = this.grpcClient.getService<UserServiceGrpc>('UserService');
+      this.userGrpcService = this.grpcClient.getService<UserServiceGrpc>('ProfileService');
     }
     return this.userGrpcService;
   }
@@ -115,7 +115,7 @@ export class AuthService implements OnModuleInit {
 
   // ------------------ Generate Tokens ------------------
   async generateTokens(
-    user: { uuid: string; email: string },
+    user: { uuid: string; email: string, accountId: string },
     clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
   ): Promise<{ accessToken: string; refreshToken: string }> {
     const rbacService = this.getRbacGrpcService();
@@ -124,7 +124,12 @@ export class AuthService implements OnModuleInit {
     );
     const roleType = userRoleResponse?.role?.roleType ?? 'GeneralUser';
 
-    const payload: JwtPayload = { userUuid: user.uuid, email: user.email, role: roleType };
+    const payload: JwtPayload = {
+      userUuid: user.uuid,
+      email: user.email,
+       role: roleType,
+      accountId: user.accountId
+    };
     const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
     const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
 
@@ -244,7 +249,11 @@ export class AuthService implements OnModuleInit {
 
 
       const { accessToken, refreshToken } = await this.generateTokens(
-        { uuid: user.uuid, email: user.email },
+        {
+          uuid: user.uuid,
+          email: user.email,
+          accountId: user.accountId
+        },
         clientInfo,
       );
 
@@ -300,7 +309,7 @@ export class AuthService implements OnModuleInit {
       const validSession = sessions.find((s) => bcrypt.compareSync(refreshToken, s.hashedToken));
       if (!validSession) throw new UnauthorizedException('Invalid or revoked refresh token');
 
-      const tokens = await this.generateTokens({ uuid: user.user.uuid, email: user.user.email });
+      const tokens = await this.generateTokens({ uuid: user.user.uuid, email: user.user.email, accountId: user.user.accountId });
 
       const tokens_success = {
 
@@ -343,12 +352,14 @@ export class AuthService implements OnModuleInit {
 
 
   // ------------------ Dev Token Generation ------------------
-async generateDevToken(userUuid: string, email: string, role: string): Promise<BaseResponseDto<TokenPairDto>> {
+async generateDevToken(userUuid: string, email: string, role: string, accountId: string): Promise<BaseResponseDto<TokenPairDto>> {
   try {
     const payload: JwtPayload = { 
       userUuid, 
       email, 
-      role 
+      role,
+      accountId
+
     };
 
     const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '1h' });

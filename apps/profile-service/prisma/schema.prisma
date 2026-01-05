@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- GLOBAL WRAPPER (Billing & Subscription Anchor) ---
+model Account {
+  id                 String   @id @default(cuid())
+  uuid               String   @unique @default(uuid()) // Links to Auth DB Identity
+  accountCode        String   @unique 
+  
+  // Distinguishes the billing entity type
+  type               String   @default("INDIVIDUAL") // INDIVIDUAL | ORGANIZATION
+
+  // Bi-directional links to User and Organization  
+  userId            String?
+  organizationId    String?
+  
+  // Relations
+  user               User?
+  organization       Organization?
+  
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// --- ENTITY LAYER (The Organization as an Independent Identity) ---
+model Organization {
+  id                 String   @id @default(cuid())
+  uuid               String   @unique @default(uuid()) // Links to Auth DB Org credentials
+  orgCode            String   @unique
+  name               String   
+
+  // Every Organization onboarded acts as its own Admin entity
+  defaultRole        String   @default("BUSINESS_ADMIN")
+  
+  // Every organization has its own billing account
+  accountId          String   @unique
+  account            Account  @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
+  
+  profile            OrganizationProfile?
+  completion         ProfileCompletion?
+  members            OrganizationMember[]
+  
+  verificationStatus String   @default("PENDING")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// --- IDENTITY LAYER (Individual Humans) ---
+model User {
+  id                String   @id @default(cuid())
+  uuid              String   @unique @default(uuid()) // Links to Auth DB Human credentials
+  userCode          String   @unique
+  email             String   @unique
+  phone             String?  @unique
+  firstName         String?
+  lastName          String?
+
+  // Ensures every individual human has a default role
+  defaultRole       String   @default("GeneralUser")
+  
+  // Every human has their own billing account (for personal subscriptions)
+  accountId         String   @unique
+  account           Account  @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
+  
+  roleName          String
+
+  profile           UserProfile?
+  completion        ProfileCompletion?
+  memberships       OrganizationMember[]
+  
+  status            String   @default("ACTIVE")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// --- PROFILE COMPLETION TRACKER ---
+model ProfileCompletion {
+  id                String   @id @default(cuid())
+  
+  // One-to-one link to User
+  userUuid          String?  @unique
+  user              User?    @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+  
+  // One-to-one link to Organization
+  organizationUuid  String?  @unique
+  organization      Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+
+  percentage        Int      @default(0) // 0 to 100
+  missingFields     String[] // e.g., ["KRA_PIN", "BIO", "NATIONAL_ID"]
+  isComplete        Boolean  @default(false)
+  
+  updatedAt         DateTime @updatedAt
+}
+
+// --- ACCESS LAYER (Connecting Humans to Organizations) ---
+model OrganizationMember {
+  id               String       @id @default(cuid())
+  userUuid         String
+  user             User         @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+  organizationUuid String
+  organization     Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  
+  // Role within the team (e.g., ContentManager, FinanceAdmin)
+  roleName         String       
+  
+  @@unique([userUuid, organizationUuid])
+}
+
+// --- PROFILE LAYER (Metadata) ---
+model UserProfile {
+  id                String   @id @default(cuid())
+  userUuid          String   @unique
+  user              User     @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+  
+  bio               String?
+  gender            String?
+  dateOfBirth       DateTime?
+  nationalId        String?  @unique
+  
+  county            String?
+  subCounty         String?
+  ward              String?
+  
+  verifications     VerificationDocument[]
+}
+
+model OrganizationProfile {
+  id                String   @id @default(cuid())
+  organizationUuid  String   @unique
+  organization      Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  
+  about             String?
+  website           String?
+  officialEmail     String?
+  officialPhone     String?
+  registrationNo    String?  @unique 
+  kraPin            String?  @unique
+  
+  physicalAddress   String?
+  headquarters      String?
+  
+  verifications     VerificationDocument[]
+}
+
+// --- VERIFICATION LAYER (Compliance) ---
+model VerificationDocument {
+  id                String   @id @default(cuid())
+  
+  userProfileId     String?
+  userProfile       UserProfile? @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  
+  orgProfileId      String?
+  orgProfile        OrganizationProfile? @relation(fields: [orgProfileId], references: [id], onDelete: Cascade)
+  
+  documentType      String   
+  documentUrl       String   
+  status            String   @default("PENDING") 
+  rejectionReason   String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}

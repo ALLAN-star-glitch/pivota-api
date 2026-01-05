@@ -166,13 +166,13 @@ model UserModule {
 // ===================== SUBSCRIPTIONS =====================
 model Subscription {
   id           String   @id @default(cuid())
-  userUuid     String               // Reference to user in user service
+  accountUuid  String?               // <-- changed from userUuid to accountUuid
   planId       String?              // FK to Plan, optional for listing-specific subscriptions
   type         String   @default("PLAN") // PLAN, LISTING, LISTING_GROUP, MODULE
-  entityIds    String[]             // can have 0, 1 or more entity IDs ... for PLAN type, ofcourse the entity entry is zero
+  entityIds    String[]             // can have 0, 1 or more entity IDs ... for PLAN type, zero entries
   totalAmount  Float?               // total cost of subscription (for groups or modules)
   currency     String?              // currency code, e.g., KES, USD
-  status       String   @default("ACTIVE") // ACTIVE, PARTIALLY_PAID, CANCELLED, EXPIRED
+  status       String   @default("ACTIVE") // ACTIVE, PENDING, PARTIALLY_PAID, CANCELLED, EXPIRED
   billingCycle String?
   amountPaid   Float?               // optional partial payment
   startedAt    DateTime @default(now())
@@ -184,8 +184,6 @@ model Subscription {
 
   plan         Plan?    @relation(fields: [planId], references: [id])
 }
-
-
 
 
 // ===================== PLAN SUBSCRIPTIONS =====================

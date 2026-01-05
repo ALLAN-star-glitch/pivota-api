@@ -67,18 +67,18 @@ export class HousingService implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('USER_GRPC') private readonly userService: ClientGrpc,
+    @Inject('PROFILE_GRPC') private readonly userService: ClientGrpc,
   ) {}
 
   onModuleInit() {
     this.userGrpcService =
-      this.userService.getService<UserServiceGrpc>('UserService');
+      this.userService.getService<UserServiceGrpc>('ProfileService');
   }
 
   private getGrpcService(): UserServiceGrpc {
     if (!this.userGrpcService) {
       this.userGrpcService =
-        this.userService.getService<UserServiceGrpc>('UserService');
+        this.userService.getService<UserServiceGrpc>('ProfileService');
     }
     return this.userGrpcService;
   }

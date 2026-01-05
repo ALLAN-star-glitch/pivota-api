@@ -5,7 +5,7 @@ import { PricingService } from './services/pricing.service';
 import { PlanService } from './services/plan.service';
 import { PlanFeatureService } from './services/plan-feature.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { USER_PROTO_PATH } from '@pivota-api/protos';
+import { PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { PrismaModule } from '../../prisma/prisma.module';
 
 @Module({
@@ -14,11 +14,11 @@ import { PrismaModule } from '../../prisma/prisma.module';
       ClientsModule.register([
         // GRPC client for User Service
         {
-          name: 'USER_PACKAGE',
+          name: 'PROFILE_PACKAGE',
           transport: Transport.GRPC,
           options: {
-            package: 'user', // must match proto definition
-            protoPath: USER_PROTO_PATH,
+            package: 'profile', // must match proto definition
+            protoPath: PROFILE_PROTO_PATH,
             url: process.env.USER_GRPC_URL || 'localhost:50052',
           },
         },

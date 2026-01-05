@@ -41,7 +41,7 @@ export class ProvidersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pricingService: ProvidersPricingService, // Inject the new service
-    @Inject('USER_GRPC') private readonly userService: ClientGrpc,
+    @Inject('PROFILE_GRPC') private readonly userService: ClientGrpc,
   ) {}
 
   private parseAvailability(availabilityStr: string | null): DayAvailabilityDto[] | undefined {

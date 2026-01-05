@@ -3,18 +3,18 @@ import { JobsService } from './jobs.service';
 import { JobsController } from './jobs.controller';
 import { PrismaModule } from '../../../prisma/prisma.module';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { USER_PROTO_PATH } from '@pivota-api/protos';
+import { PROFILE_PROTO_PATH } from '@pivota-api/protos';
 
 @Module({
   imports: [
     PrismaModule,
     ClientsModule.register([
             {
-                name: 'USER_GRPC',
+                name: 'PROFILE_GRPC',
                 transport: Transport.GRPC,
                 options: {
-                    package: 'user',
-                    protoPath: USER_PROTO_PATH,
+                    package: 'profile',
+                    protoPath: PROFILE_PROTO_PATH,
                     url: process.env.LISTINGS_GRPC_URL || 'localhost:50052'
                 }
             },

@@ -2,15 +2,15 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
-import { UserModule } from '../modules/UserProfileGatewayModule/user.module';
-import { CategoriesModule } from '../modules/CategoriesGatewayModule/categories.module';
-import { RbacGatewayModule } from '../modules/RbacGatewayModule/rbac-gateway.module';
-import { AuthModule } from '../modules/AuthGatewayModule/auth.module';
-import { PlansGatewayModule } from '../modules/PlansGatewayModule/plans-gateway.module';
-import { JobsModule } from '../modules/JobsGatewayModule/jobs.module';
-import { SubscriptionsGatewayModule } from '../modules/SubscriptionsGatewayModule/subscriptions-gateway.module';
-import { ProvidersGatewayModule } from '../modules/ProviderGatewayModule/providers-gateway.module';
-import { HousingGatewayModule } from '../modules/HousingGatewayModule/housing-gateway.module';
+import { UserModule } from '../gateway-modules/UserProfileGatewayModule/user.module';
+import { CategoriesModule } from '../gateway-modules/CategoriesGatewayModule/categories.module';
+import { RbacGatewayModule } from '../gateway-modules/RbacGatewayModule/rbac-gateway.module';
+import { AuthModule } from '../gateway-modules/AuthGatewayModule/auth.module';
+import { PlansGatewayModule } from '../gateway-modules/PlansGatewayModule/plans-gateway.module';
+import { JobsModule } from '../gateway-modules/JobsGatewayModule/jobs.module';
+import { SubscriptionsGatewayModule } from '../gateway-modules/SubscriptionsGatewayModule/subscriptions-gateway.module';
+import { ProvidersGatewayModule } from '../gateway-modules/ProviderGatewayModule/providers-gateway.module';
+import { HousingGatewayModule } from '../gateway-modules/HousingGatewayModule/housing-gateway.module';
 
 
 @Module({

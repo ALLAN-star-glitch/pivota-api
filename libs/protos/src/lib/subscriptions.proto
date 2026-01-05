@@ -7,7 +7,7 @@ package subscriptions;
 // ===================================================
 service SubscriptionService {
   rpc SubscribeToPlan (SubscribeToPlanRequest) returns (BaseSubscriptionResponse);
-  rpc GetSubscriptionsByUser (GetSubscriptionByUserRequest) returns (BaseSubscriptionsResponse);
+  rpc GetSubscriptionsByAccount (GetSubscriptionByAccountRequest) returns (BaseSubscriptionsResponse);
 }
 
 // ===================================================
@@ -30,7 +30,6 @@ message BaseSubscriptionResponse {
   ErrorPayload error = 5;
 }
 
-
 message BaseSubscriptionsResponse {
   bool success = 1;
   string code = 2;
@@ -44,47 +43,38 @@ message BaseSubscriptionsResponse {
 // ===================================================
 message Subscription {
   string id = 1;
-  string userUuid = 2;
+  string subscriberUuid = 2;         
   string plan = 3;
   string type = 4;
   repeated string entityIds = 5; 
   string status = 6;
   string billingCycle = 7;
-  int32  totalAmount = 8;     
-  int32  amountPaid = 9;
+  float totalAmount = 8;     
+  float amountPaid = 9;
   string currency = 10;
   string startedAt = 11;
   string expiresAt = 12;    
   string createdAt = 13;
   string updatedAt = 14;
-  UserBasic user = 15; 
-}
-
-message UserBasic {
-  string id = 1;
-  string fullName = 2;
-  string email = 3;
 }
 
 // ===================================================
 // REQUEST MESSAGES
 // ===================================================
 message SubscribeToPlanRequest {
-  string subscriberUuid = 1;
-  string planId = 2;          // Free, Starter, Professional, Enterprise
-  repeated string entityIds = 3; // <-- updated to array
-  string billingCycle = 4;      // monthly, quarterly, halfYearly, annually
-  string status = 5;            // ACTIVE, INACTIVE, etc.
-  int32  amountPaid = 6;
+  string subscriberUuid = 1;           
+  string planId = 2;                  // Free, Starter, Professional, Enterprise
+  repeated string entityIds = 3;      // array of listing 
+  string billingCycle = 4;            // monthly, quarterly, halfYearly, annually
+  string status = 5;                  // ACTIVE, PARTIALLY_PAID, CANCELLED, EXPIRED
+  float amountPaid = 6;
   string currency = 7;
-  string totalAmount = 8;
-  string type = 9;
-
-  
+  float totalAmount = 8;
+  string type = 9;                    // PLAN, LISTING_GROUP, MODULE, PAYGO
 }
 
-message GetSubscriptionByUserRequest {
-  string userUuid = 1;
+message GetSubscriptionByAccountRequest {
+  string accountUuid = 1;             // <-- changed from accountUuid
 }
 
 // ===================================================

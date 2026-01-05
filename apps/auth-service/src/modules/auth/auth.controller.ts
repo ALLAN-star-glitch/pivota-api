@@ -96,11 +96,12 @@ async validateUser(data: { email: string; password: string }): Promise<UserRespo
 async handleGenerateDevTokenGrpc(data: { 
   userUuid: string; 
   email: string; 
-  role: string 
+  role: string ;
+  accountId: string;
 }): Promise<BaseResponseDto<TokenPairDto>> { // Use 'any' or define a specific interface matching your proto
   this.logger.warn(`🛠️ gRPC Bypass: Generating tokens for ${data.email} as ${data.role}`);
 
-  const response = await this.authService.generateDevToken(data.userUuid, data.email, data.role); 
+  const response = await this.authService.generateDevToken(data.userUuid, data.email, data.role, data.accountId); 
   this.logger.debug(`Dev token generation response: ${JSON.stringify(response)}`);
 
   return response;    

@@ -46,17 +46,17 @@ export class RbacService implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('USER_PACKAGE') private readonly grpcClient: ClientGrpc,
+    @Inject('PROFILE_PACKAGE') private readonly grpcClient: ClientGrpc,
   ) {}
 
   // ------------------ Module Init ------------------
   onModuleInit() {
-    this.userServiceGrpc = this.grpcClient.getService<UserServiceGrpc>('UserService');
+    this.userServiceGrpc = this.grpcClient.getService<UserServiceGrpc>('ProfileService');
   }
 
   private getGrpcService(): UserServiceGrpc {
     if (!this.userServiceGrpc) {
-      this.userServiceGrpc = this.grpcClient.getService<UserServiceGrpc>('UserService');
+      this.userServiceGrpc = this.grpcClient.getService<UserServiceGrpc>('ProfileService');
     }
     return this.userServiceGrpc;
   }

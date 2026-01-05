@@ -11,6 +11,9 @@ export class UserResponseDto {
   @ApiProperty({ example: 'PIV-000123', description: 'Custom external identifier for the user' })
   userCode!: string;
 
+  @ApiProperty({example: '353tete-4675sfgdhjkhjgh', description: 'The account uuid of the user'})
+  accountId!: string;
+
   @ApiProperty({ example: 'john.doe@example.com', description: 'User email address' })
   email!: string;
 

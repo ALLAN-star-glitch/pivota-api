@@ -1,20 +1,13 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { ClientGrpc } from '@nestjs/microservices';
-import { firstValueFrom, Observable } from 'rxjs';
+
+
 import {
   BaseResponseDto,
   SubscribeToPlanDto,
-  SubscriptionResponseDto,
-  UserResponseDto,
+  SubscriptionResponseDto
 } from '@pivota-api/dtos';
-import { BaseUserResponseGrpc } from '@pivota-api/interfaces';
 
-interface UserServiceGrpc {
-  getUserProfileByUuid(
-    data: { userUuid: string }
-  ): Observable<BaseUserResponseGrpc<UserResponseDto>>;
-}
 
 type PlanPrices = {
   monthly?: number;
@@ -34,14 +27,11 @@ type PlanFeatures = {
 @Injectable()
 export class SubscriptionService {
   private readonly logger = new Logger(SubscriptionService.name);
-  private userGrpcService: UserServiceGrpc;
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('USER_PACKAGE') private readonly grpcClient: ClientGrpc
   ) {
-    this.userGrpcService =
-      this.grpcClient.getService<UserServiceGrpc>('UserService');
+    
   }
 
 
@@ -56,29 +46,8 @@ async subscribeToPlan(
     // 1. Validate user
     // ---------------------------------------
 
-    this.logger.debug(`Subscribing user ${dto.subscriberUuid} to plan ${dto.planId}`);  
-    const userResponse = await firstValueFrom(
-      this.userGrpcService.getUserProfileByUuid({
-        userUuid: dto.subscriberUuid,
-      })
-    );
-
-    if (!userResponse?.success || !userResponse.user) {
-      const response = {
-        success: false,
-        message: 'User not found',
-        code: 'USER_NOT_FOUND',
-        subscriptions: null,
-        error: { message: 'Cannot subscribe non-existent user' },
-      };
-      return response;
-    }
-
-    this.logger.debug(`User ${dto.subscriberUuid} found, proceeding with subscription`);  
-
-
-    const user = userResponse.user;
-
+    this.logger.debug(`Subscribing Account ${dto.subscriberUuid} to plan ${dto.planId}`);  
+   
     // ---------------------------------------
     // 2. Validate plan
     // ---------------------------------------
@@ -104,10 +73,10 @@ async subscribeToPlan(
     // 3. Check if this is a recurring plan
     //    (Only one active recurring plan allowed per user)
     // ---------------------------------------
-    this.logger.debug(`Checking for active plans for user ${dto.subscriberUuid}`);  
+    this.logger.debug(`Checking for active plans for account ${dto.subscriberUuid}`);  
     const activePlan = await this.prisma.subscription.findFirst({
       where: {
-        userUuid: dto.subscriberUuid,
+        accountUuid: dto.subscriberUuid,
         type: 'PLAN',
         status: 'ACTIVE',
       },
@@ -116,14 +85,14 @@ async subscribeToPlan(
     if (activePlan) {
       const response = {
         success: false,
-        message: 'User already has an active recurring plan',
+        message: 'Account already has an active recurring plan',
         code: 'PLAN_ALREADY_ACTIVE',
         subscriptions: null,
         error: { message: 'Cannot subscribe to multiple active recurring plans' },
       };
       return response;
     }
-    this.logger.debug(`No active recurring plans found for user ${dto.subscriberUuid}`);  
+    this.logger.debug(`No active recurring plans found for account ${dto.subscriberUuid}`);  
 
     // ---------------------------------------
     // 4. Pricing & expiry
@@ -143,7 +112,7 @@ async subscribeToPlan(
       expiresAt = new Date();
       expiresAt.setMonth(expiresAt.getMonth() + 1);
 
-      this.logger.debug(`Plan is free. Setting totalAmount is: ${totalAmount} and amountPaid to ${amountPaid},billing cycle: ${billingCycle} for user ${dto.subscriberUuid}`);
+      this.logger.debug(`Plan is free. Setting totalAmount is: ${totalAmount} and amountPaid to ${amountPaid},billing cycle: ${billingCycle} for account ${dto.subscriberUuid}`);
 
       this.logger.debug(`Free plan activated for user ${dto.subscriberUuid}, expires at ${expiresAt}`);
 
@@ -220,7 +189,7 @@ async subscribeToPlan(
     // ---------------------------------------
     const subscription = await this.prisma.subscription.create({
       data: {
-        userUuid: dto.subscriberUuid,
+        accountUuid: dto.subscriberUuid,
         planId: plan.id,
         type: 'PLAN',
         entityIds: dto.entityIds ?? [],
@@ -235,7 +204,7 @@ async subscribeToPlan(
       include: { plan: true },
     });
 
-    this.logger.debug(`Subscription created with ID: ${subscription.id} for user ${dto.subscriberUuid}`);
+    this.logger.debug(`Subscription created with ID: ${subscription.id} for account ${dto.subscriberUuid}`);
 
     // ---------------------------------------
     // 6. Build response
@@ -247,7 +216,7 @@ async subscribeToPlan(
       subscription: 
         {
           id: subscription.id,
-          userUuid: subscription.userUuid,
+          subscriberUuid: subscription.accountUuid,
           plan: subscription.plan.name,
           type: subscription.type,
           entityIds: subscription.entityIds ?? [],
@@ -260,11 +229,6 @@ async subscribeToPlan(
           expiresAt: subscription.expiresAt.toISOString(),
           createdAt: subscription.createdAt.toISOString(),
           updatedAt: subscription.updatedAt.toISOString(),
-          user: {
-            id: user.uuid,
-            fullName: `${user.firstName} ${user.lastName}`.trim(),
-            email: user.email ?? undefined,
-          },
       },
 
       error: null,
@@ -286,78 +250,68 @@ async subscribeToPlan(
 
 
   // ---------------------------------------------------------
-  // GET ACTIVE SUBSCRIPTIONS BY USER UUID
-  // ---------------------------------------------------------
-  async getSubscriptionsByUser(
-    userUuid: string
-  ): Promise<BaseResponseDto<SubscriptionResponseDto[]>> {
-    try {
-      const subscriptions = await this.prisma.subscription.findMany({
-        where: { userUuid, status: 'ACTIVE' },
-        include: { plan: true },
-      });
+// GET ACTIVE SUBSCRIPTIONS BY ACCOUNT UUID
+// ---------------------------------------------------------
+async getSubscriptionsByAccount(
+  accountUuid: string
+): Promise<BaseResponseDto<SubscriptionResponseDto[]>> {
+  try {
+    const subscriptions = await this.prisma.subscription.findMany({
+      where: { accountUuid, status: 'ACTIVE' },
+      include: { plan: true },
+    });
 
-      if (!subscriptions || subscriptions.length === 0) {
-        const success = {
-          success: false,
-          message: 'No active subscriptions found',
-          code: 'SUBSCRIPTIONS_NOT_FOUND',
-          subscription: null,
-          error: { message: 'No active subscriptions for this user' },
-        };
-        return success;
-      }
-
-      const userGrpcResponse = await firstValueFrom(
-        this.userGrpcService.getUserProfileByUuid({ userUuid })
-      );
-      const user = userGrpcResponse?.user;
-
+    if (!subscriptions || subscriptions.length === 0) {
       const success = {
-        success: true,
-        message: 'Subscriptions retrieved successfully',
-        code: 'FETCHED',
-        subscriptions: subscriptions.map((sub) => ({
-          id: sub.id,
-          userUuid: sub.userUuid,
-          plan: sub.plan ? sub.plan.name : undefined,
-          type: sub.type,
-          entityIds: sub.entityIds ?? [],
-          status: sub.status,
-          billingCycle: sub.billingCycle,
-          totalAmount: sub.totalAmount ?? undefined,
-          amountPaid: sub.amountPaid ?? undefined,
-          currency: sub.currency ?? 'KES',
-          startedAt: sub.startedAt.toISOString(),
-          expiresAt: sub.expiresAt.toISOString(),
-          createdAt: sub.createdAt.toISOString(),
-          updatedAt: sub.updatedAt.toISOString(),
-          user: user 
-            ? {
-                id: user.uuid,
-                fullName: `${user.firstName} ${user.lastName}`.trim(),
-                email: user.email ?? undefined,
-              }
-            : undefined,
-        })),
-        error: null,
+        success: false,
+        message: 'No active subscriptions found',
+        code: 'SUBSCRIPTIONS_NOT_FOUND',
+        subscriptions: null,
+        error: { message: 'No active subscriptions for this account' },
       };
       return success;
-    } catch (err: unknown) {
-      const error = err as Error;
-      this.logger.error(
-        `Failed to fetch subscriptions: ${error.message}`,
-        error.stack
-      );
-
-      const response = {
-        success: false,
-        message: 'Failed to fetch subscriptions',
-        code: 'FETCH_SUBSCRIPTIONS_FAILED',
-        subscriptions: null,
-        error: { message: error.message, details: error.stack },
-      };
-      return response;
     }
+
+
+
+    const success =  {
+      success: true,
+      message: 'Subscriptions retrieved successfully',
+      code: 'FETCHED',
+      subscriptions: subscriptions.map((sub) => ({
+        id: sub.id,
+        accountUuid: sub.accountUuid,
+        plan: sub.plan ? sub.plan.name : undefined,
+        type: sub.type,
+        entityIds: sub.entityIds ?? [],
+        status: sub.status,
+        billingCycle: sub.billingCycle,
+        totalAmount: sub.totalAmount ?? undefined,
+        amountPaid: sub.amountPaid ?? undefined,
+        currency: sub.currency ?? 'KES',
+        startedAt: sub.startedAt.toISOString(),
+        expiresAt: sub.expiresAt.toISOString(),
+        createdAt: sub.createdAt.toISOString(),
+        updatedAt: sub.updatedAt.toISOString(),
+      })),
+      error: null,
+    };
+    return success;
+
+
+  } catch (err: unknown) {
+    const error = err as Error;
+    this.logger.error(`Failed to fetch subscriptions: ${error.message}`, error.stack);
+
+    const failure =  {
+      success: false,
+      message: 'Failed to fetch subscriptions',
+      code: 'FETCH_SUBSCRIPTIONS_FAILED',
+      subscriptions: null,
+      error: { message: error.message, details: error.stack },
+    };
+    return failure;
   }
+}
+
 }

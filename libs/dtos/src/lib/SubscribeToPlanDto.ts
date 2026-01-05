@@ -14,7 +14,7 @@ export class SubscribeToPlanDto {
   // Subscriber
   // ======================
   @ApiProperty({
-    description: 'UUID of the subscriber',
+    description: 'UUID of the account subscribing to the plan',
     example: 'cuid_xyz123',
   })
   @IsUUID()
@@ -46,12 +46,12 @@ export class SubscribeToPlanDto {
   // ======================
   @ApiPropertyOptional({
     description: 'Subscription status',
-    enum: ['ACTIVE', 'PARTIALLY_PAID', 'CANCELLED', 'EXPIRED'],
+    enum: ['ACTIVE', 'PENDING', 'PARTIALLY_PAID', 'CANCELLED', 'EXPIRED'],
     default: 'ACTIVE',
   })
-  @IsIn(['ACTIVE', 'PARTIALLY_PAID', 'CANCELLED', 'EXPIRED'])
+  @IsIn(['ACTIVE', 'PENDING', 'PARTIALLY_PAID', 'CANCELLED', 'EXPIRED'])
   @IsOptional()
-  status?: 'ACTIVE' |'PENDING'| 'PARTIALLY_PAID' | 'CANCELLED' | 'EXPIRED' = 'ACTIVE';
+  status?: 'ACTIVE' | 'PENDING' | 'PARTIALLY_PAID' | 'CANCELLED' | 'EXPIRED' = 'ACTIVE';
 
   @ApiPropertyOptional({
     description: 'Billing cycle',
@@ -60,11 +60,7 @@ export class SubscribeToPlanDto {
   })
   @IsIn(['monthly', 'quarterly', 'halfYearly', 'annually'])
   @IsOptional()
-  billingCycle?:
-    | 'monthly'
-    | 'quarterly'
-    | 'halfYearly'
-    | 'annually' = 'monthly';
+  billingCycle?: 'monthly' | 'quarterly' | 'halfYearly' | 'annually' = 'monthly';
 
   // ======================
   // Payments

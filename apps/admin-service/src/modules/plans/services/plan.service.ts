@@ -27,16 +27,16 @@ export class PlanService implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('USER_PACKAGE') private readonly userService: ClientGrpc,
+    @Inject('PROFILE_PACKAGE') private readonly userService: ClientGrpc,
   ) {}
 
   onModuleInit() {
-    this.userGrpcService = this.userService.getService<UserServiceGrpc>('UserService');
+    this.userGrpcService = this.userService.getService<UserServiceGrpc>('ProfileService');
   }
 
   private getGrpcService(): UserServiceGrpc {
     if (!this.userGrpcService) {
-      this.userGrpcService = this.userService.getService<UserServiceGrpc>('UserService');
+      this.userGrpcService = this.userService.getService<UserServiceGrpc>('ProfileService');
     }
     return this.userGrpcService;
   }

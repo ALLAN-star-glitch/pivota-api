@@ -1,5 +1,4 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { UserBasicDto } from './BasicUserDto.dto';
 
 
 export class SubscriptionResponseDto {
@@ -10,10 +9,10 @@ export class SubscriptionResponseDto {
   id!: string;
 
   @ApiProperty({
-    description: 'UUID of the user this subscription belongs to',
-    example: 'user_cuid_abc456',
+    description: 'UUID of the account this subscription belongs to',
+    example: 'acc_cuid_abc456',
   })
-  userUuid!: string;
+  subscriberUuid!: string;
 
   // ======================
   // Subscription Type
@@ -111,13 +110,4 @@ export class SubscriptionResponseDto {
     example: '2025-12-14T10:00:00.000Z',
   })
   updatedAt!: Date;
-
-  // ======================
-  // Relations
-  // ======================
-  @ApiPropertyOptional({
-    type: UserBasicDto,
-    description: 'Basic information of the user',
-  })
-  user?: UserBasicDto;
 }
