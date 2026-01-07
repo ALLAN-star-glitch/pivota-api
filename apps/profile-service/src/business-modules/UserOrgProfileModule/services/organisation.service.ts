@@ -1,0 +1,372 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import {
+  Injectable,
+  Logger,
+  Inject,
+  OnModuleInit,
+} from '@nestjs/common';
+import { PrismaService } from '../../../prisma/prisma.service';
+import {
+  BaseResponseDto,
+  RoleIdResponse,
+  RoleIdRequestDto,
+  SubscribeToPlanDto,
+  SubscriptionResponseDto,
+  PlanIdRequestDto,
+  PlanIdDtoResponse,
+  AssignRoleToUserRequestDto,
+  UserRoleResponseDto,
+  AddOrgMemberRequestDto,
+  CreateOrganisationRequestDto,
+  OrganizationAdminResponseDto,
+  OrganizationProfileResponseDto,
+  ProfileCompletionResponseDto,
+  AccountBaseDto,
+} from '@pivota-api/dtos';
+import { ClientProxy, RpcException, ClientGrpc } from '@nestjs/microservices';
+import { randomUUID } from 'crypto';
+import { lastValueFrom, Observable, catchError, timeout, throwError } from 'rxjs';
+import { BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
+
+interface AdminUserEntity {
+  uuid: string;
+  userCode: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  roleName: string;
+  phone: string;
+}
+
+interface OrganizationProfileAggregate {
+  organization: {
+    id: string | number;
+    uuid: string;
+    orgCode: string;
+    name: string;
+    verificationStatus: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  account: {
+    uuid: string;
+    accountCode: string;
+    type: string;
+  };
+  admin: AdminUserEntity;
+  completion?: {
+    percentage: number;
+    missingFields: string[];
+    isComplete: boolean;
+  };
+}
+
+/* ======================================================
+   gRPC INTERFACES
+====================================================== */
+
+interface RbacServiceGrpc {
+  GetRoleIdByType(
+    data: RoleIdRequestDto,
+  ): Observable<BaseResponseDto<RoleIdResponse>>;
+
+  AssignRoleToUser(
+    data: AssignRoleToUserRequestDto,
+  ): Observable<BaseResponseDto<UserRoleResponseDto>>;
+}
+
+interface SubscriptionServiceGrpc {
+  SubscribeToPlan(
+    data: SubscribeToPlanDto,
+  ): Observable<BaseSubscriptionResponseGrpc<SubscriptionResponseDto>>;
+}
+
+interface PlansServiceGrpc {
+  GetPlanIdBySlug(
+    data: PlanIdRequestDto,
+  ): Observable<BaseResponseDto<PlanIdDtoResponse>>;
+}
+
+/* ======================================================
+   SERVICE
+====================================================== */
+@Injectable()
+export class OrganisationService  {
+  private readonly logger = new Logger(OrganisationService.name);
+
+  private rbacGrpc!: RbacServiceGrpc;
+  private subscriptionGrpc!: SubscriptionServiceGrpc;
+  private plansGrpc!: PlansServiceGrpc;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject('USER_RMQ') private readonly rabbitClient: ClientProxy,
+    @Inject('RBAC_PACKAGE') private readonly rbacClient: ClientGrpc,
+    @Inject('SUBSCRIPTIONS_PACKAGE')
+    private readonly subscriptionsClient: ClientGrpc,
+    @Inject('PLANS_PACKAGE') private readonly plansClient: ClientGrpc,
+  ) {
+     this.rbacGrpc = this.rbacClient.getService<RbacServiceGrpc>('RbacService');
+    this.subscriptionGrpc =
+      this.subscriptionsClient.getService<SubscriptionServiceGrpc>(
+        'SubscriptionService',
+      );
+    this.plansGrpc =
+      this.plansClient.getService<PlansServiceGrpc>('PlanService');
+  }
+
+  /* ======================================================
+     CREATE ORGANIZATION PROFILE
+  ====================================================== */
+  /* ======================================================
+     CREATE ORGANIZATION PROFILE (FULL UPDATE)
+  ====================================================== */
+  async createOrganizationProfile(
+    data: CreateOrganisationRequestDto,
+  ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
+    this.logger.log(`Initiating organization creation: ${data.name} (Admin: ${data.email})`);
+
+    const orgUuid = randomUUID();
+    const accountUuid = randomUUID();
+    const orgCode = `ORG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+
+    try {
+      /* ---------- 1. PRE-CHECKS: RBAC ROLE & PLAN ---------- */
+      // We fetch these first to ensure the external dependencies are met before hitting our DB
+      const [roleRes, planRes] = await Promise.all([
+        lastValueFrom(
+          this.rbacGrpc.GetRoleIdByType({ roleType: 'BusinessSystemAdmin' }).pipe(
+            timeout(5000),
+            catchError(() => throwError(() => new Error('RBAC service unavailable')))
+          ),
+        ),
+        lastValueFrom(
+          this.plansGrpc.GetPlanIdBySlug({ slug: 'free' }).pipe(
+            timeout(5000),
+            catchError(() => throwError(() => new Error('Plans service unavailable')))
+          ),
+        ),
+      ]);
+
+      if (!roleRes?.data?.roleId) throw new Error('System Role: BusinessSystemAdmin not found');
+      if (!planRes?.data?.planId) throw new Error('Default Plan: free not found');
+
+      /* ---------- 2. ATOMIC DATABASE TRANSACTION ---------- */
+      const result = await this.prisma.$transaction(async (tx) => {
+        // A. Create the Root Billing Account
+        const account = await tx.account.create({
+          data: {
+            uuid: accountUuid,
+            accountCode: `ACC-${orgCode}`,
+            type: 'ORGANIZATION',
+          },
+        });
+
+        // B. Create Organization with Nested Profile (Business Metadata)
+        const organization = await tx.organization.create({
+          data: {
+            uuid: orgUuid,
+            orgCode,
+            name: data.name,
+            accountId: account.uuid,
+            profile: {
+              create: {
+                officialEmail: data.officialEmail,
+                officialPhone: data.officialPhone,
+                physicalAddress: data.physicalAddress,
+              },
+            },
+          },
+        });
+
+        // C. Create the Admin User (Human Identity)
+        const admin = await tx.user.create({
+          data: {
+            uuid: data.adminUserUuid, // Link to Auth Service identity
+            userCode: `USR-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+            email: data.email,
+            phone: data.phone,
+            firstName: data.adminFirstName,
+            lastName: data.adminLastName,
+            roleName: 'Business System Admin',
+            accountId: account.uuid,
+          },
+        });
+
+        // D. Create Membership (Access Control Link)
+        await tx.organizationMember.create({
+          data: {
+            organizationUuid: organization.uuid,
+            userUuid: admin.uuid,
+            roleName: 'Business System Admin',
+          },
+        });
+
+        // E. Initialize Tracker (40% completion because basic info is provided)
+        const completion = await tx.profileCompletion.create({
+          data: {
+            organizationUuid: organization.uuid,
+            percentage: 40, 
+            missingFields: { set: ['KRA_PIN', 'REGISTRATION_NO', 'WEBSITE'] },
+            isComplete: false,
+          },
+        });
+
+        return { account, organization, admin, completion };
+      });
+
+      /* ---------- 3. POST-DB: EXTERNAL SYNCING ---------- */
+      // Assign the role in the RBAC service
+      await lastValueFrom(
+        this.rbacGrpc.AssignRoleToUser({
+          userUuid: data.adminUserUuid,
+          roleId: roleRes.data.roleId,
+        }),
+      );
+
+      // Initialize the subscription on the billing account
+      const subRes = await lastValueFrom(
+        this.subscriptionGrpc.SubscribeToPlan({
+          subscriberUuid: accountUuid,
+          planId: planRes.data.planId,
+        }),
+      );
+
+      if (!subRes.success) {
+        this.logger.warn(`Subscription failed for ${accountUuid}: ${subRes.message}`);
+        // Note: We don't necessarily roll back the whole DB transaction here 
+        // as the profile is created, but we should flag it for manual retry.
+      }
+
+      /* ---------- 4. ASYNC EVENTS ---------- */
+      this.rabbitClient.emit('organization.onboarded', {
+        organizationUuid: orgUuid,
+        adminUuid: data.adminUserUuid,
+        name: data.name,
+        accountUuid,
+        officialEmail: data.officialEmail,
+      });
+
+      /* ---------- 5. MAPPED RESPONSE ---------- */
+      return {
+        success: true,
+        code: 'CREATED',
+        message: 'Organization and Admin Profile created successfully',
+        data: this.mapToOrganizationProfileDto(result),
+        error: null,
+      };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      this.logger.error(`Organization signup failed: ${err.message}`, err.stack);
+      
+      // Standardize the error for the Gateway/Consumer
+      throw new RpcException({
+        code: err.code === 'P2002' ? 6 : 13, // 6 = Already Exists, 13 = Internal
+        message: err.message || 'Failed to complete organization onboarding',
+      });
+    }
+  }
+
+  /* ======================================================
+     GET ORGANIZATION
+  ====================================================== */
+  async getOrganisationByUuid(
+    orgUuid: string,
+  ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
+    const org = await this.prisma.organization.findUnique({
+      where: { uuid: orgUuid },
+      include: {
+        account: true,
+        completion: true,
+        members: {
+          where: { roleName: 'BUSINESS_ADMIN' },
+          include: { user: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!org)
+      throw new RpcException({ code: 5, message: 'Organisation not found' });
+
+    const adminUser = org.members[0]?.user;
+
+    return {
+      success: true,
+      code: 'OK',
+      message: 'Organisation retrieved',
+      data: {
+        id: org.id,
+        uuid: org.uuid,
+        orgCode: org.orgCode,
+        name: org.name,
+        verificationStatus: org.verificationStatus,
+        account: org.account as AccountBaseDto,
+        admin: adminUser ? this.mapToAdminDto(adminUser) : null,
+        completion: org.completion as ProfileCompletionResponseDto,
+        createdAt: org.createdAt,
+        updatedAt: org.updatedAt,
+      },
+    };
+  }
+
+  /* ======================================================
+     ADD MEMBER
+  ====================================================== */
+  async addMember(
+    data: AddOrgMemberRequestDto,
+  ): Promise<BaseResponseDto<null>> {
+    await this.prisma.organizationMember.create({
+      data: {
+        organizationUuid: data.orgUuid,
+        userUuid: data.userUuid,
+        roleName: data.role,
+      },
+    });
+
+    return {
+      success: true,
+      code: 'CREATED',
+      message: 'Member added',
+      data: null,
+      error: null,
+    };
+  }
+
+  /* ======================================================
+     MAPPERS
+  ====================================================== */
+  private mapToOrganizationProfileDto(
+    data: OrganizationProfileAggregate,
+  ): OrganizationProfileResponseDto {
+    return {
+      id: String(data.organization.id),
+      uuid: data.organization.uuid,
+      orgCode: data.organization.orgCode,
+      name: data.organization.name,
+      verificationStatus: data.organization.verificationStatus,
+      account: {
+        uuid: data.account.uuid,
+        accountCode: data.account.accountCode,
+        type: data.account.type,
+      },
+      admin: this.mapToAdminDto(data.admin),
+      completion: data.completion,
+      createdAt: data.organization.createdAt,
+      updatedAt: data.organization.updatedAt,
+    };
+  }
+
+  private mapToAdminDto(user: AdminUserEntity): OrganizationAdminResponseDto {
+    return {
+  uuid: user.uuid,
+  userCode: user.userCode,
+  email: user.email,
+  firstName: user.firstName ?? '',
+  lastName: user.lastName ?? '',
+  roleName: user.roleName,
+  phone: user.phone,
+};
+  }
+}

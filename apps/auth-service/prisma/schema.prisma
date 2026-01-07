@@ -9,9 +9,22 @@ datasource db {
 
 model Credential {
   id            Int       @id @default(autoincrement())
-  userUuid      String    @unique        // links to user service UUID
+  userUuid      String    @unique        // The unique anchor across all services
+  
+  // --- Core Identity ---
+  email         String    @unique        // Necessary here for fast lookup during Login
   passwordHash  String
+
+  // --- Security State ---
   mfaSecret     String?
+  mfaEnabled    Boolean   @default(false)
+  
+  // --- Account Protection ---
+  failedAttempts Int      @default(0)
+  lockoutExpires DateTime?
+  lastLoginAt    DateTime?
+  
+  // --- Audit & Lifecycle ---
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }

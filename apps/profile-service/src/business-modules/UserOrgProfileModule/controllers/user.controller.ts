@@ -1,11 +1,12 @@
 import { Controller, Logger } from '@nestjs/common';
 import { GrpcMethod, Payload } from '@nestjs/microservices';
-import { UserService } from './user.service';
+import { UserService } from '../services/user.service';
 import {
   BaseResponseDto,
+  CreateUserRequestDto,
   GetUserByUserUuidDto,
-  SignupRequestDto,
   UserResponseDto,
+  UserSignupDataDto,
 } from '@pivota-api/dtos';
 
 @Controller()
@@ -17,10 +18,10 @@ export class UserController {
   /** ------------------ Signup / Create User Profile ------------------ */
   @GrpcMethod('ProfileService', 'CreateUserProfile')
 async handleCreateUserProfile(
-  @Payload() signupDto: SignupRequestDto,
-): Promise<BaseResponseDto<UserResponseDto>> {
-  this.logger.log(`Creating user profile for email: ${signupDto.email}`);
-  return this.userService.createUserProfile(signupDto);
+  @Payload() dto: CreateUserRequestDto,
+): Promise<BaseResponseDto<UserSignupDataDto>> {
+  this.logger.log(`Creating user profile for email: ${dto.email}`);
+  return this.userService.createUserProfile(dto);
 }
 
 

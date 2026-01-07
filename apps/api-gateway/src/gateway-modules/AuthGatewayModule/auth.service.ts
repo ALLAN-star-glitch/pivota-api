@@ -3,31 +3,48 @@ import { Response } from 'express';
 import { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom, Observable } from 'rxjs';
 import {
-  SignupRequestDto,
   LoginRequestDto,
   LoginResponseDto,
   SessionDto,
   UserResponseDto,
   BaseResponseDto,
-  SignupResponseDto,
   GetUserByUserUuidDto,
   TokenPairDto,
+  OrganisationSignupRequestDto,
+  OrganizationSignupDataDto,
+  UserSignupRequestDto,
+  UserSignupDataDto,
 } from '@pivota-api/dtos';
 import { BaseUserResponseGrpc, BaseRefreshTokenResponseGrpc, JwtPayload, BaseTokenResponseGrpc } from '@pivota-api/interfaces';
 
 
 // Updated gRPC interface for AuthService (signup now returns BaseResponse)
 interface AuthServiceGrpc {
-  signup(data: SignupRequestDto): Observable<BaseUserResponseGrpc<SignupResponseDto>>;
+  signup(
+    data: UserSignupRequestDto
+  ): Observable<BaseResponseDto<UserSignupDataDto>>;
+
+  organisationSignup(
+    data: OrganisationSignupRequestDto
+  ): Observable<BaseResponseDto<OrganizationSignupDataDto>>;
+
   login(
-    data: LoginRequestDto & { clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'> }
+    data: LoginRequestDto & {
+      clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>;
+    }
   ): Observable<BaseUserResponseGrpc<LoginResponseDto>>;
-  refresh(data: { refreshToken: string }): Observable<BaseRefreshTokenResponseGrpc<TokenPairDto>>;
+
+  refresh(
+    data: { refreshToken: string }
+  ): Observable<BaseRefreshTokenResponseGrpc<TokenPairDto>>;
+
   logout(data: { userId: string }): Observable<{ message: string }>;
 
-
-  generateDevToken(data: { userUuid: string; email: string; role: string }): Observable<BaseTokenResponseGrpc<TokenPairDto>>;
+  generateDevToken(
+    data: { userUuid: string; email: string; role: string }
+  ): Observable<BaseTokenResponseGrpc<TokenPairDto>>;
 }
+
 
 
 
@@ -50,7 +67,7 @@ export class AuthService {
   }
 
   /** ------------------ Signup ------------------ */
-  async signup(signupDto: SignupRequestDto): Promise<BaseResponseDto<SignupResponseDto>> {
+  async signup(signupDto: UserSignupRequestDto): Promise<BaseResponseDto<UserSignupDataDto>> {
   this.logger.log('📩 Calling Auth microservice for signup');
   
 
@@ -59,10 +76,39 @@ export class AuthService {
 
   // Map gRPC response to BaseResponseDto
   if (grcpSignupResponse.success) {
-    return BaseResponseDto.ok(grcpSignupResponse.user, grcpSignupResponse.message, grcpSignupResponse.code);
+    return BaseResponseDto.ok(grcpSignupResponse.data, grcpSignupResponse.message, grcpSignupResponse.code);
   }
 
   return BaseResponseDto.fail(grcpSignupResponse.message, grcpSignupResponse.code);
+}
+
+/** ------------------ Organisation Signup ------------------ */
+async signupOrganisation(
+  dto: OrganisationSignupRequestDto,
+): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
+
+  this.logger.log('📩 Calling Auth microservice for organisation signup');
+
+  const grpcResponse = await firstValueFrom(
+    this.authGrpc.organisationSignup(dto),
+  );
+
+  this.logger.debug(
+    `📩 Received response from Auth microservice: ${JSON.stringify(grpcResponse)}`,
+  );
+
+  if (grpcResponse.success) {
+    return BaseResponseDto.ok(
+      grpcResponse.data,
+      grpcResponse.message,
+      grpcResponse.code,
+    );
+  }
+
+  return BaseResponseDto.fail(
+    grpcResponse.message,
+    grpcResponse.code,
+  );
 }
 
 

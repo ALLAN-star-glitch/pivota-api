@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
-import { UserController } from './user.controller';
-import { UserService } from './user.service';
+import { UserController } from './controllers/user.controller';
+import { UserService } from './services/user.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { PLANS_PROTO_PATH, RBAC_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH } from '@pivota-api/protos';
+import { OrganisationService } from './services/organisation.service';
+import { OrganisationController } from './controllers/organisation.controller';
 
 
 
@@ -70,13 +72,14 @@ import { PLANS_PROTO_PATH, RBAC_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH } from '@pi
       }
     ]),
   ],
-  controllers: [UserController],
+  controllers: [UserController, OrganisationController],
   providers: [
     UserService,
+    OrganisationService
    
   ],
 })
-export class UserModule {
+export class UserOrgModule {
   constructor() {
     console.log(
       '✅ UserModule initialized with:',

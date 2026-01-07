@@ -69,5 +69,9 @@ export * from './lib/housing.requests.dto';
 export * from './lib/housing.responses.dto';
 export * from './lib/social-support-request.dto';
 export * from './lib/social-support-response.dto';
+export * from './lib/organisation-response.dto';
+export * from './lib/organisation-request.dto';
+export * from './lib/user-request.dto';
+export * from './lib/user-response.dto';
 
 

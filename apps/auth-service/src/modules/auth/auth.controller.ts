@@ -1,38 +1,55 @@
-import { Controller, Logger,  } from '@nestjs/common';
+import { Controller, Logger } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-//import { LocalAuthGuard } from './local-auth.guard';
 import {
   LoginResponseDto,
-  SignupRequestDto,
   LoginRequestDto,
   TokenPairDto,
   UserResponseDto,
   BaseResponseDto,
+  OrganisationSignupRequestDto, // Import this
+  OrganizationSignupDataDto,
+  UserSignupRequestDto,
+  UserSignupDataDto,     // Import this
 } from '@pivota-api/dtos';
 
-  @Controller()
-  export class AuthController {
-    constructor(private readonly authService: AuthService) {}
+@Controller()
+export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
 
-    private readonly logger = new Logger(AuthController.name);
+  constructor(private readonly authService: AuthService) {}
 
+  /* ======================================================
+     ORGANIZATION SIGNUP (NEW)
+  ====================================================== */
+  @GrpcMethod('AuthService', 'OrganisationSignup')
+  async handleOrganisationSignupGrpc(
+    dto: OrganisationSignupRequestDto,
+  ): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
+    this.logger.log(`gRPC: Organisation Signup request for ${dto.name}`);
     
-    // ------------------ Signup ------------------
-   @GrpcMethod('AuthService', 'Signup')
-    async handleSignupGrpc(
-      signupDto: SignupRequestDto,
-    ): Promise<BaseResponseDto<UserResponseDto>> {
-      const response = this.authService.signup(signupDto);
+    const response = await this.authService.organisationSignup(dto);
 
-      this.logger.debug(`Signup successful for email: ${signupDto.email}`);
-      this.logger.debug(`Signup response: ${JSON.stringify(response)}`);
+    this.logger.debug(`Org Signup response: ${JSON.stringify(response)}`);
+    return response;
+  }
 
-      return response;
-    }
+  /* ======================================================
+     STANDARD SIGNUP
+  ====================================================== */
+  @GrpcMethod('AuthService', 'Signup')
+  async handleSignupGrpc(
+    signupDto: UserSignupRequestDto,
+  ): Promise<BaseResponseDto<UserSignupDataDto>> {
+    const response = await this.authService.signup(signupDto);
 
+    this.logger.debug(`Signup successful for email: ${signupDto.email}`);
+    return response;
+  }
 
-    // ------------------ Login ------------------
+  /* ======================================================
+     LOGIN
+  ====================================================== */
   @GrpcMethod('AuthService', 'Login')
   async handleLoginGrpc(
     loginDto: LoginRequestDto & { 
@@ -46,27 +63,20 @@ import {
   ): Promise<BaseResponseDto<LoginResponseDto>> {
     this.logger.debug(`Login attempt for email: ${loginDto.email}`);
 
-    // Provide default values if clientInfo is missing
     const clientInfo = loginDto.clientInfo || {
       device: 'Unknown',
       ipAddress: 'Unknown',
       userAgent: 'Unknown',
       os: 'Unknown',
     };
-    this.logger.debug(`Client Info: ${JSON.stringify(clientInfo)}`);
 
-    // Pass clientInfo to AuthService.login
     const result = await this.authService.login(loginDto, clientInfo);
-
-
-    this.logger.debug(`Login successful for email: ${loginDto.email}`);
     return result;
   }
 
-
-
-  // ------------------ Refresh Token ------------------
-  // ------------------ Refresh Token ------------------
+  /* ======================================================
+     REFRESH TOKEN
+  ====================================================== */
   @GrpcMethod('AuthService', 'Refresh')
   async handleRefreshGrpc(data: { refreshToken: string }): Promise<BaseResponseDto<TokenPairDto>> {
     if (!data.refreshToken) {
@@ -75,38 +85,41 @@ import {
     }
 
     try {
-      const tokens = await this.authService.refreshToken(data.refreshToken);
-      return tokens; // LoginResponseDto includes new accessToken and refreshToken
+      return await this.authService.refreshToken(data.refreshToken);
     } catch (err) {
       this.logger.error('gRPC refresh token failed', err);
       throw new Error(err instanceof Error ? err.message : 'Refresh failed');
     }
   }
 
-
+  /* ======================================================
+     VALIDATE USER
+  ====================================================== */
   @GrpcMethod('AuthService', 'ValidateUser')
-async validateUser(data: { email: string; password: string }): Promise<UserResponseDto | null> {
-  const user = await this.authService.validateUser(data.email, data.password);
-  if (!user) return null;
-  return user;
-}
+  async validateUser(data: { email: string; password: string }): Promise<UserResponseDto | null> {
+    const user = await this.authService.validateUser(data.email, data.password);
+    return user || null;
+  }
 
-// ------------------ Dev Token (Bypass) ------------------
-@GrpcMethod('AuthService', 'GenerateDevToken')
-async handleGenerateDevTokenGrpc(data: { 
-  userUuid: string; 
-  email: string; 
-  role: string ;
-  accountId: string;
-}): Promise<BaseResponseDto<TokenPairDto>> { // Use 'any' or define a specific interface matching your proto
-  this.logger.warn(`🛠️ gRPC Bypass: Generating tokens for ${data.email} as ${data.role}`);
+  /* ======================================================
+     DEV TOKEN (BYPASS)
+  ====================================================== */
+  @GrpcMethod('AuthService', 'GenerateDevToken')
+  async handleGenerateDevTokenGrpc(data: { 
+    userUuid: string; 
+    email: string; 
+    role: string;
+    accountId: string;
+  }): Promise<BaseResponseDto<TokenPairDto>> {
+    this.logger.warn(`🛠️ gRPC Bypass: Generating tokens for ${data.email} as ${data.role}`);
 
-  const response = await this.authService.generateDevToken(data.userUuid, data.email, data.role, data.accountId); 
-  this.logger.debug(`Dev token generation response: ${JSON.stringify(response)}`);
-
-  return response;    
+    const response = await this.authService.generateDevToken(
+      data.userUuid, 
+      data.email, 
+      data.role, 
+      data.accountId
+    ); 
     
-}
-
-
+    return response;
+  }
 }

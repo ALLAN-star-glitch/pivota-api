@@ -7,38 +7,32 @@ datasource db {
   provider = "postgresql"
 }
 
-// --- GLOBAL WRAPPER (Billing & Subscription Anchor) ---
+// --- GLOBAL WRAPPER (The Root Anchor) ---
 model Account {
   id                 String   @id @default(cuid())
-  uuid               String   @unique @default(uuid()) // Links to Auth DB Identity
+  uuid               String   @unique @default(uuid()) 
   accountCode        String   @unique 
   
-  // Distinguishes the billing entity type
-  type               String   @default("INDIVIDUAL") // INDIVIDUAL | ORGANIZATION
+  // Distinguishes the billing/entity type: INDIVIDUAL | ORGANIZATION
+  type               String   @default("INDIVIDUAL") 
 
-  // Bi-directional links to User and Organization  
-  userId            String?
-  organizationId    String?
-  
-  // Relations
-  user               User?
   organization       Organization?
+  
+  // One Account can house multiple Users (especially for Businesses)
+  users              User[]
   
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
 
-// --- ENTITY LAYER (The Organization as an Independent Identity) ---
+// --- ENTITY LAYER (Independent Business Profile) ---
 model Organization {
   id                 String   @id @default(cuid())
-  uuid               String   @unique @default(uuid()) // Links to Auth DB Org credentials
+  uuid               String   @unique @default(uuid()) 
   orgCode            String   @unique
   name               String   
 
-  // Every Organization onboarded acts as its own Admin entity
-  defaultRole        String   @default("BUSINESS_ADMIN")
-  
-  // Every organization has its own billing account
+  // Links the business entity to its root billing Account
   accountId          String   @unique
   account            Account  @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
   
@@ -51,24 +45,26 @@ model Organization {
   updatedAt          DateTime @updatedAt
 }
 
-// --- IDENTITY LAYER (Individual Humans) ---
+// --- IDENTITY LAYER (Logins/Humans) ---
 model User {
   id                String   @id @default(cuid())
-  uuid              String   @unique @default(uuid()) // Links to Auth DB Human credentials
+  uuid              String   @unique @default(uuid()) // Matches userUuid from Auth Service
   userCode          String   @unique
   email             String   @unique
   phone             String?  @unique
+
+  // Optional initially for Organization signups (filled during onboarding)
   firstName         String?
   lastName          String?
 
-  // Ensures every individual human has a default role
-  defaultRole       String   @default("GeneralUser")
-  
-  // Every human has their own billing account (for personal subscriptions)
-  accountId         String   @unique
+  // Every User (human login) belongs to a root Account
+  accountId         String   
   account           Account  @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
   
-  roleName          String
+  // Role assignment happens here (e.g., BUSINESS_ADMIN or GeneralUser)
+  roleName          String   @default("GeneralUser")
+
+  profileImage      String?
 
   profile           UserProfile?
   completion        ProfileCompletion?
@@ -83,22 +79,20 @@ model User {
 model ProfileCompletion {
   id                String   @id @default(cuid())
   
-  // One-to-one link to User
   userUuid          String?  @unique
   user              User?    @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
   
-  // One-to-one link to Organization
   organizationUuid  String?  @unique
   organization      Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
 
   percentage        Int      @default(0) // 0 to 100
-  missingFields     String[] // e.g., ["KRA_PIN", "BIO", "NATIONAL_ID"]
+  missingFields     String[] // e.g., ["FIRST_NAME", "KRA_PIN", "REG_NO"]
   isComplete        Boolean  @default(false)
   
   updatedAt         DateTime @updatedAt
 }
 
-// --- ACCESS LAYER (Connecting Humans to Organizations) ---
+// --- ACCESS LAYER (Team Connectivity) ---
 model OrganizationMember {
   id               String       @id @default(cuid())
   userUuid         String
@@ -106,30 +100,26 @@ model OrganizationMember {
   organizationUuid String
   organization     Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
   
-  // Role within the team (e.g., ContentManager, FinanceAdmin)
   roleName         String       
   
   @@unique([userUuid, organizationUuid])
 }
 
-// --- PROFILE LAYER (Metadata) ---
+// --- PROFILE LAYER (Human Metadata) ---
 model UserProfile {
   id                String   @id @default(cuid())
   userUuid          String   @unique
   user              User     @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
-  
+  profileImage      String?  // Added this field
   bio               String?
   gender            String?
   dateOfBirth       DateTime?
   nationalId        String?  @unique
   
-  county            String?
-  subCounty         String?
-  ward              String?
-  
   verifications     VerificationDocument[]
 }
 
+// --- BUSINESS PROFILE LAYER (Entity Metadata) ---
 model OrganizationProfile {
   id                String   @id @default(cuid())
   organizationUuid  String   @unique
@@ -141,14 +131,15 @@ model OrganizationProfile {
   officialPhone     String?
   registrationNo    String?  @unique 
   kraPin            String?  @unique
+
+  logo              String?
   
   physicalAddress   String?
-  headquarters      String?
   
   verifications     VerificationDocument[]
 }
 
-// --- VERIFICATION LAYER (Compliance) ---
+// --- VERIFICATION LAYER (Compliance Documents) ---
 model VerificationDocument {
   id                String   @id @default(cuid())
   

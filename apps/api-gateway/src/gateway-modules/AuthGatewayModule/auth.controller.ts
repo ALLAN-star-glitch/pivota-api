@@ -11,13 +11,15 @@ import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt.guard';
 import {
-  SignupRequestDto,
   LoginRequestDto,
   SessionDto,
   LoginResponseDto,
   BaseResponseDto,
-  SignupResponseDto,
-  TokenPairDto, // ✅ Make sure this is exported from @pivota-api/dtos
+  TokenPairDto,
+  OrganisationSignupRequestDto,
+  OrganizationSignupDataDto,
+  UserSignupRequestDto,
+  UserSignupDataDto, // ✅ Make sure this is exported from @pivota-api/dtos
 } from '@pivota-api/dtos';
 import { ClientInfo } from '../../decorators/client-info.decorator';
 import {
@@ -31,7 +33,7 @@ import {
 } from '@nestjs/swagger';
 
 @ApiTags('AuthModule - ((Auth-Service) - MICROSERVICE)') // Group all endpoints under "Auth"
-@ApiExtraModels(BaseResponseDto, LoginResponseDto, SignupResponseDto, TokenPairDto)
+@ApiExtraModels(BaseResponseDto, LoginResponseDto, UserSignupRequestDto, TokenPairDto, OrganizationSignupDataDto)
 @Controller('auth-module')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
@@ -42,7 +44,7 @@ export class AuthController {
   @Version('1')
   @Post('signup')
   @ApiOperation({ summary: 'Register a new user' })
-  @ApiBody({ type: SignupRequestDto })
+  @ApiBody({ type: UserSignupRequestDto })
   @ApiResponse({
     status: 201,
     description: 'User signed up successfully',
@@ -51,18 +53,49 @@ export class AuthController {
         { $ref: getSchemaPath(BaseResponseDto) },
         {
           properties: {
-            data: { $ref: getSchemaPath(SignupResponseDto) },
+            data: { $ref: getSchemaPath(UserSignupDataDto) },
           },
         },
       ],
     },
   })
   async signup(
-    @Body() signupDto: SignupRequestDto  
-  ): Promise<BaseResponseDto<SignupResponseDto>> {
+    @Body() signupDto: UserSignupRequestDto  
+  ): Promise<BaseResponseDto<UserSignupDataDto>> {
     this.logger.log(`📩 Signup request: ${JSON.stringify(signupDto)}`);
     return this.authService.signup(signupDto);
   }
+
+  // ===================== ORGANISATION SIGNUP =====================
+@Version('1')
+@Post('signup/organisation')
+@ApiOperation({ summary: 'Register a new organisation with a master admin' })
+@ApiBody({ type: OrganisationSignupRequestDto })
+@ApiResponse({
+  status: 201,
+  description: 'Organisation signed up successfully',
+  schema: {
+    allOf: [
+      { $ref: getSchemaPath(BaseResponseDto) },
+      {
+        properties: {
+          data: { $ref: getSchemaPath(OrganizationSignupDataDto) },
+        },
+      },
+    ],
+  },
+})
+async signupOrganisation(
+  @Body() dto: OrganisationSignupRequestDto,
+): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
+  this.logger.log(
+    `🏢 Organisation signup request: ${JSON.stringify(dto)}`,
+  );
+
+  return this.authService.signupOrganisation(dto);
+}
+
+
 
   // ===================== LOGIN =====================
   @Version('1')
