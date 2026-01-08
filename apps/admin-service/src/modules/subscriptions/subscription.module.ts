@@ -50,6 +50,7 @@ import { PrismaModule } from '../../prisma/prisma.module';
   ],
   providers: [SubscriptionService],
   controllers: [SubscriptionController],
+  exports: [SubscriptionService]
 })
 export class SubscriptionModule {}
 

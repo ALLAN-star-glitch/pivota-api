@@ -10,22 +10,22 @@ import { PrismaModule } from '../../prisma/prisma.module';
 
 @Module({
   imports: [
-      PrismaModule,
-      ClientsModule.register([
-        // GRPC client for User Service
-        {
-          name: 'PROFILE_PACKAGE',
-          transport: Transport.GRPC,
-          options: {
-            package: 'profile', // must match proto definition
-            protoPath: PROFILE_PROTO_PATH,
-            url: process.env.USER_GRPC_URL || 'localhost:50052',
-          },
+    PrismaModule,
+    ClientsModule.register([
+      {
+        name: 'PROFILE_PACKAGE',
+        transport: Transport.GRPC,
+        options: {
+          package: 'profile',
+          protoPath: PROFILE_PROTO_PATH,
+          url: process.env.USER_GRPC_URL || 'localhost:50052',
         },
-      ]),
-
-    ],
+      },
+    ]),
+  ],
   controllers: [PlanController, PricingController],
   providers: [PricingService, PlanService, PlanFeatureService],
+  // ADD THIS LINE:
+  exports: [PlanService, PricingService, PlanFeatureService], 
 })
 export class PlanModule {}

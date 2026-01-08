@@ -1,5 +1,20 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+// Define the Organization shape as a class for Swagger to pick up as a Schema
+export class OrganizationContextDto {
+  @ApiProperty({ example: '880e8400-e29b-41d4-a716-446655441111', description: 'Unique identifier for the organization' })
+  uuid!: string;
+
+  @ApiProperty({ example: 'Pivota Tech Ltd', description: 'Official name of the organization' })
+  name!: string;
+
+  @ApiProperty({ example: 'ORG-XYZ987', description: 'Custom external identifier for the organization' })
+  orgCode!: string;
+
+  @ApiProperty({ example: 'VERIFIED', description: 'Status of business verification: PENDING, VERIFIED, REJECTED' })
+  verificationStatus!: string;
+}
+
 export class UserResponseDto {
   // Core user fields
   @ApiProperty({ example: '550e8400-e29b-41d4', description: 'Internal cuid' })
@@ -11,7 +26,7 @@ export class UserResponseDto {
   @ApiProperty({ example: 'PIV-000123', description: 'Custom external identifier for the user' })
   userCode!: string;
 
-  @ApiProperty({example: '353tete-4675sfgdhjkhjgh', description: 'The account uuid of the user'})
+  @ApiProperty({ example: '353tete-4675sfgdhjkhjgh', description: 'The account uuid of the user' })
   accountId!: string;
 
   @ApiProperty({ example: 'john.doe@example.com', description: 'User email address' })
@@ -38,7 +53,7 @@ export class UserResponseDto {
   @ApiProperty({ example: '2025-11-05T12:34:56Z', description: 'Account last updated timestamp' })
   updatedAt!: string;
 
-  // Dynamic / runtime fields (populated from other services)
+  // Dynamic / runtime fields
   @ApiProperty({ example: 'PremiumUser', description: 'Role fetched from admin-service', required: false })
   role?: string;
 
@@ -56,4 +71,12 @@ export class UserResponseDto {
 
   @ApiProperty({ example: 'cat_456', description: 'Service category ID', required: false })
   categoryId?: string;
+
+  // Added Organization Context with proper Swagger Type
+  @ApiProperty({ 
+    type: () => OrganizationContextDto, 
+    required: false, 
+    description: 'Only populated if the user is associated with an Organization account' 
+  })
+  organization?: OrganizationContextDto;
 }

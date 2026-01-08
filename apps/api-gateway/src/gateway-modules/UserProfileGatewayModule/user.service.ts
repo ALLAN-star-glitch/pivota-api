@@ -1,7 +1,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
 import { AuthUserDto, BaseResponseDto, GetUserByEmailDto, GetUserByUserCodeDto, UserResponseDto } from '@pivota-api/dtos';
-import { BaseUserResponseGrpc, BaseUsersResponseGrpc } from '@pivota-api/interfaces';
 import { firstValueFrom, Observable } from 'rxjs';
 
 
@@ -10,13 +9,13 @@ import { firstValueFrom, Observable } from 'rxjs';
 interface UserServiceGrpc {
   GetUserProfileByUserCode(
     data: GetUserByUserCodeDto,
-  ): Observable<BaseUserResponseGrpc<UserResponseDto> | null>;
+  ): Observable<BaseResponseDto<UserResponseDto> | null>;
   
   GetUserProfileByEmail(
     data: GetUserByEmailDto,
-  ): Observable<BaseUserResponseGrpc<AuthUserDto> | null>;
+  ): Observable<BaseResponseDto<AuthUserDto> | null>;
 
-  GetAllUsers(data: object): Observable<BaseUsersResponseGrpc<UserResponseDto[]>>;
+  GetAllUsers(data: object): Observable<BaseResponseDto<UserResponseDto[]>>;
 }
 
 @Injectable()
@@ -37,7 +36,7 @@ export class UserService {
     );
 
     if (res && res.success) {
-      return BaseResponseDto.ok(res.user, res.message, res.code);
+      return BaseResponseDto.ok(res.data, res.message, res.code);
     }
 
     this.logger.warn(`User not found for userCode: ${userCode}`);
@@ -53,7 +52,7 @@ export class UserService {
     );
 
     if (res && res.success) {
-      return BaseResponseDto.ok(res.user, res.message, res.code);
+      return BaseResponseDto.ok(res.data, res.message, res.code);
     }
 
     this.logger.warn(`User not found for email: ${email}`);
@@ -68,7 +67,7 @@ export class UserService {
     
 
     if (res.success) {
-      return BaseResponseDto.ok(res.users || [], res.message, res.code);
+      return BaseResponseDto.ok(res.data || [], res.message, res.code);
     }
 
     return BaseResponseDto.fail(res.message, res.code);

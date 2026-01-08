@@ -5,7 +5,6 @@ import {
   LoginResponseDto,
   LoginRequestDto,
   TokenPairDto,
-  UserResponseDto,
   BaseResponseDto,
   OrganisationSignupRequestDto, // Import this
   OrganizationSignupDataDto,
@@ -90,15 +89,6 @@ export class AuthController {
       this.logger.error('gRPC refresh token failed', err);
       throw new Error(err instanceof Error ? err.message : 'Refresh failed');
     }
-  }
-
-  /* ======================================================
-     VALIDATE USER
-  ====================================================== */
-  @GrpcMethod('AuthService', 'ValidateUser')
-  async validateUser(data: { email: string; password: string }): Promise<UserResponseDto | null> {
-    const user = await this.authService.validateUser(data.email, data.password);
-    return user || null;
   }
 
   /* ======================================================

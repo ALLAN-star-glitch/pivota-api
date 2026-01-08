@@ -2,7 +2,6 @@ import { Injectable, Logger, Inject } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
   BaseResponseDto,
-  UserResponseDto,
   GetUserByUserUuidDto,
   AssignRoleToUserRequestDto,
   RoleIdResponse,
@@ -16,7 +15,7 @@ import {
   CreateUserRequestDto,
 } from '@pivota-api/dtos';
 import { Account, ProfileCompletion, User, UserProfile } from '../../../../generated/prisma/client';
-import { ClientKafka, ClientProxy, RpcException, ClientGrpc } from '@nestjs/microservices';
+import {  RpcException, ClientGrpc } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
 import { catchError, lastValueFrom, Observable, throwError, timeout } from 'rxjs';
 import { BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
@@ -27,6 +26,13 @@ interface UserProfileAggregate {
   profile: UserProfile;
   completion: ProfileCompletion;
 }
+
+// Shape from Prisma's findUnique(... { include: { ... } })
+type PrismaUserAggregate = User & {
+  account: Account;
+  profile: UserProfile | null;
+  completion: ProfileCompletion | null;
+};
 
 interface RbacServiceGrpc {
   AssignRoleToUser(data: AssignRoleToUserRequestDto): Observable<BaseResponseDto<UserRoleResponseDto>>;
@@ -57,8 +63,6 @@ export class UserService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('USER_KAFKA') private readonly kafkaClient: ClientKafka,
-    @Inject('USER_RMQ') private readonly rabbitClient: ClientProxy,
     @Inject('RBAC_PACKAGE') private readonly rbacClient: ClientGrpc,
     @Inject('SUBSCRIPTIONS_PACKAGE') private readonly subscriptionsClient: ClientGrpc,
     @Inject('PLANS_PACKAGE') private readonly plansClient: ClientGrpc,
@@ -75,80 +79,81 @@ export class UserService {
  /* ======================================================
      CREATE INDIVIDUAL PROFILE (FULL UPDATE)
   ====================================================== */
-  async createUserProfile(
-    data: CreateUserRequestDto,
-  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
-    this.logger.log(`Initiating individual profile creation: ${data.email}`);
+ async createUserProfile(
+  data: CreateUserRequestDto,
+): Promise<BaseResponseDto<UserProfileResponseDto>> {
+  this.logger.log(`Initiating individual profile creation: ${data.email}`);
 
-    const accountUuid = randomUUID();
-    const userCode = `USR-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+  const accountUuid = randomUUID();
+  const userCode = `USR-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 
-    try {
-      /* ---------- 1. PRE-CHECKS: RBAC ROLE & PLAN ---------- */
-      const [roleRes, planRes] = await Promise.all([
-        lastValueFrom(
-          this.rbacGrpc.GetRoleIdByType({ roleType: 'GeneralUser' }).pipe(
-            timeout(5000),
-            catchError(() => throwError(() => new Error('RBAC service unavailable')))
-          ),
+  try {
+    /* ---------- 1. PRE-CHECKS: RBAC ROLE & PLAN ---------- */
+    const [roleRes, planRes] = await Promise.all([
+      lastValueFrom(
+        this.rbacGrpc.GetRoleIdByType({ roleType: 'GeneralUser' }).pipe(
+          timeout(5000),
+          catchError(() => throwError(() => new Error('RBAC service unavailable')))
         ),
-        lastValueFrom(
-          this.plansGrpc.GetPlanIdBySlug({ slug: 'free' }).pipe(
-            timeout(5000),
-            catchError(() => throwError(() => new Error('Plans service unavailable')))
-          ),
+      ),
+      lastValueFrom(
+        this.plansGrpc.GetPlanIdBySlug({ slug: 'free' }).pipe(
+          timeout(5000),
+          catchError(() => throwError(() => new Error('Plans service unavailable')))
         ),
-      ]);
+      ),
+    ]);
 
-      if (!roleRes?.data?.roleId) throw new Error('System Role: GeneralUser not found');
-      if (!planRes?.data?.planId) throw new Error('Default Plan: free not found');
+    if (!roleRes?.data?.roleId) throw new Error('System Role: GeneralUser not found');
+    if (!planRes?.data?.planId) throw new Error('Default Plan: free not found');
 
-      /* ---------- 2. ATOMIC DATABASE TRANSACTION ---------- */
-      const result = await this.prisma.$transaction(async (tx) => {
-        // A. Create Root Individual Account
-        const account = await tx.account.create({
-          data: {
-            uuid: accountUuid,
-            accountCode: `ACC-${userCode}`,
-            type: 'INDIVIDUAL',
-          },
-        });
-
-        // B. Create User Identity
-        const user = await tx.user.create({
-          data: {
-            uuid: data.userUuid,
-            userCode,
-            email: data.email,
-            phone: data.phone,
-            firstName: data.firstName,
-            lastName: data.lastName,
-            roleName: 'General User',
-            accountId: account.uuid,
-          },
-        });
-
-        // C. Initialize Empty User Profile (Metadata)
-        const profile = await tx.userProfile.create({
-          data: {
-            userUuid: user.uuid,
-          },
-        });
-
-        // D. Initialize Tracker (25% completion for basic identity)
-        const completion = await tx.profileCompletion.create({
-          data: {
-            userUuid: user.uuid,
-            percentage: 25,
-            missingFields: { set: ['BIO', 'NATIONAL_ID', 'GENDER', 'DATE_OF_BIRTH', 'PROFILE_IMAGE'] },
-            isComplete: false,
-          },
-        });
-
-        return { user, account, profile, completion };
+    /* ---------- 2. ATOMIC DATABASE TRANSACTION ---------- */
+    const result = await this.prisma.$transaction(async (tx) => {
+      // A. Create Root Individual Account
+      const account = await tx.account.create({
+        data: {
+          uuid: accountUuid,
+          accountCode: `ACC-${userCode}`,
+          type: 'INDIVIDUAL',
+        },
       });
 
-      /* ---------- 3. POST-DB: EXTERNAL SYNCING ---------- */
+      // B. Create User Identity
+      const user = await tx.user.create({
+        data: {
+          uuid: data.userUuid,
+          userCode,
+          email: data.email,
+          phone: data.phone,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          roleName: 'General User',
+          accountId: account.uuid,
+        },
+      });
+
+      // C. Initialize Empty User Profile (Metadata)
+      const profile = await tx.userProfile.create({
+        data: {
+          userUuid: user.uuid,
+        },
+      });
+
+      // D. Initialize Tracker (25% completion for basic identity)
+      const completion = await tx.profileCompletion.create({
+        data: {
+          userUuid: user.uuid,
+          percentage: 25,
+          missingFields: { set: ['BIO', 'NATIONAL_ID', 'GENDER', 'DATE_OF_BIRTH', 'PROFILE_IMAGE'] },
+          isComplete: false,
+        },
+      });
+
+      return { user, account, profile, completion };
+    });
+
+    /* ---------- 3. POST-DB: EXTERNAL SYNCING (WITH ROLLBACK) ---------- */
+    try {
       // Assign the role in the RBAC service
       await lastValueFrom(
         this.rbacGrpc.AssignRoleToUser({
@@ -157,181 +162,261 @@ export class UserService {
         }),
       );
 
-      // Initialize the subscription (Handled subRes to satisfy ESLint)
+      // Initialize the subscription
       const subRes = await lastValueFrom(
         this.subscriptionGrpc.SubscribeToPlan({
           subscriberUuid: accountUuid,
           planId: planRes.data.planId,
+          billingCycle: null, // The service explicitly sets this to null for free plans anyway
+          amountPaid: 0,
+          currency: 'KES'
         }),
       );
 
       if (!subRes.success) {
-        this.logger.warn(`Subscription failed for account ${accountUuid}: ${subRes.message}`);
+        throw new Error(`Subscription Service Error: ${subRes.message}`);
       }
 
-      /* ---------- 4. ASYNC EVENTS ---------- */
-      this.rabbitClient.emit('individual.onboarded', {
-        userUuid: data.userUuid,
-        email: data.email,
-        accountUuid,
-      });
-
-      /* ---------- 5. MAPPED RESPONSE ---------- */
-      return {
-        success: true,
-        code: 'CREATED',
-        message: 'Individual profile created successfully',
-        data: this.mapToUserProfileResponseDto(result),
-        error: null,
-      };
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      this.logger.error(`Individual profile creation failed: ${err.message}`);
+    } catch (syncError: any) {
+      this.logger.error(`Post-DB Sync failed. Rolling back local records for ${data.email}`);
       
-      throw new RpcException({
-        code: err.code === 'P2002' ? 6 : 13, // 6 = ALREADY_EXISTS, 13 = INTERNAL
-        message: err.message || 'Internal failure during profile creation',
-      });
+      // COMPENSATING ACTION: Manual Rollback
+      await this.prisma.$transaction([
+        this.prisma.profileCompletion.deleteMany({ where: { userUuid: data.userUuid } }),
+        this.prisma.userProfile.deleteMany({ where: { userUuid: data.userUuid } }),
+        this.prisma.user.delete({ where: { uuid: data.userUuid } }),
+        this.prisma.account.delete({ where: { uuid: accountUuid } }),
+      ]);
+
+      throw new Error(`Onboarding failed during external provisioning: ${syncError.message}`);
     }
+
+    /* ---------- 4. MAPPED RESPONSE ---------- */
+    return {
+      success: true,
+      code: 'CREATED',
+      message: 'Individual profile created successfully',
+      data: this.mapToUserProfileResponseDto(result),
+      error: null,
+    };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    this.logger.error(`Individual profile creation failed: ${err.message}`);
+    
+    throw new RpcException({
+      code: err.code === 'P2002' ? 6 : 13, // 6 = ALREADY_EXISTS, 13 = INTERNAL
+      message: err.message || 'Internal failure during profile creation',
+    });
   }
+}
 
   /** ------------------ Fetch user by UUID ------------------ */
   async getUserProfileByUuid(
-    data: GetUserByUserUuidDto,
-  ): Promise<BaseResponseDto<UserResponseDto>> {
-    const user = await this.prisma.user.findUnique({ where: { uuid: data.userUuid } });
+  data: GetUserByUserUuidDto,
+): Promise<BaseResponseDto<UserProfileResponseDto>> {
+  this.logger.log(`[gRPC] GetUserProfileByUuid triggered for: ${data.userUuid}`);
 
-    if (!user) {
-      throw new RpcException({ code: 'USER_NOT_FOUND', message: 'User not found' });
+  try {
+    // 1. Fetch from DB
+    const userAggregate = await this.prisma.user.findUnique({
+      where: { uuid: data.userUuid },
+      include: {
+        account: true,
+        profile: true,
+        completion: true,
+      }
+    });
+
+    // 2. Log Raw Prisma Output
+    if (userAggregate) {
+      this.logger.debug(`[DB RESULT] User found. Keys returned: ${Object.keys(userAggregate).join(', ')}`);
+      this.logger.debug(`[DB DETAIL] Account Object present: ${!!userAggregate.account}`);
+      this.logger.debug(`[DB DETAIL] Profile Object present: ${!!userAggregate.profile}`);
+      
+      // Specifically check for the field causing the crash
+      if (!userAggregate.account) {
+        this.logger.error(`[CRITICAL] Account relation is missing in DB for user: ${data.userUuid}`);
+      }
     }
 
-    const user_profile = {  
+    if (!userAggregate) {
+      this.logger.warn(`[NOT FOUND] No user record for UUID: ${data.userUuid}`);
+      throw new RpcException({ code: 5, message: 'User not found' });
+    }
+
+    // 3. Log Mapping Attempt
+    this.logger.log(`[MAPPER] Attempting to map userAggregate to UserProfileResponseDto...`);
+    
+    // We cast to any first to log exactly what is being sent to the mapper
+    const mappedData = this.mapToUserProfileResponseDto(userAggregate as PrismaUserAggregate);
+
+    this.logger.log(`[SUCCESS] Mapping complete for: ${data.userUuid}`);
+
+    return {
       success: true,
       message: "User retrieved successfully",
-      code: "OK",
-      user: this.toUserResponse(user),
+      code: 'OK', 
+      data: mappedData,
       error: null,
+    };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    this.logger.error(`[ERROR] getUserProfileByUuid failed: ${err.message}`);
+    
+    // If it's a TypeError, it's likely the mapper crashing
+    if (err instanceof TypeError) {
+      this.logger.error(`[MAPPER CRASH] Detailed stack: ${err.stack}`);
     }
 
-    return user_profile;
+    throw new RpcException({
+      code: err.code || 13, // Internal
+      message: err.message || 'Internal server error',
+    });
   }
+}
 
   /** ------------------ Fetch user by email ------------------ */
-  async getUserProfileByEmail(data: { email: string }): Promise<BaseResponseDto<UserResponseDto>> {
-    const user = await this.prisma.user.findUnique({ where: { email: data.email } });
+  async getUserProfileByEmail(data: { email: string }): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    const userAggregate = await this.prisma.user.findUnique({
+      where: { email: data.email },
+      include: {
+        account: true,
+        profile: true,
+        completion: true,
+      }
+    });
 
-    if (!user) {
-      throw new RpcException({ code: 'USER_NOT_FOUND', message: 'User not found' });
+    if (!userAggregate) {
+      throw new RpcException({ code: 5, message: 'User not found' });
     }
 
-
-    const user_profile = {
+    return {
       success: true,
       message: 'User retrieved successfully',
       code: 'OK',
-      user: this.toUserResponse(user),
+      data: this.mapToUserProfileResponseDto(userAggregate as unknown as UserProfileAggregate),
       error: null,
-    
-    }
-    return user_profile;
+    };
   }
 
   /** ------------------ Fetch user by userCode ------------------ */
-  async getUserProfileByUserCode(data: { userCode: string }): Promise<BaseResponseDto<UserResponseDto>> {
-    const user = await this.prisma.user.findUnique({ where: { userCode: data.userCode } });
+  async getUserProfileByUserCode(
+    data: { userCode: string }
+  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`Fetching profile for User Code: ${data.userCode}`);
 
-    if (!user) {
-      throw new RpcException({ code: 'USER_NOT_FOUND', message: 'User not found' });
+    // 1. Fetch the full aggregate (The Trio + Completion)
+    const userAggregate = await this.prisma.user.findUnique({ 
+      where: { userCode: data.userCode },
+      include: {
+        account: true,
+        profile: true,
+        completion: true,
+      }
+    });
+
+    // 2. Handle Not Found
+    if (!userAggregate) {
+      this.logger.warn(`User Code not found: ${data.userCode}`);
+      throw new RpcException({ 
+        code: 5, // gRPC NOT_FOUND
+        message: 'User profile not found' 
+      });
     }
 
-
-
-    const user_profile = {
+    // 3. Return aligned with UserProfileResponse proto message
+    return {
       success: true,
       message: "User retrieved successfully",
-      code: "OK",
-      user: this.toUserResponse(user),
+      code: 'OK',
+      // Map the aggregate and place it in the 'data' key as per proto
+      data: this.mapToUserProfileResponseDto(userAggregate as unknown as UserProfileAggregate),
       error: null,
-      
-    }
-    return user_profile;
+    };
   }
 
   /** ------------------ Get all users ------------------ */
-  async getAllUsers(): Promise<BaseResponseDto<UserResponseDto[]>> {
-    const users = await this.prisma.user.findMany();
+  async getAllUsers(): Promise<BaseResponseDto<UserProfileResponseDto[]>> {
+    const users = await this.prisma.user.findMany({
+      include: {
+        account: true,
+        profile: true,
+        completion: true,
+      }
+    });
   
-    const userResponse = {
+    return {
       success: true,
       message: 'Users retrieved successfully',
       code: 'OK',
-      users: users.map((u) => this.toUserResponse(u)),
+      data: users.map((u) => this.mapToUserProfileResponseDto(u as unknown as UserProfileAggregate)),
       error: null,  
-    }
-    return userResponse;
-  }
-
-  /** ------------------ Map User entity to DTO ------------------ */
-  private toUserResponse(user: User): UserResponseDto {
-    return {
-      id: user.id?.toString(),
-      uuid: user.uuid,
-      userCode: user.userCode,
-      accountId: user.accountId,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      phone: user.phone,
-      status: user.status,
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
     };
   }
+
 
   /* ======================================================
      MAPPER: PRISMA AGGREGATE TO USER PROFILE DTO
   ====================================================== */
-  private mapToUserProfileResponseDto(data: UserProfileAggregate): UserProfileResponseDto {
+  /* ======================================================
+   MAPPER: PRISMA AGGREGATE TO USER PROFILE DTO
+====================================================== */
+private mapToUserProfileResponseDto(
+  data: UserProfileAggregate | PrismaUserAggregate,
+): UserProfileResponseDto {
+  
+  // Type Guard / Extraction Logic
+  const isNested = (input: UserProfileAggregate | PrismaUserAggregate): input is UserProfileAggregate => {
+    return 'user' in input;
+  };
+
+  const user = isNested(data) ? data.user : data;
+  const account = data.account;
+  const profile = data.profile;
+  const completion = data.completion;
+
   return {
     // 1. Account Layer
     account: {
-      uuid: data.account.uuid,
-      accountCode: data.account.accountCode,
-      type: data.account.type,
+      uuid: account?.uuid ?? '',
+      accountCode: account?.accountCode ?? '',
+      type: account?.type ?? 'INDIVIDUAL',
     },
 
     // 2. Identity Layer (User)
     user: {
-      uuid: data.user.uuid,
-      userCode: data.user.userCode,
-      firstName: data.user.firstName ?? '', // Handle optional firstName
-      lastName: data.user.lastName ?? '',   // Handle optional lastName
-      email: data.user.email,
-      phone: data.user.phone ?? '',
-      status: data.user.status,
-      roleName: data.user.roleName,
+      uuid: user.uuid,
+      userCode: user.userCode,
+      firstName: user.firstName ?? '',
+      lastName: user.lastName ?? '',
+      email: user.email,
+      phone: user.phone ?? '',
+      status: user.status,
+      roleName: user.roleName,
     },
 
     // 3. Metadata Layer (Profile)
-    profile: data.profile ? {
-      bio: data.profile.bio ?? undefined,
-      gender: data.profile.gender ?? undefined,
-      dateOfBirth: data.profile.dateOfBirth?.toISOString(),
-      nationalId: data.profile.nationalId ?? undefined,
-      profileImage: data.profile.profileImage ?? undefined,
+    profile: profile ? {
+      bio: profile.bio ?? undefined,
+      gender: profile.gender ?? undefined,
+      dateOfBirth: profile.dateOfBirth?.toISOString(),
+      nationalId: profile.nationalId ?? undefined,
+      profileImage: profile.profileImage ?? undefined,
     } : undefined,
 
     // 4. Onboarding Layer (Completion)
-    completion: data.completion ? {
-      percentage: data.completion.percentage,
-      missingFields: data.completion.missingFields,
-      isComplete: data.completion.isComplete,
+    completion: completion ? {
+      percentage: completion.percentage,
+      missingFields: completion.missingFields,
+      isComplete: completion.isComplete,
     } : undefined,
 
     // 5. Chronological Metadata
-    createdAt: data.user.createdAt.toISOString(),
-    updatedAt: data.user.updatedAt.toISOString(),
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
   };
 }
 

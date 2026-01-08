@@ -19,7 +19,7 @@ import {
   OrganisationSignupRequestDto,
   OrganizationSignupDataDto,
   UserSignupRequestDto,
-  UserSignupDataDto, // ✅ Make sure this is exported from @pivota-api/dtos
+  UserSignupDataDto, // Make sure this is exported from @pivota-api/dtos
 } from '@pivota-api/dtos';
 import { ClientInfo } from '../../decorators/client-info.decorator';
 import {
@@ -33,7 +33,7 @@ import {
 } from '@nestjs/swagger';
 
 @ApiTags('AuthModule - ((Auth-Service) - MICROSERVICE)') // Group all endpoints under "Auth"
-@ApiExtraModels(BaseResponseDto, LoginResponseDto, UserSignupRequestDto, TokenPairDto, OrganizationSignupDataDto)
+@ApiExtraModels(BaseResponseDto, LoginResponseDto, UserSignupRequestDto, TokenPairDto, OrganizationSignupDataDto, UserSignupDataDto)
 @Controller('auth-module')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);

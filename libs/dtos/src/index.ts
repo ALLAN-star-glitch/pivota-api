@@ -73,5 +73,7 @@ export * from './lib/organisation-response.dto';
 export * from './lib/organisation-request.dto';
 export * from './lib/user-request.dto';
 export * from './lib/user-response.dto';
+export * from './lib/OrganizationOnboardedEventDto.dto';
+export * from './lib/UserOnboardedEventDto.dto';
 
 

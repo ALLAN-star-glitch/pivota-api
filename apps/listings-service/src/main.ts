@@ -66,21 +66,6 @@ async function bootstrap() {
     }
   })
 
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.KAFKA,
-    options: {
-      client: {
-        clientId: 'notification-service',
-        brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
-      },
-      consumer: {
-      groupId: 'notification-service-consumer'
-    },
-    },
-
-  }
-);
-
 await app.startAllMicroservices();
 
  logger.log(`🚀 Listings service is running`);

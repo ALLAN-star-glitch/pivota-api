@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AccountBaseDto } from './organisation-response.dto';
+import { AccountBaseDto, OrganizationBaseDto } from './organisation-response.dto';
 
 /* ======================================================
    1. PROFILE COMPLETION DTO
@@ -77,6 +77,10 @@ export class UserSignupDataDto {
 
   @ApiProperty({ type: UserBaseDto })
   user!: UserBaseDto;
+
+  // Add this to fix the ts(2339) error
+  @ApiPropertyOptional({ type: OrganizationBaseDto })
+  organization?: OrganizationBaseDto;
 
   @ApiPropertyOptional({ type: UserProfileDataDto })
   profile?: UserProfileDataDto;

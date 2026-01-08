@@ -7,6 +7,7 @@ import { PlanModule } from '../modules/plans/plan.module';
 import { SubscriptionModule } from '../modules/subscriptions/subscription.module';
 
 
+
 @Module({
   imports: [
     ConfigModule.forRoot({  
@@ -15,7 +16,7 @@ import { SubscriptionModule } from '../modules/subscriptions/subscription.module
      }), // Loads .env.dev or .env.prod depending on NODE_ENV
  RbacModule,
  PlanModule,
- SubscriptionModule
+ SubscriptionModule,
   ],
 
   controllers: [AppController],

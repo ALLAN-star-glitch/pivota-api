@@ -31,7 +31,7 @@ message CreateUserProfileRequest {
 message UserProfileResponse {
   bool success = 1;
   string message = 2;
-  int32 code = 3;
+  string code = 3;
   UserProfileTrio data = 4;      // Aligned with UserProfileResponseDto
   ErrorPayload error = 5;  
 }
@@ -78,13 +78,13 @@ message CreateOrgProfileRequest {
   string email = 6;             
   string phone = 7;             
   string adminFirstName = 8;    
-  string adminLastName = 9;
+  string adminLastName = 9;  
 }
 
 message OrgProfileResponse {
   bool success = 1;
   string message = 2;
-  int32 code = 3;
+  string code = 3;
   OrgProfileData data = 4;      
   ErrorPayload error = 5;
 }
@@ -138,8 +138,8 @@ message GetUserByEmailRequest { string email = 1; }
 message UserListResponse {
   bool success = 1;
   string message = 2;
-  int32 code = 3;
-  repeated UserProfileTrio users = 4; 
+  string code = 3;
+  repeated UserProfileTrio data = 4; 
   ErrorPayload error = 5;          
 }
 

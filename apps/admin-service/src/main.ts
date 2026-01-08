@@ -73,7 +73,10 @@ async function bootstrap() {
     transport: Transport.RMQ,
     options: {
       urls: [process.env.RMQ_URL || 'amqp://localhost:5672'],
-      queue: process.env.RMQ_QUEUE || 'admin_service_queue',
+      // IMPORTANT: Ensure this matches the queue name in Profile Service
+      queue: 'profile_events_queue', 
+      // REQUIRED for manual ack/nack logic to work
+      noAck: false, 
       queueOptions: {
         durable: true,
       },
@@ -86,7 +89,7 @@ async function bootstrap() {
   logger.log(`🚀 Admin service is running`);
   logger.log(`✅ gRPC listening on ${process.env.RBAC_GRPC_URL || '0.0.0.0:50055'}`);
   logger.log(`✅ Kafka connected to ${process.env.KAFKA_BROKERS || 'localhost:9092'}`);
-  logger.log(`✅ RabbitMQ queue: ${process.env.RMQ_QUEUE || 'admin_service_queue'}`);
+  logger.log(`✅ RabbitMQ queue: ${process.env.RMQ_QUEUE || 'profile_events_queue'}`);
 }
 
 bootstrap();

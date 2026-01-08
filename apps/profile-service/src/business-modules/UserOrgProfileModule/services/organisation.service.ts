@@ -22,6 +22,7 @@ import {
   OrganizationProfileResponseDto,
   ProfileCompletionResponseDto,
   AccountBaseDto,
+  OrganizationOnboardedEventDto,
 } from '@pivota-api/dtos';
 import { ClientProxy, RpcException, ClientGrpc } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
@@ -100,7 +101,6 @@ export class OrganisationService  {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('USER_RMQ') private readonly rabbitClient: ClientProxy,
     @Inject('RBAC_PACKAGE') private readonly rbacClient: ClientGrpc,
     @Inject('SUBSCRIPTIONS_PACKAGE')
     private readonly subscriptionsClient: ClientGrpc,
@@ -118,104 +118,107 @@ export class OrganisationService  {
   /* ======================================================
      CREATE ORGANIZATION PROFILE
   ====================================================== */
-  /* ======================================================
-     CREATE ORGANIZATION PROFILE (FULL UPDATE)
-  ====================================================== */
   async createOrganizationProfile(
-    data: CreateOrganisationRequestDto,
-  ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
-    this.logger.log(`Initiating organization creation: ${data.name} (Admin: ${data.email})`);
+  data: CreateOrganisationRequestDto,
+): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
+  this.logger.log(`Initiating organization creation: ${data.name} (Admin: ${data.email})`);
 
-    const orgUuid = randomUUID();
-    const accountUuid = randomUUID();
-    const orgCode = `ORG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+  const orgUuid = randomUUID();
+  const accountUuid = randomUUID();
+  const orgCode = `ORG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 
-    try {
-      /* ---------- 1. PRE-CHECKS: RBAC ROLE & PLAN ---------- */
-      // We fetch these first to ensure the external dependencies are met before hitting our DB
-      const [roleRes, planRes] = await Promise.all([
-        lastValueFrom(
-          this.rbacGrpc.GetRoleIdByType({ roleType: 'BusinessSystemAdmin' }).pipe(
-            timeout(5000),
-            catchError(() => throwError(() => new Error('RBAC service unavailable')))
-          ),
+  try {
+    /* ---------- 1. PRE-CHECKS: RBAC ROLE & PLAN ---------- */
+    const [roleRes, planRes] = await Promise.all([
+      lastValueFrom(
+        this.rbacGrpc.GetRoleIdByType({ roleType: 'BusinessSystemAdmin' }).pipe(
+          timeout(5000),
+          catchError(() => throwError(() => new Error('RBAC service unavailable')))
         ),
-        lastValueFrom(
-          this.plansGrpc.GetPlanIdBySlug({ slug: 'free' }).pipe(
-            timeout(5000),
-            catchError(() => throwError(() => new Error('Plans service unavailable')))
-          ),
+      ),
+      lastValueFrom(
+        this.plansGrpc.GetPlanIdBySlug({ slug: 'free' }).pipe(
+          timeout(5000),
+          catchError(() => throwError(() => new Error('Plans service unavailable')))
         ),
-      ]);
+      ),
+    ]);
 
-      if (!roleRes?.data?.roleId) throw new Error('System Role: BusinessSystemAdmin not found');
-      if (!planRes?.data?.planId) throw new Error('Default Plan: free not found');
+    if (!roleRes?.data?.roleId) throw new Error('System Role: BusinessSystemAdmin not found');
+    if (!planRes?.data?.planId) throw new Error('Default Plan: free not found');
 
-      /* ---------- 2. ATOMIC DATABASE TRANSACTION ---------- */
-      const result = await this.prisma.$transaction(async (tx) => {
-        // A. Create the Root Billing Account
-        const account = await tx.account.create({
-          data: {
-            uuid: accountUuid,
-            accountCode: `ACC-${orgCode}`,
-            type: 'ORGANIZATION',
-          },
-        });
-
-        // B. Create Organization with Nested Profile (Business Metadata)
-        const organization = await tx.organization.create({
-          data: {
-            uuid: orgUuid,
-            orgCode,
-            name: data.name,
-            accountId: account.uuid,
-            profile: {
-              create: {
-                officialEmail: data.officialEmail,
-                officialPhone: data.officialPhone,
-                physicalAddress: data.physicalAddress,
-              },
-            },
-          },
-        });
-
-        // C. Create the Admin User (Human Identity)
-        const admin = await tx.user.create({
-          data: {
-            uuid: data.adminUserUuid, // Link to Auth Service identity
-            userCode: `USR-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-            email: data.email,
-            phone: data.phone,
-            firstName: data.adminFirstName,
-            lastName: data.adminLastName,
-            roleName: 'Business System Admin',
-            accountId: account.uuid,
-          },
-        });
-
-        // D. Create Membership (Access Control Link)
-        await tx.organizationMember.create({
-          data: {
-            organizationUuid: organization.uuid,
-            userUuid: admin.uuid,
-            roleName: 'Business System Admin',
-          },
-        });
-
-        // E. Initialize Tracker (40% completion because basic info is provided)
-        const completion = await tx.profileCompletion.create({
-          data: {
-            organizationUuid: organization.uuid,
-            percentage: 40, 
-            missingFields: { set: ['KRA_PIN', 'REGISTRATION_NO', 'WEBSITE'] },
-            isComplete: false,
-          },
-        });
-
-        return { account, organization, admin, completion };
+    /* ---------- 2. ATOMIC DATABASE TRANSACTION ---------- */
+    const result = await this.prisma.$transaction(async (tx) => {
+      // A. Create the Root Billing Account
+      const account = await tx.account.create({
+        data: {
+          uuid: accountUuid,
+          accountCode: `ACC-${orgCode}`,
+          type: 'ORGANIZATION',
+        },
       });
 
-      /* ---------- 3. POST-DB: EXTERNAL SYNCING ---------- */
+      // B. Create Organization with Nested Profile
+      const organization = await tx.organization.create({
+        data: {
+          uuid: orgUuid,
+          orgCode,
+          name: data.name,
+          accountId: account.uuid,
+          profile: {
+            create: {
+              officialEmail: data.officialEmail,
+              officialPhone: data.officialPhone,
+              physicalAddress: data.physicalAddress,
+            },
+          },
+        },
+      });
+
+      // C. Create the Admin User Identity
+      const admin = await tx.user.create({
+        data: {
+          uuid: data.adminUserUuid,
+          userCode: `USR-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+          email: data.email,
+          phone: data.phone,
+          firstName: data.adminFirstName,
+          lastName: data.adminLastName,
+          roleName: 'Business System Admin',
+          accountId: account.uuid,
+          profile: {
+            create: {
+              bio: `Administrator for ${data.name}`,
+            }
+          }
+        },
+        include: { profile: true } 
+      });
+
+      // D. Create Membership
+      await tx.organizationMember.create({
+        data: {
+          organizationUuid: organization.uuid,
+          userUuid: admin.uuid,
+          roleName: 'Business System Admin',
+        },
+      });
+
+      // E. Initialize Tracker
+      const completion = await tx.profileCompletion.create({
+        data: {
+          organizationUuid: organization.uuid,
+          percentage: 40, 
+          missingFields: { set: ['KRA_PIN', 'REGISTRATION_NO', 'WEBSITE'] },
+          isComplete: false,
+        },
+      });
+
+      return { account, organization, admin, completion };
+    });
+
+    /* ---------- 3. POST-DB: EXTERNAL SYNCING (WITH ROLLBACK) ---------- */
+    try {
       // Assign the role in the RBAC service
       await lastValueFrom(
         this.rbacGrpc.AssignRoleToUser({
@@ -224,49 +227,57 @@ export class OrganisationService  {
         }),
       );
 
-      // Initialize the subscription on the billing account
+      // Initialize the subscription
       const subRes = await lastValueFrom(
         this.subscriptionGrpc.SubscribeToPlan({
           subscriberUuid: accountUuid,
           planId: planRes.data.planId,
+          billingCycle: null
         }),
       );
 
       if (!subRes.success) {
-        this.logger.warn(`Subscription failed for ${accountUuid}: ${subRes.message}`);
-        // Note: We don't necessarily roll back the whole DB transaction here 
-        // as the profile is created, but we should flag it for manual retry.
+        throw new Error(`Subscription Service Error: ${subRes.message}`);
       }
 
-      /* ---------- 4. ASYNC EVENTS ---------- */
-      this.rabbitClient.emit('organization.onboarded', {
-        organizationUuid: orgUuid,
-        adminUuid: data.adminUserUuid,
-        name: data.name,
-        accountUuid,
-        officialEmail: data.officialEmail,
-      });
-
-      /* ---------- 5. MAPPED RESPONSE ---------- */
-      return {
-        success: true,
-        code: 'CREATED',
-        message: 'Organization and Admin Profile created successfully',
-        data: this.mapToOrganizationProfileDto(result),
-        error: null,
-      };
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      this.logger.error(`Organization signup failed: ${err.message}`, err.stack);
+    } catch (syncError: any) {
+      this.logger.error(`Post-DB Sync failed for Org. Rolling back records for ${data.name}`);
       
-      // Standardize the error for the Gateway/Consumer
-      throw new RpcException({
-        code: err.code === 'P2002' ? 6 : 13, // 6 = Already Exists, 13 = Internal
-        message: err.message || 'Failed to complete organization onboarding',
-      });
+      // COMPENSATING ACTION: Manual Rollback
+      // We delete everything tied to this failed onboarding attempt
+      await this.prisma.$transaction([
+        this.prisma.profileCompletion.deleteMany({ where: { organizationUuid: orgUuid } }),
+        this.prisma.organizationMember.deleteMany({ where: { organizationUuid: orgUuid } }),
+        this.prisma.userProfile.deleteMany({ where: { userUuid: data.adminUserUuid } }),
+        this.prisma.user.delete({ where: { uuid: data.adminUserUuid } }),
+        this.prisma.organizationProfile.deleteMany({ where: { organizationUuid: orgUuid } }),
+        this.prisma.organization.delete({ where: { uuid: orgUuid } }),
+        this.prisma.account.delete({ where: { uuid: accountUuid } }),
+      ]);
+
+      throw new Error(`Organization provisioning failed: ${syncError.message}`);
     }
+
+    /* ---------- 4. RESPONSE ---------- */
+    return {
+      success: true,
+      code: 'CREATED',
+      message: 'Organization profile records created and provisioned successfully.',
+      data: this.mapToOrganizationProfileDto(result),
+      error: null,
+    };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    this.logger.error(`Organization profile creation failed: ${err.message}`, err.stack);
+    
+    throw new RpcException({
+      code: err.code === 'P2002' ? 6 : 13,
+      message: err.message || 'Failed to complete organization profile creation',
+    });
   }
+}
 
   /* ======================================================
      GET ORGANIZATION

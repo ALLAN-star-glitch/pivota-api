@@ -14,9 +14,8 @@ import { PrismaModule } from '../../prisma/prisma.module';
       signOptions: { expiresIn: '3600s' }, // 1 hour
     }),
 
-    // Register gRPC + Kafka
     ClientsModule.register([
-      // gRPC (direct calls to UserService)
+      // 1. gRPC: Profile Service (Identity Creation)
       {
         name: 'PROFILE_GRPC',
         transport: Transport.GRPC,
@@ -27,7 +26,7 @@ import { PrismaModule } from '../../prisma/prisma.module';
         },
       },
       
-      // gRPC client for RBAC service
+      // 2. gRPC: RBAC Service (Role Authorization checks)
       {
         name: 'RBAC_PACKAGE',
         transport: Transport.GRPC,
@@ -37,16 +36,16 @@ import { PrismaModule } from '../../prisma/prisma.module';
           url: process.env.RBAC_GRPC_URL || 'localhost:50055',
         },
       },
-      // RabbitMQ client for refresh token events
+      
+      //  RMQ: Notification Event Bus (Emails/Alerts)
       {
-        name: 'PROFILE_RMQ',
+        name: 'NOTIFICATION_EVENT_BUS', 
         transport: Transport.RMQ,
         options: {
-          urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
-          queue: process.env.RABBITMQ_NOTIFICATION_QUEUE || 'notification_queue',
+          urls: [process.env.RMQ_URL || 'amqp://localhost:5672'],
+          queue: 'notification_email_queue', // Consumed by Notification Service
           queueOptions: { durable: true },
-          noAck: true,
-         },
+        },
       },
     ]),
   ],
@@ -57,9 +56,9 @@ import { PrismaModule } from '../../prisma/prisma.module';
 export class AuthModule {
   constructor() {
     console.log(
-      'AuthModule initialized with gRPC + RabbitMQ clients',
-      '| USER_GRPC_URL =', process.env.PROFILE_GRPC_URL ,
-      '| RABBITMQ_URL =', process.env.RABBITMQ_URL 
+      '🚀 AuthModule: gRPC Clients & Dual RMQ Event Buses initialized.',
+      '| Profile GRPC:', process.env.PROFILE_GRPC_URL,
+      '| RMQ URL:', process.env.RMQ_URL
     );
   }
 }

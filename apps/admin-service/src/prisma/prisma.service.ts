@@ -1,25 +1,40 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as dotenv from 'dotenv';
-dotenv.config({ path: '.env.dev' }); // MUST come before importing PrismaClient
+dotenv.config({ path: '.env.dev' });
 
-import { PrismaClient } from '../../generated/prisma/client'; // correct named import
-import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '../../generated/prisma/client';
+import { withAccelerate } from '@prisma/extension-accelerate';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(PrismaService.name);
+
   constructor(private readonly configService: ConfigService) {
-    const adapter = new PrismaPg({
-      connectionString: configService.get<string>('ADMIN_SERVICE_DATABASE_URL'),
+    super({
+      accelerateUrl: configService.get<string>('ADMIN_SERVICE_DATABASE_URL'),
     });
-    super({ adapter }); // pass adapter to PrismaClient
+
+    // Extend Prisma client with Accelerate features
+    return this.$extends(withAccelerate()) as this;
   }
 
   async onModuleInit() {
-    await this.$connect();
+    try {
+      await this.$connect();
+      this.logger.log('✅ Connected to database via Prisma Accelerate.');
+    } catch (error) {
+      this.logger.error('❌ Failed to connect', error);
+      throw error;
+    }
   }
 
   async onModuleDestroy() {
-    await this.$disconnect();
+    try {
+      await this.$disconnect();
+      this.logger.log('🧹 Prisma connection closed gracefully.');
+    } catch (error) {
+      this.logger.error('❌ Error during Prisma disconnect', error);
+    }
   }
 }

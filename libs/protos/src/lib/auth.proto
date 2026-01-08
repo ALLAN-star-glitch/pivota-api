@@ -4,19 +4,65 @@ package auth;
 
 // ------------------ Auth Service ------------------
 service AuthService {
-  // Individual Signup: Returns the full Trio + Completion
   rpc Signup(SignupRequest) returns (SignupResponse);
-  
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Refresh(RefreshRequest) returns (BaseRefreshTokenResponse);
-  rpc ValidateUser(ValidateUserRequest) returns (LoginResponse);
   rpc GenerateDevToken(GenerateDevTokenRequest) returns (BaseDevTokenResponse);
-
-  // Organization Signup: Kept for business registration
   rpc OrganisationSignup(OrganisationSignupRequest) returns (OrganisationSignupResponse);
 }
 
-// ------------------ Individual Signup ------------------
+// ------------------ Auth / Login Flow ------------------
+
+message AuthUserResponse {
+  // Core Identity
+  string id = 1;
+  string uuid = 2;                   
+  string userCode = 3;               
+  string accountId = 4;
+  string email = 5;
+  string firstName = 6;
+  string lastName = 7;
+  string phone = 8;
+  string status = 9;                 
+  string role = 10;                  
+
+  // Profile metadata
+  string profileImage = 11;
+  string createdAt = 12;
+  string updatedAt = 13;
+
+  // Subscription/Runtime Data
+  string currentSubscription = 14;
+  string subscriptionStatus = 15;
+  string subscriptionExpiresAt = 16;
+  string planId = 17;
+  string categoryId = 18;
+
+  // Tokens
+  string accessToken = 19;           
+  string refreshToken = 20;
+
+ 
+   OrgContext organization = 21;
+}
+
+message OrgContext {
+  string uuid = 1;
+  string name = 2;
+  string orgCode = 3;
+  string verificationStatus = 4;
+}
+
+message LoginResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  // Note: Standardize field name to 'data' to match BaseResponseDto
+  AuthUserResponse data = 4; 
+  ErrorPayload error = 5;
+}
+
+// ------------------ Signup Messages ------------------
 
 message SignupRequest {
   string firstName = 1;
@@ -34,15 +80,13 @@ message SignupResponse {
   ErrorPayload error = 5;
 }
 
-// Matches UserSignupDataDto (The Trio + Onboarding)
 message UserSignupData {
   AccountBase account = 1;
   UserBase user = 2;
   UserProfileBase profile = 3; 
-  CompletionBase completion = 4; // Aligned with ProfileCompletionDto
+  OrgContext organisation = 4;
+  CompletionBase completion = 5;
 }
-
-// ------------------ Organization Signup ------------------
 
 message OrganisationSignupRequest {
   string name = 1;
@@ -72,18 +116,16 @@ message OrganisationSignupData {
 
 // ------------------ Shared Data Objects ------------------
 
-// Matches AccountBaseDto
 message AccountBase {
   string uuid = 1;
   string accountCode = 2;
-  string type = 3; // "INDIVIDUAL" or "ORGANIZATION"
+  string type = 3; 
 }
 
-// Matches UserBaseDto (Identity Layer)
 message UserBase {
   string uuid = 1;
   string userCode = 2;
-  string firstName = 3; // Order aligned with DTO
+  string firstName = 3;
   string lastName = 4;
   string email = 5;
   string phone = 6;
@@ -91,7 +133,6 @@ message UserBase {
   string roleName = 8;
 }
 
-// Matches UserProfileDataDto (Metadata Layer)
 message UserProfileBase {
   string bio = 1;
   string gender = 2;
@@ -100,14 +141,12 @@ message UserProfileBase {
   string profileImage = 5;
 }
 
-// Matches ProfileCompletionDto
 message CompletionBase {
   int32 percentage = 1;
   repeated string missingFields = 2;
   bool isComplete = 3;
 }
 
-// Specialized for Org Admin Response
 message AdminUserResponse {
   string uuid = 1;
   string userCode = 2;
@@ -126,31 +165,6 @@ message OrgBase {
   string verificationStatus = 5;
 }
 
-// ------------------ Auth / Login Flow ------------------
-
-message AuthUserResponse {
-  string uuid = 1;                   
-  string userCode = 2;               
-  string email = 3;
-  string firstName = 4;
-  string lastName = 5;
-  string phone = 6;
-  string status = 7;                 
-  string role = 8;                  
-  string accessToken = 9;           
-  string refreshToken = 10;
-  string accountId = 11;
-  string accountType = 12; 
-}
-
-message LoginResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  AuthUserResponse user = 4;
-  ErrorPayload error = 5;
-}
-
 // ------------------ Common Helpers ------------------
 
 message ClientInfo {
@@ -167,7 +181,7 @@ message LoginRequest {
 }
 
 message RefreshRequest { string refreshToken = 1; }
-message ValidateUserRequest { string email = 1; string password = 2; }
+
 
 message BaseRefreshTokenResponse {
   bool success = 1;

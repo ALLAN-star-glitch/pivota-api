@@ -32,7 +32,7 @@ interface AuthServiceGrpc {
     data: LoginRequestDto & {
       clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>;
     }
-  ): Observable<BaseUserResponseGrpc<LoginResponseDto>>;
+  ): Observable<BaseResponseDto<LoginResponseDto>>;
 
   refresh(
     data: { refreshToken: string }
@@ -122,7 +122,7 @@ async signupOrganisation(
     const grcpLoginResponse = await firstValueFrom(this.authGrpc.login(grpcPayload));
     this.logger.log(`📩 Received response from Auth microservice: ${JSON.stringify(grcpLoginResponse)}`);
 
-    const LoginResponseData = grcpLoginResponse.user
+    const LoginResponseData = grcpLoginResponse.data
 
     const access_token = LoginResponseData.accessToken
 
@@ -143,7 +143,7 @@ async signupOrganisation(
     
 
     if ( grcpLoginResponse.success) {
-      return BaseResponseDto.ok(grcpLoginResponse.user, grcpLoginResponse.message, grcpLoginResponse.code);
+      return BaseResponseDto.ok(grcpLoginResponse.data, grcpLoginResponse.message, grcpLoginResponse.code);
     }
     return BaseResponseDto.fail(grcpLoginResponse.message, grcpLoginResponse.code);
   }

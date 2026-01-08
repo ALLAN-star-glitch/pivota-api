@@ -5,7 +5,7 @@ import {
   BaseResponseDto,
   CreateUserRequestDto,
   GetUserByUserUuidDto,
-  UserResponseDto,
+  UserProfileResponseDto,
   UserSignupDataDto,
 } from '@pivota-api/dtos';
 
@@ -29,7 +29,7 @@ async handleCreateUserProfile(
   @GrpcMethod('ProfileService', 'GetUserProfileByEmail')
   async handleGetUserProfileByEmail(
     @Payload() data: { email: string },
-  ): Promise<BaseResponseDto<UserResponseDto> | null> {
+  ): Promise<BaseResponseDto<UserProfileResponseDto> | null> {
     this.logger.log(`Fetching user profile by email: ${data.email}`);
     return this.userService.getUserProfileByEmail(data);
   }
@@ -38,7 +38,7 @@ async handleCreateUserProfile(
   @GrpcMethod('ProfileService', 'GetUserProfileByUserCode')
   async handleGetUserProfileByUserCode(
     @Payload() data: { userCode: string },
-  ): Promise<BaseResponseDto<UserResponseDto> | null> {
+  ): Promise<BaseResponseDto<UserProfileResponseDto> | null> {
     this.logger.log(`Fetching user profile by userCode: ${data.userCode}`);
     return this.userService.getUserProfileByUserCode(data);
   }
@@ -47,14 +47,14 @@ async handleCreateUserProfile(
   @GrpcMethod('ProfileService', 'GetUserProfileByUuid')
   async handleGetUserProfileByUuid(
     @Payload() data: GetUserByUserUuidDto,
-  ): Promise<BaseResponseDto<UserResponseDto> | null> {
+  ): Promise<BaseResponseDto<UserProfileResponseDto> | null> {
     this.logger.log(`Fetching user profile by UUID: ${data.userUuid}`);
     return this.userService.getUserProfileByUuid(data);
   }
   
   /** ------------------ Get All Users ------------------ */
   @GrpcMethod('ProfileService', 'GetAllUsers')
-  async handleGetAllUsers(): Promise<BaseResponseDto<UserResponseDto[]>> {
+  async handleGetAllUsers(): Promise<BaseResponseDto<UserProfileResponseDto[]>> {
     this.logger.log('Fetching all users');
     return this.userService.getAllUsers();
   }

@@ -9,37 +9,37 @@ datasource db {
 
 // --- GLOBAL WRAPPER (The Root Anchor) ---
 model Account {
-  id                 String   @id @default(cuid())
-  uuid               String   @unique @default(uuid()) 
-  accountCode        String   @unique 
-  
-  // Distinguishes the billing/entity type: INDIVIDUAL | ORGANIZATION
-  type               String   @default("INDIVIDUAL") 
+  id          String @id @default(cuid())
+  uuid        String @unique @default(uuid())
+  accountCode String @unique
 
-  organization       Organization?
-  
+  // Distinguishes the billing/entity type: INDIVIDUAL | ORGANIZATION
+  type String @default("INDIVIDUAL")
+
+  organization Organization?
+
   // One Account can house multiple Users (especially for Businesses)
-  users              User[]
-  
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  users User[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // --- ENTITY LAYER (Independent Business Profile) ---
 model Organization {
-  id                 String   @id @default(cuid())
-  uuid               String   @unique @default(uuid()) 
-  orgCode            String   @unique
-  name               String   
+  id      String @id @default(cuid())
+  uuid    String @unique @default(uuid())
+  orgCode String @unique
+  name    String
 
   // Links the business entity to its root billing Account
-  accountId          String   @unique
-  account            Account  @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
-  
-  profile            OrganizationProfile?
-  completion         ProfileCompletion?
-  members            OrganizationMember[]
-  
+  accountId String  @unique
+  account   Account @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
+
+  profile    OrganizationProfile?
+  completion ProfileCompletion?
+  members    OrganizationMember[]
+
   verificationStatus String   @default("PENDING")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -47,49 +47,49 @@ model Organization {
 
 // --- IDENTITY LAYER (Logins/Humans) ---
 model User {
-  id                String   @id @default(cuid())
-  uuid              String   @unique @default(uuid()) // Matches userUuid from Auth Service
-  userCode          String   @unique
-  email             String   @unique
-  phone             String?  @unique
+  id       String  @id @default(cuid())
+  uuid     String  @unique @default(uuid()) // Matches userUuid from Auth Service
+  userCode String  @unique
+  email    String  @unique
+  phone    String? @unique
 
   // Optional initially for Organization signups (filled during onboarding)
-  firstName         String?
-  lastName          String?
+  firstName String?
+  lastName  String?
 
   // Every User (human login) belongs to a root Account
-  accountId         String   
-  account           Account  @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
-  
+  accountId String
+  account   Account @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
+
   // Role assignment happens here (e.g., BUSINESS_ADMIN or GeneralUser)
-  roleName          String   @default("GeneralUser")
+  roleName String @default("GeneralUser")
 
-  profileImage      String?
+  profileImage String?
 
-  profile           UserProfile?
-  completion        ProfileCompletion?
-  memberships       OrganizationMember[]
-  
-  status            String   @default("ACTIVE")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  profile     UserProfile?
+  completion  ProfileCompletion?
+  memberships OrganizationMember[]
+
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // --- PROFILE COMPLETION TRACKER ---
 model ProfileCompletion {
-  id                String   @id @default(cuid())
-  
-  userUuid          String?  @unique
-  user              User?    @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
-  
-  organizationUuid  String?  @unique
-  organization      Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  id String @id @default(cuid())
 
-  percentage        Int      @default(0) // 0 to 100
-  missingFields     String[] // e.g., ["FIRST_NAME", "KRA_PIN", "REG_NO"]
-  isComplete        Boolean  @default(false)
-  
-  updatedAt         DateTime @updatedAt
+  userUuid String? @unique
+  user     User?   @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+
+  organizationUuid String?       @unique
+  organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+
+  percentage    Int      @default(0) // 0 to 100
+  missingFields String[] // e.g., ["FIRST_NAME", "KRA_PIN", "REG_NO"]
+  isComplete    Boolean  @default(false)
+
+  updatedAt DateTime @updatedAt
 }
 
 // --- ACCESS LAYER (Team Connectivity) ---
@@ -99,61 +99,61 @@ model OrganizationMember {
   user             User         @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
   organizationUuid String
   organization     Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
-  
-  roleName         String       
-  
+
+  roleName String
+
   @@unique([userUuid, organizationUuid])
 }
 
 // --- PROFILE LAYER (Human Metadata) ---
 model UserProfile {
-  id                String   @id @default(cuid())
-  userUuid          String   @unique
-  user              User     @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
-  profileImage      String?  // Added this field
-  bio               String?
-  gender            String?
-  dateOfBirth       DateTime?
-  nationalId        String?  @unique
-  
-  verifications     VerificationDocument[]
+  id           String    @id @default(cuid())
+  userUuid     String    @unique
+  user         User      @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+  profileImage String? // Added this field
+  bio          String?
+  gender       String?
+  dateOfBirth  DateTime?
+  nationalId   String?   @unique
+
+  verifications VerificationDocument[]
 }
 
 // --- BUSINESS PROFILE LAYER (Entity Metadata) ---
 model OrganizationProfile {
-  id                String   @id @default(cuid())
-  organizationUuid  String   @unique
-  organization      Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
-  
-  about             String?
-  website           String?
-  officialEmail     String?
-  officialPhone     String?
-  registrationNo    String?  @unique 
-  kraPin            String?  @unique
+  id               String       @id @default(cuid())
+  organizationUuid String       @unique
+  organization     Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
 
-  logo              String?
-  
-  physicalAddress   String?
-  
-  verifications     VerificationDocument[]
+  about          String?
+  website        String?
+  officialEmail  String?
+  officialPhone  String?
+  registrationNo String? @unique
+  kraPin         String? @unique
+
+  logo String?
+
+  physicalAddress String?
+
+  verifications VerificationDocument[]
 }
 
 // --- VERIFICATION LAYER (Compliance Documents) ---
 model VerificationDocument {
-  id                String   @id @default(cuid())
-  
-  userProfileId     String?
-  userProfile       UserProfile? @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
-  
-  orgProfileId      String?
-  orgProfile        OrganizationProfile? @relation(fields: [orgProfileId], references: [id], onDelete: Cascade)
-  
-  documentType      String   
-  documentUrl       String   
-  status            String   @default("PENDING") 
-  rejectionReason   String?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id String @id @default(cuid())
+
+  userProfileId String?
+  userProfile   UserProfile? @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+
+  orgProfileId String?
+  orgProfile   OrganizationProfile? @relation(fields: [orgProfileId], references: [id], onDelete: Cascade)
+
+  documentType    String
+  documentUrl     String
+  status          String  @default("PENDING")
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
