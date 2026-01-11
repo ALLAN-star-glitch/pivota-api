@@ -15,7 +15,7 @@ import {
   UserSignupRequestDto,
   UserSignupDataDto,
 } from '@pivota-api/dtos';
-import { BaseUserResponseGrpc, BaseRefreshTokenResponseGrpc, JwtPayload, BaseTokenResponseGrpc } from '@pivota-api/interfaces';
+import {  BaseRefreshTokenResponseGrpc, JwtPayload, BaseTokenResponseGrpc } from '@pivota-api/interfaces';
 
 
 // Updated gRPC interface for AuthService (signup now returns BaseResponse)
@@ -49,7 +49,7 @@ interface AuthServiceGrpc {
 
 
 interface UserServiceGrpc {
-  getUserProfileByUuid  (data: GetUserByUserUuidDto ): Observable<BaseUserResponseGrpc<UserResponseDto> | null>;
+  getUserProfileByUuid  (data: GetUserByUserUuidDto ): Observable<BaseResponseDto<UserResponseDto> | null>;
 }
 
 @Injectable()
@@ -113,6 +113,7 @@ async signupOrganisation(
 
 
   /** ------------------ Login ------------------ */
+  /** ------------------ Login ------------------ */
   async login(
     loginDto: LoginRequestDto,
     clientInfo: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
@@ -120,37 +121,47 @@ async signupOrganisation(
   ): Promise<BaseResponseDto<LoginResponseDto>> {
     const grpcPayload = { ...loginDto, clientInfo };
     const grcpLoginResponse = await firstValueFrom(this.authGrpc.login(grpcPayload));
+    
     this.logger.log(`📩 Received response from Auth microservice: ${JSON.stringify(grcpLoginResponse)}`);
 
-    const LoginResponseData = grcpLoginResponse.data
+    // ✅ 1. Check for failure first
+    if (!grcpLoginResponse.success || !grcpLoginResponse.data) {
+      return BaseResponseDto.fail(grcpLoginResponse.message, grcpLoginResponse.code);
+    }
 
-    const access_token = LoginResponseData.accessToken
+    // ✅ 2. Safe to access data now because we know it exists
+    const loginData = grcpLoginResponse.data;
+    const access_token = loginData.accessToken;
+    const refresh_token = loginData.refreshToken;
 
-    const refresh_token = LoginResponseData.refreshToken
-
+    // 3. Set Cookies
     res.cookie('access_token', access_token, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       maxAge: 15 * 60 * 1000,
     });
+    
     res.cookie('refresh_token', refresh_token, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
-    
 
-    if ( grcpLoginResponse.success) {
-      return BaseResponseDto.ok(grcpLoginResponse.data, grcpLoginResponse.message, grcpLoginResponse.code);
-    }
-    return BaseResponseDto.fail(grcpLoginResponse.message, grcpLoginResponse.code);
+    // 4. Return the successful DTO
+    return BaseResponseDto.ok(loginData, grcpLoginResponse.message, grcpLoginResponse.code);
   }
 
   /** ------------------ Refresh ------------------ */
+  /** ------------------ Refresh ------------------ */
   async refresh(refreshToken: string, res: Response): Promise<BaseResponseDto<TokenPairDto>> {
     const refreshResp = await firstValueFrom(this.authGrpc.refresh({ refreshToken }));
+
+    // Check success before setting cookies
+    if (!refreshResp.success || !refreshResp.tokens) {
+        return BaseResponseDto.fail(refreshResp.message, refreshResp.code);
+    }
 
     res.cookie('access_token', refreshResp.tokens.accessToken, {
       httpOnly: true,
@@ -158,6 +169,7 @@ async signupOrganisation(
       secure: process.env.NODE_ENV === 'production',
       maxAge: 15 * 60 * 1000,
     });
+    
     res.cookie('refresh_token', refreshResp.tokens.refreshToken, {
       httpOnly: true,
       sameSite: 'lax',
@@ -165,9 +177,7 @@ async signupOrganisation(
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    if(refreshResp.success){
-      return BaseResponseDto.ok(refreshResp.tokens, refreshResp.message, refreshResp.code)
-    }
+    return BaseResponseDto.ok(refreshResp.tokens, refreshResp.message, refreshResp.code);
   }
 
   /** ------------------ Logout ------------------ */
@@ -182,11 +192,13 @@ async signupOrganisation(
       this.userGrpc.getUserProfileByUuid({ userUuid: payload.userUuid })
     );
 
-    if (!userResponse.success || !userResponse.user) {
+    this.logger.debug(`User Response: ${JSON.stringify(userResponse.data)}`)
+    if (!userResponse.success || !userResponse.data) {
       throw new UnauthorizedException('User not found or inactive');
     }
+    
 
-    return userResponse.user;
+    return userResponse.data;
   }
   
   /** ------------------ Generate Dev Token (Testing Only) ------------------ */

@@ -11,7 +11,6 @@ service JobsService {
   rpc GetJobsByCategory (GetJobsByCategoryRequest) returns (ListJobPostsResponse);
   rpc ValidateJobPostIds(ValidateJobPostIdsRequest) returns (BaseValidateJobPostIdsResponse);
   
-  // NEW METHODS
   rpc UpdateJobPost (UpdateJobPostRequest) returns (BaseJobPostResponse);
   rpc CloseJobPost (CloseJobPostRequest) returns (BaseCloseJobPostResponse);
   rpc ApplyToJobPost (CreateJobApplicationRequest) returns (BaseJobApplicationResponse);
@@ -30,6 +29,11 @@ message UserBasic {
   string id = 1;
   string fullName = 2;
   string email = 3;
+}
+
+message AccountBasic {
+  string id = 1;
+  string name = 2;
 }
 
 message CategoryBasic {
@@ -57,45 +61,36 @@ message StatusHistory {
 }
 
 message JobApplication {
-  // --- Identification & Relationships ---
   string id = 1;
   string externalId = 2;
   string jobPostId = 3;
   string applicantId = 4;
   string employerId = 5;
   string status = 6;
-
-  // --- Financials & Logistics ---
   double expectedPay = 7;
   string availabilityDate = 8;
   string availabilityNotes = 9;
-
-  // --- Referral Information ---
   string referrerName = 10;
   string referrerPhone = 11;
-  string referrerEmail = 12; // Added this as we discussed it for the formal pillar
+  string referrerEmail = 12; 
   string referrerRelationship = 13;
-
-  // --- Timestamps ---
   string createdAt = 14;
   string reviewedAt = 15;
-
-  // --- Nested Collections ---
   repeated Attachment attachments = 16;
   repeated StatusHistory statusHistory = 17;
 }
 
 // ===================================================
-// JOB POST ENTITY
+// JOB POST ENTITY (Matches JobPostResponseDto)
 // ===================================================
 message JobPost {
   string id = 1;
-  string externalId = 2;
-  string title = 3;
-  string description = 4;
-  CategoryBasic category = 5;
-  CategoryBasic subCategory = 6;
-  UserBasic creator = 7;
+  string title = 2;
+  string description = 3;
+  CategoryBasic category = 4;
+  CategoryBasic subCategory = 5;
+  UserBasic creator = 6;
+  AccountBasic account = 7; 
   string jobType = 8;
   string locationCity = 9;
   string locationNeighborhood = 10;
@@ -104,15 +99,15 @@ message JobPost {
   bool requiresEquipment = 13;
   double payAmount = 14;
   string payRate = 15;
-  repeated string skills = 16;
-  string experienceLevel = 17;
-  string employmentType = 18;
-  repeated string documentsNeeded = 19;
-  repeated string equipmentRequired = 20;
-  string additionalNotes = 21;
-  string status = 22;
-  int32 applicationsCount = 23;
-  int32 bookingsCount = 24;
+  bool isNegotiable = 16;
+  repeated string skills = 17;
+  string experienceLevel = 18;
+  string employmentType = 19;
+  repeated string documentsNeeded = 20;
+  repeated string equipmentRequired = 21;
+  string additionalNotes = 22;
+  string status = 23;
+  int32 applicationsCount = 24;
   string createdAt = 25;
   string updatedAt = 26;
 }
@@ -120,20 +115,21 @@ message JobPost {
 // ===================================================
 // REQUEST MESSAGES
 // ===================================================
+
 message CreateJobPostRequest {
   string title = 1;
   string description = 2;
   string categoryId = 3;
   string subCategoryId = 4;
-  string creatorId = 5;
-  string jobType = 6;
-  string locationCity = 7;
-  string locationNeighborhood = 8;
-  bool isRemote = 9;
-  bool requiresDocuments = 10;
-  bool requiresEquipment = 11;
-  double payAmount = 12;
-  string payRate = 13;
+  string jobType = 5;
+  string locationCity = 6;
+  string locationNeighborhood = 7;
+  bool isRemote = 8;
+  double payAmount = 9;
+  string payRate = 10;
+  bool isNegotiable = 11;
+  bool requiresDocuments = 12;
+  bool requiresEquipment = 13;
   repeated string skills = 14;
   string experienceLevel = 15;
   string employmentType = 16;
@@ -141,46 +137,47 @@ message CreateJobPostRequest {
   repeated string equipmentRequired = 18;
   string additionalNotes = 19;
   string status = 20;
+
+  // Identity Pillars (Injected via GrpcDto)
+  string accountId = 21;
+  string accountName = 22;
+  string creatorId = 23;
+  string creatorName = 24;
 }
 
 message UpdateJobPostRequest {
   string id = 1;
-  string creatorId = 2;
-  // Use optional for partial updates in proto3
+  // Metadata for authorization
+  string creatorId = 2; 
+
+  // Partial update fields
   optional string title = 3;
   optional string description = 4;
   optional string status = 5;
   optional double payAmount = 6;
-  // Add other optional fields as needed based on your DTO
+  optional bool isNegotiable = 7;
+  optional string locationCity = 8;
+  optional string locationNeighborhood = 9;
+}
+
+message CreateJobApplicationRequest {
+  string jobPostId = 1;
+  string applicantId = 2;
+  bool hasRequiredEquipment = 3; 
+  double expectedPay = 4;
+  string availabilityDate = 5;
+  string availabilityNotes = 6;
+  string referrerName = 7;
+  string referrerPhone = 8;
+  string referrerEmail = 9;
+  string referrerRelationship = 10;
+  repeated Attachment attachments = 11;
 }
 
 message CloseJobPostRequest {
   string id = 1;
   string creatorId = 2;
   string reason = 3;
-}
-
-message CreateJobApplicationRequest {
-  string jobPostId = 1;
-  string applicantId = 2;
-  
-  // Handshake field from your DTO logic
-  bool hasRequiredEquipment = 3; 
-  
-  // Note: We removed employerId because the Microservice 
-  // will fetch it from the database for security.
-  
-  double expectedPay = 4; // Re-indexed to 4
-  string availabilityDate = 5;
-  string availabilityNotes = 6;
-  
-  // Referral details
-  string referrerName = 7;
-  string referrerPhone = 8;
-  string referrerEmail = 9;
-  string referrerRelationship = 10;
-  
-  repeated Attachment attachments = 11;
 }
 
 message GetJobPostByIdRequest { string id = 1; }
@@ -190,11 +187,12 @@ message ValidateJobPostIdsRequest { repeated string ids = 1; }
 // ===================================================
 // RESPONSE MESSAGES
 // ===================================================
+
 message BaseJobPostResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-  JobPost data = 4;
+  JobPost data = 4; // Standardized key to 'data'
   ErrorPayload error = 5;
 }
 

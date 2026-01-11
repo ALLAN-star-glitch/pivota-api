@@ -22,7 +22,7 @@ export class AccountBaseDto {
     description: 'Type of account entity',
     example: 'ORGANIZATION',
   })
-  type!: string;
+  type!: 'ORGANIZATION' | 'INDIVIDUAL';
 }
 
 /* ------------------ Organization Base ------------------ */

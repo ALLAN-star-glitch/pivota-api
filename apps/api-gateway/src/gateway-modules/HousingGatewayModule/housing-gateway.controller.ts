@@ -20,7 +20,6 @@ import {
 
 import {
   BaseResponseDto,
-  CreateHouseListingDto,
   HouseListingResponseDto,
   SearchHouseListingsDto,
   UpdateHouseListingRequestDto,
@@ -58,14 +57,14 @@ export class HousingGatewayController {
   @Post('listings')
   @ApiOperation({ summary: 'Create a new house listing' })
   async createListing(
-    @Body() dto: CreateHouseListingDto,
+    @Body() dto: CreateHouseListingGrpcRequestDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<HouseListingResponseDto>> {
     const userId = req.user.userUuid;
 
     const grpcDto: CreateHouseListingGrpcRequestDto = {
       ...dto,
-      ownerId: userId,
+      creatorId: userId,
     };
 
 

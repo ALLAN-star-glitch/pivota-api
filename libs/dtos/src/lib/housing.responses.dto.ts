@@ -1,241 +1,216 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { HOUSE_LISTING_TYPES, HOUSE_LISTING_STATUSES, HOUSE_VIEWING_STATUSES } from '@pivota-api/constants';
-import { IsIn } from 'class-validator';
-import { CategoryResponseDto } from './CategoryResponseDto.dto';
+import { 
+  HOUSE_LISTING_TYPES, 
+  HOUSE_LISTING_STATUSES, 
+  HOUSE_VIEWING_STATUSES 
+} from '@pivota-api/constants';
+import { IsIn, IsString, IsNumber, IsBoolean, IsOptional, IsArray, IsObject, IsDate } from 'class-validator';
+
+/* ======================================================
+   SHARED BASIC DTOS (Identity Pillar)
+====================================================== */
+
+class UserBasicDto {
+  @ApiProperty({ example: 'user_uuid_123', description: 'The UUID of the human creator' })
+  @IsString()
+  id!: string;
+
+  @ApiProperty({ example: 'John Doe', description: 'The First + Last name of the human' })
+  @IsString()
+  fullName!: string;
+
+  @ApiPropertyOptional({ example: '+254712345678' })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+}
+
+class AccountBasicDto {
+  @ApiProperty({ example: 'acc_uuid_456', description: 'The UUID of the root account' })
+  @IsString()
+  id!: string;
+
+  @ApiProperty({ example: 'Pivota Properties Ltd', description: 'The Brand or Org name' })
+  @IsString()
+  name!: string;
+}
+
+export class NestedCategoryResponseDto {
+  @ApiProperty({ example: 'cat_98765' })
+  @IsString()
+  id!: string;
+
+  @ApiProperty({ example: 'Apartment' })
+  @IsString()
+  name!: string;
+
+  @ApiProperty({ example: 'apartment' })
+  @IsString()
+  slug!: string;
+
+  @ApiProperty({ example: 'HOUSING' })
+  @IsString()
+  vertical!: string;
+}
 
 /* ======================================================
    IMAGE RESPONSE
 ====================================================== */
 export class HouseImageResponseDto {
-  @ApiProperty({
-    description: 'Unique identifier for the house image',
-    example: 'img_123abc',
-  })
+  @ApiProperty({ example: 'img_123abc' })
+  @IsString()
   id!: string;
 
-  @ApiProperty({
-    description: 'URL of the house image',
-    example: 'https://example.com/images/house1.jpg',
-  })
+  @ApiProperty({ example: 'https://example.com/images/house1.jpg' })
+  @IsString()
   url!: string;
 
-  @ApiProperty({
-    description: 'Indicates if this image is the main display image',
-    example: true,
-  })
+  @ApiProperty({ example: true })
+  @IsBoolean()
   isMain!: boolean;
-}
-
-/* ======================================================
-   OWNER RESPONSE
-====================================================== */
-export class HouseOwnerResponseDto {
-  @ApiProperty({
-    description: 'Unique identifier of the owner',
-    example: 'user_987xyz',
-  })
-  id!: string;
-
-  @ApiProperty({
-    description: 'Full name of the house owner',
-    example: 'John Doe',
-  })
-  fullName!: string;
-
-  @ApiPropertyOptional({
-    description: 'Phone number of the owner, if available',
-    example: '+254712345678',
-  })
-  phone?: string;
-}
-
-/* ======================================================
-   NESTED CATEGORY RESPONSE
-====================================================== */ 
-
-export class NestedCategoryResponseDto {
-  @ApiProperty()
-  id!: string;
-
-  @ApiProperty()
-  name!: string;
-
-  @ApiProperty()
-  slug!: string;
-
-  @ApiProperty()
-  vertical!: string;
 }
 
 /* ======================================================
    HOUSE LISTING RESPONSE
 ====================================================== */
 export class HouseListingResponseDto {
-  @ApiProperty({
-    description: 'Unique identifier for the house listing',
-    example: 'house_123abc',
-  })
+  @ApiProperty({ example: 'house_123abc' })
+  @IsString()
   id!: string;
 
-  @ApiProperty({
-    description: 'External identifier for public use or third-party integrations',
-    example: 'ext_456def',
-  })
+  @ApiProperty({ example: 'ext_456def' })
+  @IsString()
   externalId!: string;
 
-  @ApiProperty({
-    description: 'Title of the house listing',
-    example: 'Spacious 3 Bedroom Apartment',
-  })
+  @ApiProperty({ example: 'Spacious 3 Bedroom Apartment' })
+  @IsString()
   title!: string;
 
-  @ApiProperty({
-    description: 'Detailed description of the house',
-    example: 'A modern apartment in the city center with a balcony and parking',
-  })
+  @ApiProperty({ example: 'A modern apartment in the city center...' })
+  @IsString()
   description!: string;
 
-  // UPDATED: Rich Category data (Name, Slug, etc.)
-  @ApiPropertyOptional({ 
-    description: 'Detailed category information from the unified system',
-    type: () => CategoryResponseDto 
-  })
-  category?: NestedCategoryResponseDto;
+  @ApiProperty({ description: 'Detailed category information' })
+  @IsObject()
+  category!: NestedCategoryResponseDto;
 
+  /* --- Identity Pillar --- */
+  @ApiProperty({ description: 'The Human (Agent/Landlord) who created the listing' })
+  @IsObject()
+  creator!: UserBasicDto;
+
+  @ApiProperty({ description: 'The Brand or Agency account owning this listing' })
+  @IsObject()
+  account!: AccountBasicDto;
+  /* ---------------------- */
 
   @ApiProperty({
     description: 'Listing type (for sale or rent)',
     enum: HOUSE_LISTING_TYPES,
-    example: 'RENT',
+    example: 'RENTAL',
   })
+  @IsString()
   listingType!: string;
 
-  @ApiProperty({
-    description: 'Price of the house',
-    example: 1500000,
-  })
+  @ApiProperty({ example: 150000 })
+  @IsNumber()
   price!: number;
 
-  @ApiProperty({
-    description: 'Currency of the price',
-    example: 'KES',
-  })
+  @ApiProperty({ example: 'KES' })
+  @IsString()
   currency!: string;
 
-  @ApiPropertyOptional({
-    description: 'Number of bedrooms',
-    example: 3,
-  })
+  @ApiPropertyOptional({ example: 3 })
+  @IsOptional()
+  @IsNumber()
   bedrooms?: number;
 
-  @ApiPropertyOptional({
-    description: 'Number of bathrooms',
-    example: 2,
-  })
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @IsNumber()
   bathrooms?: number;
 
   @ApiProperty({
-    description: 'List of amenities available in the house',
+    description: 'List of amenities',
     type: [String],
     example: ['Parking', 'Balcony', 'Gym'],
   })
+  @IsArray()
+  @IsString({ each: true })
   amenities!: string[];
 
-  @ApiProperty({
-    description: 'Indicates whether the house is furnished',
-    example: true,
-  })
+  @ApiProperty({ example: true })
+  @IsBoolean()
   isFurnished!: boolean;
 
-  @ApiProperty({
-    description: 'City where the house is located',
-    example: 'Nairobi',
-  })
+  @ApiProperty({ example: 'Nairobi' })
+  @IsString()
   locationCity!: string;
 
-  @ApiPropertyOptional({
-    description: 'Neighborhood or suburb of the house',
-    example: 'Westlands',
-  })
+  @ApiPropertyOptional({ example: 'Westlands' })
+  @IsOptional()
+  @IsString()
   locationNeighborhood?: string;
 
-  @ApiPropertyOptional({
-    description: 'Full address of the house',
-    example: '123 Riverside Drive, Nairobi',
-  })
+  @ApiPropertyOptional({ example: '123 Riverside Drive, Nairobi' })
+  @IsOptional()
+  @IsString()
   address?: string;
 
   @ApiProperty({
-    description: 'Current status of the listing',
     enum: HOUSE_LISTING_STATUSES,
     example: 'ACTIVE',
   })
+  @IsString()
   status!: string;
 
-  @ApiProperty({
-    description: 'Date and time the listing was created',
-    example: '2025-12-01T12:00:00Z',
-  })
+  @ApiProperty({ example: '2025-12-01T12:00:00Z' })
+  @IsDate()
   createdAt!: Date;
 
-  @ApiProperty({
-    description: 'Date and time the listing was last updated',
-    example: '2025-12-05T15:30:00Z',
-  })
+  @ApiProperty({ example: '2025-12-05T15:30:00Z' })
+  @IsDate()
   updatedAt!: Date;
 
-  @ApiPropertyOptional({
-    description: 'Primary image URL for the listing',
-    example: 'https://example.com/images/house1_main.jpg',
-  })
+  @ApiPropertyOptional({ example: 'https://example.com/images/house1_main.jpg' })
+  @IsOptional()
+  @IsString()
   imageUrl?: string;
 
-  @ApiProperty({
-    description: 'List of all images for this house',
-    type: [HouseImageResponseDto],
-  })
+  @ApiProperty({ type: [HouseImageResponseDto] })
+  @IsArray()
   images!: HouseImageResponseDto[];
-
-  @ApiProperty({
-    description: 'Information about the owner of the house',
-    type: HouseOwnerResponseDto,
-  })
-  owner!: HouseOwnerResponseDto;
 }
 
 /* ======================================================
    HOUSE VIEWING RESPONSE
 ====================================================== */
 export class HouseViewingResponseDto {
-  @ApiProperty({
-    description: 'Unique identifier for the house viewing record',
-    example: 'view_789xyz',
-  })
+  @ApiProperty({ example: 'view_789xyz' })
+  @IsString()
   id!: string;
 
-  @ApiProperty({
-    description: 'Identifier of the house being viewed',
-    example: 'house_123abc',
-  })
+  @ApiProperty({ example: 'house_123abc' })
+  @IsString()
   houseId!: string;
 
-  @ApiProperty({
-    description: 'Identifier of the user viewing the house',
-    example: 'user_456def',
-  })
+  @ApiProperty({ example: 'user_456def' })
+  @IsString()
   viewerId!: string;
 
-  @ApiProperty({
-    description: 'Scheduled date and time of the viewing',
-    example: '2026-01-05T14:00:00Z',
-  })
+  @ApiProperty({ example: '2026-01-05T14:00:00Z' })
+  @IsDate()
   viewingDate!: Date;
 
   @ApiProperty({
-    description: 'Status of the house viewing',
     enum: HOUSE_VIEWING_STATUSES,
     example: 'SCHEDULED',
   })
   @IsIn(HOUSE_VIEWING_STATUSES)
   status!: string;
+
+  @ApiPropertyOptional({ example: 'I will be coming with my spouse' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }

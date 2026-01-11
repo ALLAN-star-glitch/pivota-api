@@ -9,7 +9,7 @@ import { AuthModule } from '../gateway-modules/AuthGatewayModule/auth.module';
 import { PlansGatewayModule } from '../gateway-modules/PlansGatewayModule/plans-gateway.module';
 import { JobsModule } from '../gateway-modules/JobsGatewayModule/jobs.module';
 import { SubscriptionsGatewayModule } from '../gateway-modules/SubscriptionsGatewayModule/subscriptions-gateway.module';
-import { ProvidersGatewayModule } from '../gateway-modules/ProviderGatewayModule/providers-gateway.module';
+import { ProvidersGatewayModule } from '../gateway-modules/ContractorsGatewayModule/contractors-gateway.module';
 import { HousingGatewayModule } from '../gateway-modules/HousingGatewayModule/housing-gateway.module';
 
 

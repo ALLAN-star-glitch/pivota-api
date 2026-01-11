@@ -13,8 +13,12 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   console.log('🌱 Starting unified category and pricing seeding...');
 
+  // Map to store DB IDs for subcategory linking
+  // Format: "VERTICAL:SLUG" -> "CUID_FROM_DB"
   const rootIds: Record<string, string> = {};
 
+
+  
   // ======================================================
   // 1. Seed ROOT CATEGORIES
   // ======================================================
@@ -46,30 +50,39 @@ async function main() {
   // 2. Seed SUBCATEGORIES
   // ======================================================
   console.log('➡️ Seeding subcategories...');
-  const subCategoriesData = SUB_CATEGORIES(rootIds).map((sub) => ({
-    vertical: sub.vertical,
-    name: sub.name,
-    slug: sub.slug,
-    parentId: sub.parentId,
-    hasParent: true,
-    hasSubcategories: false,
-  }));
+  const subCategoriesData = SUB_CATEGORIES(rootIds);
 
-  await prisma.category.createMany({
-    data: subCategoriesData,
-    skipDuplicates: true,
-  });
-  console.log('✅ Categories and Subcategories ready.');
+  for (const sub of subCategoriesData) {
+    await prisma.category.upsert({
+      where: {
+        vertical_slug: { vertical: sub.vertical, slug: sub.slug },
+      },
+      update: {
+        parentId: sub.parentId,
+        hasParent: true,
+        hasSubcategories: false,
+      },
+      create: {
+        vertical: sub.vertical,
+        name: sub.name,
+        slug: sub.slug,
+        parentId: sub.parentId,
+        hasParent: true,
+        hasSubcategories: false,
+      },
+    });
+  }
+  console.log('✅ Categories and Subcategories synced.');
 
   // ======================================================
-  // 3. Seed PROVIDER PRICING RULES
+  // 3. Seed CONTRACTOR PRICING RULES
   // ======================================================
-  console.log('➡️ Seeding provider pricing rules...');
+  console.log('➡️ Seeding contractor pricing rules...');
 
   for (const rule of PRICE_UNIT_RULES) {
     let targetCategoryId: string | null = null;
 
-    // Resolve categoryId if a slug is provided
+    // Resolve categoryId from the DB if a slug was provided in the constants
     if (rule.categorySlug) {
       const category = await prisma.category.findUnique({
         where: {
@@ -88,15 +101,14 @@ async function main() {
     }
 
     /**
-     * FIX: Manual Upsert Logic
-     * Prisma 'upsert' unique filters do not support 'null'.
-     * We find the record first, then branch to update or create.
+     * Logic: Match the @unique([vertical, unit, currency, categoryId]) constraint
      */
-    const existingRule = await prisma.providerPricingRule.findFirst({
+    const existingRule = await prisma.contractorPricingRule.findFirst({
       where: {
         vertical: rule.vertical,
         unit: rule.unit,
-        categoryId: targetCategoryId, // findFirst handles null correctly
+        currency: rule.currency ?? 'KES',
+        categoryId: targetCategoryId,
       },
     });
 
@@ -106,17 +118,16 @@ async function main() {
       isExperienceRequired: rule.isExperienceRequired ?? false,
       isNotesRequired: rule.isNotesRequired ?? false,
       isActive: true,
+      currency: rule.currency ?? 'KES',
     };
 
     if (existingRule) {
-      // Update by unique internal ID
-      await prisma.providerPricingRule.update({
+      await prisma.contractorPricingRule.update({
         where: { id: existingRule.id },
         data: commonData,
       });
     } else {
-      // Create new record
-      await prisma.providerPricingRule.create({
+      await prisma.contractorPricingRule.create({
         data: {
           ...commonData,
           vertical: rule.vertical,
@@ -127,7 +138,7 @@ async function main() {
     }
   }
 
-  console.log('✅ Provider pricing rules seeded (including global fallbacks).');
+  console.log('✅ Contractor pricing rules seeded.');
   console.log('🎉 Seeding process completed successfully!');
 }
 

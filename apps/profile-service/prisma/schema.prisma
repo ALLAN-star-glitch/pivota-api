@@ -9,20 +9,53 @@ datasource db {
 
 // --- GLOBAL WRAPPER (The Root Anchor) ---
 model Account {
-  id          String @id @default(cuid())
-  uuid        String @unique @default(uuid())
-  accountCode String @unique
+  id          String   @id @default(cuid())
+  uuid        String   @unique @default(uuid())
+  accountCode String   @unique
 
-  // Distinguishes the billing/entity type: INDIVIDUAL | ORGANIZATION
-  type String @default("INDIVIDUAL")
+  // Individual: "John Doe" | Organization: "Pivota NGO"
+  name        String?
+  type        String   @default("INDIVIDUAL") // INDIVIDUAL | ORGANIZATION
+
+  // --- THE TRUST ANCHOR ---
+  // The master flag used for gRPC/JWT and UI badges
+  isVerified  Boolean  @default(false)
+  
+  // List of verified capabilities (e.g., ["IDENTITY", "KRA", "PRO_LICENSE"])
+  verifiedFeatures String[]
+
+  // Relation to the verification lifecycle and documents
+  verifications AccountVerification[]
 
   organization Organization?
-
-  // One Account can house multiple Users (especially for Businesses)
-  users User[]
+  contractor   ContractorProfile?
+  users        User[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// --- NEW: ACCOUNT VERIFICATION TRACKER ---
+model AccountVerification {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
+
+  // e.g., "NATIONAL_ID", "BUSINESS_REGISTRATION", "KRA_PIN", "LICENSE"
+  type        String   
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED, EXPIRED
+  
+  // URL to the uploaded evidence (ID photo, PDF Certificate, etc.)
+  documentUrl String?
+  
+  rejectionReason String?
+  verifiedAt      DateTime?
+  expiresAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, type])
 }
 
 // --- ENTITY LAYER (Independent Business Profile) ---
@@ -32,7 +65,6 @@ model Organization {
   orgCode String @unique
   name    String
 
-  // Links the business entity to its root billing Account
   accountId String  @unique
   account   Account @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
 
@@ -40,7 +72,9 @@ model Organization {
   completion ProfileCompletion?
   members    OrganizationMember[]
 
-  verificationStatus String   @default("PENDING")
+  // Inherited/Synced from Account.isVerified
+  verificationStatus String   @default("PENDING") 
+  
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -48,22 +82,18 @@ model Organization {
 // --- IDENTITY LAYER (Logins/Humans) ---
 model User {
   id       String  @id @default(cuid())
-  uuid     String  @unique @default(uuid()) // Matches userUuid from Auth Service
+  uuid     String  @unique @default(uuid())
   userCode String  @unique
   email    String  @unique
   phone    String? @unique
 
-  // Optional initially for Organization signups (filled during onboarding)
   firstName String?
   lastName  String?
 
-  // Every User (human login) belongs to a root Account
   accountId String
   account   Account @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
 
-  // Role assignment happens here (e.g., BUSINESS_ADMIN or GeneralUser)
-  roleName String @default("GeneralUser")
-
+  roleName     String  @default("GeneralUser")
   profileImage String?
 
   profile     UserProfile?
@@ -85,8 +115,8 @@ model ProfileCompletion {
   organizationUuid String?       @unique
   organization     Organization? @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
 
-  percentage    Int      @default(0) // 0 to 100
-  missingFields String[] // e.g., ["FIRST_NAME", "KRA_PIN", "REG_NO"]
+  percentage    Int      @default(0) 
+  missingFields String[] 
   isComplete    Boolean  @default(false)
 
   updatedAt DateTime @updatedAt
@@ -110,13 +140,11 @@ model UserProfile {
   id           String    @id @default(cuid())
   userUuid     String    @unique
   user         User      @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
-  profileImage String? // Added this field
+  profileImage String? 
   bio          String?
   gender       String?
   dateOfBirth  DateTime?
   nationalId   String?   @unique
-
-  verifications VerificationDocument[]
 }
 
 // --- BUSINESS PROFILE LAYER (Entity Metadata) ---
@@ -131,29 +159,29 @@ model OrganizationProfile {
   officialPhone  String?
   registrationNo String? @unique
   kraPin         String? @unique
-
-  logo String?
-
+  logo           String?
   physicalAddress String?
-
-  verifications VerificationDocument[]
 }
 
-// --- VERIFICATION LAYER (Compliance Documents) ---
-model VerificationDocument {
-  id String @id @default(cuid())
+// --- CONTRACTOR PROFILE ---
+model ContractorProfile {
+  id               String       @id @default(cuid())
+  uuid             String       @unique @default(uuid())
+  
+  accountId        String       @unique
+  account          Account      @relation(fields: [accountId], references: [uuid], onDelete: Cascade)
 
-  userProfileId String?
-  userProfile   UserProfile? @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  specialties      String[]     
+  serviceAreas     String[]     
+  
+  yearsExperience  Int?         @default(0)
+  
+  // Snapshot from Account.isVerified for fast querying in search
+  isVerified       Boolean      @default(false)
+  
+  averageRating    Float        @default(0.0)
+  totalReviews     Int          @default(0)
 
-  orgProfileId String?
-  orgProfile   OrganizationProfile? @relation(fields: [orgProfileId], references: [id], onDelete: Cascade)
-
-  documentType    String
-  documentUrl     String
-  status          String  @default("PENDING")
-  rejectionReason String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 }

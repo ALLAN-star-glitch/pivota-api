@@ -2,7 +2,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
-  CreateJobPostDto,
   JobPostResponseDto,
   BaseResponseDto,
   UserResponseDto,
@@ -13,7 +12,8 @@ import {
   JobApplicationResponseDto,
   UpdateJobPostRequestDto,
   CloseJobPostRequestDto,
-  CloseJobPostResponseDto
+  CloseJobPostResponseDto,
+  CreateJobPostGrpcDto
 } from '@pivota-api/dtos';
 import { firstValueFrom, Observable } from 'rxjs';
 import { BaseUserResponseGrpc,   } from '@pivota-api/interfaces';
@@ -21,7 +21,7 @@ import { ClientGrpc } from '@nestjs/microservices';
 
 interface UserServiceGrpc {
 
-  getUserProfileByUuid(data: GetUserByUserUuidDto): Observable<BaseUserResponseGrpc<UserResponseDto> | null>;
+  getUserProfileByUuid(data: GetUserByUserUuidDto): Observable<BaseResponseDto<UserResponseDto> | null>;
 }
 
 
@@ -52,7 +52,7 @@ export class JobsService {
   // CREATE JOB POST
   // ======================================================
   async createJobPost(
-    dto: CreateJobPostDto,
+    dto: CreateJobPostGrpcDto,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
     try {
       const category = await this.prisma.category.findUnique({
@@ -73,25 +73,33 @@ export class JobsService {
       const created = await this.prisma.jobPost.create({
         data: {
           title: dto.title,
-          description: dto.description,
-          categoryId: dto.categoryId,
-          subCategoryId: dto.subCategoryId ?? null,
-          creatorId: dto.creatorId,
-          jobType: dto.jobType,
-          locationCity: dto.locationCity,
-          locationNeighborhood: dto.locationNeighborhood ?? '',
-          isRemote: dto.isRemote ?? false,
-          payAmount: dto.payAmount ?? 0,
-          payRate: dto.payRate,
-          skills: dto.skills ?? [],
-          experienceLevel: dto.experienceLevel ?? '',
-          employmentType: dto.employmentType ?? '',
-          documentsNeeded: dto.documentsNeeded ?? [],
-          equipmentRequired: dto.equipmentRequired ?? [],
-          additionalNotes: dto.additionalNotes ?? '',
-          requiresDocuments: dto.requiresDocuments ?? false,
-          requiresEquipment: dto.requiresEquipment ?? false,
-          status: dto.status ?? 'ACTIVE',
+        description: dto.description,
+        categoryId: dto.categoryId,
+        subCategoryId: dto.subCategoryId ?? null,
+        
+        // Identity Pillars from Gateway
+        creatorId: dto.creatorId,
+        creatorName: dto.creatorName,
+        accountId: dto.accountId,
+        accountName: dto.accountName,
+        
+        jobType: dto.jobType,
+        locationCity: dto.locationCity,
+        locationNeighborhood: dto.locationNeighborhood ?? '',
+        isRemote: dto.isRemote ?? false,
+        payAmount: dto.payAmount ?? 0,
+        payRate: dto.payRate,
+        isNegotiable: dto.isNegotiable ?? false,
+        
+        skills: dto.skills ?? [],
+        experienceLevel: dto.experienceLevel ?? '',
+        employmentType: dto.employmentType ?? '',
+        requiresDocuments: dto.requiresDocuments ?? false,
+        documentsNeeded: dto.documentsNeeded ?? [],
+        requiresEquipment: dto.requiresEquipment ?? false,
+        equipmentRequired: dto.equipmentRequired ?? [],
+        additionalNotes: dto.additionalNotes ?? '',
+        status: dto.status ?? 'ACTIVE',
         },
         include: {
           category: true,
@@ -99,47 +107,37 @@ export class JobsService {
         },
       });
 
-      // -----------------------------
-      // Fetch creator info from User Service
-      // -----------------------------
+    
+      const data: JobPostResponseDto = {
+      ...created,
+      createdAt: created.createdAt.toISOString(),
+      updatedAt: created.updatedAt.toISOString(),
       
+      // Map relations safely
+      category: created.category
+        ? { id: created.category.id, name: created.category.name }
+        : null,
+      subCategory: created.subCategory
+        ? { id: created.subCategory.id, name: created.subCategory.name }
+        : undefined,
 
-      const userGrpcService = this.getGrpcService();
-      const creator$ = userGrpcService.getUserProfileByUuid({ userUuid: created.creatorId });
-      const creatorRes: BaseUserResponseGrpc<UserResponseDto> = await firstValueFrom(creator$);
-
-      this.logger.log(`Creator fetched successfully: ${JSON.stringify(creatorRes)}`);
-
-
-      const [applicationsCount, bookingsCount] = await Promise.all([
-        this.prisma.jobPostApplication.count({ where: { jobPostId: created.id } }),
-        this.prisma.booking.count({ where: { jobPostId: created.id } }),
-      ]);
-
-      const jobPost: JobPostResponseDto = {
-        ...created,
-        createdAt: created.createdAt.toISOString(),
-        updatedAt: created.updatedAt.toISOString(),
-        category: created.category
-          ? { id: created.category.id, name: created.category.name }
-          : null,
-        subCategory: created.subCategory
-          ? { id: created.subCategory.id, name: created.subCategory.name }
-          : undefined,
-        creator: {
-          id: creatorRes.user.uuid,
-          fullName: `${creatorRes.user.firstName} ${creatorRes.user.lastName}`.trim(),
-          email: creatorRes.user.email ?? undefined,
-        },
-        applicationsCount,
-        bookingsCount,
-      };
+      // Map Identity Pillars directly from the created record
+      creator: {
+        id: created.creatorId,
+        fullName: created.creatorName,
+      },
+      account: {
+        id: created.accountId,
+        name: created.accountName,
+      },
+      applicationsCount: 0,
+    };
 
       const success =  {
         success: true,
         message: 'Job post created successfully',
         code: 'CREATED',
-        jobPost,
+        data,
         error: null,
       };
       return success;
@@ -150,139 +148,155 @@ export class JobsService {
         success: false,
         message: 'Failed to create job post',
         code: 'JOB_CREATION_FAILED',
-        jobPost: null,
+        data: null,
         error: { message: err.message, details: err.stack },
       };
       return response;
     }
   }
+  
 
   // ======================================================
   // GET JOB POST BY ID
   // ======================================================
   async getJobPostById(id: string): Promise<BaseResponseDto<JobPostResponseDto>> {
-    try {
-      const job = await this.prisma.jobPost.findUnique({
-        where: { id },
-        include: {
-          category: true,
-          subCategory: true,
-        },
-      });
+  try {
+    // 1. Fetch Job from DB with relations
+    // We cast as 'any' to allow clean mapping of category/subCategory objects
+    const job = await this.prisma.jobPost.findUnique({
+      where: { id },
+      include: {
+        category: true,
+        subCategory: true,
+      },
+    });
 
-      if (!job) {
-        return {
-          success: false,
-          message: 'Job post not found',
-          code: 'JOB_NOT_FOUND',
-          data: null,
-          error: { message: 'No job post exists with this ID', details: null },
-        };
-    
-      }
-
-       const userGrpcService = this.getGrpcService();
-       const creator$ = userGrpcService.getUserProfileByUuid({ userUuid: job.creatorId });
-       const creatorRes: BaseUserResponseGrpc<UserResponseDto> = await firstValueFrom(creator$);
-       
-
-     
-
-      const [applicationsCount, bookingsCount] = await Promise.all([
-        this.prisma.jobPostApplication.count({ where: { jobPostId: job.id } }),
-        this.prisma.booking.count({ where: { jobPostId: job.id } }),
-      ]);
-
-      const jobPost: JobPostResponseDto = {
-        ...job,
-        createdAt: job.createdAt.toISOString(),
-        updatedAt: job.updatedAt.toISOString(),
-        category: job.category
-          ? { id: job.category.id, name: job.category.name }
-          : null,
-        subCategory: job.subCategory
-          ? { id: job.subCategory.id, name: job.subCategory.name }
-          : undefined,
-        creator: {
-          id: creatorRes.user.uuid,
-          fullName: `${creatorRes.user.firstName} ${creatorRes.user.lastName}`.trim(),
-          email: creatorRes.user.email ?? undefined,
-        },
-        applicationsCount,
-        bookingsCount,
-      };
-
-      return {
-        success: true,
-        message: 'Job post fetched successfully',
-        code: 'FETCHED',
-        data: jobPost,
-        error: null,
-      };
-    } catch (error) {
-      const err = error as Error;
-      this.logger.error(`Fetch job post failed: ${err.message}`, err.stack);
+    if (!job) {
       return {
         success: false,
-        message: 'Failed to fetch job post',
-        code: 'FETCH_FAILED',
+        message: 'Job post not found',
+        code: 'JOB_NOT_FOUND',
         data: null,
-        error: { message: err.message, details: err.stack },
+        error: { message: 'No job post exists with this ID', details: null },
       };
     }
+
+    // 2. Count applications only (Removed Booking logic)
+    const applicationsCount = await this.prisma.jobPostApplication.count({ 
+      where: { jobPostId: job.id } 
+    });
+
+    // 3. Construct Response using spread operator
+    // Using denormalized names (job.creatorName / job.accountName)
+    const jobPost: JobPostResponseDto = {
+      ...job,
+      createdAt: job.createdAt.toISOString(),
+      updatedAt: job.updatedAt.toISOString(),
+      
+      category: job.category
+        ? { id: job.category.id, name: job.category.name }
+        : null,
+      
+      subCategory: job.subCategory
+        ? { id: job.subCategory.id, name: job.subCategory.name }
+        : undefined,
+
+      // Identity Pillar (Now from DB, no gRPC needed)
+      creator: {
+        id: job.creatorId,
+        fullName: job.creatorName,
+      },
+      account: {
+        id: job.accountId,
+        name: job.accountName,
+      },
+      
+      applicationsCount,
+      // bookingsCount removed as per your request
+    };
+
+    return {
+      success: true,
+      message: 'Job post fetched successfully',
+      code: 'FETCHED',
+      data: jobPost,
+      error: null,
+    };
+  } catch (error) {
+    const err = error as Error;
+    this.logger.error(`Fetch job post failed: ${err.message}`, err.stack);
+    return {
+      success: false,
+      message: 'Failed to fetch job post',
+      code: 'FETCH_FAILED',
+      data: null,
+      error: { message: err.message, details: err.stack },
+    };
   }
+}
 
   // ======================================================
 // FETCH JOBS BY CATEGORY
 // ======================================================
 async getJobsByCategory(categoryId: string): Promise<BaseResponseDto<JobPostResponseDto[]>> {
+  this.logger.log(`[JOBS] Fetching feed for category: ${categoryId}`);
+
   try {
+    // 1. Fetch all jobs in the category with relations
     const jobs = await this.prisma.jobPost.findMany({
-      where: { categoryId },
-      include: { category: true, subCategory: true },
+      where: { categoryId, status: 'ACTIVE' }, // Only show active jobs in feed
+      include: { 
+        category: true, 
+        subCategory: true 
+      },
+      orderBy: { createdAt: 'desc' } // Newest first
     });
 
-    const jobsCount = jobs.length; // total number of jobs
-
+    // 2. Map the results (Removing gRPC and Bookings)
     const jobsWithCounts: JobPostResponseDto[] = await Promise.all(
       jobs.map(async (job) => {
-        const [applicationsCount, bookingsCount] = await Promise.all([
-          this.prisma.jobPostApplication.count({ where: { jobPostId: job.id } }),
-          this.prisma.booking.count({ where: { jobPostId: job.id } }),
-        ]);
-
-        const userGrpcService = this.getGrpcService();
-        const creator$ = userGrpcService.getUserProfileByUuid({ userUuid: job.creatorId });
-        const creatorRes: BaseUserResponseGrpc<UserResponseDto> = await firstValueFrom(creator$);
+        // We still count applications as they are dynamic
+        const applicationsCount = await this.prisma.jobPostApplication.count({ 
+          where: { jobPostId: job.id } 
+        });
 
         return {
           ...job,
-          createdAt: job.createdAt.toISOString(),   // convert to string
-          updatedAt: job.updatedAt.toISOString(),   // convert to string
+          createdAt: job.createdAt.toISOString(),
+          updatedAt: job.updatedAt.toISOString(),
+          
           category: job.category
             ? { id: job.category.id, name: job.category.name }
             : null,
+            
           subCategory: job.subCategory
             ? { id: job.subCategory.id, name: job.subCategory.name }
             : undefined,
+
+          // Identity Pillars (Using denormalized names from DB)
           creator: { 
             id: job.creatorId, 
-            fullName: `${creatorRes.user.firstName} ${creatorRes.user.lastName}`.trim(), 
-            email: undefined 
+            fullName: job.creatorName, 
           },
+          account: {
+            id: job.accountId,
+            name: job.accountName,
+          },
+
           applicationsCount,
-          bookingsCount,
+          // bookingsCount removed
         };
       }),
     );
 
     return {
       success: true,
-      message: `Jobs fetched successfully. Total jobs: ${jobsCount}`, 
+      message: `Successfully fetched ${jobs.length} jobs`, 
       code: 'FETCHED',
       data: jobsWithCounts,
       error: null,
     };
+
   } catch (error) {
     const err = error as Error;
     this.logger.error(`Fetch jobs by category failed: ${err.message}`, err.stack);
@@ -293,7 +307,6 @@ async getJobsByCategory(categoryId: string): Promise<BaseResponseDto<JobPostResp
       data: null,
       error: { message: err.message, details: err.stack },
     };
-    
   }
 }
 

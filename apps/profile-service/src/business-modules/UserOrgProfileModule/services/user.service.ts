@@ -14,22 +14,31 @@ import {
   UserProfileResponseDto,
   CreateUserRequestDto,
 } from '@pivota-api/dtos';
-import { Account, ProfileCompletion, User, UserProfile } from '../../../../generated/prisma/client';
+import { Account, Organization, ProfileCompletion, User, UserProfile, OrganizationProfile } from '../../../../generated/prisma/client';
 import {  RpcException, ClientGrpc } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
 import { catchError, lastValueFrom, Observable, throwError, timeout } from 'rxjs';
 import { BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
 
+// 1. Define Organization with its Profile relation
+type OrganizationWithProfile = Organization & { 
+  profile?: OrganizationProfile | null 
+};
+
+// 2. Define Account with the updated Organization
+type AccountWithOrg = Account & { 
+  organization?: OrganizationWithProfile | null 
+};
+
 interface UserProfileAggregate {
   user: User;
-  account: Account;
-  profile: UserProfile;
-  completion: ProfileCompletion;
+  account: AccountWithOrg; 
+  profile: UserProfile | null;
+  completion: ProfileCompletion | null;
 }
 
-// Shape from Prisma's findUnique(... { include: { ... } })
 type PrismaUserAggregate = User & {
-  account: Account;
+  account: AccountWithOrg; 
   profile: UserProfile | null;
   completion: ProfileCompletion | null;
 };
@@ -109,12 +118,15 @@ export class UserService {
 
     /* ---------- 2. ATOMIC DATABASE TRANSACTION ---------- */
     const result = await this.prisma.$transaction(async (tx) => {
+      // Construct the display name for the account
+      const accountDisplayName = `${data.firstName} ${data.lastName}`.trim();
       // A. Create Root Individual Account
       const account = await tx.account.create({
         data: {
           uuid: accountUuid,
           accountCode: `ACC-${userCode}`,
           type: 'INDIVIDUAL',
+          name: accountDisplayName, 
         },
       });
 
@@ -220,15 +232,22 @@ export class UserService {
 
   try {
     // 1. Fetch from DB
-    const userAggregate = await this.prisma.user.findUnique({
-      where: { uuid: data.userUuid },
-      include: {
-        account: true,
-        profile: true,
-        completion: true,
-      }
-    });
-
+        const userAggregate = await this.prisma.user.findUnique({
+        where: { uuid: data.userUuid },
+        include: {
+          account: {
+            include: {
+              organization: {
+                include: {
+                  profile: true
+                }
+              },
+            },
+          },
+          profile: true,
+          completion: true,
+        },
+      });
     // 2. Log Raw Prisma Output
     if (userAggregate) {
       this.logger.debug(`[DB RESULT] User found. Keys returned: ${Object.keys(userAggregate).join(', ')}`);
@@ -254,6 +273,7 @@ export class UserService {
 
     this.logger.log(`[SUCCESS] Mapping complete for: ${data.userUuid}`);
 
+    this.logger.log(`Organisation Email For the User: ${mappedData.organization?.officialEmail ?? 'N/A'}`);
     return {
       success: true,
       message: "User retrieved successfully",
@@ -283,7 +303,7 @@ export class UserService {
     const userAggregate = await this.prisma.user.findUnique({
       where: { email: data.email },
       include: {
-        account: true,
+        account: {include: {organization:true}},
         profile: true,
         completion: true,
       }
@@ -297,7 +317,7 @@ export class UserService {
       success: true,
       message: 'User retrieved successfully',
       code: 'OK',
-      data: this.mapToUserProfileResponseDto(userAggregate as unknown as UserProfileAggregate),
+      data: this.mapToUserProfileResponseDto(userAggregate as PrismaUserAggregate),
       error: null,
     };
   }
@@ -312,7 +332,7 @@ export class UserService {
     const userAggregate = await this.prisma.user.findUnique({ 
       where: { userCode: data.userCode },
       include: {
-        account: true,
+        account: {include: {organization: true}},
         profile: true,
         completion: true,
       }
@@ -333,7 +353,7 @@ export class UserService {
       message: "User retrieved successfully",
       code: 'OK',
       // Map the aggregate and place it in the 'data' key as per proto
-      data: this.mapToUserProfileResponseDto(userAggregate as unknown as UserProfileAggregate),
+      data: this.mapToUserProfileResponseDto(userAggregate as PrismaUserAggregate),
       error: null,
     };
   }
@@ -342,7 +362,7 @@ export class UserService {
   async getAllUsers(): Promise<BaseResponseDto<UserProfileResponseDto[]>> {
     const users = await this.prisma.user.findMany({
       include: {
-        account: true,
+        account: {include: {organization: true}},
         profile: true,
         completion: true,
       }
@@ -352,72 +372,81 @@ export class UserService {
       success: true,
       message: 'Users retrieved successfully',
       code: 'OK',
-      data: users.map((u) => this.mapToUserProfileResponseDto(u as unknown as UserProfileAggregate)),
+      data: users.map((u) => this.mapToUserProfileResponseDto(u  as PrismaUserAggregate)),
       error: null,  
     };
   }
 
-
-  /* ======================================================
+/* ======================================================
      MAPPER: PRISMA AGGREGATE TO USER PROFILE DTO
   ====================================================== */
-  /* ======================================================
-   MAPPER: PRISMA AGGREGATE TO USER PROFILE DTO
-====================================================== */
-private mapToUserProfileResponseDto(
-  data: UserProfileAggregate | PrismaUserAggregate,
-): UserProfileResponseDto {
-  
-  // Type Guard / Extraction Logic
-  const isNested = (input: UserProfileAggregate | PrismaUserAggregate): input is UserProfileAggregate => {
-    return 'user' in input;
-  };
+  private mapToUserProfileResponseDto(
+    data: UserProfileAggregate | PrismaUserAggregate,
+  ): UserProfileResponseDto {
+    
+    const isNested = (input: UserProfileAggregate | PrismaUserAggregate): input is UserProfileAggregate => {
+      return 'user' in input;
+    };
 
-  const user = isNested(data) ? data.user : data;
-  const account = data.account;
-  const profile = data.profile;
-  const completion = data.completion;
+    const user = isNested(data) ? data.user : data;
+    const account = data.account;
+    const profile = data.profile;
+    const completion = data.completion;
+    
+    // Extract organization from the nested account object
+    const orgData = account?.organization;
 
-  return {
-    // 1. Account Layer
-    account: {
-      uuid: account?.uuid ?? '',
-      accountCode: account?.accountCode ?? '',
-      type: account?.type ?? 'INDIVIDUAL',
-    },
+    return {
+      // 1. Account Layer
+      account: {
+        uuid: account?.uuid ?? '',
+        accountCode: account?.accountCode ?? '',
+        type: (account?.type ?? 'INDIVIDUAL') as 'INDIVIDUAL' | 'ORGANIZATION',
+      },
 
-    // 2. Identity Layer (User)
-    user: {
-      uuid: user.uuid,
-      userCode: user.userCode,
-      firstName: user.firstName ?? '',
-      lastName: user.lastName ?? '',
-      email: user.email,
-      phone: user.phone ?? '',
-      status: user.status,
-      roleName: user.roleName,
-    },
+      // 2. Identity Layer (User)
+      user: {
+        uuid: user.uuid,
+        userCode: user.userCode,
+        firstName: user.firstName ?? '',
+        lastName: user.lastName ?? '',
+        email: user.email,
+        phone: user.phone ?? '',
+        status: user.status,
+        roleName: user.roleName,
+      },
 
-    // 3. Metadata Layer (Profile)
-    profile: profile ? {
-      bio: profile.bio ?? undefined,
-      gender: profile.gender ?? undefined,
-      dateOfBirth: profile.dateOfBirth?.toISOString(),
-      nationalId: profile.nationalId ?? undefined,
-      profileImage: profile.profileImage ?? undefined,
-    } : undefined,
+      // 3. Organization Layer (New)
+      // Only returns data if the account type is ORGANIZATION and record exists
+      organization: orgData ? {
+        id: orgData.id,
+        uuid: orgData.uuid,
+        name: orgData.name,
+        orgCode: orgData.orgCode,
+        officialEmail: orgData.profile?.officialEmail ?? undefined,
+        verificationStatus: orgData.verificationStatus,
+      } : undefined,
 
-    // 4. Onboarding Layer (Completion)
-    completion: completion ? {
-      percentage: completion.percentage,
-      missingFields: completion.missingFields,
-      isComplete: completion.isComplete,
-    } : undefined,
+      // 4. Metadata Layer (Profile)
+      profile: profile ? {
+        bio: profile.bio ?? undefined,
+        gender: profile.gender ?? undefined,
+        dateOfBirth: profile.dateOfBirth?.toISOString(),
+        nationalId: profile.nationalId ?? undefined,
+        profileImage: profile.profileImage ?? undefined,
+      } : undefined,
 
-    // 5. Chronological Metadata
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString(),
-  };
-}
+      // 5. Onboarding Layer (Completion)
+      completion: completion ? {
+        percentage: completion.percentage,
+        missingFields: completion.missingFields,
+        isComplete: completion.isComplete,
+      } : undefined,
+
+      // 6. Chronological Metadata
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+    };
+  }
 
 }

@@ -155,6 +155,7 @@ export class OrganisationService  {
           uuid: accountUuid,
           accountCode: `ACC-${orgCode}`,
           type: 'ORGANIZATION',
+          name: data.name
         },
       });
 
@@ -360,7 +361,7 @@ export class OrganisationService  {
       account: {
         uuid: data.account.uuid,
         accountCode: data.account.accountCode,
-        type: data.account.type,
+        type: (data.account.type ?? 'INDIVIDUAL') as 'INDIVIDUAL' | 'ORGANIZATION',
       },
       admin: this.mapToAdminDto(data.admin),
       completion: data.completion,

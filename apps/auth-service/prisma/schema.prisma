@@ -9,35 +9,39 @@ datasource db {
 
 model Credential {
   id            Int       @id @default(autoincrement())
-  userUuid      String    @unique        // The unique anchor across all services
-  
-  // --- Core Identity ---
-  email         String    @unique        // Necessary here for fast lookup during Login
+  userUuid      String    @unique
+  email         String    @unique
   passwordHash  String
 
-  // --- Security State ---
   mfaSecret     String?
   mfaEnabled    Boolean   @default(false)
   
-  // --- Account Protection ---
+  // Keep these here: They protect the IDENTITY regardless of the device
   failedAttempts Int      @default(0)
   lockoutExpires DateTime?
-  lastLoginAt    DateTime?
   
-  // --- Audit & Lifecycle ---
+  // Global record of the last time this user successfully authenticated
+  lastLoginAt    DateTime? 
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
 
 model Session {
   id           Int       @id @default(autoincrement())
-  userUuid     String                 // links to user via UUID
+  userUuid     String
   tokenId      String    @unique @default(uuid())
   hashedToken  String
+  
+  // Contextual Data (Already in your schema, which is good)
   device       String?
   ipAddress    String?
   userAgent    String?
   os           String?
+  
+  // --- RECOMMENDED ADDITION ---
+  lastActiveAt DateTime  @default(now()) // Update this on every refresh/authorized request
+  
   revoked      Boolean   @default(false)
   deletedAt    DateTime?
   createdAt    DateTime  @default(now())

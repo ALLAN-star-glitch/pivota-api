@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   BaseResponseDto,
-  CreateJobPostDto,
+  CreateJobPostGrpcDto,
   JobPostResponseDto,
   ValidateJobPostIdsRequestDto,
   ValidateJobPostIdsReponseDto,
@@ -23,7 +23,7 @@ interface ApplyToJobPostGrpcRequest extends CreateJobApplicationDto {
 
 interface JobsServiceGrpc {
   CreateJobPost(
-    data: CreateJobPostDto,
+    data: CreateJobPostGrpcDto,
   ): Observable<BaseResponseDto<JobPostResponseDto>>;
 
   GetJobPostById(
@@ -56,13 +56,14 @@ export class JobsService {
   // ===========================================================
   // CREATE JOB POST
   // ===========================================================
-  async createJobPost(dto: CreateJobPostDto): Promise<BaseResponseDto<JobPostResponseDto>> {
+  async createJobPost(dto: CreateJobPostGrpcDto): Promise<BaseResponseDto<JobPostResponseDto>> {
   // Ensure creatorId is included
   const grpcRequest = {
     ...dto,
     creatorId: dto.creatorId, // must exist here
-    jobType: dto.jobType,     // make sure enums match proto values (0 | 1)
-    status: dto.status,       // same for JobPostStatus
+    creatorName: dto.creatorName,
+    accountId: dto.accountId,
+    accountName: dto.accountName,
   };
 
   const res = await firstValueFrom(this.grpcService.CreateJobPost(grpcRequest));

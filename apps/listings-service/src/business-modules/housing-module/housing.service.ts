@@ -1,12 +1,10 @@
-import { Injectable, Logger, Inject, OnModuleInit } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import { Injectable, Logger, } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ClientGrpc } from '@nestjs/microservices';
-import { firstValueFrom, Observable } from 'rxjs';
+
 import {
   HouseListingResponseDto,
   BaseResponseDto,
-  UserResponseDto,
-  GetUserByUserUuidDto,
   HouseViewingResponseDto,
   UpdateHouseListingStatusDto,
   SearchHouseListingsDto,
@@ -17,13 +15,15 @@ import {
   CreateHouseListingGrpcRequestDto,
   ArchiveHouseListingsGrpcRequestDto,
 } from '@pivota-api/dtos';
-import { BaseUserResponseGrpc } from '@pivota-api/interfaces';
 
-// Internal interface to represent the Prisma result with included relations
-interface HouseListingWithImages {
+// Internal interface for Prisma results with relations
+interface HouseListingWithRelations {
   id: string;
   externalId: string;
-  ownerId: string;
+  creatorId: string;   // The human author
+  creatorName: string; // Denormalized name
+  accountId: string;   // The Org or Individual Account
+  accountName: string; // Denormalized name
   title: string;
   description: string;
   listingType: string;
@@ -36,7 +36,7 @@ interface HouseListingWithImages {
     name: string;
     slug: string;
     vertical: string;
-  } | null; 
+  } | null;
   bathrooms: number | null;
   amenities: string[];
   isFurnished: boolean;
@@ -50,47 +50,23 @@ interface HouseListingWithImages {
     id: string;
     url: string;
     isMain: boolean;
-    houseId: string;
   }>;
 }
 
-interface UserServiceGrpc {
-  getUserProfileByUuid(
-    data: GetUserByUserUuidDto,
-  ): Observable<BaseUserResponseGrpc<UserResponseDto> | null>;
-}
-
 @Injectable()
-export class HousingService implements OnModuleInit {
+export class HousingService {
   private readonly logger = new Logger(HousingService.name);
-  private userGrpcService: UserServiceGrpc;
 
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject('PROFILE_GRPC') private readonly userService: ClientGrpc,
-  ) {}
-
-  onModuleInit() {
-    this.userGrpcService =
-      this.userService.getService<UserServiceGrpc>('ProfileService');
-  }
-
-  private getGrpcService(): UserServiceGrpc {
-    if (!this.userGrpcService) {
-      this.userGrpcService =
-        this.userService.getService<UserServiceGrpc>('ProfileService');
-    }
-    return this.userGrpcService;
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   // ======================================================
   // CREATE HOUSE LISTING
   // ======================================================
- async createHouseListing(
+  async createHouseListing(
     dto: CreateHouseListingGrpcRequestDto,
   ): Promise<BaseResponseDto<HouseListingResponseDto>> {
     try {
-      // 1. Validate that the Category exists and belongs to the HOUSING vertical
+      // 1. Validate Category
       const category = await this.prisma.category.findFirst({
         where: { id: dto.categoryId, vertical: 'HOUSING' },
       });
@@ -104,14 +80,17 @@ export class HousingService implements OnModuleInit {
         };
       }
 
-      // 2. Create the listing in the database
+      // 2. Atomic Creation with Identity Pillars
+      // Injected by Gateway: ownerName, accountId, accountName
       const created = (await this.prisma.houseListing.create({
         data: {
-          ownerId: dto.ownerId,
+          creatorId: dto.creatorId,
+          creatorName: dto.creatorName, 
+          accountId: dto.accountId,
+          accountName: dto.accountName,
           title: dto.title,
           description: dto.description,
-          // Use categoryId instead of raw 'type'
-          categoryId: dto.categoryId, 
+          categoryId: dto.categoryId,
           listingType: dto.listingType,
           price: dto.price,
           currency: dto.currency ?? 'KES',
@@ -132,28 +111,17 @@ export class HousingService implements OnModuleInit {
               }
             : undefined,
         },
-        include: { 
+        include: {
           images: true,
-          category: true // Include category metadata in the return
+          category: true,
         },
-      })) as HouseListingWithImages;
-
-      // 3. Fetch Owner details via gRPC
-      const ownerRes = await firstValueFrom(
-        this.getGrpcService().getUserProfileByUuid({
-          userUuid: created.ownerId,
-        }),
-      );
-
-      if (!ownerRes || !ownerRes.user) {
-        throw new Error('Owner profile not found via User Service');
-      }
+      })) as unknown as HouseListingWithRelations;
 
       return {
         success: true,
         message: 'House listing created successfully',
         code: 'CREATED',
-        data: this.mapToResponseDto(created, ownerRes.user),
+        data: this.mapToResponseDto(created),
         error: null,
       };
     } catch (error: unknown) {
@@ -176,10 +144,10 @@ export class HousingService implements OnModuleInit {
     dto: GetHouseListingByIdDto,
   ): Promise<BaseResponseDto<HouseListingResponseDto>> {
     try {
-      const listing = await this.prisma.houseListing.findUnique({
+      const listing = (await this.prisma.houseListing.findUnique({
         where: { id: dto.id },
         include: { images: true, category: true },
-      }) as HouseListingWithImages | null;
+      })) as unknown as HouseListingWithRelations | null;
 
       if (!listing) {
         return {
@@ -190,19 +158,12 @@ export class HousingService implements OnModuleInit {
         };
       }
 
-      const ownerRes = await firstValueFrom(
-        this.getGrpcService().getUserProfileByUuid({
-          userUuid: listing.ownerId,
-        }),
-      );
-
       return {
         success: true,
         message: 'Listing fetched successfully',
         code: 'FETCHED',
-        data: this.mapToResponseDto(listing, ownerRes.user),
+        data: this.mapToResponseDto(listing),
       };
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       return {
         success: false,
@@ -214,40 +175,7 @@ export class HousingService implements OnModuleInit {
   }
 
   // ======================================================
-  // GET LISTINGS BY OWNER (DASHBOARD)
-  // ======================================================
-  async getListingsByOwner(
-    dto: GetListingsByOwnerDto,
-  ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
-    const listings = await this.prisma.houseListing.findMany({
-      where: { ownerId: dto.ownerId },
-      include: { 
-        images: true, 
-        category: true // Mandatory for the mapper
-      },
-      orderBy: { createdAt: 'desc' },
-    }) as HouseListingWithImages[];
-
-    // Reuse the central mapping logic
-    const data = listings.map(listing => 
-      this.mapToResponseDto(listing, {
-        uuid: listing.ownerId,
-        firstName: 'Owner', // Placeholder logic remains
-        lastName: '',
-        phone: '',
-      } as UserResponseDto)
-    );
-
-    return {
-      success: true,
-      message: 'Owner listings fetched successfully',
-      code: 'FETCHED',
-      data,
-    };
-  }
-
-  // ======================================================
-  // ADVANCED SEARCH & DISCOVERY
+  // SEARCH LISTINGS (High Performance - No gRPC)
   // ======================================================
   async searchListings(
     dto: SearchHouseListingsDto,
@@ -266,92 +194,55 @@ export class HousingService implements OnModuleInit {
       }
       if (dto.bedrooms) where.bedrooms = { gte: dto.bedrooms };
 
-      const listings = await this.prisma.houseListing.findMany({
+      const listings = (await this.prisma.houseListing.findMany({
         where,
         include: { images: true, category: true },
         orderBy: { createdAt: 'desc' },
         take: dto.limit ?? 20,
         skip: dto.offset ?? 0,
-      }) as unknown as HouseListingWithImages[];
+      })) as unknown as HouseListingWithRelations[];
+
+      // Map instantly without calling User Service
+      const data = listings.map((l) => this.mapToResponseDto(l));
 
       return {
         success: true,
         message: 'Listings fetched successfully',
         code: 'FETCHED',
-        data: listings as unknown as HouseListingResponseDto[],
+        data,
       };
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       return {
         success: false,
         message: 'Search failed',
         code: 'SEARCH_ERROR',
-        data: null,
+        data: [],
       };
     }
   }
 
   // ======================================================
-  // UPDATE LISTING DETAILS (Unified User & Admin Logic)
+  // UPDATE LISTING
   // ======================================================
-  async updateHouseListing(  
-  dto: UpdateHouseListingGrpcRequestDto
-): Promise<BaseResponseDto<HouseListingResponseDto>> {
-  // 1. Fetch the listing + check existence
-  const listing = await this.prisma.houseListing.findUnique({ 
-    where: { id: dto.listingId } 
-  });
-
-  if (!listing) {
-    return { success: false, message: 'Listing not found', code: 'NOT_FOUND', data: null };
-  }
-
-  // 2. Authorization Logic (Owner OR Admin)
-  const isOwner = listing.ownerId === dto.callerId;
-  const isAdmin = ['SuperAdmin', 'SystemAdmin'].includes(dto.userRole);
-
-  if (!isOwner && !isAdmin) {
-    return { success: false, message: 'Unauthorized', code: 'UNAUTHORIZED', data: null };
-  }
-
-  // 3. FETCH THE ACTUAL OWNER DATA
-  // We use listing.ownerId (from DB) to ensure we get the real landlord's profile
-  const getGrpcService = this.getGrpcService();
-  const ownerRes = await firstValueFrom(
-    getGrpcService.getUserProfileByUuid({ userUuid: listing.ownerId })
-  );
-
-  if (!ownerRes || !ownerRes.user) {
-    return { success: false, message: 'Owner profile not found', code: 'OWNER_NOT_FOUND', data: null };
-  }
-
-  // 4. Perform the Update
-  const updated = await this.prisma.houseListing.update({
-    where: { id: dto.listingId },
-    data: { ...dto.data },
-    include: { images: true, category: true },
-  }) as unknown as HouseListingWithImages;
-
-  // 5. Map with BOTH required arguments
-  return {
-    success: true,
-    message: isAdmin ? 'Updated by Admin' : 'Updated successfully',
-    code: 'UPDATED',
-    data: this.mapToResponseDto(updated, ownerRes.user), // Error fixed!
-  };
-}
-
-  // ======================================================
-  // UPDATE LISTING STATUS (LIFECYCLE)
-  // ======================================================
-  async updateListingStatus(
-    dto: UpdateHouseListingStatusDto,
+  async updateHouseListing(
+    dto: UpdateHouseListingGrpcRequestDto,
   ): Promise<BaseResponseDto<HouseListingResponseDto>> {
     const listing = await this.prisma.houseListing.findUnique({
-      where: { id: dto.id },
+      where: { id: dto.listingId },
     });
 
-    if (!listing || listing.ownerId !== dto.ownerId) {
+    if (!listing) {
+      return {
+        success: false,
+        message: 'Listing not found',
+        code: 'NOT_FOUND',
+        data: null,
+      };
+    }
+
+    // Auth check (Owner or Admin)
+    const isAdmin = ['SuperAdmin', 'SystemAdmin'].includes(dto.userRole);
+    if (listing.creatorId !== dto.callerId && !isAdmin) {
       return {
         success: false,
         message: 'Unauthorized',
@@ -360,104 +251,53 @@ export class HousingService implements OnModuleInit {
       };
     }
 
-    const updated = await this.prisma.houseListing.update({
-      where: { id: dto.id },
-      data: { status: dto.status },
-      include: { images: true, category: true},
-    }) as unknown as HouseListingWithImages;
+    const updated = (await this.prisma.houseListing.update({
+      where: { id: dto.listingId },
+      data: { ...dto.data },
+      include: { images: true, category: true },
+    })) as unknown as HouseListingWithRelations;
 
     return {
       success: true,
-      message: `Listing status updated to ${dto.status}`,
+      message: 'Updated successfully',
       code: 'UPDATED',
-      data: updated as unknown as HouseListingResponseDto,
+      data: this.mapToResponseDto(updated),
     };
   }
 
   // ======================================================
-  // ARCHIVE (SOFT DELETE)
-  // ======================================================
-  async archiveHouseListing(
-    dto: ArchiveHouseListingsGrpcRequestDto
-  ): Promise<BaseResponseDto<null>> {
-    const listing = await this.prisma.houseListing.findUnique({
-      where: { id: dto.id },
-    });
-
-    if (!listing || listing.ownerId !== dto.ownerId) {
-      return {
-        success: false,
-        message: 'Unauthorized',
-        code: 'UNAUTHORIZED',
-        data: null,
-      };
-    }
-
-    await this.prisma.houseListing.update({
-      where: { id: dto.id },
-      data: { status: 'ARCHIVED' },
-    });
-
-    return {
-      success: true,
-      message: 'Listing archived',
-      code: 'ARCHIVED',
-      data: null,
-    };
-  }
-
- // ======================================================
-  // SCHEDULE A VIEWING
-  // ======================================================
- // ======================================================
   // SCHEDULE A VIEWING
   // ======================================================
   async scheduleViewing(
     dto: ScheduleViewingGrpcRequestDto,
   ): Promise<BaseResponseDto<HouseViewingResponseDto>> {
     try {
-      // 1. Fetch the house
       const house = await this.prisma.houseListing.findUnique({
         where: { id: dto.houseId },
       });
 
       if (!house || house.status !== 'AVAILABLE') {
-        return { success: false, message: 'House not available', code: 'NOT_AVAILABLE', data: null };
-      }
-
-      // 2. ROLE CHECK: Booking for someone else?
-      const isAdmin = ['SuperAdmin', 'SystemAdmin'].includes(dto.userRole);
-      
-      // If a targetViewerId is provided and it's DIFFERENT from the caller...
-      if (dto.targetViewerId && dto.targetViewerId !== dto.callerId) {
-        // ...then the caller MUST be an Admin
-        if (!isAdmin) {
-          return {
-            success: false,
-            message: 'You do not have permission to schedule viewings for other users.',
-            code: 'FORBIDDEN',
-            data: null,
-          };
-        }
-      }
-
-      // 3. Determine Final Viewer ID
-      // If we passed the check above, we can safely trust the logic below
-      const finalViewerId = (isAdmin && dto.targetViewerId) 
-        ? dto.targetViewerId 
-        : dto.callerId;
-
-      // 4. Safety Check: Landlord check
-      if (house.ownerId === finalViewerId) {
         return {
           success: false,
-          message: 'Landlords cannot schedule viewings for their own listings.',
+          message: 'House not available',
+          code: 'NOT_AVAILABLE',
+          data: null,
+        };
+      }
+
+      const isAdmin = ['SuperAdmin', 'SystemAdmin'].includes(dto.userRole);
+      const finalViewerId =
+        isAdmin && dto.targetViewerId ? dto.targetViewerId : dto.callerId;
+
+      if (house.creatorId === finalViewerId) {
+        return {
+          success: false,
+          message: 'Owners cannot schedule viewings for their own houses',
           code: 'FORBIDDEN',
           data: null,
         };
       }
 
-      // 5. Create Viewing
       const viewing = await this.prisma.houseViewing.create({
         data: {
           houseId: dto.houseId,
@@ -471,34 +311,132 @@ export class HousingService implements OnModuleInit {
 
       return {
         success: true,
-        message: isAdmin && dto.targetViewerId !== dto.callerId 
-          ? 'Viewing scheduled for client' 
-          : 'Viewing scheduled successfully',
+        message: 'Viewing scheduled',
         code: 'SCHEDULED',
         data: viewing as unknown as HouseViewingResponseDto,
       };
-
-    } catch (error: unknown) {
-      const err = error as Error;
-      this.logger.error(`ScheduleViewing Error: ${err.message}`);
-      return { success: false, message: 'Failed to schedule viewing', code: 'ERROR', data: null };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to schedule',
+        code: 'ERROR',
+        data: null,
+      };
     }
   }
 
   // ======================================================
-  // UTILITY MAPPER
+  // GET LISTINGS BY OWNER (Dashboard View)
   // ======================================================
- private mapToResponseDto(
-    listing: HouseListingWithImages,
-    owner: UserResponseDto,
+  async getListingsByOwner(
+    dto: GetListingsByOwnerDto,
+  ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    try {
+      const listings = (await this.prisma.houseListing.findMany({
+        where: { accountId: dto.ownerId }, // ownerId here refers to the Account UUID
+        include: { images: true, category: true },
+        orderBy: { createdAt: 'desc' },
+      })) as unknown as HouseListingWithRelations[];
+
+      return {
+        success: true,
+        message: 'Owner listings fetched successfully',
+        code: 'FETCHED',
+        data: listings.map((l) => this.mapToResponseDto(l)),
+      };
+    } catch (error) {
+      this.logger.error(`GetListingsByOwner Error: ${error instanceof Error ? error.message : 'Unknown'}`);
+      return { success: false, message: 'Failed to fetch owner listings', code: 'ERROR', data: [] };
+    }
+  }
+
+  // ======================================================
+  // UPDATE LISTING STATUS (Lifecycle: AVAILABLE | SOLD | RENTED)
+  // ======================================================
+  async updateListingStatus(
+    dto: UpdateHouseListingStatusDto,
+  ): Promise<BaseResponseDto<HouseListingResponseDto>> {
+    try {
+      const listing = await this.prisma.houseListing.findUnique({
+        where: { id: dto.id },
+      });
+
+      // Authorization: Ensure the person changing status belongs to the owning Account
+      if (!listing || listing.accountId !== dto.ownerId) {
+        return {
+          success: false,
+          message: 'Unauthorized: You do not own this listing',
+          code: 'UNAUTHORIZED',
+          data: null,
+        };
+      }
+
+      const updated = (await this.prisma.houseListing.update({
+        where: { id: dto.id },
+        data: { status: dto.status },
+        include: { images: true, category: true },
+      })) as unknown as HouseListingWithRelations;
+
+      return {
+        success: true,
+        message: `Listing status updated to ${dto.status}`,
+        code: 'UPDATED',
+        data: this.mapToResponseDto(updated),
+      };
+    } catch (error) {
+      return { success: false, message: 'Status update failed', code: 'ERROR', data: null };
+    }
+  }
+
+  // ======================================================
+  // ARCHIVE (Soft Delete)
+  // ======================================================
+  async archiveHouseListing(
+    dto: ArchiveHouseListingsGrpcRequestDto,
+  ): Promise<BaseResponseDto<null>> {
+    try {
+      const listing = await this.prisma.houseListing.findUnique({
+        where: { id: dto.id },
+      });
+
+      // Authorization: Check against Account ID
+      if (!listing || listing.accountId !== dto.ownerId) {
+        return {
+          success: false,
+          message: 'Unauthorized to archive this listing',
+          code: 'UNAUTHORIZED',
+          data: null,
+        };
+      }
+
+      await this.prisma.houseListing.update({
+        where: { id: dto.id },
+        data: { status: 'ARCHIVED' },
+      });
+
+      return {
+        success: true,
+        message: 'Listing archived successfully',
+        code: 'ARCHIVED',
+        data: null,
+      };
+    } catch (error) {
+      return { success: false, message: 'Archiving failed', code: 'ERROR', data: null };
+    }
+  }
+
+  // ======================================================
+  // UTILITY MAPPER (The Heart of the Identity Pillar)
+  // ======================================================
+  private mapToResponseDto(
+    listing: HouseListingWithRelations,
   ): HouseListingResponseDto {
     return {
       id: listing.id,
       externalId: listing.externalId,
       title: listing.title,
       description: listing.description,
-      
-      // The category object is now the single source of truth for 'type'
+
       category: {
         id: listing.categoryId,
         name: listing.category?.name || 'Property',
@@ -506,7 +444,7 @@ export class HousingService implements OnModuleInit {
         vertical: 'HOUSING',
       },
 
-      listingType: listing.listingType, // e.g., 'RENTAL' or 'SALE'
+      listingType: listing.listingType,
       price: listing.price,
       currency: listing.currency,
       bedrooms: listing.bedrooms ?? undefined,
@@ -519,23 +457,24 @@ export class HousingService implements OnModuleInit {
       status: listing.status,
       createdAt: listing.createdAt,
       updatedAt: listing.updatedAt,
-      
-      // Transform Prisma images to DTO format
-      images: (listing.images || []).map(img => ({
+
+      images: (listing.images || []).map((img) => ({
         id: img.id,
         url: img.url,
         isMain: img.isMain,
       })),
-      
-      // Transform gRPC User data to DTO format
-      owner: {
-        id: owner.uuid,
-        fullName: `${owner.firstName || ''} ${owner.lastName || ''}`.trim() || 'Owner',
-        phone: owner.phone,
+
+      // Use Denormalized data for instant mapping
+      creator: {
+        id: listing.creatorId,
+        fullName: listing.creatorName,
+      },
+      account: {
+        id: listing.accountId,
+        name: listing.accountName,
       },
 
-      // Computed hero image for quick UI rendering
-      imageUrl: listing.images?.find(img => img.isMain)?.url ?? undefined,
+      imageUrl: listing.images?.find((img) => img.isMain)?.url ?? undefined,
     };
   }
 }

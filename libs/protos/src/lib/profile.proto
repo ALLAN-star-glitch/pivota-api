@@ -5,48 +5,37 @@ package profile;
 // ================== Service Definitions ==================
 
 service ProfileService {
-  // Core profile operations (Now returning the Trio structure)
   rpc CreateUserProfile(CreateUserProfileRequest) returns (UserProfileResponse);
   rpc GetUserProfileByUuid(GetUserByUuidRequest) returns (UserProfileResponse);
   rpc GetUserProfileByUserCode(GetUserByUserCodeRequest) returns (UserProfileResponse);
   rpc GetUserProfileByEmail(GetUserByEmailRequest) returns (UserProfileResponse);
 
-  // Admin or dashboard-only operations
   rpc GetAllUsers(Empty) returns (UserListResponse);
 
-  // Organization Signup flow (Kept as requested)
   rpc CreateOrganizationProfile(CreateOrgProfileRequest) returns (OrgProfileResponse);
 }
 
-// ================== User Profile Messages (The Trio) ==================
-
-message CreateUserProfileRequest {
-  string userUuid = 1;          // Anchor identity from Auth Service
-  string firstName = 2;
-  string lastName = 3;
-  string email = 4;
-  string phone = 5;
-}
+// ================== User Profile Messages (The Trio + Organization) ==================
 
 message UserProfileResponse {
   bool success = 1;
   string message = 2;
   string code = 3;
-  UserProfileTrio data = 4;      // Aligned with UserProfileResponseDto
+  UserProf data = 4;      
   ErrorPayload error = 5;  
 }
 
-// This represents the "Trio" architecture: Account + User + Profile
-message UserProfileTrio {
+message UserProf{
   AccountBase account = 1;
   UserBase user = 2;
   UserProfileMetadata profile = 3;
   string createdAt = 4;
   string updatedAt = 5;
   CompletionResponse completion = 6;
+  // ADDED: Optional organization context for the user
+  OrganizationBase organization = 7; 
 }
 
-// Matches UserBaseDto
 message UserBase {
   string uuid = 1;
   string userCode = 2;
@@ -58,7 +47,6 @@ message UserBase {
   string roleName = 8;
 }
 
-// Matches UserProfileDataDto
 message UserProfileMetadata {
   string bio = 1;
   string gender = 2;
@@ -67,7 +55,17 @@ message UserProfileMetadata {
   string profileImage = 5;
 }
 
-// ================== Organization Messages (Unchanged) ==================
+// ================== Organization Messages ==================
+
+
+message OrganizationBase {
+  string id = 1;
+  string uuid = 2;
+  string name = 3;
+  string orgCode = 4;
+  string verificationStatus = 5;
+  string officialEmail = 6; 
+}
 
 message CreateOrgProfileRequest {
   string name = 1;              
@@ -110,7 +108,7 @@ message OrgProfileData {
 message AccountBase {
   string uuid = 1;
   string accountCode = 2;
-  string type = 3; // e.g., "INDIVIDUAL" or "ORGANIZATION"
+  string type = 3; 
 }
 
 message AdminResponse {
@@ -131,6 +129,14 @@ message CompletionResponse {
 
 // ================== Common Messages ==================
 
+message CreateUserProfileRequest {
+  string userUuid = 1;
+  string firstName = 2;
+  string lastName = 3;
+  string email = 4;
+  string phone = 5;
+}
+
 message GetUserByUuidRequest { string userUuid = 1; }
 message GetUserByUserCodeRequest { string userCode = 1; }
 message GetUserByEmailRequest { string email = 1; }
@@ -139,7 +145,7 @@ message UserListResponse {
   bool success = 1;
   string message = 2;
   string code = 3;
-  repeated UserProfileTrio data = 4; 
+  repeated UserProf data = 4; 
   ErrorPayload error = 5;          
 }
 

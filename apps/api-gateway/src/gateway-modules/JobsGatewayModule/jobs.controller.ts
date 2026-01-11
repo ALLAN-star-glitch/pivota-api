@@ -13,7 +13,7 @@ import {
 
 import {
   BaseResponseDto,
-  CreateJobPostDto,
+  CreateJobPostGrpcDto,
   JobPostResponseDto,
   ValidateJobPostIdsRequestDto,
   UpdateJobPostRequestDto,
@@ -49,13 +49,22 @@ export class JobsController {
   @Post('jobs')
   @ApiOperation({summary: 'Create a new job post'})
   async createJobPost(
-    @Body() dto: CreateJobPostDto,
+    @Body() dto: CreateJobPostGrpcDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
     const userId = req.user.userUuid;
     dto.creatorId = userId;
 
-    this.logger.debug(`REST createJobPost request by user=${userId}`);
+    const accountId = req.user.accountId;
+    dto.accountId = accountId;
+
+    const accountName = req.user.accountName;
+    dto.accountName = accountName;
+
+    const creatorName = req.user.userName
+    dto.creatorName = creatorName
+
+    this.logger.debug(`REST createJobPost request by userId=${userId}, User Name: ${creatorName},  for accounT Details: AccountID:  ${accountId} Account Name: ${accountName} `);
     return this.jobsService.createJobPost(dto);
   }
 
@@ -109,7 +118,7 @@ export class JobsController {
   // APPLY TO JOB POST
   // ===========================================================
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('GeneralUser', 'ModuleManager', 'SystemAdmin', 'SuperAdmin')
+  @Roles('GeneralUser', 'ModuleManager', 'SystemAdmin', 'SuperAdmin', 'BusinessSystemAdmin')
   @Version('1')
   @Post('jobs/:id/apply')
   @ApiOperation({ summary: 'Apply for a job post' })

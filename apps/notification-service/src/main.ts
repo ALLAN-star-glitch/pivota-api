@@ -25,6 +25,7 @@ async function bootstrap() {
       urls: [process.env.RMQ_URL || 'amqp://localhost:5672'],
       queue: 'notification_email_queue', // Everything (Login & Onboarding) comes here
       noAck: false,
+      prefetchCount: 1, // Process 1 email at a time per worker
       queueOptions: { durable: true },
     },
   }, { inheritAppConfig: true });

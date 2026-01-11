@@ -1,0 +1,127 @@
+syntax = "proto3";
+
+package contractors;
+
+// ===================================================
+// SERVICE DEFINITION
+// ===================================================
+service ContractorsService {
+  rpc CreateServiceOffering (CreateServiceOfferingRequest) returns (BaseServiceOfferingResponse);
+  rpc GetOfferingsByVertical (GetOfferingsByVerticalRequest) returns (ListServiceOfferingsResponse);
+  rpc GetOfferingsByAccount (GetOfferingsByAccountRequest) returns (ListServiceOfferingsResponse);
+}
+
+// ===================================================
+// SHARED MESSAGES
+// ===================================================
+message ErrorPayload {
+  string code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+message DayAvailability {
+  string day = 1;      // e.g., "Monday"
+  string open = 2;     // e.g., "08:00"
+  string close = 3;    // e.g., "17:00"
+  bool isClosed = 4;   
+}
+
+// ===================================================
+// ENTITIES
+// ===================================================
+message ServiceOffering {
+  string id = 1;
+  string externalId = 2;
+  
+  // Identity Pillar
+  string creatorId = 3;      // The human individual
+  string creatorName = 4;    // Denormalized name
+  string accountId = 5;      // The Org or Individual Root Account
+  string accountName = 6;    // Denormalized name
+  
+  string title = 7;
+  string description = 8;
+  string categoryId = 9; 
+  repeated string verticals = 10; 
+  
+  double basePrice = 11;
+  string priceUnit = 12; 
+  string currency = 13;
+  
+  string locationCity = 14;
+  string locationNeighborhood = 15;
+  
+  repeated DayAvailability availability = 16;
+  
+  int32 yearsExperience = 17; 
+  string additionalNotes = 18;
+  
+  // Metadata injected by Gateway or Service
+  bool isAccountVerified = 19;
+  double averageRating = 20;
+  int32 reviewCount = 21;
+  
+  string createdAt = 22;
+  string updatedAt = 23;
+}
+
+// ===================================================
+// REQUEST MESSAGES
+// ===================================================
+message CreateServiceOfferingRequest {
+  // Identity Injection (from Gateway)
+  string creatorId = 1;
+  string creatorName = 2;
+  string accountId = 3;
+  string accountName = 4;
+
+  string title = 5;
+  string description = 6;
+  string categoryId = 7; 
+  string categorySlug = 8;
+  
+  repeated string verticals = 9; 
+  
+  double basePrice = 10;
+  string priceUnit = 11;
+  string currency = 12;
+  
+  string locationCity = 13;
+  string locationNeighborhood = 14;
+  
+  int32 yearsExperience = 15;
+  string additionalNotes = 16;
+  
+  repeated DayAvailability availability = 17;
+}
+
+message GetOfferingsByVerticalRequest {
+  string vertical = 1; 
+  string city = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message GetOfferingsByAccountRequest {
+  string accountId = 1;
+}
+
+// ===================================================
+// RESPONSE MESSAGES
+// ===================================================
+message BaseServiceOfferingResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  ServiceOffering data = 4; 
+  ErrorPayload error = 5;
+}
+
+message ListServiceOfferingsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated ServiceOffering data = 4;
+  ErrorPayload error = 5;
+}

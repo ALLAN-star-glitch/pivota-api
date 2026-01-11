@@ -8,7 +8,7 @@ export class LoginRequestDto {
 
   @IsString({ message: 'Password must be a string' })
   @IsNotEmpty({ message: 'Password is required' })
-  @ApiProperty({ example: 'Brav1997@#', description: 'User password' })
+  @ApiProperty({ example: "StrongPass@2026" , description: 'User password' })
   password!: string;
 }
 

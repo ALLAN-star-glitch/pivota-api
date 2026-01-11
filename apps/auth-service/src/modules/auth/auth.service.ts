@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Injectable,
   Logger,
@@ -14,7 +15,6 @@ import {
   LoginRequestDto,
   SessionDto,
   TokenPairDto,
-  UserResponseDto,
   BaseResponseDto,
   GetUserByUserUuidDto,
   RoleResponseDto,
@@ -31,7 +31,7 @@ import {
   UserProfileResponseDto,
 } from '@pivota-api/dtos';
 import { firstValueFrom, Observable } from 'rxjs';
-import { BaseUserResponseGrpc, BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
+import { BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
 import { randomUUID } from 'crypto';
 
 interface GrpcError {
@@ -102,24 +102,25 @@ export class AuthService implements OnModuleInit {
   
 
   // ------------------ Validate User ------------------
- async validateUser(email: string, password: string): Promise<UserProfileResponseDto | null> {
+ /** ------------------ Validate User ------------------ */
+async validateUser(email: string, password: string): Promise<UserProfileResponseDto | null> {
   const MAX_FAILED_ATTEMPTS = 5;
   const LOCKOUT_DURATION_MINUTES = 15;
 
   try {
-    // 1. FETCH CREDENTIAL
+    // 1. FETCH CREDENTIAL (Identity Check)
     const credential = await this.prisma.credential.findUnique({
       where: { email },
     });
 
-    if (credential) {
-      this.logger.debug(`[AUTH] Found Credential for: ${email}. UUID in DB: ${credential.userUuid}`);
-    } else {
+    if (!credential) {
       this.logger.warn(`[AUTH] Login attempt failed: ${email} not found.`);
       return null;
     }
 
-    // 2. CHECK LOCKOUT STATUS
+    this.logger.debug(`[AUTH] Found Credential for: ${email}. UUID: ${credential.userUuid}`);
+
+    // 2. CHECK LOCKOUT STATUS (Identity Level Protection)
     if (credential.lockoutExpires && credential.lockoutExpires > new Date()) {
       const remainingTime = Math.ceil((credential.lockoutExpires.getTime() - Date.now()) / 60000);
       this.logger.warn(`[AUTH] Blocked: ${email} locked for ${remainingTime} mins.`);
@@ -134,49 +135,45 @@ export class AuthService implements OnModuleInit {
 
       if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
         lockoutExpires = new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60000);
-        this.logger.error(`[AUTH] Locking account: ${email}`);
+        this.logger.error(`[AUTH] Locking account: ${email} due to max failed attempts.`);
       }
 
       await this.prisma.credential.update({
         where: { id: credential.id },
-        data: { failedAttempts: newFailedAttempts, lockoutExpires },
+        data: { 
+          failedAttempts: newFailedAttempts, 
+          lockoutExpires 
+        },
       });
       return null;
     }
 
-    // 4. FETCH PROFILE
+    // 4. FETCH PROFILE (Cross-Service gRPC Call)
     const profileGrpcService = this.getProfileGrpcService();
-    const grpcPayload = { userUuid: credential.userUuid };
-    
-    this.logger.debug(`[gRPC OUTBOUND] Calling ProfileService.getUserProfileByUuid with: ${JSON.stringify(grpcPayload)}`);
+    this.logger.debug(`[gRPC OUTBOUND] Calling ProfileService for UUID: ${credential.userUuid}`);
 
     const profileResponse = await firstValueFrom(
-      profileGrpcService.getUserProfileByUuid(grpcPayload)
+      profileGrpcService.getUserProfileByUuid({ userUuid: credential.userUuid })
     );
 
-    this.logger.debug(`[gRPC INBOUND] ProfileService Response received`);
-
-    // Verify the response contains the full data object
+    // Verify gRPC response integrity
     if (!profileResponse?.success || !profileResponse.data) {
-      this.logger.error(
-        `[SYNC ERROR] Profile missing in Profile Service for UUID: ${credential.userUuid}`
-      );
+      this.logger.error(`[SYNC ERROR] Profile data missing in Profile Service for UUID: ${credential.userUuid}`);
       return null;
     }
 
-    // Extract the full aggregate and the specific user record for status checks
     const fullProfileDto = profileResponse.data;
-    const userDetails = fullProfileDto.user;
 
-    // 5. CHECK USER STATUS
-    if (userDetails.status !== 'ACTIVE') {
-      this.logger.warn(`[AUTH] Blocked: User ${email} is ${userDetails.status}`);
-      // Use toLowerCase() safely on the validated status string
-      const statusMessage = userDetails.status ? userDetails.status.toLowerCase() : 'inactive';
+    // 5. CHECK USER STATUS (Business Logic)
+    if (fullProfileDto.user.status !== 'ACTIVE') {
+      const statusMessage = fullProfileDto.user.status ? fullProfileDto.user.status.toLowerCase() : 'inactive';
+      this.logger.warn(`[AUTH] Blocked: User ${email} is currently ${statusMessage}`);
       throw new UnauthorizedException(`Your account is ${statusMessage}.`);
     }
 
-    // 6. FINAL SUCCESS: RESET & AUDIT
+    // 6. FINAL SUCCESS: RESET SECURITY & UPDATE GLOBAL ANCHOR
+    // We update 'lastLoginAt' here in Credentials, but detailed activity 
+    // tracking (IP/Device) happens in the 'generateTokens' session creation.
     await this.prisma.credential.update({
       where: { id: credential.id },
       data: { 
@@ -186,15 +183,15 @@ export class AuthService implements OnModuleInit {
       }
     });
 
-    this.logger.log(`[AUTH] Validation successful for: ${email}`);
+    this.logger.log(`[AUTH] Identity and Profile validated successfully for: ${email}`);
     
-    // RETURN the full DTO (contains account, user, createdAt, updatedAt)
     return fullProfileDto;
 
   } catch (err: unknown) {
+    // Re-throw specific UnauthorizedExceptions (like Lockout messages)
     if (err instanceof UnauthorizedException) throw err;
     
-    this.logger.error('[AUTH] Error in validateUser flow');
+    this.logger.error('[AUTH] Critical error in validateUser flow');
     if (err instanceof Error) {
       this.logger.error(`[DETAILS] ${err.message}`);
     }
@@ -203,40 +200,65 @@ export class AuthService implements OnModuleInit {
 }
 
   // ------------------ Generate Tokens ------------------
+  /** ------------------ Generate Tokens ------------------ */
   async generateTokens(
-    user: { uuid: string; email: string, accountId: string },
+    profile: UserProfileResponseDto,
     clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
   ): Promise<{ accessToken: string; refreshToken: string }> {
+    const userData = profile.user;
+    const accountData = profile.account;
+    const fullName = `${userData.firstName} ${userData.lastName}`.trim();
+    // 1. Fetch the User Role via gRPC (RBAC Service)
     const rbacService = this.getRbacGrpcService();
     const userRoleResponse = await firstValueFrom(
-      rbacService.getUserRole({ userUuid: user.uuid }),
+      rbacService.getUserRole({ userUuid: userData.uuid }),
     );
+    
+    // Fallback to GeneralUser if no role is found
     const roleType = userRoleResponse?.role?.roleType ?? 'GeneralUser';
+    
 
+    // 2. Prepare JWT Payload
     const payload: JwtPayload = {
-      userUuid: user.uuid,
-      email: user.email,
-       role: roleType,
-      accountId: user.accountId
+      userUuid: userData.uuid,
+      email: userData.email,
+      role: roleType,
+      accountId: accountData.uuid,
+      userName: fullName,
+      accountName: accountData.type == 'ORGANIZATION' ? profile.organization.name :  fullName,
+      accountType: accountData.type as 'INDIVIDUAL' | 'ORGANIZATION'
     };
+
+    // 3. Sign Access and Refresh Tokens
     const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
     const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
 
+    // 4. Security: Hash the Refresh Token before storing it in DB
     const hashedToken = await bcrypt.hash(refreshToken, 10);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
+    // 5. CREATE SESSION (Detailed Activity Tracking)
+    // This follows your new schema by capturing environmental context
     await this.prisma.session.create({
       data: {
-        userUuid: user.uuid,
+        userUuid: userData.uuid,
         tokenId: `${payload.userUuid}-${Date.now()}`,
         hashedToken,
+        
+        // Contextual Metadata from clientInfo
         device: clientInfo?.device,
         ipAddress: clientInfo?.ipAddress,
         userAgent: clientInfo?.userAgent,
         os: clientInfo?.os,
+        
+        // Activity Tracking
+        lastActiveAt: new Date(), // Set current time as the first activity
         expiresAt,
+        revoked: false,
       },
     });
+
+    this.logger.debug(`[AUTH] New session created for User: ${userData.uuid} on ${clientInfo?.device || 'unknown device'}`);
 
     return { accessToken, refreshToken };
   }
@@ -449,7 +471,6 @@ this.logger.log(`✅ Organization onboarding events dispatched for: ${dto.name}`
       error: null
     };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     this.logger.error('Organisation Signup Error', err);
     return {
@@ -464,7 +485,6 @@ this.logger.log(`✅ Organization onboarding events dispatched for: ${dto.name}`
   }
 }
 
-  // ------------------ Login ------------------
   // ------------------ Unified Login ------------------
  async login(
   loginDto: LoginRequestDto,
@@ -474,48 +494,79 @@ this.logger.log(`✅ Organization onboarding events dispatched for: ${dto.name}`
 
   try {
     // 1. Validate Credentials & Fetch Profile via gRPC
-    // 'user' is now the full UserProfileResponseDto
+    // The profile returned here already contains the user, account, and organization data
     const profile = await this.validateUser(loginDto.email, loginDto.password);
 
     if (!profile) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Shortcut variables for cleaner code
+    // Helper variables
     const userData = profile.user;
     const accountData = profile.account;
+    const isOrgAccount = accountData.type === 'ORGANIZATION';
+   
 
     // 2. Generate JWT Tokens
+    // roleName is passed here to be signed into the JWT payload as the source of truth
     const { accessToken, refreshToken } = await this.generateTokens(
-      {
-        uuid: userData.uuid,
-        email: userData.email,
-        accountId: accountData.uuid
-      },
+      profile,
       clientInfo,
     );
 
-    // 3. Dispatch Security Notification (Async)      
-    const loginEmailPayload: UserLoginEmailDto = {
-      to: userData.email,
-      firstName: userData.firstName || 'User',
-      subject: profile.organization 
-        ? `Security Alert: ${profile.organization.name} Admin Login` 
-        : 'New Login to Your Pivota Account',
-      device: clientInfo?.device || 'Unknown Device',
-      os: clientInfo?.os || 'Unknown OS',
-      userAgent: clientInfo?.userAgent || 'Unknown Browser',
-      ipAddress: clientInfo?.ipAddress || '0.0.0.0',
-      timestamp: new Date().toISOString(),
-    };
+  /* ======================================================
+   3. CONDITIONAL NOTIFICATION LOGIC
+====================================================== */
 
-    this.notificationBus.emit('user.login.email', loginEmailPayload);
+// 1. Define what qualifies as an 'Admin' login for your business logic
+const adminRoles = ['Business System Admin'];
 
-    // 4. Construct the LoginResponseDto
-    // We map strictly from the nested profile structure
+// LOG 1: Check the raw data coming from the Profile Service
+this.logger.debug(`[Login Debug] User Role: "${userData.roleName}" | Is Org: ${isOrgAccount}`);
+this.logger.debug(`[Login Debug] Org Official Email: "${profile.organization?.officialEmail}"`);
+
+const isUserAdmin = isOrgAccount && adminRoles.includes(userData.roleName);
+
+// LOG 2: Check if the Admin condition was actually met
+this.logger.debug(`[Login Debug] Is User Admin Match: ${isUserAdmin}`);
+
+const loginEmailPayload: UserLoginEmailDto = {
+  to: userData.email,
+  firstName: userData.firstName || 'User',
+  lastName: userData.lastName || 'User',
+  organizationName: isOrgAccount ? profile.organization?.name : undefined,
+
+  // FIX: Only provide orgEmail if the user logging in IS an admin.
+  orgEmail: isUserAdmin ? profile.organization?.officialEmail : undefined,
+
+  subject: isUserAdmin
+    ? `SECURITY: Admin Login to ${profile.organization?.name}` 
+    : 'New Login to Your Pivota Account',
+
+  device: clientInfo?.device || 'Unknown Device',
+  os: clientInfo?.os || 'Unknown OS',
+  userAgent: clientInfo?.userAgent || 'Unknown Browser',
+  ipAddress: clientInfo?.ipAddress || '0.0.0.0',
+  timestamp: new Date().toISOString(),
+};
+
+// LOG 3: Final confirmation of the payload before it leaves the service
+this.logger.log(`[RMQ Emit] Sending login email event for: ${loginEmailPayload.to}`);
+if (loginEmailPayload.orgEmail) {
+  this.logger.log(`[RMQ Emit] Target secondary Org Email detected: ${loginEmailPayload.orgEmail}`);
+} else {
+  this.logger.warn(`[RMQ Emit] No secondary Org Email set. IsAdmin was ${isUserAdmin}`);
+}
+
+
+// Dispatch to background queue
+this.notificationBus.emit('user.login.email', loginEmailPayload);
+
+    /* ======================================================
+       4. CONSTRUCT RESPONSE
+    ====================================================== */
     const loginData: LoginResponseDto = {
-      // Identity Fields
-      id: userData.uuid, // Using UUID as the ID for consistency
+      id: userData.uuid,
       uuid: userData.uuid,
       userCode: userData.userCode,
       accountId: accountData.uuid,
@@ -527,11 +578,10 @@ this.logger.log(`✅ Organization onboarding events dispatched for: ${dto.name}`
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
 
-      // Auth Fields
       accessToken,
       refreshToken,
 
-      // Organization Fields (if applicable)
+      // Map organization details if it's an organization account
       organization: profile.organization ? {
         uuid: profile.organization.uuid,
         name: profile.organization.name,
@@ -540,6 +590,7 @@ this.logger.log(`✅ Organization onboarding events dispatched for: ${dto.name}`
       } : undefined
     };
 
+  
     return {
       success: true,
       message: 'Login successful',
@@ -552,62 +603,146 @@ this.logger.log(`✅ Organization onboarding events dispatched for: ${dto.name}`
     this.logger.error(`Login failed for ${loginDto.email}`, err instanceof Error ? err.stack : err);
 
     if (err instanceof UnauthorizedException) {
+      // Extract the message (e.g., "Invalid credentials" or "Account locked. Try again in 15 minutes.")
+      const errorMessage = err.message;
+      
       return {
         success: false,
-        message: err.message,
+        message: errorMessage,
         code: 'UNAUTHORIZED',
         data: null as unknown as LoginResponseDto,
-        error: { code: 'AUTH_FAILURE', message: err.message },
+        error: { 
+          code: 'AUTH_FAILURE', 
+          message: errorMessage,
+          // We add details here if you want to pass more structured info to the frontend
+          details: (err as any).getResponse?.()?.message || null 
+        },
       };
     }
+
+    // Handle gRPC errors if ProfileService or RBAC fails during login
+    if (err instanceof RpcException || (err as any).code !== undefined) {
+      const rpcErr = (err instanceof RpcException ? err.getError() : err) as any;
+      return {
+        success: false,
+        message: 'Identity service communication failure',
+        code: 'SERVICE_UNAVAILABLE',
+        data: null as unknown as LoginResponseDto,
+        error: { 
+          code: String(rpcErr.code), 
+          message: rpcErr.message,
+          details: rpcErr.details || null
+        },
+      };
+    }
+    
 
     return {
       success: false,
       message: 'Internal server error during login',
       code: 'INTERNAL',
       data: null as unknown as LoginResponseDto,
-      error: { code: 'INTERNAL', message: err instanceof Error ? err.message : 'Login failed' },
+      error: { 
+        code: 'INTERNAL', 
+        message: err instanceof Error ? err.message : 'Login failed',
+        details: null
+      },
     };
   }
 }
+
 
   // ------------------ Refresh Token ------------------
   async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>> {
     if (!refreshToken) throw new UnauthorizedException('Refresh token is required');
 
     try {
+      // 1. Verify the JWT integrity and expiration
       const payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken);
-      const userGrpcService = this.getProfileGrpcService();
-      const user$ = userGrpcService.getUserProfileByUuid({ userUuid: payload.userUuid });
-      const user: BaseUserResponseGrpc<UserResponseDto> = await firstValueFrom(user$);
+      
+      // 2. Database Lookup: Find all active sessions for this user
       const sessions = await this.prisma.session.findMany({
-        where: { userUuid: payload.userUuid, revoked: false },
+        where: { 
+          userUuid: payload.userUuid, 
+          revoked: false,
+          expiresAt: { gt: new Date() } // Ensure session hasn't naturally expired in DB
+        },
       });
+
+      // 3. Verify the hashed token matches the one in our database
       const validSession = sessions.find((s) => bcrypt.compareSync(refreshToken, s.hashedToken));
-      if (!validSession) throw new UnauthorizedException('Invalid or revoked refresh token');
-
-      const tokens = await this.generateTokens({ uuid: user.user.uuid, email: user.user.email, accountId: user.user.accountId });
-
-      const tokens_success = {
-
-        success: true,
-        message: 'Token generated successfully',
-        code: 'OK',
-        tokens,
-        error: null,
-
-
+      
+      if (!validSession) {
+        this.logger.warn(`[AUTH] Refresh attempt with invalid/revoked token for user: ${payload.userUuid}`);
+        throw new UnauthorizedException('Invalid or revoked refresh token');
       }
 
-      return tokens_success;
+      // 4. Update the "Last Active" timestamp for the current session
+      // This confirms the user is still active on this specific device/connection
+      await this.prisma.session.update({
+        where: { id: validSession.id },
+        data: { lastActiveAt: new Date() }
+      });
+
+      // 5. Fetch fresh user profile details via gRPC
+      const userGrpcService = this.getProfileGrpcService();
+      const profileResponse = await firstValueFrom(
+        userGrpcService.getUserProfileByUuid({ userUuid: payload.userUuid })
+      );
+
+      if (!profileResponse?.success || !profileResponse.data) {
+        throw new UnauthorizedException('User profile no longer exists');
+      }
+
+      // 6. Issue a New Token Pair
+      // Pass the existing session context (device, ip, etc.) to the new session record
+      const tokens = await this.generateTokens(
+        profileResponse.data,
+        {
+          device: validSession.device,
+          ipAddress: validSession.ipAddress,
+          userAgent: validSession.userAgent,
+          os: validSession.os
+        }
+      );
+
+      // 7. Revoke the old session used for this refresh (Token Rotation)
+      // This prevents the same refresh token from being used multiple times
+      await this.prisma.session.update({
+        where: { id: validSession.id },
+        data: { revoked: true }
+      });
+
+      return {
+        success: true,
+        message: 'Tokens refreshed successfully',
+        code: 'OK',
+        data: tokens, // Standardized to 'data' to match your other DTOs
+        error: null,
+      };
 
     } catch (err: unknown) {
-      const unknownErr = err as Error;
+      this.logger.error(`[AUTH] Refresh Token Error: ${err instanceof Error ? err.message : 'Unknown'}`);
+      
+      if (err instanceof UnauthorizedException) {
+        return {
+          success: false,
+          message: err.message,
+          code: 'UNAUTHORIZED',
+          data: null as any,
+          error: { code: 'AUTH_FAILURE', message: err.message }
+        };
+      }
+
       return {
         success: false,
-        message: 'Token refresh failed',
+        message: 'Token refresh failed due to a system error',
         code: 'INTERNAL',
-        error: { code: 'INTERNAL', message: unknownErr?.message || 'Token refresh failed' },
+        data: null as any,
+        error: { 
+          code: 'INTERNAL', 
+          message: err instanceof Error ? err.message : 'Refresh failed' 
+        },
       };
     }
   }
@@ -630,13 +765,23 @@ this.logger.log(`✅ Organization onboarding events dispatched for: ${dto.name}`
 
   // ------------------ Dev Token Generation ------------------
 async generateDevToken(userUuid: string, email: string, role: string, accountId: string): Promise<BaseResponseDto<TokenPairDto>> {
-  try {
-    const payload: JwtPayload = { 
-      userUuid, 
-      email, 
-      role,
-      accountId
 
+  const userGrpcService = this.getProfileGrpcService();
+  const profileResponse = await firstValueFrom(
+  userGrpcService.getUserProfileByUuid({ userUuid: userUuid })
+  );   
+  const userData = profileResponse.data.user
+  const accountData = profileResponse.data.account
+  const fullName = `${userData.firstName} ${userData.lastName}`.trim()
+  try {
+    const payload: JwtPayload = {
+      userUuid,
+      email,
+      role,
+      accountId,
+      userName: fullName,
+      accountName: accountData.type=='ORGANIZATION' ? profileResponse.data.organization.name : fullName,
+      accountType: accountData.type
     };
 
     const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '1h' });

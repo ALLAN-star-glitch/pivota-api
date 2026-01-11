@@ -27,26 +27,31 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
   
 
-  async validate(payload: JwtPayload) {
-    this.logger.debug(`Validating JWT payload for ${payload.email}`);
+async validate(payload: JwtPayload) {
+  this.logger.debug(`Validating JWT payload for ${payload.email}`);
 
-    const user = await this.authService.getUserFromPayload(payload);
-    if (!user) {
-      this.logger.warn(`❌ JWT validation failed: user not found for ${payload.email}`);
-      throw new UnauthorizedException('Invalid or expired token');
-    }
-
-    this.logger.debug(
-      ` Authenticated user ${user.email} (UUID: ${payload.userUuid}) with role: ${payload.role}`,
-    );
-
-    return {
-      ...user,
-      userUuid: payload.userUuid,
-      email: payload.email,
-      role: payload.role, //  single role
-      planSlug: payload.planSlug,
-      accountId: payload.accountId,
-    };
+  const user = await this.authService.getUserFromPayload(payload);
+  if (!user) {
+    this.logger.warn(`❌ JWT validation failed: user not found for ${payload.email}`);
+    throw new UnauthorizedException('Invalid or expired token');
   }
+
+  this.logger.debug(
+    ` Authenticated user ${user.email} (UUID: ${payload.userUuid}) with role: ${payload.role}`,
+  );
+
+  // RETURN THE FULL OBJECT
+  return {
+    ...user,
+    userUuid: payload.userUuid,
+    email: payload.email,
+    role: payload.role,
+    planSlug: payload.planSlug,
+    accountId: payload.accountId,
+    // ADD THESE THREE LINES:
+    userName: payload.userName,       
+    accountName: payload.accountName, 
+    accountType: payload.accountType,
+  };
+}
 }

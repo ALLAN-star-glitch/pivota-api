@@ -30,10 +30,17 @@ message ErrorPayload {
   string details = 3;
 }
 
+// Representing the Human individual
 message UserBasic {
   string id = 1;
   string fullName = 2;
   string phone = 3;
+}
+
+// Representing the Brand/Organization
+message AccountBasic {
+  string id = 1;
+  string name = 2;
 }
 
 message CategoryBasic {
@@ -76,11 +83,15 @@ message HouseListing {
   string createdAt = 16;
   string updatedAt = 17;
 
-  string imageUrl = 18; // Primary image
+  string imageUrl = 18; 
 
   CategoryBasic category = 19;
-  UserBasic owner = 20;
-  repeated HouseImage images = 21;
+  
+  // Identity Pillar: Split from 'owner' to Creator & Account
+  UserBasic creator = 20;
+  AccountBasic account = 21;
+  
+  repeated HouseImage images = 22;
 }
 
 message HouseViewing {
@@ -99,26 +110,31 @@ message HouseViewing {
 
 // ---------- CREATE ----------
 message CreateHouseListingRequest {
-  string ownerId = 1;
+  // Identity Anchor Fields
+  string creatorId = 1;
+  string creatorName = 2;
+  string accountId = 3;
+  string accountName = 4;
+  string ownerId = 5; // Legacy support / Foreign Key
 
-  string title = 2;
-  string description = 3;
-  string categoryId = 4;
-  string listingType = 5;
+  string title = 6;
+  string description = 7;
+  string categoryId = 8;
+  string listingType = 9;
 
-  double price = 6;
-  string currency = 7;
+  double price = 10;
+  string currency = 11;
 
-  int32 bedrooms = 8;
-  int32 bathrooms = 9;
-  repeated string amenities = 10;
-  bool isFurnished = 11;
+  int32 bedrooms = 12;
+  int32 bathrooms = 13;
+  repeated string amenities = 14;
+  bool isFurnished = 15;
 
-  string locationCity = 12;
-  string locationNeighborhood = 13;
-  string address = 14;
+  string locationCity = 16;
+  string locationNeighborhood = 17;
+  string address = 18;
 
-  repeated string imageUrls = 15;
+  repeated string imageUrls = 19;
 }
 
 // ---------- SEARCH ----------
@@ -158,16 +174,16 @@ message UpdateHouseListingData {
   optional string locationCity = 8;
   optional string locationNeighborhood = 9;
   optional string address = 10;
+  optional string status = 11; // Added status update capability
 }
 
-// ---------- STATUS ----------
+// ---------- STATUS & ARCHIVE ----------
 message UpdateHouseListingStatusRequest {
   string id = 1;
   string ownerId = 2;
   string status = 3;
 }
 
-// ---------- ARCHIVE ----------
 message ArchiveHouseListingRequest {
   string id = 1;
   string ownerId = 2;

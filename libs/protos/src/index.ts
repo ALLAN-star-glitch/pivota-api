@@ -8,9 +8,9 @@ export const LISTINGS_CATEGORIES_PROTO_PATH = join(process.cwd(), 'dist/libs/pro
 export const LISTINGS_JOBS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/jobs.proto');
 export const PLANS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/plans.proto');    
 export const SUBSCRIPTIONS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/subscriptions.proto');   
-export const PROVIDERS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/providers.proto');
+export const CONTRACTORS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/contractors.proto');
 export const NOTIFICATIONS_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/notifications.proto'); 
-export const PROVIDERS_PRICING_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/providers_pricing.proto');   
+export const CONTRACTORS_PRICING_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/contractors_pricing.proto');   
 export const LISTINGS_HOUSING_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/housing.proto');    
 
 

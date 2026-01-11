@@ -1,23 +1,14 @@
 export interface JwtPayload {
-  /** The unique ID of the person (Identity) */
-  userUuid: string;
+  userUuid: string;    // The human (e.g., "user_123")
+  userName: string;    // Denormalized (e.g., "John Doe")
   
-  /** The unique ID of the billing entity (Billing Context) */
-  accountId: string;
+  accountId: string;   // The billing/owner entity (e.g., "acc_456")
+  accountName: string; // Denormalized (e.g., "Pivota NGO" or "John Doe")
+  
+  accountType: "INDIVIDUAL" | "ORGANIZATION"; // Helps UI logic
 
   email: string;
-
-  /** * The user's role in the current context.
-   * If they are logged into an Org, this is their Org Role.
-   * If logged in as an Individual, this is their Global Role.
-   */
-  role: string; 
-
-  /** * Optional: The current active subscription plan slug/ID 
-   * useful for quick "Plan-Gate" checks without DB hits.
-   */
-  planSlug?: string;
-
-  /** Optional: If the user is currently acting on behalf of an Org */
+  role: string;
   organizationUuid?: string;
+  planSlug?: string;
 }

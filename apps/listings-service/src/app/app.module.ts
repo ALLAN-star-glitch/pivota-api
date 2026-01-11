@@ -3,7 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import {ConfigModule} from '@nestjs/config';
 import { JobsModule } from '../business-modules/jobs-module/jobs/jobs.module';
-import { ProvidersModule } from '../business-modules/providers-module/providers.module';
+import { ContractorsModule } from '../business-modules/contractors-module/contractors.module';
 import { CategoriesModule } from '../business-modules/categories/categories.module';
 import { HousingModule } from '../business-modules/housing-module/housing.module';
 
@@ -15,7 +15,7 @@ import { HousingModule } from '../business-modules/housing-module/housing.module
     }),
     CategoriesModule,
     JobsModule,
-    ProvidersModule,
+    ContractorsModule,
     HousingModule
   ],
 

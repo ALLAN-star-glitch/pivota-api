@@ -78,10 +78,6 @@ export class UserSignupDataDto {
   @ApiProperty({ type: UserBaseDto })
   user!: UserBaseDto;
 
-  // Add this to fix the ts(2339) error
-  @ApiPropertyOptional({ type: OrganizationBaseDto })
-  organization?: OrganizationBaseDto;
-
   @ApiPropertyOptional({ type: UserProfileDataDto })
   profile?: UserProfileDataDto;
 
@@ -94,6 +90,10 @@ export class UserSignupDataDto {
    - Includes timestamps as per UserProfileTrio in .proto
 ====================================================== */
 export class UserProfileResponseDto extends UserSignupDataDto {
+
+  @ApiPropertyOptional({ type: OrganizationBaseDto })
+  organization?: OrganizationBaseDto;
+
   @ApiProperty({ example: '2026-01-06T10:00:00Z' })
   createdAt!: string;
 

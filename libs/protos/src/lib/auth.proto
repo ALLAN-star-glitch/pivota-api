@@ -84,8 +84,7 @@ message UserSignupData {
   AccountBase account = 1;
   UserBase user = 2;
   UserProfileBase profile = 3; 
-  OrgContext organisation = 4;
-  CompletionBase completion = 5;
+  CompletionBase completion = 4;
 }
 
 message OrganisationSignupRequest {

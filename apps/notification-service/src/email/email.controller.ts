@@ -36,22 +36,35 @@ export class EmailController {
 
   @EventPattern('user.login.email')
   async handleLoginEmail(@Payload() data: UserLoginEmailDto, @Ctx() context: RmqContext) {
+    this.logger.debug(`[RMQ] Received event for: ${data.to}`);
     await this.processEvent(context, () => this.emailService.sendLoginEmail(data), data.to);
   }
 
   private async processEvent(context: RmqContext, action: () => Promise<void>, identifier: string) {
-    const pattern = context.getPattern();
-    this.logger.log(`[RMQ] Received event: ${pattern} for ${identifier}`);
+  const channel = context.getChannelRef();
+  const originalMsg = context.getMessage();
+  const pattern = context.getPattern();
+  
+  this.logger.log(`[RMQ] Received event: ${pattern} for ${identifier}`);
+  
+  const startTime = Date.now();
+  try {
+    await action();
     
-    const startTime = Date.now();
-    try {
-      await action();
-      const duration = Date.now() - startTime;
-      this.logger.log(`[RMQ] Successfully processed ${pattern} for ${identifier} (${duration}ms)`);
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      this.logger.error(`[RMQ] Failed ${pattern} for ${identifier} after ${duration}ms: ${error.message}`);
-      throw error; 
-    }
+    //  SUCCESS: Tell RabbitMQ to delete the message
+    channel.ack(originalMsg);
+    
+    const duration = Date.now() - startTime;
+    this.logger.log(`[RMQ] Successfully processed ${pattern} for ${identifier} (${duration}ms)`);
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    this.logger.error(`[RMQ] Failed ${pattern} for ${identifier} after ${duration}ms: ${error.message}`);
+    
+    // ❌ FAILURE: Tell RabbitMQ to put the message back in the queue to try again
+    // The 'true' argument means "requeue"
+    channel.nack(originalMsg, false, true); 
+    
+    throw error; 
   }
+}
 }

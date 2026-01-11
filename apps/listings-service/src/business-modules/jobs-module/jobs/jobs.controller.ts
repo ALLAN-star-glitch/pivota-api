@@ -2,7 +2,6 @@ import { Controller, Logger } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import {
   BaseResponseDto,
-  CreateJobPostDto,
   JobPostResponseDto,
   ValidateJobPostIdsRequestDto,
   ValidateJobPostIdsReponseDto,
@@ -11,6 +10,7 @@ import {
   CreateJobApplicationDto,
   JobApplicationResponseDto,
   CloseJobPostResponseDto,
+  CreateJobPostGrpcDto,
 } from '@pivota-api/dtos';
 import { JobsService } from './jobs.service';
 
@@ -25,7 +25,7 @@ export class JobsController {
   // -----------------------------
   @GrpcMethod('JobsService', 'CreateJobPost')
   async createJobPost(
-    data: CreateJobPostDto,
+    data: CreateJobPostGrpcDto,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
     this.logger.debug(`CreateJobPost Request: ${JSON.stringify(data)}`);
     return this.jobsService.createJobPost(data);

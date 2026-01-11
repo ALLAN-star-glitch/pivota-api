@@ -15,7 +15,7 @@ import {
 import { Type } from 'class-transformer';
 
 // Valid Enums based on your Concept Note and Models
-const PROVIDER_TYPES = ['INDIVIDUAL', 'ORGANIZATION', 'GOVERNMENT', 'RELIGIOUS_BODY'];
+// PROVIDER_TYPES removed here as it is managed by the Account/Profile Service
 const SUPPORT_TYPES = ['GRANT', 'TRAINING', 'FOOD_STAMP', 'MEDICAL_COVER', 'VOUCHER', 'GENERAL'];
 const BENEFIT_STATUSES = ['PENDING', 'DELIVERED', 'RECEIVED', 'FAILED'];
 
@@ -33,19 +33,12 @@ export class CreateSupportProgramDto {
   @IsNotEmpty()
   description!: string;
 
-  @ApiProperty({ description: 'Category ID in the SOCIAL_SUPPORT vertical' })
+  @ApiProperty({ description: 'Category ID in the HELP-AND-SUPPORT vertical' })
   @IsString()
   @IsNotEmpty()
   categoryId!: string;
 
-  @ApiProperty({ 
-    description: 'The type of provider listing this opportunity',
-    enum: PROVIDER_TYPES,
-    example: 'ORGANIZATION'
-  })
-  @IsString()
-  @IsIn(PROVIDER_TYPES)
-  providerType!: string;
+  // REMOVED: providerType - This is now derived from the Account in Profile Service
 
   @ApiProperty({ 
     description: 'Type of support offered',
@@ -117,13 +110,25 @@ export class CreateSupportProgramDto {
 }
 
 export class CreateSupportProgramGrpcRequestDto extends CreateSupportProgramDto {
+  @ApiProperty({ description: 'The Root Account ID (Individual or Organization)' })
   @IsUUID()
   @IsNotEmpty()
-  organizationId!: string;
+  accountId!: string;
 
+  @ApiProperty({ description: 'Denormalized name from the Account profile' })
+  @IsString()
+  @IsNotEmpty()
+  accountName!: string;
+
+  @ApiProperty({ description: 'The UUID of the specific human staff member' })
   @IsUUID()
   @IsNotEmpty()
   creatorId!: string;
+
+  @ApiPropertyOptional({ description: 'Denormalized name of the human staff member' })
+  @IsString()
+  @IsOptional()
+  creatorName?: string;
 }
 
 /* ======================================================
@@ -147,31 +152,30 @@ export class ApplyForSupportDto {
   @Min(1)
   requestedQuantity?: number;
 
-  @ApiProperty({ example: 'program-uuid-1234', description: 'ID of the support program' })
+  @ApiProperty({ example: 'program-uuid-1234' })
   @IsString()
   @IsNotEmpty()
   programId!: string; 
 
-  @ApiProperty({ example: true, description: 'User must accept terms' })
+  @ApiProperty({ example: true })
   @IsBoolean()
   @IsNotEmpty()
   termsAccepted!: boolean;
 }
 
 export class ApplyForSupportGrpcRequestDto extends ApplyForSupportDto {
-
   @IsUUID()
   @IsNotEmpty()
   beneficiaryId!: string;
 }
 
 /* ======================================================
-   ISSUE BENEFIT (The Handshake Init)
+   ISSUE BENEFIT
 ====================================================== */
 export class IssueBenefitDto {
-  @ApiProperty({ example: 'CASH_TRANSFER', enum: SUPPORT_TYPES })
+  @ApiProperty({ example: 'VOUCHER', enum: SUPPORT_TYPES })
   @IsString()
-  @IsIn(SUPPORT_TYPES)
+  @IsNotEmpty()
   type!: string;
 
   @ApiPropertyOptional({ example: 5000 })
@@ -186,12 +190,12 @@ export class IssueBenefitDto {
   @Min(1)
   quantity?: number;
 
-  @ApiPropertyOptional({ example: 'MPESA-REF-123', description: 'Audit link to external payment' })
+  @ApiPropertyOptional({ example: 'REF-XYZ-001' })
   @IsOptional()
   @IsString()
   externalReference?: string;
 
-  @ApiPropertyOptional({ example: 'January Stipend' })
+  @ApiPropertyOptional({ example: 'Food Voucher for February' })
   @IsOptional()
   @IsString()
   description?: string;
@@ -227,10 +231,12 @@ export class SearchSupportProgramsDto {
   @IsIn(SUPPORT_TYPES)
   supportType?: string;
 
-  @ApiPropertyOptional({ enum: PROVIDER_TYPES })
+  // REMOVED: providerType - Filtering by Org/Individual is handled by joining with Profile Account data
+
+  @ApiPropertyOptional({ description: 'Filter by a specific provider account' })
   @IsOptional()
-  @IsIn(PROVIDER_TYPES)
-  providerType?: string;
+  @IsUUID()
+  accountId?: string;
 
   @IsOptional()
   @IsInt()
@@ -244,22 +250,15 @@ export class SearchSupportProgramsDto {
 }
 
 /* ======================================================
-   UPDATE BENEFIT STATUS (The Handshake Update)
+   UPDATE BENEFIT STATUS
 ====================================================== */
 export class UpdateBenefitStatusDto {
-  @ApiProperty({ 
-    description: 'The new status of the benefit disbursement',
-    enum: BENEFIT_STATUSES,
-    example: 'RECEIVED'
-  })
+  @ApiProperty({ enum: BENEFIT_STATUSES, example: 'RECEIVED' })
   @IsString()
-  @IsIn(BENEFIT_STATUSES) // This consumes the BENEFIT_STATUSES constant
+  @IsIn(BENEFIT_STATUSES)
   status!: string;
 
-  @ApiPropertyOptional({ 
-    description: 'Optional note regarding the status change (e.g., why it failed)',
-    example: 'Beneficiary confirmed receipt via phone.' 
-  })
+  @ApiPropertyOptional({ example: 'Confirmed receipt' })
   @IsOptional()
   @IsString()
   notes?: string;
@@ -272,5 +271,5 @@ export class UpdateBenefitStatusGrpcRequestDto extends UpdateBenefitStatusDto {
 
   @IsUUID()
   @IsNotEmpty()
-  updaterId!: string; // The ID of the person performing the update
+  updaterId!: string;
 }

@@ -39,8 +39,8 @@ async sendUserWelcomeEmail(dto: UserOnboardedEventDto) {
     Messages: [
       {
         From: {
-          Email: process.env.MJ_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MJ_SENDER_NAME || 'Pivota Connect',
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
         },
         To: [{ Email: dto.email, Name: dto.firstName }],
         Subject: 'Welcome to Pivota!',
@@ -69,7 +69,7 @@ async sendOrganizationWelcomeEmail(dto: OrganizationOnboardedEventDto) {
   const createdAt = format(new Date(), 'PPpp');
   
   const ADMIN_TEMPLATE_ID = 7587355; 
-  const ORG_TEMPLATE_ID = 7640124;  
+  const ORG_TEMPLATE_ID = 7641247;  
 
   // 1. Define common variables used in both templates
   const commonVariables = {
@@ -85,8 +85,8 @@ async sendOrganizationWelcomeEmail(dto: OrganizationOnboardedEventDto) {
   const messages: SendEmailV3_1.Message[] = [
     {
       From: {
-        Email: process.env.MJ_SENDER_EMAIL || 'info@acop.co.ke',
-        Name: process.env.MJ_SENDER_NAME || 'Pivota Connect',
+        Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+        Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
       },
       To: [{ Email: dto.adminEmail, Name: dto.adminFirstName }],
       Subject: `Welcome to Pivota, ${dto.adminFirstName}!`,
@@ -100,8 +100,8 @@ async sendOrganizationWelcomeEmail(dto: OrganizationOnboardedEventDto) {
   if (dto.orgEmail && dto.orgEmail.toLowerCase() !== dto.adminEmail.toLowerCase()) {
     messages.push({
       From: {
-        Email: process.env.MJ_SENDER_EMAIL || 'info@acop.co.ke',
-        Name: process.env.MJ_SENDER_NAME || 'Pivota Connect',
+        Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+        Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
       },
       To: [{ Email: dto.orgEmail, Name: businessName }],
       Subject: `Official Registration Confirmed: ${businessName}`,
@@ -121,34 +121,92 @@ async sendOrganizationWelcomeEmail(dto: OrganizationOnboardedEventDto) {
 }
 
   /** ------------------ Send login notification email ------------------ */
-  async sendLoginEmail(dto: UserLoginEmailDto) {
-    const timestamp = dto.timestamp
-      ? format(new Date(dto.timestamp), 'PPpp')
-      : format(new Date(), 'PPpp'); 
+async sendLoginEmail(dto: UserLoginEmailDto) {
+  const timestamp = dto.timestamp
+    ? format(new Date(dto.timestamp), 'PPpp')
+    : format(new Date(), 'PPpp');
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [
-        {
-          From: {
-            Email: process.env.MJ_SENDER_EMAIL || 'info@acop.co.ke',
-            Name: process.env.MJ_SENDER_NAME || 'Pivota Connect',
-          },
-          To: [{ Email: dto.to, Name: dto.firstName }],
-          Subject: dto.subject || 'New Login to Your Account',
-          HTMLPart: `
-            <h3>Hi ${dto.firstName},</h3>
-            <p>We noticed a login to your account for device ${dto.device}.</p>
-            <p>Time: ${timestamp}</p>
-          `,
-        },
-      ],
-    };
+  // Replace these with your actual Mailjet Template IDs
+  const INDIVIDUAL_LOGIN_TEMPLATE = 7641211; // Your individual template
+  const ORG_ADMIN_LOGIN_TEMPLATE = 7641043;  // Sent to the person logging in
+  const ORG_OFFICIAL_LOGIN_TEMPLATE = 7641196; // Sent to official business email
 
-    await this.sendEmail(body, dto.to);
+  const isOrgLogin = !!dto.organizationName;
+  const messages: SendEmailV3_1.Message[] = [];
+
+  // 1. PRIMARY MESSAGE: Always send to the user who logged in
+  messages.push({
+    From: {
+      Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+      Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+    },
+    To: [{ Email: dto.to, Name: dto.firstName }],
+    Subject: dto.subject,
+    TemplateID: isOrgLogin ? ORG_ADMIN_LOGIN_TEMPLATE : INDIVIDUAL_LOGIN_TEMPLATE,
+    TemplateLanguage: true,
+    Variables: {
+      firstName: dto.firstName,
+      organizationName: dto.organizationName || '',
+      device: dto.device,
+      os: dto.os,
+      browser: dto.userAgent,
+      ipAddress: dto.ipAddress,
+      timestamp: timestamp,
+    },
+  });
+
+  // 2. SECONDARY MESSAGE: Only for Orgs, send to official org email if it exists and is different
+  if (isOrgLogin && dto.orgEmail && dto.orgEmail.toLowerCase() !== dto.to.toLowerCase()) {
+    messages.push({
+      From: {
+        Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+        Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+      },
+      To: [{ Email: dto.orgEmail, Name: dto.organizationName }],
+      Subject: `Security Alert: Login to ${dto.organizationName}`,
+      TemplateID: ORG_OFFICIAL_LOGIN_TEMPLATE,
+      TemplateLanguage: true,
+      Variables: {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        organizationName: dto.organizationName,
+        device: dto.device,
+        os: dto.os,
+        browser: dto.userAgent,
+        ipAddress: dto.ipAddress,
+        timestamp: timestamp,
+      },
+    });
   }
 
+  const body: SendEmailV3_1.Body = { Messages: messages };
+
+  this.logger.log(
+    `📧 Dispatching ${messages.length} login alert(s) for ${
+      isOrgLogin ? 'Org: ' + dto.organizationName : 'Individual: ' + dto.to
+    }`
+  );
+
+  // Send the body (can contain 1 or 2 messages)
+  await this.sendEmail(body, dto.to);
+}
+
+  /** ------------------ Internal Mailjet sender ------------------ */
   /** ------------------ Internal Mailjet sender ------------------ */
   private async sendEmail(body: SendEmailV3_1.Body, recipient: string): Promise<void> {
+    // We add error reporting to every message in the body
+    if (body.Messages) {
+      body.Messages = body.Messages.map(msg => ({
+        ...msg,
+        TemplateLanguage: true,
+        //  This sends YOU an email if the template fails to render
+        TemplateErrorReporting: {
+          Email: 'allanmathenge67@gmail.com', // Replace with your dev email
+          Name: 'Pivota Debugger',
+        },
+      }));
+    }
+
     try {
       const result: LibraryResponse<SendEmailV3_1.Response> =
         await this.mailjet.post('send', { version: 'v3.1' }).request(body);

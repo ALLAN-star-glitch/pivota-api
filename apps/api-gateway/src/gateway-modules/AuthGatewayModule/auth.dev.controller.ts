@@ -182,7 +182,7 @@ export class AuthDevController {
   async loginSuperAdmin(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      '27ce02f2-ac01-4f7c-b7bb-95eebc43cbd7',
+      '69a601b6-fdb9-4333-9c01-8895a8b3af45',
       'allanmathenge67@gmail.com',
       'SuperAdmin',
       res,

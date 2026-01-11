@@ -31,7 +31,7 @@ model Category {
   subCategoryPosts JobPost[]          @relation("SubcategoryPosts")
   serviceOfferings ServiceOffering[]
   supportPrograms  SupportProgram[]
-  providerPricingRules ProviderPricingRule[]
+  contractorPricingRules ContractorPricingRule[]
   houseListings    HouseListing[]
 
   hasSubcategories Boolean @default(false)
@@ -58,7 +58,10 @@ model JobPost {
   subCategoryId  String?
   subCategory    Category? @relation("SubcategoryPosts", fields: [subCategoryId], references: [id])
 
-  creatorId   String
+  creatorName   String
+  accountName   String
+  creatorId   String   // The individual user who clicked "Post"
+  accountId   String   // The Org or Individual Account owning the post
   jobType     String
   locationCity String
   locationNeighborhood String?
@@ -88,9 +91,11 @@ model JobPost {
   applications JobPostApplication[]
   ratings     Rating[]
 
+
   @@index([locationCity])
   @@index([status])
   @@index([creatorId]) // Good for "My Posts" dashboard
+  @@index([accountId])
   @@index([categoryId])
 }
 
@@ -228,62 +233,115 @@ model JobApplicationStatusHistory {
 }
 
 /// =====================================================================
-///                        PROVIDER SERVICE OFFERINGS (The Storefront)
+///                        CONTRACTOR SERVICE OFFERINGS
+/// =====================================================================
+/// =====================================================================
+///                        CONTRACTOR SERVICE OFFERINGS
 /// =====================================================================
 model ServiceOffering {
   id           String   @id @default(cuid())
   externalId   String   @default(uuid())
-  providerId   String   // Reference to User/Provider UUID from Identity Service
   
-  title        String   // e.g., "Professional Plumbing & Leak Repair"
+  // --- EXTERNAL IDENTITY ANCHORS ---
+  // refers to the individual human user UUID in Profile DB
+  creatorId    String   
+  // refers to the root 'Account' (Org or Individual) in Profile DB
+  accountId    String   
+
+  // --- DENORMALIZED DISPLAY METADATA ---
+  // Store names locally to avoid high-frequency cross-service gRPC calls
+  creatorName  String?  
+  accountName  String
+
+  // NOTE: 'contractorType' and 'isVerified' are removed.
+  // These are handled by the Account model in the Profile Service.
+  // The API Gateway/Aggregator will inject these into the response DTO.
+
+  // --- LISTING DETAILS ---
+  title        String   
   description  String
   
-  // Cross-Vertical Tagging
-  // Using String[] to act as an array of tags (e.g., ["JOBS", "HOUSING"])
-  // This allows one offering to show up in multiple modules.
+  // AI Discovery: e.g., ["JOBS", "SOCIAL_SUPPORT"]
+  // This allows one listing to appear in multiple marketplace pillars.
   verticals    String[] @default(["JOBS"]) 
-  
+
   categoryId   String
   category     Category @relation(fields: [categoryId], references: [id])
   
-  // Supply-side pricing logic
+  // --- PRICING & LOGISTICS ---
   basePrice    Float
-  priceUnit    String      @default("FIXED") // e.g., "PER_HOUR", "PER_SQFT", "FIXED"
+  priceUnit    String   @default("FIXED") // FIXED, PER_HOUR, PER_SESSION
+  currency     String   @default("KES")
   
   locationCity         String
   locationNeighborhood String?
   
-  // Professional specific fields
+  // Snapshot for quick search results & UI rendering
   yearsExperience Int?
-  isVerified      Boolean  @default(false)
-  availability    String?  // Could be a JSON string of working hours
+  availability    String?  // e.g., JSON string or "Mon-Fri, 8am-5pm"
   
-  additionalNotes String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  // Relationships
- reviews     Rating[] @relation("ServiceReviews")
+  // --- RELATIONSHIPS (Internal to Listings DB) ---
+  bookings        ServiceBooking[]
+  reviews         Rating[] @relation("ServiceReviews")
 
-
+  // --- INDEXES ---
   @@index([locationCity])
-  @@index([verticals])   // Extremely important for cross-vertical discovery
-  @@index([providerId])
+  @@index([verticals])   
+  @@index([creatorId])
+  @@index([accountId])
   @@index([categoryId])
 }
 
 /// =====================================================================
-///                            BOOKINGS
+///                           CONTRACTOR SERVICE BOOKINGS
 /// =====================================================================
-model Booking {
-  id          String   @id @default(cuid())
-  externalId  String   @default(uuid())
-  jobPostId   String
-  providerId  String    // reference User Service ID
-  status      String    @default("PENDING") // was enum
+model ServiceBooking {
+  id            String   @id @default(cuid())
+  externalId    String   @default(uuid())
+
+  // ======================
+  // THE WHO (External IDs)
+  // ======================
+  // The Provider (Individual or Org) from Profile DB
+  contractorId  String   
+  // The User/Beneficiary from Profile DB
+  clientId      String   
+
+  // ======================
+  // THE WHAT
+  // ======================
+  // Link to a specific storefront item (Optional if booking contractor generally)
+  serviceId     String?
+  service       ServiceOffering? @relation(fields: [serviceId], references: [id])
+
+  // Denormalized for quick display in "My Bookings"
+  contractorName String?  
+  serviceTitle   String?  
+
+  // ======================
+  // THE WHEN & WHERE
+  // ======================
+  status        String    @default("PENDING") // PENDING | CONFIRMED | COMPLETED | CANCELLED
   scheduledDate DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  locationCity  String?
+  
+  // ======================
+  // FINANCIALS & NOTES
+  // ======================
+  agreedPrice   Float?
+  currency      String    @default("KES")
+  customerNotes String?   // "Please come after 2 PM"
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([contractorId])
+  @@index([clientId])
+  @@index([status])
+  @@index([serviceId])
 }
 
 /// =====================================================================
@@ -297,7 +355,7 @@ model Rating {
   jobPostId       String?
   jobPost         JobPost?         @relation(fields: [jobPostId], references: [id])
 
-  // Relation to ServiceOffering (Optional, for provider reviews)
+  // Relation to ServiceOffering (Optional, for contractor reviews)
   serviceId       String?
   serviceOffering ServiceOffering? @relation("ServiceReviews", fields: [serviceId], references: [id])
 
@@ -315,7 +373,10 @@ model Rating {
 model HouseListing {
   id           String   @id @default(cuid())
   externalId   String   @default(uuid())
-  ownerId      String   // Reference to User/Owner UUID
+  creatorId      String   // The individual User UUID
+  creatorName    String
+  accountId    String   // The owning Account (Individual or Property Agency Org)
+  accountName   String
   
   title        String
   description  String
@@ -351,7 +412,8 @@ model HouseListing {
   viewings     HouseViewing[]
 
   @@index([locationCity, listingType, categoryId])
-  @@index([ownerId])
+  @@index([creatorId])
+  @@index([accountId])
   @@index([status])
 }
 
@@ -381,30 +443,32 @@ model HouseViewing {
 /// =====================================================================
 ///                       SOCIAL SUPPORT (Impact-Driven)
 /// =====================================================================
-/// =====================================================================
-///                       SOCIAL SUPPORT (Impact-Driven)
-/// =====================================================================
 model SupportProgram {
   id           String   @id @default(cuid())
   externalId   String   @default(uuid())
 
-  // Ownership Logic: organizationId is the 'Brand/Entity', creatorId is the 'Author'
-  organizationId String // NGO / Gov / Partner UUID (or User UUID for Individuals)
-  creatorId      String // User UUID who actually created the listing
+  // --- IDENTITY ANCHORS ---
+  // accountId refers to the root 'Account' (Individual or Organization) in Profile DB
+  accountId      String   
+  // creatorId refers to the specific human staff member/user who created this listing
+  creatorId      String   
 
-  // NEW: Trust & Verification (Directly from Concept Note)
-  // INDIVIDUAL | ORGANIZATION | GOVERNMENT | RELIGIOUS_BODY
-  providerType       String   @default("ORGANIZATION")
-  isProviderVerified Boolean  @default(false) // For the "Verified" badge on listings
+  // --- DENORMALIZED IDENTITY (For fast UI rendering) ---
+  // Store the name of the NGO/Provider to avoid cross-service joins on every list view
+  accountName    String
+  creatorName    String?
+
+  // Note: 'providerType' and 'isVerified' are removed here.
+  // These are fetched/injected from the Account model in the Profile Service.
 
   title        String
   description  String
 
+  // --- CATEGORIZATION ---
   categoryId    String
   category      Category @relation(fields: [categoryId], references: [id])
 
-  // Marketplace Discovery: Helps users filter by the kind of help they need
-  // e.g., "GRANT", "TRAINING", "FOOD_STAMP", "MEDICAL_COVER", "MENTORSHIP"
+  // Marketplace Discovery: e.g., "GRANT", "TRAINING", "FOOD_STAMP", "MENTORSHIP"
   supportType   String   @default("GENERAL")
 
   /// =====================================================
@@ -413,7 +477,7 @@ model SupportProgram {
   eligibilityCriteria String?
   targetAudience      String[] @default([]) 
   
-  // Handshake Requirements: Pre-conditions for the application
+  // Handshake Requirements: Pre-conditions for the application process
   requiresIdVerification Boolean @default(false)
   requiresIncomeProof    Boolean @default(false)
 
@@ -421,18 +485,18 @@ model SupportProgram {
   /// COST & ACCESS
   /// =====================================================
   isFree     Boolean @default(true)
-  baseCost   Float?  @default(0) // Used if there is a nominal fee for training/services
+  baseCost   Float?  @default(0) 
   currency   String  @default("KES")
 
   /// =====================================================
   /// CAPACITY & IMPACT TRACKING
   /// =====================================================
-  maxBeneficiaries     Int?   // Total slots available
-  currentBeneficiaries Int    @default(0) // Tracks how many people were approved
+  maxBeneficiaries     Int?      // Total available slots
+  currentBeneficiaries Int       @default(0) // Successful approvals count
   
-  // Financial Tracking: For sponsored social impact listings
-  totalBudget          Float? // Initial donor/sponsor funding
-  remainingBudget      Float? // Decremented as benefits are issued
+  // Financial Transparency: For sponsored/grant-based programs
+  totalBudget          Float?    // Total funding allocated
+  remainingBudget      Float?    // Funds left to disburse
 
   locationCity         String?
   locationNeighborhood String?
@@ -440,7 +504,8 @@ model SupportProgram {
   /// =====================================================
   /// LIFECYCLE & METRICS
   /// =====================================================
-  status    String    @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED | ARCHIVED
+  // DRAFT | ACTIVE | PAUSED | COMPLETED | ARCHIVED
+  status    String    @default("DRAFT") 
   isActive  Boolean   @default(true)
   expiresAt DateTime?
 
@@ -451,12 +516,11 @@ model SupportProgram {
   applications SupportApplication[]
   milestones   SupportMilestone[]
 
-  // INDEXES: Optimized for the "Unified Listing Platform" search requirements
+  // INDEXES: Optimized for Marketplace Search & Discovery
   @@index([categoryId])
   @@index([locationCity])
   @@index([status])
-  @@index([organizationId])
-  @@index([providerType])
+  @@index([accountId])
   @@index([supportType])
 }
 
@@ -603,7 +667,7 @@ model SupportMilestone {
   @@index([programId])
 }
 
-model ProviderPricingRule {
+model ContractorPricingRule {
   id                   String   @id @default(uuid())
   vertical             String   
   unit                 String   

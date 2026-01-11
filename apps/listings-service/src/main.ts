@@ -7,7 +7,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app/app.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { LISTINGS_CATEGORIES_PROTO_PATH, LISTINGS_HOUSING_PROTO_PATH, LISTINGS_JOBS_PROTO_PATH, PROVIDERS_PRICING_PROTO_PATH, PROVIDERS_PROTO_PATH} from '@pivota-api/protos';
+import { LISTINGS_CATEGORIES_PROTO_PATH, LISTINGS_HOUSING_PROTO_PATH, LISTINGS_JOBS_PROTO_PATH, CONTRACTORS_PRICING_PROTO_PATH, CONTRACTORS_PROTO_PATH} from '@pivota-api/protos';
 import * as dotenv from 'dotenv'
 
 // Load environment
@@ -42,8 +42,8 @@ async function bootstrap() {
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.GRPC,
     options: {
-      package: 'providers',
-      protoPath: PROVIDERS_PROTO_PATH,
+      package: 'contractors',
+      protoPath: CONTRACTORS_PROTO_PATH,
       url: process.env.PROVIDERS_GRPC_URL || '0.0.0.0:50058', // separate port
     },
   }); 
@@ -51,8 +51,8 @@ async function bootstrap() {
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.GRPC,
     options: {
-      package: 'providers_pricing',
-      protoPath: PROVIDERS_PRICING_PROTO_PATH,
+      package: 'contractors_pricing',
+      protoPath: CONTRACTORS_PRICING_PROTO_PATH,
       url: process.env.PROVIDERS_PRICING_GRPC_URL || '0.0.0.0:50059', // separate port
     },
   }); 
