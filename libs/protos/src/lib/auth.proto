@@ -9,6 +9,7 @@ service AuthService {
   rpc Refresh(RefreshRequest) returns (BaseRefreshTokenResponse);
   rpc GenerateDevToken(GenerateDevTokenRequest) returns (BaseDevTokenResponse);
   rpc OrganisationSignup(OrganisationSignupRequest) returns (OrganisationSignupResponse);
+  rpc GoogleLogin(GoogleLoginRequest) returns (LoginResponse);
 }
 
 // ------------------ Auth / Login Flow ------------------
@@ -78,6 +79,11 @@ message SignupResponse {
   string code = 3;
   UserSignupData data = 4; 
   ErrorPayload error = 5;
+}
+
+message GoogleLoginRequest {
+  string token = 1;         // The id_token from Google
+  ClientInfo clientInfo = 2; // Reusing your existing helper
 }
 
 message UserSignupData {

@@ -67,4 +67,4 @@ export * from './lib/jobs-requests.dto';
 export * from './lib/jobs-responses.dto';
 export * from './lib/contractors-request.dto';
 export * from './lib/contractors-response.dto';
-
+export * from './lib/GoogleLoginRequestDto.dto';

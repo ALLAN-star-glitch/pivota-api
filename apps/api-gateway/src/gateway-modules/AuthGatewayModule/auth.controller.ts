@@ -13,6 +13,7 @@ import { JwtAuthGuard } from './jwt.guard';
 import {
   LoginRequestDto,
   SessionDto,
+  GoogleLoginRequestDto,
   LoginResponseDto,
   BaseResponseDto,
   TokenPairDto,
@@ -33,7 +34,7 @@ import {
 } from '@nestjs/swagger';
 
 @ApiTags('AuthModule - ((Auth-Service) - MICROSERVICE)') // Group all endpoints under "Auth"
-@ApiExtraModels(BaseResponseDto, LoginResponseDto, UserSignupRequestDto, TokenPairDto, OrganizationSignupDataDto, UserSignupDataDto)
+@ApiExtraModels(BaseResponseDto, LoginResponseDto, UserSignupRequestDto, TokenPairDto, OrganizationSignupDataDto, UserSignupDataDto, GoogleLoginRequestDto)
 @Controller('auth-module')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
@@ -124,6 +125,36 @@ async signupOrganisation(
   ): Promise<BaseResponseDto<LoginResponseDto>> {
     this.logger.log(`📩 Login request for email: ${loginDto.email}`);
     return this.authService.login(loginDto, clientInfo, res);
+  }
+
+  // ===================== GOOGLE LOGIN =====================
+  @Version('1')
+  @Post('google')
+  @ApiOperation({ summary: 'Login or Register using Google OAuth token' })
+  @ApiBody({ type: GoogleLoginRequestDto }) // Use the new DTO here
+  @ApiResponse({
+    status: 200,
+    description: 'Google authentication successful',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BaseResponseDto) },
+        {
+          properties: {
+            data: { $ref: getSchemaPath(LoginResponseDto) },
+          },
+        },
+      ],
+    },
+  })
+  async googleLogin(
+    @Body() googleDto: GoogleLoginRequestDto, // Bind to the DTO object
+    @ClientInfo() clientInfo: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+    @Res({ passthrough: true }) res: Response
+  ): Promise<BaseResponseDto<LoginResponseDto>> {
+    this.logger.log(`🌐 Google Login request received for token validation`);
+    
+    // We merge the DTO token with the auto-captured clientInfo
+    return this.authService.googleLogin(googleDto.token, clientInfo, res);
   }
 
   // ===================== REFRESH TOKEN =====================

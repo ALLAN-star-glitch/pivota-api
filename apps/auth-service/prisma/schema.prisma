@@ -11,10 +11,13 @@ model Credential {
   id            Int       @id @default(autoincrement())
   userUuid      String    @unique
   email         String    @unique
-  passwordHash  String
+  passwordHash String?  
 
   mfaSecret     String?
   mfaEnabled    Boolean   @default(false)
+
+  // Optional: Store the Google Unique ID for extra security/linking
+  googleProviderId String? @unique
   
   // Keep these here: They protect the IDENTITY regardless of the device
   failedAttempts Int      @default(0)

@@ -74,6 +74,49 @@ export class AuthController {
   }
 
   /* ======================================================
+   GOOGLE LOGIN (NEW)
+====================================================== */
+@GrpcMethod('AuthService', 'GoogleLogin')
+async handleGoogleLoginGrpc(
+  data: { 
+    token: string; 
+    clientInfo?: { 
+      device?: string; 
+      ipAddress?: string; 
+      userAgent?: string; 
+      os?: string 
+    } 
+  }
+): Promise<BaseResponseDto<LoginResponseDto>> {
+  this.logger.debug(`gRPC: Google Login attempt`);
+
+  const clientInfo = data.clientInfo || {
+    device: 'Unknown',
+    ipAddress: 'Unknown',
+    userAgent: 'Unknown',
+    os: 'Unknown',
+  };
+
+  try {
+    const result = await this.authService.signInWithGoogle(data.token, clientInfo);
+    return result;
+  } catch (err) {
+    this.logger.error('gRPC Google Login failed', err);
+    // Return a structured error response consistent with your API
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Google login failed',
+      code: 'UNAUTHORIZED',
+      data: null as unknown as LoginResponseDto,
+      error: {
+        code: 'AUTH_FAILURE',
+        message: err instanceof Error ? err.message : 'Unknown error',
+      }
+    };
+  }
+}
+
+  /* ======================================================
      REFRESH TOKEN
   ====================================================== */
   @GrpcMethod('AuthService', 'Refresh')

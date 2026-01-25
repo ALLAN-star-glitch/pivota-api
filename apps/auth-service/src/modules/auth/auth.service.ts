@@ -33,6 +33,10 @@ import {
 import { firstValueFrom, Observable } from 'rxjs';
 import { BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
 import { randomUUID } from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
+import * as dotenv from 'dotenv';
+
+dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
 
 interface GrpcError {
   code: number | string;
@@ -64,6 +68,7 @@ export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
   private profileGrpcService: ProfileServiceGrpc;
   private rbacGrpcService: RbacServiceGrpc;
+  private readonly googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
  
 
 
@@ -746,6 +751,178 @@ this.notificationBus.emit('user.login.email', loginEmailPayload);
       };
     }
   }
+
+async signInWithGoogle(
+  idToken: string, 
+  clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>
+): Promise<BaseResponseDto<LoginResponseDto>> {
+  try {
+    const profileGrpc = this.getProfileGrpcService();
+    
+    // 1. VERIFY GOOGLE TOKEN
+    const ticket = await this.googleClient.verifyIdToken({
+      idToken,
+      audience: [
+        process.env.GOOGLE_CLIENT_ID,
+        '407408718192.apps.googleusercontent.com'
+      ]
+    });
+    
+    const payload = ticket.getPayload(); 
+    if (!payload || !payload.email) {
+      throw new UnauthorizedException('Invalid Google token');
+    }
+
+    const { sub: googleProviderId, email, given_name, family_name } = payload;
+    let profileData: UserProfileResponseDto;
+    let isNewProvisioning = false;
+
+    // 2. IDENTITY LOOKUP
+    const credential = await this.prisma.credential.findFirst({
+      where: {
+        OR: [{ googleProviderId }, { email }]
+      }
+    });
+
+    if (credential) {
+      // --- PATH A: EXISTING CREDENTIAL ---
+      if (!credential.googleProviderId) {
+        await this.prisma.credential.update({
+          where: { id: credential.id },
+          data: { googleProviderId }
+        });
+        this.logger.log(`[Google Auth] Linked Google ID to existing email: ${email}`);
+      }
+
+      const profileResponse = await firstValueFrom(
+        profileGrpc.getUserProfileByUuid({ userUuid: credential.userUuid })
+      );
+      profileData = profileResponse.data;
+
+    } else {
+      // --- PATH B: NO CREDENTIAL FOUND ---
+      try {
+        const existingProfile = await firstValueFrom(
+          profileGrpc.getUserProfileByEmail({ email })
+        );
+
+        if (existingProfile?.success && existingProfile.data) {
+          profileData = existingProfile.data;
+          await this.prisma.credential.create({
+            data: { 
+              userUuid: profileData.user.uuid, 
+              email, 
+              googleProviderId,
+              passwordHash: null 
+            },
+          });
+          this.logger.log(`[Google Auth] Anchored Google login to pre-existing profile: ${email}`);
+        }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (profileErr) {
+        // Truly brand new user
+        isNewProvisioning = true;
+        this.logger.log(`[Google Auth] New user detected: ${email}. Provisioning...`);
+        
+        const userUuid = randomUUID();
+
+        // Fix for Unique Constraint: Ensure phone is null if not provided
+        const createResponse = await firstValueFrom(
+          profileGrpc.createUserProfile({
+            userUuid,
+            email,
+            firstName: given_name || 'User',
+            lastName: family_name || '',
+            phone: null, // Best practice: send null, not empty string ""
+          }),
+        );
+
+        if (!createResponse.success || !createResponse.data) {
+          throw new Error('Profile creation failed via gRPC');
+        }
+
+        await this.prisma.credential.create({
+          data: { userUuid, email, googleProviderId, passwordHash: null },
+        });
+
+        const fullProfile = await firstValueFrom(
+          profileGrpc.getUserProfileByUuid({ userUuid })
+        );
+        profileData = fullProfile.data;
+
+        // Emit Onboarding Event (Welcome Email)
+        this.notificationBus.emit('user.onboarded', {
+          accountId: profileData.account.accountCode,
+          firstName: profileData.user.firstName,
+          email: profileData.user.email,
+          plan: 'Free Forever',
+        });
+      }
+    }
+
+    // 3. GENERATE SESSIONS & TOKENS
+    const { accessToken, refreshToken } = await this.generateTokens(profileData, clientInfo);
+
+    // 4. TRIGGER LOGIN NOTIFICATION (Consistent with manual login)
+    // Only send "New Login" email if it's NOT a brand new signup (avoid double emailing)
+    if (!isNewProvisioning) {
+      const isOrgAccount = profileData.account.type === 'ORGANIZATION';
+      const adminRoles = ['Business System Admin'];
+      const isUserAdmin = isOrgAccount && adminRoles.includes(profileData.user.roleName);
+
+      const loginEmailPayload: UserLoginEmailDto = {
+        to: profileData.user.email,
+        firstName: profileData.user.firstName || 'User',
+        lastName: profileData.user.lastName || '',
+        organizationName: isOrgAccount ? profileData.organization?.name : undefined,
+        orgEmail: isUserAdmin ? profileData.organization?.officialEmail : undefined,
+        subject: isUserAdmin
+          ? `SECURITY: Admin Login to ${profileData.organization?.name}` 
+          : 'New Login to Your Pivota Account (via Google)',
+        device: clientInfo?.device || 'Unknown Device',
+        os: clientInfo?.os || 'Unknown OS',
+        userAgent: clientInfo?.userAgent || 'Unknown Browser',
+        ipAddress: clientInfo?.ipAddress || '0.0.0.0',
+        timestamp: new Date().toISOString(),
+      };
+
+      this.logger.log(`[RMQ Emit] Sending Google login notification for: ${loginEmailPayload.to}`);
+      this.notificationBus.emit('user.login.email', loginEmailPayload);
+    }
+
+    return {
+      success: true,
+      message: 'Authentication successful',
+      code: 'OK',
+      data: {
+        id: profileData.user.uuid,
+        uuid: profileData.user.uuid,
+        userCode: profileData.user.userCode,
+        accountId: profileData.account.uuid,
+        email: profileData.user.email,
+        firstName: profileData.user.firstName,
+        lastName: profileData.user.lastName,
+        phone: profileData.user.phone,
+        status: profileData.user.status,
+        createdAt: profileData.createdAt,
+        updatedAt: profileData.updatedAt,
+        accessToken,
+        refreshToken,
+        organization: profileData.organization ? {
+          uuid: profileData.organization.uuid,
+          name: profileData.organization.name,
+          orgCode: profileData.organization.orgCode,
+          verificationStatus: profileData.organization.verificationStatus,
+        } : undefined
+      },
+    };
+
+  } catch (err) {
+    const errorMessage = err.details || err.message;
+    this.logger.error(`[Google Auth] Failure: ${errorMessage}`);
+    throw new UnauthorizedException(`Google Auth failed: ${errorMessage}`);
+  }
+}
 
   // ------------------ Logout ------------------
   async logout(userUuid: string, tokenId?: string): Promise<void> {

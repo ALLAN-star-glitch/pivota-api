@@ -136,7 +136,8 @@ export class UserService {
           uuid: data.userUuid,
           userCode,
           email: data.email,
-          phone: data.phone,
+          // THE FIX: If phone is an empty string, save it as null
+          phone: data.phone === "" ? null : data.phone,
           firstName: data.firstName,
           lastName: data.lastName,
           roleName: 'General User',

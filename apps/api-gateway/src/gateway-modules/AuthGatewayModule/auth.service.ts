@@ -43,6 +43,13 @@ interface AuthServiceGrpc {
   generateDevToken(
     data: { userUuid: string; email: string; role: string }
   ): Observable<BaseTokenResponseGrpc<TokenPairDto>>;
+
+  googleLogin(
+    data: {
+      token: string;
+      clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>;
+    }
+  ): Observable<BaseResponseDto<LoginResponseDto>>;
 }
 
 
@@ -113,7 +120,6 @@ async signupOrganisation(
 
 
   /** ------------------ Login ------------------ */
-  /** ------------------ Login ------------------ */
   async login(
     loginDto: LoginRequestDto,
     clientInfo: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
@@ -151,6 +157,45 @@ async signupOrganisation(
 
     // 4. Return the successful DTO
     return BaseResponseDto.ok(loginData, grcpLoginResponse.message, grcpLoginResponse.code);
+  }
+
+  /** ------------------ Google Login ------------------ */
+  async googleLogin(
+    token: string,
+    clientInfo: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+    res: Response
+  ): Promise<BaseResponseDto<LoginResponseDto>> {
+    this.logger.log('📩 Calling Auth microservice for Google login');
+
+    const grpcPayload = { token, clientInfo };
+    const grpcResponse = await firstValueFrom(this.authGrpc.googleLogin(grpcPayload));
+
+    this.logger.debug(`📩 Google Auth response: ${JSON.stringify(grpcResponse)}`);
+
+    // 1. Handle failure
+    if (!grpcResponse.success || !grpcResponse.data) {
+      return BaseResponseDto.fail(grpcResponse.message, grpcResponse.code);
+    }
+
+    const loginData = grpcResponse.data;
+
+    // 2. Set Secure Cookies (Matches standard login behavior)
+    res.cookie('access_token', loginData.accessToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 15 * 60 * 1000, // 15 mins
+    });
+
+    res.cookie('refresh_token', loginData.refreshToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    // 3. Return the response to the Gateway Controller
+    return BaseResponseDto.ok(loginData, grpcResponse.message, grpcResponse.code);
   }
 
   /** ------------------ Refresh ------------------ */
