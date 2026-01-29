@@ -6,10 +6,14 @@ import {
   LoginRequestDto,
   TokenPairDto,
   BaseResponseDto,
-  OrganisationSignupRequestDto, // Import this
+  OrganisationSignupRequestDto,
   OrganizationSignupDataDto,
   UserSignupRequestDto,
-  UserSignupDataDto,     // Import this
+  UserSignupDataDto,
+  RequestOtpDto,
+  VerifyOtpDto,
+  VerifyOtpResponseDataDto,
+  ResetPasswordDto, // Add this import
 } from '@pivota-api/dtos';
 
 @Controller()
@@ -19,39 +23,64 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   /* ======================================================
-     ORGANIZATION SIGNUP (NEW)
+     FORGOT PASSWORD FLOW
+  ====================================================== */
+
+  @GrpcMethod('AuthService', 'RequestPasswordReset')
+  async handleRequestPasswordResetGrpc(
+    dto: RequestOtpDto,
+  ): Promise<BaseResponseDto<null>> {
+    this.logger.log(`gRPC: Requesting Password Reset for ${dto.email}`);
+    return await this.authService.requestPasswordReset(dto);
+  }
+
+  @GrpcMethod('AuthService', 'ResetPassword')
+  async handleResetPasswordGrpc(
+    dto: ResetPasswordDto,
+  ): Promise<BaseResponseDto<null>> {
+    this.logger.log(`gRPC: Resetting Password for ${dto.email}`);
+    return await this.authService.resetPassword(dto);
+  }
+
+  /* ======================================================
+     ORGANIZATION SIGNUP
   ====================================================== */
   @GrpcMethod('AuthService', 'OrganisationSignup')
   async handleOrganisationSignupGrpc(
     dto: OrganisationSignupRequestDto,
   ): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
-    this.logger.log(`gRPC: Organisation Signup request for ${dto.name}`);
-    
-    const response = await this.authService.organisationSignup(dto);
-
-    this.logger.debug(`Org Signup response: ${JSON.stringify(response)}`);
-    return response;
+    this.logger.log(`gRPC: Organisation Signup for ${dto.name}`);
+    return await this.authService.organisationSignup(dto);
   }
 
   /* ======================================================
-     STANDARD SIGNUP
+     INDIVIDUAL SIGNUP
   ====================================================== */
   @GrpcMethod('AuthService', 'Signup')
   async handleSignupGrpc(
     signupDto: UserSignupRequestDto,
   ): Promise<BaseResponseDto<UserSignupDataDto>> {
-    const response = await this.authService.signup(signupDto);
-
-    this.logger.debug(`Signup successful for email: ${signupDto.email}`);
-    return response;
+    this.logger.log(`gRPC: Individual Signup for ${signupDto.email}`);
+    return await this.authService.signup(signupDto);
   }
 
   /* ======================================================
-     LOGIN
+     LOGIN (Stage 1: Identity Challenge)
   ====================================================== */
   @GrpcMethod('AuthService', 'Login')
   async handleLoginGrpc(
-    loginDto: LoginRequestDto & { 
+    loginDto: LoginRequestDto,
+  ): Promise<BaseResponseDto<LoginResponseDto>> {
+    this.logger.debug(`gRPC: Login Stage 1 for ${loginDto.email}`);
+    return await this.authService.login(loginDto);
+  }
+
+  /* ======================================================
+     VERIFY MFA LOGIN (Stage 2: Token Issuance)
+  ====================================================== */
+  @GrpcMethod('AuthService', 'VerifyMfaLogin')
+  async handleVerifyMfaLoginGrpc(
+    data: VerifyOtpDto & { 
       clientInfo?: { 
         device?: string; 
         ipAddress?: string;
@@ -60,78 +89,76 @@ export class AuthController {
       } 
     }
   ): Promise<BaseResponseDto<LoginResponseDto>> {
-    this.logger.debug(`Login attempt for email: ${loginDto.email}`);
+    this.logger.debug(`gRPC: Login Stage 2 (MFA Verify) for ${data.email}`);
 
-    const clientInfo = loginDto.clientInfo || {
-      device: 'Unknown',
-      ipAddress: 'Unknown',
-      userAgent: 'Unknown',
-      os: 'Unknown',
+    // Map gRPC message to session DTO shape
+    const clientInfo = {
+      device: data.clientInfo?.device || 'Unknown',
+      ipAddress: data.clientInfo?.ipAddress || 'Unknown',
+      userAgent: data.clientInfo?.userAgent || 'Unknown',
+      os: data.clientInfo?.os || 'Unknown',
     };
 
-    const result = await this.authService.login(loginDto, clientInfo);
-    return result;
+    return await this.authService.verifyMfaLogin(data, clientInfo);
   }
 
   /* ======================================================
-   GOOGLE LOGIN (NEW)
-====================================================== */
-@GrpcMethod('AuthService', 'GoogleLogin')
-async handleGoogleLoginGrpc(
-  data: { 
-    token: string; 
-    clientInfo?: { 
-      device?: string; 
-      ipAddress?: string; 
-      userAgent?: string; 
-      os?: string 
-    } 
+     GOOGLE LOGIN
+  ====================================================== */
+  @GrpcMethod('AuthService', 'GoogleLogin')
+  async handleGoogleLoginGrpc(
+    data: { 
+      token: string; 
+      clientInfo?: { 
+        device?: string; 
+        ipAddress?: string; 
+        userAgent?: string; 
+        os?: string 
+      } 
+    }
+  ): Promise<BaseResponseDto<LoginResponseDto>> {
+    const clientInfo = data.clientInfo || { device: 'Unknown', ipAddress: 'Unknown' };
+    return await this.authService.signInWithGoogle(data.token, clientInfo);
   }
-): Promise<BaseResponseDto<LoginResponseDto>> {
-  this.logger.debug(`gRPC: Google Login attempt`);
-
-  const clientInfo = data.clientInfo || {
-    device: 'Unknown',
-    ipAddress: 'Unknown',
-    userAgent: 'Unknown',
-    os: 'Unknown',
-  };
-
-  try {
-    const result = await this.authService.signInWithGoogle(data.token, clientInfo);
-    return result;
-  } catch (err) {
-    this.logger.error('gRPC Google Login failed', err);
-    // Return a structured error response consistent with your API
-    return {
-      success: false,
-      message: err instanceof Error ? err.message : 'Google login failed',
-      code: 'UNAUTHORIZED',
-      data: null as unknown as LoginResponseDto,
-      error: {
-        code: 'AUTH_FAILURE',
-        message: err instanceof Error ? err.message : 'Unknown error',
-      }
-    };
-  }
-}
 
   /* ======================================================
      REFRESH TOKEN
   ====================================================== */
   @GrpcMethod('AuthService', 'Refresh')
   async handleRefreshGrpc(data: { refreshToken: string }): Promise<BaseResponseDto<TokenPairDto>> {
-    if (!data.refreshToken) {
-      this.logger.warn('Refresh token not provided in gRPC request');
-      throw new Error('Refresh token is required');
-    }
+    return await this.authService.refreshToken(data.refreshToken);
+  }
 
-    try {
-      return await this.authService.refreshToken(data.refreshToken);
-    } catch (err) {
-      this.logger.error('gRPC refresh token failed', err);
-      throw new Error(err instanceof Error ? err.message : 'Refresh failed');
-    }
+  /* ======================================================
+     OTP MANAGEMENT
+  ====================================================== */
+
+  @GrpcMethod('AuthService', 'RequestOtp')
+  async handleRequestOtpGrpc(
+    data: RequestOtpDto
+  ): Promise<BaseResponseDto<null>> {
+    return await this.authService.requestOtp(data);
+  }
+
+  @GrpcMethod('AuthService', 'VerifyOtp')
+  async handleVerifyOtpGrpc(
+    data: VerifyOtpDto
+  ): Promise<BaseResponseDto<VerifyOtpResponseDataDto>> {
+    return await this.authService.verifyOtp(data);
+  }
+
+  /* ======================================================
+     SESSION MANAGEMENT
+  ====================================================== */
+
+  @GrpcMethod('AuthService', 'RevokeSessions')
+  async handleRevokeSessionsGrpc(
+    data: { userUuid: string; tokenId?: string }
+  ): Promise<BaseResponseDto<null>> {
+    this.logger.log(`gRPC: Revoking session(s) for user ${data.userUuid}`);
+    
+    // Calls the service logic we wrote earlier
+    return await this.authService.revokeSessions(data.userUuid, data.tokenId);
   }
 
   /* ======================================================
@@ -155,4 +182,5 @@ async handleGoogleLoginGrpc(
     
     return response;
   }
+  
 }

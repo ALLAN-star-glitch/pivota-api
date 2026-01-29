@@ -7,7 +7,8 @@ import {
   IsOptional, 
   MinLength,
   IsUrl,
-  IsPhoneNumber
+  IsPhoneNumber,
+  Length
 } from 'class-validator';
 
 /* ======================================================
@@ -88,6 +89,11 @@ export class OrganisationSignupRequestDto {
   @IsString()
   @IsNotEmpty()
   adminLastName!: string;
+
+  @IsString()
+  @Length(6, 6, { message: 'Verification code must be exactly 6 digits' })
+  @IsNotEmpty()
+  code!: string;
 }
 
 /* ======================================================

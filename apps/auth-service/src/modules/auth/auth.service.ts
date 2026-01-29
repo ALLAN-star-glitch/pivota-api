@@ -29,6 +29,10 @@ import {
   UserOnboardedEventDto,
   OrganizationOnboardedEventDto,
   UserProfileResponseDto,
+  VerifyOtpDto,
+  RequestOtpDto,
+  SendOtpEventDto,
+  ResetPasswordDto,
 } from '@pivota-api/dtos';
 import { firstValueFrom, Observable } from 'rxjs';
 import { BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
@@ -206,79 +210,102 @@ async validateUser(email: string, password: string): Promise<UserProfileResponse
 
   // ------------------ Generate Tokens ------------------
   /** ------------------ Generate Tokens ------------------ */
-  async generateTokens(
-    profile: UserProfileResponseDto,
-    clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
-    const userData = profile.user;
-    const accountData = profile.account;
-    const fullName = `${userData.firstName} ${userData.lastName}`.trim();
-    // 1. Fetch the User Role via gRPC (RBAC Service)
-    const rbacService = this.getRbacGrpcService();
-    const userRoleResponse = await firstValueFrom(
-      rbacService.getUserRole({ userUuid: userData.uuid }),
-    );
-    
-    // Fallback to GeneralUser if no role is found
-    const roleType = userRoleResponse?.role?.roleType ?? 'GeneralUser';
-    
+ async generateTokens(
+  profile: UserProfileResponseDto,
+  clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+): Promise<{ accessToken: string; refreshToken: string }> {
+  const userData = profile.user;
+  const accountData = profile.account;
+  const fullName = `${userData.firstName} ${userData.lastName}`.trim();
 
-    // 2. Prepare JWT Payload
-    const payload: JwtPayload = {
+  // 1. Fetch the User Role via gRPC
+  const rbacService = this.getRbacGrpcService();
+  const userRoleResponse = await firstValueFrom(
+    rbacService.getUserRole({ userUuid: userData.uuid }),
+  );
+  const roleType = userRoleResponse?.role?.roleType ?? 'GeneralUser';
+
+  // --- NEW STEP: PRE-GENERATE THE TOKEN ID ---
+  // We create this ID now so we can include it in the JWT payload
+  const tokenId = `${userData.uuid}-${Date.now()}`;
+
+  // 2. Prepare JWT Payload (Include the tokenId!)
+  const payload: JwtPayload = {
+    userUuid: userData.uuid,
+    email: userData.email,
+    role: roleType,
+    tokenId: tokenId, // <--- CRUCIAL: Linked to the DB session
+    accountId: accountData.uuid,
+    userName: fullName,
+    accountName: accountData.type === 'ORGANIZATION' ? profile.organization.name : fullName,
+    accountType: accountData.type as 'INDIVIDUAL' | 'ORGANIZATION',
+  };
+
+  // 3. Sign Access and Refresh Tokens
+  const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
+  const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
+
+  // 4. Security: Hash the Refresh Token
+  const hashedToken = await bcrypt.hash(refreshToken, 10);
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  // 5. CREATE SESSION
+  await this.prisma.session.create({
+    data: {
       userUuid: userData.uuid,
-      email: userData.email,
-      role: roleType,
-      accountId: accountData.uuid,
-      userName: fullName,
-      accountName: accountData.type == 'ORGANIZATION' ? profile.organization.name :  fullName,
-      accountType: accountData.type as 'INDIVIDUAL' | 'ORGANIZATION'
-    };
+      tokenId: tokenId, // <--- Use the SAME tokenId used in the payload
+      hashedToken,
+      device: clientInfo?.device,
+      ipAddress: clientInfo?.ipAddress,
+      userAgent: clientInfo?.userAgent,
+      os: clientInfo?.os,
+      lastActiveAt: new Date(),
+      expiresAt,
+      revoked: false,
+    },
+  });
 
-    // 3. Sign Access and Refresh Tokens
-    const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
-    const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
+  this.logger.debug(`[AUTH] Session ${tokenId} created for User: ${userData.uuid}`);
 
-    // 4. Security: Hash the Refresh Token before storing it in DB
-    const hashedToken = await bcrypt.hash(refreshToken, 10);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+  return { accessToken, refreshToken };
+}
 
-    // 5. CREATE SESSION (Detailed Activity Tracking)
-    // This follows your new schema by capturing environmental context
-    await this.prisma.session.create({
-      data: {
-        userUuid: userData.uuid,
-        tokenId: `${payload.userUuid}-${Date.now()}`,
-        hashedToken,
-        
-        // Contextual Metadata from clientInfo
-        device: clientInfo?.device,
-        ipAddress: clientInfo?.ipAddress,
-        userAgent: clientInfo?.userAgent,
-        os: clientInfo?.os,
-        
-        // Activity Tracking
-        lastActiveAt: new Date(), // Set current time as the first activity
-        expiresAt,
-        revoked: false,
+/* ======================================================
+   INDIVIDUAL SIGNUP (With Transactional OTP Verification)
+====================================================== */
+async signup(
+  signupDto: UserSignupRequestDto,
+): Promise<BaseResponseDto<UserSignupDataDto>> {
+  const profileGrpcService = this.getProfileGrpcService();
+
+  try {
+    // 1. VERIFY OTP (Initial Check)
+    // We check existence and expiration before any gRPC overhead.
+    const validOtp = await this.prisma.otp.findFirst({
+      where: {
+        email: signupDto.email,
+        code: signupDto.code,
+        purpose: 'SIGNUP',
+        expiresAt: { gt: new Date() },
       },
     });
 
-    this.logger.debug(`[AUTH] New session created for User: ${userData.uuid} on ${clientInfo?.device || 'unknown device'}`);
+    if (!validOtp) {
+      this.logger.warn(`[AUTH] Blocked signup attempt: Invalid/Expired OTP for ${signupDto.email}`);
+      return {
+        success: false,
+        message: 'Invalid or expired verification code.',
+        code: 'UNAUTHORIZED',
+        data: null as unknown as UserSignupDataDto,
+        error: { code: 'INVALID_OTP', message: 'Verification failed' },
+      };
+    }
 
-    return { accessToken, refreshToken };
-  }
+    // 2. Anchor Identity: Pre-generate the UUID
+    const userUuid = randomUUID();
 
-  /* ======================================================
-   INDIVIDUAL SIGNUP (Auth Service)
-====================================================== */
-async signup(signupDto: UserSignupRequestDto): Promise<BaseResponseDto<UserSignupDataDto>> {
-  const profileGrpcService = this.getProfileGrpcService();
-
-  // 1. Anchor Identity: Pre-generate the UUID
-  const userUuid = randomUUID();
-
-  try {
-    // 2. Call Profile Service (gRPC) to create the identity records
+    // 3. Call Profile Service (gRPC Outbound)
+    // This creates the Account, User, and Profile records in the Profile DB
     const profileResponse = await firstValueFrom(
       profileGrpcService.createUserProfile({
         userUuid: userUuid,
@@ -289,53 +316,51 @@ async signup(signupDto: UserSignupRequestDto): Promise<BaseResponseDto<UserSignu
       }),
     );
 
-    this.logger.debug(`Profile Service Response: ${JSON.stringify(profileResponse)}`);
-
-    // Strict check for success and data presence
     if (!profileResponse.success || !profileResponse.data) {
+      this.logger.error(`[gRPC ERROR] Profile Service failed for ${signupDto.email}: ${profileResponse.message}`);
       return {
         success: false,
-        message: profileResponse.message || 'User profile creation failed',
+        message: profileResponse.message || 'Identity creation failed',
         code: profileResponse.code || 'INTERNAL',
         error: profileResponse.error,
         data: null as unknown as UserSignupDataDto,
       };
     }
 
-    // 3. Save Credentials locally in Auth DB
-    // We do this only after the Profile Service confirms the user exists
+    // 4. Save Credentials Locally
+    // Only happens if Step 3 succeeded.
     const hashedPassword = await bcrypt.hash(signupDto.password, 10);
     await this.prisma.credential.create({
-      data: { 
-        userUuid: userUuid, 
-        passwordHash: hashedPassword, 
-        email: signupDto.email 
+      data: {
+        userUuid: userUuid,
+        passwordHash: hashedPassword,
+        email: signupDto.email,
+        mfaEnabled: true,
       },
     });
 
-    this.logger.log(`Auth credentials anchored to User UUID: ${userUuid}`);
+    // 5. CLEANUP: Delete the used OTP (The "Commit" Step)
+    // We only delete the OTP once we are certain the user records are permanent.
+    await this.prisma.otp.deleteMany({
+      where: { email: signupDto.email, purpose: 'SIGNUP' },
+    });
+
+    this.logger.log(`[AUTH] Registration complete and OTP burned for: ${signupDto.email}`);
 
     /* ======================================================
-       4. ASYNC EVENT EMISSION (The "Double Emit")
-       Both DBs are confirmed. Trigger background provisioning.
+       6. ASYNC EVENT EMISSION
     ====================================================== */
     const onboardedPayload: UserOnboardedEventDto = {
-        accountId: profileResponse.data.account.accountCode,
-        firstName: signupDto.firstName,
-        email: signupDto.email,
-        // Focus only on the Plan and Billing for the Free Tier
-        plan: 'Free Forever',        
-      };
-      this.logger.log(`[RMQ Outbound] Emitting user.onboarded for ${profileResponse.data.user.firstName}`);
+      accountId: profileResponse.data.account.accountCode,
+      firstName: signupDto.firstName,
+      email: signupDto.email,
+      plan: 'Free Forever',
+    };
 
-    // Emit to Notification Service (Queue: notification_email_queue)
-    // For the Welcome Email
     this.notificationBus.emit('user.onboarded', onboardedPayload);
 
-    this.logger.log(`✅ Onboarding events dispatched for: ${signupDto.email}`);
-
     /* ======================================================
-       5. RETURN SUCCESS
+       7. CONSTRUCT SUCCESS RESPONSE
     ====================================================== */
     return {
       success: true,
@@ -345,35 +370,30 @@ async signup(signupDto: UserSignupRequestDto): Promise<BaseResponseDto<UserSignu
         account: profileResponse.data.account,
         user: profileResponse.data.user,
         profile: profileResponse.data.profile,
-        completion: profileResponse.data.completion
+        completion: profileResponse.data.completion,
       },
       error: null,
     };
-    
+
   } catch (err: unknown) {
-    this.logger.error('Individual Signup Error', err);
-    
-    // Type-safe Error Handling for gRPC
+    this.logger.error('Individual Signup Method Failure', err);
+
     if (err instanceof RpcException) {
       const rpcErr = err.getError() as unknown as GrpcError;
       return {
         success: false,
-        message: rpcErr.message || 'Communication failure with Profile Service',
-        code: String(rpcErr.code) || 'GRPC_ERROR',
-        error: {
-          code: String(rpcErr.code),
-          message: rpcErr.message,
-        },
+        message: 'Identity service is currently unreachable.',
+        code: 'SERVICE_UNAVAILABLE',
+        error: { code: String(rpcErr.code), message: rpcErr.message },
         data: null as unknown as UserSignupDataDto,
       };
     }
 
-    const internalErr = err instanceof Error ? err : new Error('Unknown Auth Error');
     return {
       success: false,
-      message: internalErr.message,
+      message: 'An unexpected error occurred during signup.',
       code: 'INTERNAL',
-      error: { code: 'INTERNAL', message: internalErr.message },
+      error: { code: 'INTERNAL', message: err instanceof Error ? err.message : 'Unknown error' },
       data: null as unknown as UserSignupDataDto,
     };
   }
@@ -381,15 +401,40 @@ async signup(signupDto: UserSignupRequestDto): Promise<BaseResponseDto<UserSignu
 
 
   // ------------------ Organisation Signup ------------------
+/* ======================================================
+   ORGANISATION SIGNUP (Updated with OTP Guard)
+====================================================== */
 async organisationSignup(
+  // We extend the DTO to include the 6-digit verification code
   dto: OrganisationSignupRequestDto,
 ): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
   this.logger.log(`Starting Org Signup for: ${dto.name}`);
 
-  const adminUserUuid = randomUUID();
-
   try {
-    // 1. Prepare and Call Profile Service (gRPC)
+    // 1. VERIFY OTP (The Gatekeeper)
+    // Ensure the admin's email is verified before touching gRPC or DBs
+    const validOtp = await this.prisma.otp.findFirst({
+      where: {
+        email: dto.email,
+        code: dto.code,
+        purpose: 'SIGNUP',
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!validOtp) {
+      this.logger.warn(`[AUTH] Org Signup blocked: Invalid OTP for ${dto.email}`);
+      return {
+        success: false,
+        message: 'Invalid or expired verification code.',
+        code: 'UNAUTHORIZED',
+        error: { code: 'INVALID_OTP', message: 'Verification failed' }
+      };
+    }
+
+    const adminUserUuid = randomUUID();
+
+    // 2. Prepare and Call Profile Service (gRPC)
     const createOrgProfileReq: CreateOrganisationRequestDto = {
       name: dto.name,
       officialEmail: dto.officialEmail,
@@ -416,36 +461,41 @@ async organisationSignup(
       };
     }
 
-    // 2. Save Admin Credentials Locally
+    // 3. Save Admin Credentials Locally
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     await this.prisma.credential.create({
       data: {
         userUuid: adminUserUuid,
         email: dto.email,
         passwordHash: hashedPassword,
+        mfaEnabled: true,
       },
     });
 
-    this.logger.log(`Org Signup Credentials stored for: ${adminUserUuid}`);
- 
+    // 4. CLEANUP: Delete the used OTP
+    // Only delete once the Profile Service and Credentials creation are successful
+    await this.prisma.otp.deleteMany({
+      where: { email: dto.email, purpose: 'SIGNUP' }
+    });
+
+    this.logger.log(`Org credentials anchored and OTP cleared for: ${dto.email}`);
+
     /* ======================================================
-   3. ASYNC EVENT EMISSION (Organization)
-====================================================== */
-const orgOnboardedPayload: OrganizationOnboardedEventDto = {
-  accountId: orgResponse.data.account.accountCode, // String, not UUID
-  name: dto.name,                                  // Business Name
-  adminFirstName: orgResponse.data.admin.firstName,
-  adminEmail: dto.email,                           // Admin's email (from DTO)
-  orgEmail: dto.officialEmail,                     // Org official email
-  plan: 'Free Forever',                            // Matches @IsOptional() @IsString()
-};
+       5. ASYNC EVENT EMISSION (Organization Onboarded)
+    ====================================================== */
+    const orgOnboardedPayload: OrganizationOnboardedEventDto = {
+      accountId: orgResponse.data.account.accountCode,
+      name: dto.name,
+      adminFirstName: orgResponse.data.admin.firstName,
+      adminEmail: dto.email,
+      orgEmail: dto.officialEmail,
+      plan: 'Free Forever',
+    };
 
-// Emit the event
-this.notificationBus.emit('organization.onboarded', orgOnboardedPayload);
+    this.notificationBus.emit('organization.onboarded', orgOnboardedPayload);
+    this.logger.log(`✅ Organization onboarding events dispatched for: ${dto.name}`);
 
-this.logger.log(`✅ Organization onboarding events dispatched for: ${dto.name}`);
-
-    // 4. Return the "Trio" shape
+    // 6. Return the full data shape
     return {
       success: true,
       code: 'CREATED',
@@ -493,124 +543,57 @@ this.logger.log(`✅ Organization onboarding events dispatched for: ${dto.name}`
   // ------------------ Unified Login ------------------
  async login(
   loginDto: LoginRequestDto,
-  clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
 ): Promise<BaseResponseDto<LoginResponseDto>> {
-  this.logger.debug(`Login request received for: ${loginDto.email}`);
+  this.logger.debug(`Login Stage 1 (Password check) received for: ${loginDto.email}`);
 
   try {
     // 1. Validate Credentials & Fetch Profile via gRPC
-    // The profile returned here already contains the user, account, and organization data
+    // validateUser handles lockout logic and password bcrypt comparison
     const profile = await this.validateUser(loginDto.email, loginDto.password);
 
     if (!profile) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Helper variables
-    const userData = profile.user;
-    const accountData = profile.account;
-    const isOrgAccount = accountData.type === 'ORGANIZATION';
-   
-
-    // 2. Generate JWT Tokens
-    // roleName is passed here to be signed into the JWT payload as the source of truth
-    const { accessToken, refreshToken } = await this.generateTokens(
-      profile,
-      clientInfo,
-    );
-
-  /* ======================================================
-   3. CONDITIONAL NOTIFICATION LOGIC
-====================================================== */
-
-// 1. Define what qualifies as an 'Admin' login for your business logic
-const adminRoles = ['Business System Admin'];
-
-// LOG 1: Check the raw data coming from the Profile Service
-this.logger.debug(`[Login Debug] User Role: "${userData.roleName}" | Is Org: ${isOrgAccount}`);
-this.logger.debug(`[Login Debug] Org Official Email: "${profile.organization?.officialEmail}"`);
-
-const isUserAdmin = isOrgAccount && adminRoles.includes(userData.roleName);
-
-// LOG 2: Check if the Admin condition was actually met
-this.logger.debug(`[Login Debug] Is User Admin Match: ${isUserAdmin}`);
-
-const loginEmailPayload: UserLoginEmailDto = {
-  to: userData.email,
-  firstName: userData.firstName || 'User',
-  lastName: userData.lastName || 'User',
-  organizationName: isOrgAccount ? profile.organization?.name : undefined,
-
-  // FIX: Only provide orgEmail if the user logging in IS an admin.
-  orgEmail: isUserAdmin ? profile.organization?.officialEmail : undefined,
-
-  subject: isUserAdmin
-    ? `SECURITY: Admin Login to ${profile.organization?.name}` 
-    : 'New Login to Your Pivota Account',
-
-  device: clientInfo?.device || 'Unknown Device',
-  os: clientInfo?.os || 'Unknown OS',
-  userAgent: clientInfo?.userAgent || 'Unknown Browser',
-  ipAddress: clientInfo?.ipAddress || '0.0.0.0',
-  timestamp: new Date().toISOString(),
-};
-
-// LOG 3: Final confirmation of the payload before it leaves the service
-this.logger.log(`[RMQ Emit] Sending login email event for: ${loginEmailPayload.to}`);
-if (loginEmailPayload.orgEmail) {
-  this.logger.log(`[RMQ Emit] Target secondary Org Email detected: ${loginEmailPayload.orgEmail}`);
-} else {
-  this.logger.warn(`[RMQ Emit] No secondary Org Email set. IsAdmin was ${isUserAdmin}`);
-}
-
-
-// Dispatch to background queue
-this.notificationBus.emit('user.login.email', loginEmailPayload);
-
     /* ======================================================
-       4. CONSTRUCT RESPONSE
+       2. TRIGGER MFA CHALLENGE (Always-On Default)
     ====================================================== */
-    const loginData: LoginResponseDto = {
-      id: userData.uuid,
-      uuid: userData.uuid,
-      userCode: userData.userCode,
-      accountId: accountData.uuid,
-      email: userData.email,
-      firstName: userData.firstName,
-      lastName: userData.lastName,
-      phone: userData.phone,
-      status: userData.status,
-      createdAt: profile.createdAt,
-      updatedAt: profile.updatedAt,
-
-      accessToken,
-      refreshToken,
-
-      // Map organization details if it's an organization account
-      organization: profile.organization ? {
-        uuid: profile.organization.uuid,
-        name: profile.organization.name,
-        orgCode: profile.organization.orgCode,
-        verificationStatus: profile.organization.verificationStatus,
-      } : undefined
+    const otpPayload: RequestOtpDto = {
+      email: loginDto.email,
+      purpose: '2FA', 
     };
 
-  
+    // Generates code, saves to DB, and emits to Notification Bus
+    await this.requestOtp(otpPayload);
+
+    this.logger.log(`[AUTH] Password verified. MFA Challenge sent to: ${loginDto.email}`);
+
+    /* ======================================================
+       3. CONSTRUCT INTERMEDIATE RESPONSE
+    ====================================================== */
+    // We return enough data for the frontend to show a personalized OTP screen
+    // but NO tokens (accessToken/refreshToken) are issued yet.
     return {
       success: true,
-      message: 'Login successful',
-      code: 'OK',
-      data: loginData,
+      message: 'MFA_REQUIRED',
+      code: '2FA_PENDING',
+      data: {
+        email: profile.user.email,
+        firstName: profile.user.firstName,
+        lastName: profile.user.lastName,
+        uuid: profile.user.uuid,
+        status: profile.user.status,
+      } as unknown as LoginResponseDto,
       error: null,
     };
 
-  } catch (err: unknown) {
-    this.logger.error(`Login failed for ${loginDto.email}`, err instanceof Error ? err.stack : err);
 
+  } catch (err: unknown) {
+    this.logger.error(`Login Stage 1 failed for ${loginDto.email}`, err instanceof Error ? err.stack : err);
+
+    // 1. Handle Known Unauthorized (Lockouts, Wrong Passwords)
     if (err instanceof UnauthorizedException) {
-      // Extract the message (e.g., "Invalid credentials" or "Account locked. Try again in 15 minutes.")
       const errorMessage = err.message;
-      
       return {
         success: false,
         message: errorMessage,
@@ -619,13 +602,12 @@ this.notificationBus.emit('user.login.email', loginEmailPayload);
         error: { 
           code: 'AUTH_FAILURE', 
           message: errorMessage,
-          // We add details here if you want to pass more structured info to the frontend
           details: (err as any).getResponse?.()?.message || null 
         },
       };
     }
 
-    // Handle gRPC errors if ProfileService or RBAC fails during login
+    // 2. Handle gRPC Service Failures (Profile/RBAC)
     if (err instanceof RpcException || (err as any).code !== undefined) {
       const rpcErr = (err instanceof RpcException ? err.getError() : err) as any;
       return {
@@ -640,11 +622,11 @@ this.notificationBus.emit('user.login.email', loginEmailPayload);
         },
       };
     }
-    
 
+    // 3. Fallback for Internal Errors
     return {
       success: false,
-      message: 'Internal server error during login',
+      message: 'Internal server error during login stage 1',
       code: 'INTERNAL',
       data: null as unknown as LoginResponseDto,
       error: { 
@@ -813,6 +795,7 @@ async signInWithGoogle(
               userUuid: profileData.user.uuid, 
               email, 
               googleProviderId,
+              mfaEnabled: true,
               passwordHash: null 
             },
           });
@@ -842,7 +825,7 @@ async signInWithGoogle(
         }
 
         await this.prisma.credential.create({
-          data: { userUuid, email, googleProviderId, passwordHash: null },
+          data: { userUuid, email, googleProviderId, mfaEnabled: true, passwordHash: null },
         });
 
         const fullProfile = await firstValueFrom(
@@ -941,74 +924,397 @@ async signInWithGoogle(
 
 
   // ------------------ Dev Token Generation ------------------
-async generateDevToken(userUuid: string, email: string, role: string, accountId: string): Promise<BaseResponseDto<TokenPairDto>> {
-
+async generateDevToken(
+  userUuid: string, 
+  email: string, 
+  role: string, 
+  accountId: string
+): Promise<BaseResponseDto<TokenPairDto>> {
   const userGrpcService = this.getProfileGrpcService();
   const profileResponse = await firstValueFrom(
-  userGrpcService.getUserProfileByUuid({ userUuid: userUuid })
+    userGrpcService.getUserProfileByUuid({ userUuid: userUuid })
   );   
-  const userData = profileResponse.data.user
-  const accountData = profileResponse.data.account
-  const fullName = `${userData.firstName} ${userData.lastName}`.trim()
+  
+  const userData = profileResponse.data.user;
+  const accountData = profileResponse.data.account;
+  const fullName = `${userData.firstName} ${userData.lastName}`.trim();
+
   try {
+    // 1. Pre-generate the Dev Token ID
+    const devTokenId = `dev-${userUuid}-${Date.now()}`;
+
+    // 2. Prepare Payload including the tokenId
     const payload: JwtPayload = {
       userUuid,
       email,
       role,
       accountId,
+      tokenId: devTokenId, // Linked to the DB entry below
       userName: fullName,
-      accountName: accountData.type=='ORGANIZATION' ? profileResponse.data.organization.name : fullName,
+      accountName: accountData.type === 'ORGANIZATION' ? profileResponse.data.organization.name : fullName,
       accountType: accountData.type
     };
 
+    // 3. Sign Tokens
     const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '1h' });
     const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
 
-    /**
-     *  PREVENTION: CLEANUP BEFORE CREATE
-     * We delete any previous dev sessions for THIS specific user/role 
-     * before creating a new one. This keeps the DB at a constant size.
-     */
+    // 4. Cleanup old Dev sessions to keep DB clean
     await this.prisma.session.deleteMany({
       where: {
         userUuid: userUuid,
-        device: 'Postman-Dev', // Only targets sessions created by this tool
+        device: 'Postman-Dev', 
       },
     });
 
-    // Create the fresh session
+    // 5. Create the fresh session in DB
     await this.prisma.session.create({
       data: {
         userUuid,
-        tokenId: `dev-${userUuid}-${Date.now()}`,
+        tokenId: devTokenId, // MUST match payload.tokenId
         hashedToken: await bcrypt.hash(refreshToken, 10),
         device: 'Postman-Dev',
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        revoked: false,
+        lastActiveAt: new Date(),
       },
     });
 
-    const success= {
+    return {
       success: true,
       message: 'Dev tokens generated successfully',
       code: 'OK',
-      tokens: { accessToken, refreshToken }, // Use 'data' if that matches your DTO
-      error: null,
+      data: { accessToken, refreshToken }, // Ensuring it wraps in 'data' for BaseResponseDto consistency
     };
-
-    return success;
 
   } catch (err: unknown) {
     const unknownErr = err as Error;
     this.logger.error(`Dev Token Error: ${unknownErr.message}`);
+    return BaseResponseDto.fail(unknownErr?.message || 'Dev token generation failed', 'INTERNAL');
+  }
+}
+
+/** ------------------ Request OTP ------------------ */
+async requestOtp(data: RequestOtpDto): Promise<BaseResponseDto<null>> {
+  const { email, purpose } = data;
+
+  try {
+    // 1. Check if user already exists
+    const existingUser = await this.prisma.credential.findUnique({
+      where: { email },
+      select: { id: true }, // Lightweight check
+    });
+
+    // 2. Business Logic based on Purpose
+    // 2. Business Logic based on Purpose
+    switch (purpose) {
+      case 'SIGNUP':
+        if (existingUser) {
+          return BaseResponseDto.fail('This email is already registered.', 'CONFLICT');
+        }
+        break;
+
+      case 'PASSWORD_RESET':
+        if (!existingUser) {
+          this.logger.log(`[OTP] Password reset requested for non-existent: ${email}`);
+          return BaseResponseDto.ok(null, 'If an account exists, a code has been sent.');
+        }
+        break;
+
+      case '2FA':
+        if (!existingUser) {
+          return BaseResponseDto.fail('Account not found.', 'NOT_FOUND');
+        }
+        break;
+
+      case 'CHANGE_EMAIL':
+        if (existingUser) {
+          return BaseResponseDto.fail('This email is already in use.', 'CONFLICT');
+        }
+        break;
+
+      case 'CHANGE_PHONE':
+        // Note: For phone changes, the 'email' in the DTO is still the user's primary ID
+        // so we can find them, but the OTP is being sent to a phone (usually via SMS).
+        if (!existingUser) {
+          return BaseResponseDto.fail('User account not found.', 'NOT_FOUND');
+        }
+        break;
+
+      default:
+        return BaseResponseDto.fail('Invalid request purpose.', 'BAD_REQUEST');
+    }
+   
+ 
+    // 3. Generate 6-digit code
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const EXPIRES_IN_MINUTES = 10;
+    const expiresAt = new Date(Date.now() + EXPIRES_IN_MINUTES * 60000);
+
+    // 4. Save to DB 
+    // Optimization: Delete old OTPs for this email/purpose first to prevent clutter
+    await this.prisma.otp.deleteMany({ where: { email, purpose } });
+
+    await this.prisma.otp.create({
+      data: {
+        email,
+        code: otpCode,
+        purpose,
+        expiresAt,
+      },
+    });
+
+    // 5. Emit Event to Notification Service
+    this.logger.log(`[RMQ Outbound] Emitting otp.requested for ${email} (${purpose})`);
+
+    const otpPayload: SendOtpEventDto = {
+      email: email,
+      code: otpCode,
+      purpose: purpose,
+    };
+    this.notificationBus.emit('otp.requested', otpPayload);
+
+    return {
+      success: true,
+      message: 'Verification code sent to your email',
+      code: 'OK',
+      data: null,
+    };
+  } catch (error) {
+    this.logger.error(`Failed to generate OTP for ${email}`, error);
     return {
       success: false,
-      message: 'Dev token generation failed',
-      code: 'INTERNAL',
-      error: { 
-        code: 'INTERNAL', 
-        message: unknownErr?.message || 'Internal Server Error' 
-      },
+      message: 'An error occurred while processing your request',
+      code: 'INTERNAL_ERROR',
+      data: null,
     };
+  }
+}
+
+
+/** ------------------ Verify OTP ------------------ */
+async verifyOtp(data: VerifyOtpDto): Promise<BaseResponseDto<{ verified: boolean }>> {
+  const { email, code, purpose } = data;
+
+  try {
+    // 1. Find the latest valid OTP for this email and purpose
+    const latestOtp = await this.prisma.otp.findFirst({
+      where: {
+        email,
+        code,
+        purpose: purpose || 'SIGNUP',
+        expiresAt: { gt: new Date() }, // Must not be expired
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!latestOtp) {
+      this.logger.warn(`[AUTH] Invalid or expired OTP attempt for: ${email}`);
+      return {
+        success: false,
+        message: 'Invalid or expired code',
+        code: 'UNAUTHORIZED',
+        data: { verified: false },
+      };
+    }
+
+    // 2. OTP is valid! Clean up: Delete all OTPs for this email/purpose to prevent replay
+    await this.prisma.otp.deleteMany({
+      where: { email, purpose: purpose || 'SIGNUP' },
+    });
+
+    this.logger.log(`[AUTH] OTP verified successfully for: ${email}`);
+
+    return {
+      success: true,
+      message: 'Code verified',
+      code: 'OK',
+      data: { verified: true },
+    };
+  } catch (error) {
+    this.logger.error(`Error verifying OTP for ${email}`, error);
+    throw new RpcException({ code: 13, message: 'Internal validation failure' });
+  }
+}
+
+async verifyMfaLogin(
+  verifyDto: VerifyOtpDto,
+  clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+): Promise<BaseResponseDto<LoginResponseDto>> {
+  this.logger.debug(`Login Stage 2 (MFA) received for: ${verifyDto.email}`);
+
+  try {
+    // 1. Verify OTP in Database
+    const validOtp = await this.prisma.otp.findFirst({
+      where: {
+        email: verifyDto.email,
+        code: verifyDto.code,
+        purpose: '2FA',
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!validOtp) {
+      throw new UnauthorizedException('Invalid or expired 2FA code');
+    }
+
+    // 2. Fetch User Profile to generate tokens
+    // We need the credential to get the userUuid for the gRPC call
+    const credential = await this.prisma.credential.findUnique({
+      where: { email: verifyDto.email },
+    });
+
+    const profileResponse = await firstValueFrom(
+      this.getProfileGrpcService().getUserProfileByUuid({ userUuid: credential.userUuid })
+    );
+
+    const profile = profileResponse.data;
+    const userData = profile.user;
+
+    // 3. Generate JWT Tokens & Create Session
+    const { accessToken, refreshToken } = await this.generateTokens(profile, clientInfo);
+
+    /* ======================================================
+       4. NOTIFICATION LOGIC (Moved here from login)
+    ====================================================== */
+    const adminRoles = ['Business System Admin'];
+    const isOrgAccount = profile.account.type === 'ORGANIZATION';
+    const isUserAdmin = isOrgAccount && adminRoles.includes(userData.roleName);
+
+    const loginEmailPayload: UserLoginEmailDto = {
+      to: userData.email,
+      firstName: userData.firstName,
+      lastName: userData.lastName,
+      organizationName: isOrgAccount ? profile.organization?.name : undefined,
+      orgEmail: isUserAdmin ? profile.organization?.officialEmail : undefined,
+      subject: isUserAdmin ? `SECURITY: Admin Login` : 'New Login detected',
+      device: clientInfo?.device || 'Unknown',
+      os: clientInfo?.os || 'Unknown',
+      userAgent: clientInfo?.userAgent || 'Unknown',
+      ipAddress: clientInfo?.ipAddress || '0.0.0.0',
+      timestamp: new Date().toISOString(),
+    };
+
+    this.notificationBus.emit('user.login.email', loginEmailPayload);
+
+    // 5. Cleanup: Burn the OTP
+    await this.prisma.otp.delete({ where: { id: validOtp.id } });
+
+    // 6. Final Login Response
+    return {
+      success: true,
+      message: 'Login successful',
+      code: 'OK',
+      data: {
+        ...userData,
+        accessToken,
+        refreshToken,
+        organization: profile.organization,
+      } as unknown as LoginResponseDto,
+      error: null,
+    };
+
+  } catch (err: unknown) {
+    this.logger.error(`MFA Verification failed for ${verifyDto.email}`, err);
+    throw new UnauthorizedException(err instanceof Error ? err.message : 'MFA Failed');
+  }
+}
+
+
+/** ------------------ Forgot Password: Step 1 (Request) ------------------ */
+  async requestPasswordReset(dto: RequestOtpDto): Promise<BaseResponseDto<null>> {
+    // Verify user exists before sending email
+    const credential = await this.prisma.credential.findUnique({ where: { email: dto.email } });
+    if (!credential) {
+      // Security best practice: don't reveal if email exists, just say "If account exists..."
+      return BaseResponseDto.ok(null, 'If an account exists, a reset code has been sent.');
+    }
+
+    return this.requestOtp({ email: dto.email, purpose: 'PASSWORD_RESET' });
+  }
+
+  /** ------------------ Forgot Password: Step 2 (Reset) ------------------ */
+  async resetPassword(dto: ResetPasswordDto): Promise<BaseResponseDto<null>> {
+  const { email, code, newPassword } = dto;
+
+  try {
+    // 1. Reuse your existing verifyOtp logic
+    const otpVerification = await this.verifyOtp({ 
+      email, 
+      code, 
+      purpose: 'PASSWORD_RESET' 
+    });
+
+    if (!otpVerification.success) {
+      return BaseResponseDto.fail(otpVerification.message, otpVerification.code);
+    }
+
+    // 2. Perform the update and revocation in a transaction
+    return await this.prisma.$transaction(async (tx) => {
+      // Hash the new password
+      const passwordHash = await bcrypt.hash(newPassword, 12);
+
+      // Update the credential
+      const updatedCredential = await tx.credential.update({
+        where: { email },
+        data: { 
+          passwordHash,
+          failedAttempts: 0,
+          lockoutExpires: null 
+        },
+        select: { userUuid: true }
+      });
+
+      // 3. Reuse your existing revokeSessions logic
+      // Note: We call it to invalidate all active devices/refresh tokens
+      await this.revokeSessions(updatedCredential.userUuid);
+
+      // 4. Delete the OTP now that it has been used
+      await tx.otp.deleteMany({ 
+        where: { email, code, purpose: 'PASSWORD_RESET' } 
+      });
+
+      return BaseResponseDto.ok(null, 'Password updated and all active sessions revoked.');
+    });
+  } catch (error) {
+    this.logger.error(`Critical error during password reset for ${email}:`, error);
+    return BaseResponseDto.fail('Failed to complete password reset', 'INTERNAL');
+  }
+}
+
+  /** ------------------ Revoke Session(s) ------------------ */
+ async revokeSessions(userUuid: string, tokenId?: string): Promise<BaseResponseDto<null>> {
+  try {
+    let result: { count: any; };
+
+    if (tokenId) {
+      this.logger.log(`🚫 Revoking specific session: ${tokenId} for user: ${userUuid}`);
+      result = await this.prisma.session.updateMany({
+        where: { userUuid: userUuid, tokenId: tokenId, revoked: false },
+        data: { revoked: true },
+      });
+
+      // If a specific tokenId was provided but nothing was updated
+      if (result.count === 0) {
+        this.logger.warn(`⚠️ No active session found for tokenId: ${tokenId}`);
+        return BaseResponseDto.fail('Session not found or already revoked', 'NOT_FOUND');
+      }
+    } else {
+      this.logger.warn(`🚨 Revoking ALL sessions for user: ${userUuid}`);
+      result = await this.prisma.session.updateMany({
+        where: { userUuid: userUuid, revoked: false },
+        data: { revoked: true },
+      });
+      
+      // Note: For Global Logout, you might still want to return 'ok' 
+      // even if count is 0, as the end state (no active sessions) is achieved.
+    }
+
+    
+    return BaseResponseDto.ok(null, 'Session(s) successfully revoked');
+  } catch (err) {
+    this.logger.error(`Failed to revoke sessions for ${userUuid}`, err);
+    return BaseResponseDto.fail('Failed to revoke session', 'INTERNAL');
   }
 }
 }

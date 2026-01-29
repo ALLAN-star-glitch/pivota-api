@@ -179,7 +179,7 @@ export class AuthDevController {
   @Get('token/super-admin')
   @ApiOperation({ summary: 'Login as SuperAdmin' })
   @ApiResponse(AuthDevController.TokenResponseSchema)
-  async loginSuperAdmin(@Res({ passthrough: true }) res: Response) {
+  async loginSuperAdmin(@Res({ passthrough: true }) res: Response): Promise<BaseResponseDto<TokenPairDto>> {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
       '69a601b6-fdb9-4333-9c01-8895a8b3af45',

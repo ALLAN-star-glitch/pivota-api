@@ -72,7 +72,7 @@ async function bootstrap() {
   // Swagger integration start
   // ========================
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Pivota API Gateway')
+    .setTitle('PivotaConnect API Documentation')
     .setDescription('Documentation for Auth and other services')
     .setVersion('1.0')
     .addBearerAuth()

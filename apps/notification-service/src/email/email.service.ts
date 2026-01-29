@@ -3,7 +3,8 @@ import { Client, SendEmailV3_1, LibraryResponse } from 'node-mailjet';
 import {  
   UserLoginEmailDto,
   UserOnboardedEventDto,
-  OrganizationOnboardedEventDto, 
+  OrganizationOnboardedEventDto,
+  SendOtpEventDto, 
 } from '@pivota-api/dtos';
 import * as dotenv from 'dotenv';
 import { format } from 'date-fns';
@@ -218,4 +219,42 @@ async sendLoginEmail(dto: UserLoginEmailDto) {
       this.logger.error(`Failed to send email to ${recipient}: ${message}`);
     }
   }
+
+  /* ======================================================
+       NEW: OTP EMAIL LOGIC
+  ====================================================== */
+
+  /** ------------------ Send OTP Verification Code ------------------ */
+  async sendOtpEmail(dto: SendOtpEventDto) {
+    const OTP_TEMPLATE_ID = 7697471; // Replace with your actual Mailjet Template ID for OTPs
+    
+    // Customize subject based on purpose
+    let subject = 'Your Verification Code';
+    if (dto.purpose === 'SIGNUP') subject = 'Confirm your Pivota Registration';
+    if (dto.purpose === 'PASSWORD_RESET') subject = 'Reset your Pivota Password';
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [
+        {
+          From: {
+            Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+            Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+          },
+          To: [{ Email: dto.email }],
+          Subject: subject,
+          TemplateID: OTP_TEMPLATE_ID,
+          TemplateLanguage: true,
+          Variables: {
+            otpCode: dto.code, // Make sure your Mailjet template uses {{var:otpCode}}
+            purpose: dto.purpose.toLowerCase().replace('_', ' '),
+            expiresIn: '10 minutes',
+          },
+        },
+      ],
+    };
+
+    this.logger.log(`📧 Dispatching OTP code to: ${dto.email} for ${dto.purpose}`);
+    await this.sendEmail(body, dto.email);
+  }
+  
 }

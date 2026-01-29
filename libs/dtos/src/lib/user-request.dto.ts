@@ -8,7 +8,8 @@ import {
   MinLength,
   IsPhoneNumber,
   IsDateString,
-  IsUrl
+  IsUrl,
+  Length
 } from 'class-validator';
 
 /* ======================================================
@@ -52,6 +53,11 @@ export class UserSignupRequestDto {
   @IsNotEmpty()
   @MinLength(8)
   password!: string;
+
+  @IsString()
+  @Length(6, 6, { message: 'Verification code must be exactly 6 digits' })
+  @IsNotEmpty()
+  code!: string;
 }
 
 /* ======================================================

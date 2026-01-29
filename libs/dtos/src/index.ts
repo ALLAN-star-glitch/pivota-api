@@ -68,3 +68,8 @@ export * from './lib/jobs-responses.dto';
 export * from './lib/contractors-request.dto';
 export * from './lib/contractors-response.dto';
 export * from './lib/GoogleLoginRequestDto.dto';
+export * from './lib/RequestOtpDto.dto';
+export * from './lib/VerifyOtpDto';
+export * from './lib/SendOtpEventDto.dto';
+export * from './lib/ResetPasswordDto.dto';
+export * from './lib/RevokeSessionDto.dto';

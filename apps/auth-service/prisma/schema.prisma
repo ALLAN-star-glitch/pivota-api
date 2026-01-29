@@ -14,7 +14,7 @@ model Credential {
   passwordHash String?  
 
   mfaSecret     String?
-  mfaEnabled    Boolean   @default(false)
+  mfaEnabled    Boolean   @default(true)
 
   // Optional: Store the Google Unique ID for extra security/linking
   googleProviderId String? @unique
@@ -53,4 +53,16 @@ model Session {
   @@index([userUuid])
   @@index([revoked])
   @@index([expiresAt])
+}
+
+
+model Otp {
+  id        String   @id @default(cuid())
+  email     String
+  code      String   
+  purpose   String   @default("SIGNUP") 
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email, code])
 }
