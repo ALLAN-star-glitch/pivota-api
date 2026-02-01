@@ -165,8 +165,8 @@ export class AuthDevController {
   async loginGeneralUser(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      '0892c11c-1fb2-4a5e-948e-075c9c11231a',
-      'janenyambura4272@gmail.com',
+      '8400a033-eb84-4bd6-b87f-f5e11cba1cd3',
+      'stephenjuguna9010@gmail.com',
       'GeneralUser',
       res,
     );

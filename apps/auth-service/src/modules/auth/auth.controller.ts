@@ -13,7 +13,8 @@ import {
   RequestOtpDto,
   VerifyOtpDto,
   VerifyOtpResponseDataDto,
-  ResetPasswordDto, // Add this import
+  ResetPasswordDto,
+  SessionDto, // Add this import
 } from '@pivota-api/dtos';
 
 @Controller()
@@ -151,14 +152,30 @@ export class AuthController {
      SESSION MANAGEMENT
   ====================================================== */
 
+  @GrpcMethod('AuthService', 'GetActiveSessions')
+  async handleGetActiveSessionsGrpc(
+    data: { userUuid: string }
+  ): Promise<BaseResponseDto<SessionDto[]>> {
+    this.logger.log(`gRPC: Fetching active sessions for user ${data.userUuid}`);
+    return await this.authService.getActiveSessions(data.userUuid);
+  }
+
   @GrpcMethod('AuthService', 'RevokeSessions')
   async handleRevokeSessionsGrpc(
     data: { userUuid: string; tokenId?: string }
   ): Promise<BaseResponseDto<null>> {
     this.logger.log(`gRPC: Revoking session(s) for user ${data.userUuid}`);
     
-    // Calls the service logic we wrote earlier
-    return await this.authService.revokeSessions(data.userUuid, data.tokenId);
+    // Perform the revoke
+    await this.authService.logout(data.userUuid, data.tokenId);
+    
+    return {
+      success: true,
+      message: data.tokenId ? 'Session revoked successfully' : 'All sessions revoked',
+      code: 'OK',
+      data: null,
+      error: null
+    };
   }
 
   /* ======================================================

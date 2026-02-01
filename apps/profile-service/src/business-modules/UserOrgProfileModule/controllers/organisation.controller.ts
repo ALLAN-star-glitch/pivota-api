@@ -52,4 +52,16 @@ export class OrganisationController {
   ): Promise<BaseResponseDto<null>> {
     return this.organisationService.addMember(data);
   }
+
+  /* ======================================================
+     GET ORGANIZATIONS BY TYPE
+     - Filters organizations based on the OrganizationType slug
+  ====================================================== */
+  @GrpcMethod('ProfileService', 'GetOrganisationsByType')
+  async getOrganisationsByType(
+    data: { typeSlug: string },
+  ): Promise<BaseResponseDto<OrganizationProfileResponseDto[]>> {
+    this.logger.log(`gRPC → GetOrganisationsByType: ${data.typeSlug}`);
+    return this.organisationService.getOrganisationsByType(data.typeSlug);
+  }
 }

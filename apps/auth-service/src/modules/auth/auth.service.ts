@@ -445,6 +445,7 @@ async organisationSignup(
       adminUserUuid: adminUserUuid,
       adminFirstName: dto.adminFirstName,
       adminLastName: dto.adminLastName,
+      organizationType: dto.organizationType || 'PRIVATE_LIMITED',
     };
 
     const profileGrpcService = this.getProfileGrpcService();
@@ -1310,11 +1311,58 @@ async verifyMfaLogin(
       // even if count is 0, as the end state (no active sessions) is achieved.
     }
 
-    
+
     return BaseResponseDto.ok(null, 'Session(s) successfully revoked');
   } catch (err) {
     this.logger.error(`Failed to revoke sessions for ${userUuid}`, err);
     return BaseResponseDto.fail('Failed to revoke session', 'INTERNAL');
+  }
+}
+ 
+async getActiveSessions(userUuid: string): Promise<BaseResponseDto<SessionDto[]>> {
+  this.logger.log(`🔍 Fetching active sessions for user: ${userUuid}`);
+ 
+  try {
+    const sessions = await this.prisma.session.findMany({
+      where: {
+        userUuid: userUuid,
+        revoked: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: {
+        lastActiveAt: 'desc',
+      },
+    });
+
+    // We map every field required by the SessionDto type definition
+    const sessionDtos: SessionDto[] = sessions.map((s) => ({
+      id: s.id, // Added: Database ID (likely Int based on your schema)
+      tokenId: s.tokenId,
+      device: s.device || 'Unknown Device',
+      ipAddress: s.ipAddress || '0.0.0.0',
+      userAgent: s.userAgent || 'Unknown Browser',
+      os: s.os || 'Unknown OS',
+      revoked: s.revoked, // Added: Status flag
+      lastActiveAt: s.lastActiveAt.toISOString(),
+      expiresAt: s.expiresAt.toISOString(),
+      createdAt: s.createdAt.toISOString(), // Added: Creation timestamp
+    }));
+
+    return {
+      success: true,
+      message: sessions.length > 0 
+        ? `Found ${sessions.length} active sessions.` 
+        : 'No active sessions found.',
+      code: 'OK',
+      data: sessionDtos,
+      error: null,
+    };
+  } catch (error) {
+    this.logger.error(`🔥 Failed to fetch sessions for ${userUuid}`, error.stack);
+    return BaseResponseDto.fail(
+      'An error occurred while retrieving active sessions.',
+      'INTERNAL_ERROR',
+    );
   }
 }
 }

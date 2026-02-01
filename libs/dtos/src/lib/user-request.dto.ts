@@ -142,3 +142,35 @@ export class UpdateUserProfileRequestDto {
   @IsUrl()
   profileImage?: string;
 }
+
+/* ======================================================
+   4. FULL USER PROFILE UPDATE (UNIFIED)
+   - Used for the Gateway to update both User and Profile tables.
+====================================================== */
+
+export class UpdateFullUserProfileDto extends UpdateUserProfileRequestDto {
+  @ApiProperty({ description: 'The UUID of the user to update' })
+  @IsUUID()
+  @IsNotEmpty()
+  userUuid!: string;
+
+  @ApiPropertyOptional({ example: 'Jane' })
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @ApiPropertyOptional({ example: 'Doe' })
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @ApiPropertyOptional({ example: 'jane.doe@pivota.com' })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({ example: '+254700111222' })
+  @IsOptional()
+  @IsPhoneNumber(undefined)
+  phone?: string;
+}

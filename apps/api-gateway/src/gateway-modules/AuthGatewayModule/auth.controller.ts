@@ -7,6 +7,9 @@ import {
   Res,
   UseGuards,
   Req,
+  Get,
+  Query,
+  Delete,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
@@ -37,6 +40,7 @@ import {
   ApiBody,
   getSchemaPath,
   ApiExtraModels,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { JwtRequest } from '@pivota-api/interfaces';
 import { RolesGuard } from '../../guards/role.guard';
@@ -266,55 +270,106 @@ export class AuthController {
   }
 
   // ===================== SESSION: REVOKE =====================
+  // ===================== SESSION: REVOKE =====================
   @Version('1')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SuperAdmin', 'SystemAdmin', 'ModuleManager', 'GeneralUser')
-  @Post('session/revoke')
+  @Delete('session') // Single path = Single entry in Swagger
   @ApiBearerAuth()
   @ApiOperation({ 
-    summary: 'Revoke one or all sessions',
-    description: 'Terminates user sessions. Users can revoke their own sessions. Admins can revoke sessions for any user by providing a userUuid.'
+    summary: 'Revoke session(s)',
+    description: 'Revokes a specific session or all sessions. Defaults to current user unless targetUserUuid is provided (Admin only).'
   })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Session(s) successfully invalidated.',
-    type: BaseResponseDto 
+  @ApiQuery({
+    name: 'tokenId',
+    required: false,
+    description: 'The unique ID of the session to revoke. Leave empty to revoke ALL sessions.',
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized - Invalid or missing token.' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions to revoke another user\'s session.' })
-  @ApiResponse({ status: 500, description: 'Internal Server Error.' })
+  @ApiQuery({
+    name: 'userUuid',
+    required: false,
+    description: 'Admin only: The UUID of the user whose sessions should be revoked.',
+  })
   async revokeSession(
     @Req() req: JwtRequest,
-    @Body() dto: RevokeSessionDto,
-    @Res({ passthrough: true }) res: Response
+    @Res({ passthrough: true }) res: Response,
+    @Query('tokenId') tokenId?: string,      // Now both are queries
+    @Query('userUuid') targetUserUuid?: string,
   ): Promise<BaseResponseDto<null>> {
     const requesterUuid = req.user.userUuid;
     const requesterRole = req.user.role;
     const currentTokenId = req.user.tokenId;
 
-    const targetUserUuid = dto.userUuid || requesterUuid;
+    // 1. Determine Target User
+    const finalUserUuid = (targetUserUuid && targetUserUuid.trim() !== '') 
+      ? targetUserUuid 
+      : requesterUuid;
 
-    if (targetUserUuid !== requesterUuid) {
-      const isAdmin = ['SuperAdmin', 'SystemAdmin'].includes(requesterRole);
+    // 2. Permission Check
+    if (finalUserUuid !== requesterUuid) {
+      const isAdmin = ['SuperAdmin', 'SystemAdmin', 'ModuleManager'].includes(requesterRole);
       if (!isAdmin) {
-        this.logger.warn(`🚫 Unauthorized revoke attempt by ${requesterUuid} on ${targetUserUuid}`);
-        return BaseResponseDto.fail(
-          'You do not have permission to revoke sessions for other users.',
-          'FORBIDDEN',
-        );
+        return BaseResponseDto.fail('Forbidden: Cannot revoke sessions for other users.', 'FORBIDDEN');
       }
-      this.logger.warn(`👮 Admin ${requesterRole} (${requesterUuid}) revoking session for user: ${targetUserUuid}`);
     }
 
-    const isGlobalLogout = !dto.tokenId;
-    const isRevokingCurrentDevice = dto.tokenId === currentTokenId;
-    const isTargetingSelf = targetUserUuid === requesterUuid;
+    // 3. Cookie Cleanup
+    const isGlobalLogout = !tokenId || tokenId.trim() === '';
+    const isRevokingCurrentDevice = tokenId === currentTokenId;
+    const isTargetingSelf = finalUserUuid === requesterUuid;
 
     if (isTargetingSelf && (isGlobalLogout || isRevokingCurrentDevice)) {
-      this.logger.log(`🧹 Cleaning up local cookies for user: ${requesterUuid}`);
       await this.authService.logout(res);
     }
 
-    return this.authService.revokeSessions(targetUserUuid, dto.tokenId);
+    return this.authService.revokeSessions(finalUserUuid, tokenId);
+  }
+
+  // ===================== SESSION: GET ACTIVE =====================
+  @Version('1')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SuperAdmin', 'SystemAdmin', 'ModuleManager', 'GeneralUser')
+  @Get('sessions/active')
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'Retrieve active sessions',
+    description: 'General users get their own sessions. Admins can provide a userUuid query param to see sessions for a specific user.'
+  })
+  @ApiQuery({ 
+    name: 'userUuid', 
+    required: false, 
+    description: 'The UUID of the user to fetch sessions for (Admin only). Defaults to current user.' 
+  }) 
+  @ApiResponse({ status: 200, type: BaseResponseDto })
+  async getActiveSessions(
+    @Req() req: JwtRequest,
+    @Query('userUuid') targetUserUuid?: string, 
+  ): Promise<BaseResponseDto<SessionDto[]>> {
+    const requesterUuid = req.user.userUuid;
+    const requesterRole = req.user.role;
+
+    // 1. Determine which UUID to use
+    // Check if targetUserUuid exists AND is not just an empty string/whitespace
+    const hasTarget = targetUserUuid && targetUserUuid.trim().length > 0;
+    let finalUserUuid = requesterUuid;
+
+    if (hasTarget && targetUserUuid !== requesterUuid) {
+      // 2. Security Check: Only privileged roles can view others
+      const isAdmin = ['SuperAdmin', 'SystemAdmin', 'ModuleManager'].includes(requesterRole);
+      
+      if (!isAdmin) {
+        this.logger.warn(`🚫 Unauthorized session view attempt by ${requesterUuid} on ${targetUserUuid}`);
+        return BaseResponseDto.fail(
+          'You do not have permission to view sessions for other users.',
+          'FORBIDDEN',
+        );
+      }
+      finalUserUuid = targetUserUuid;
+      this.logger.log(`👮 Admin ${requesterRole} fetching sessions for user: ${finalUserUuid}`);
+    } else {
+      this.logger.log(`📱 User ${requesterUuid} fetching their own sessions`);
+    }
+
+    return this.authService.getActiveSessions(finalUserUuid);
   }
 }

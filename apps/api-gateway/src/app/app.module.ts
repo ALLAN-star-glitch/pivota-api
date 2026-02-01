@@ -11,6 +11,7 @@ import { JobsModule } from '../gateway-modules/JobsGatewayModule/jobs.module';
 import { SubscriptionsGatewayModule } from '../gateway-modules/SubscriptionsGatewayModule/subscriptions-gateway.module';
 import { ProvidersGatewayModule } from '../gateway-modules/ContractorsGatewayModule/contractors-gateway.module';
 import { HousingGatewayModule } from '../gateway-modules/HousingGatewayModule/housing-gateway.module';
+import { OrganisationGatewayModule } from '../gateway-modules/OrganisationProfileGatewayModule/organisation-gateway.module';
 
 
 @Module({
@@ -27,8 +28,9 @@ import { HousingGatewayModule } from '../gateway-modules/HousingGatewayModule/ho
     PlansGatewayModule,
     SubscriptionsGatewayModule,
     ProvidersGatewayModule,
-    HousingGatewayModule
-  
+    HousingGatewayModule,
+    OrganisationGatewayModule
+
   ],
   controllers: [AppController],
   providers: [AppService],

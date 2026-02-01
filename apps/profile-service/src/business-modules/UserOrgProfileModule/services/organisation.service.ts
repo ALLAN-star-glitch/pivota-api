@@ -23,6 +23,8 @@ import {
   ProfileCompletionResponseDto,
   AccountBaseDto,
   OrganizationOnboardedEventDto,
+  InviteMemberRequestDto,
+  MemberInviteEventDto,
 } from '@pivota-api/dtos';
 import { ClientProxy, RpcException, ClientGrpc } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
@@ -171,6 +173,7 @@ export class OrganisationService  {
               officialEmail: data.officialEmail,
               officialPhone: data.officialPhone,
               physicalAddress: data.physicalAddress,
+              typeSlug: data.organizationType || 'PRIVATE_LIMITED',
             },
           },
         },
@@ -347,6 +350,73 @@ export class OrganisationService  {
   }
 
   /* ======================================================
+   GET ORGANIZATIONS BY TYPE
+====================================================== */
+async getOrganisationsByType(
+  typeSlug: string,
+): Promise<BaseResponseDto<OrganizationProfileResponseDto[]>> {
+  this.logger.log(`Fetching organizations with type slug: ${typeSlug}`);
+
+  // 1. Fetch organizations filtered by the profile's typeSlug
+  const organizations = await this.prisma.organization.findMany({
+    where: {
+      profile: {
+        typeSlug: typeSlug,
+      },
+    },
+    include: {
+      account: true,
+      completion: true,
+      profile: true, // Included to access typeSlug and other metadata
+      members: {
+        // We look for the primary admin to satisfy the DTO requirement
+        where: { roleName: 'Business System Admin' }, 
+        include: { user: true },
+        take: 1,
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  // 2. Map the results to the response DTO
+  const mappedData = organizations.map((org) => {
+    const adminUser = org.members[0]?.user;
+    
+    // We use a manual aggregate object to fit your existing mapper's signature
+    return this.mapToOrganizationProfileDto({
+      organization: {
+        id: org.id,
+        uuid: org.uuid,
+        orgCode: org.orgCode,
+        name: org.name,
+        verificationStatus: org.verificationStatus,
+        createdAt: org.createdAt,
+        updatedAt: org.updatedAt,
+      },
+      account: {
+        uuid: org.account.uuid,
+        accountCode: org.account.accountCode,
+        type: org.account.type,
+      },
+      admin: adminUser ? (adminUser as unknown as AdminUserEntity) : ({} as AdminUserEntity),
+      completion: org.completion ? {
+        percentage: org.completion.percentage,
+        missingFields: org.completion.missingFields,
+        isComplete: org.completion.isComplete
+      } : undefined
+    });
+  });
+
+  return {
+    success: true,
+    code: 'OK',
+    message: `Found ${organizations.length} organizations of type ${typeSlug}`,
+    data: mappedData,
+    error: null,
+  };
+}
+
+  /* ======================================================
      MAPPERS
   ====================================================== */
   private mapToOrganizationProfileDto(
@@ -381,4 +451,6 @@ export class OrganisationService  {
   phone: user.phone,
 };
   }
+
+  
 }

@@ -28,6 +28,9 @@ service AuthService {
 
 
   rpc RevokeSessions(RevokeSessionRequest) returns (BaseResponse);
+  rpc GetActiveSessions(GetActiveSessionsRequest) returns (GetActiveSessionsResponse);
+
+
 }
 
 // ------------------ Forgot Password Messages ------------------
@@ -284,7 +287,36 @@ message ErrorPayload {
   string details = 3;  
 }
 
+// ------------------ Session Management Messages ------------------
+
+message GetActiveSessionsRequest {
+  string userUuid = 1;
+}
+
+message GetActiveSessionsResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  repeated SessionDto data = 4; // The list of active devices
+  ErrorPayload error = 5;
+}
+
+message SessionDto {
+  int32 id = 1;
+  string tokenId = 2;
+  string device = 3;
+  string ipAddress = 4;
+  string userAgent = 5;
+  string os = 6;
+  string lastActiveAt = 7;
+  string expiresAt = 8;
+  string createdAt = 9;
+  bool revoked = 10;
+}
+
+// Update your existing RevokeSessionRequest to make tokenId optional
+// This allows you to revoke one session OR all sessions for a user.
 message RevokeSessionRequest {
   string userUuid = 1;
-  string tokenId = 2; 
+  optional string tokenId = 2; 
 }

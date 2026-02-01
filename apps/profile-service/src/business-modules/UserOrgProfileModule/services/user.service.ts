@@ -13,6 +13,7 @@ import {
   SubscribeToPlanDto,
   UserProfileResponseDto,
   CreateUserRequestDto,
+  UpdateFullUserProfileDto,
 } from '@pivota-api/dtos';
 import { Account, Organization, ProfileCompletion, User, UserProfile, OrganizationProfile } from '../../../../generated/prisma/client';
 import {  RpcException, ClientGrpc } from '@nestjs/microservices';
@@ -449,5 +450,100 @@ export class UserService {
       updatedAt: user.updatedAt.toISOString(),
     };
   }
+
+  async updateFullProfile(dto: UpdateFullUserProfileDto): Promise<BaseResponseDto<UserProfileResponseDto>> {
+  this.logger.log(`[gRPC] Full profile update initiated for: ${dto.userUuid}`);
+
+  try {
+    const updatedAggregate = await this.prisma.$transaction(async (tx) => {
+      // 1. Update Core Identity (User Table)
+      const user = await tx.user.update({
+        where: { uuid: dto.userUuid },
+        data: {
+          firstName: dto.firstName ?? undefined,
+          lastName: dto.lastName ?? undefined,
+          email: dto.email ?? undefined,
+          phone: dto.phone === "" ? null : (dto.phone ?? undefined),
+        },
+      });
+
+      // 2. Update/Create Metadata (UserProfile Table)
+      await tx.userProfile.upsert({
+        where: { userUuid: dto.userUuid },
+        create: {
+          userUuid: dto.userUuid,
+          bio: dto.bio,
+          gender: dto.gender,
+          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+          nationalId: dto.nationalId,
+          profileImage: dto.profileImage,
+        },
+        update: {
+          bio: dto.bio ?? undefined,
+          gender: dto.gender ?? undefined,
+          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+          nationalId: dto.nationalId ?? undefined,
+          profileImage: dto.profileImage ?? undefined,
+        },
+      });
+
+      // 3. Root Account Name Sync
+      // If the human name changes, the account display name must reflect it.
+      if (dto.firstName || dto.lastName) {
+        await tx.account.update({
+          where: { uuid: user.accountId },
+          data: { name: `${user.firstName} ${user.lastName}`.trim() }
+        });
+      }
+
+      // 4. Fetch the final state with all relations included for the mapper
+      return tx.user.findUnique({
+        where: { uuid: dto.userUuid },
+        include: {
+          account: {
+            include: {
+              organization: {
+                include: { profile: true }
+              },
+            },
+          },
+          profile: true,
+          completion: true,
+        },
+      });
+    });
+
+    if (!updatedAggregate) {
+      throw new RpcException({ code: 5, message: 'User not found after update' });
+    }
+
+    return {
+      success: true,
+      message: 'Profile updated successfully',
+      code: 'OK',
+      data: this.mapToUserProfileResponseDto(updatedAggregate as PrismaUserAggregate),
+      error: null,
+    };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    this.logger.error(`Update failed: ${err.message}`);
+
+    // Handle Unique Constraint (Email/Phone/NationalID)
+    if (err.code === 'P2002') {
+      const target = err.meta?.target || [];
+      const field = target.includes('email') ? 'Email' : target.includes('phone') ? 'Phone' : 'National ID';
+      throw new RpcException({
+        code: 6, // ALREADY_EXISTS
+        message: `${field} is already in use by another user.`,
+      });
+    }
+
+    throw new RpcException({
+      code: err.code || 13, // Internal
+      message: err.message || 'Internal server error during profile update',
+    });
+  }
+}
 
 }

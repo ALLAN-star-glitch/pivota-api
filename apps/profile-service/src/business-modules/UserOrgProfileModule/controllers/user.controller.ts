@@ -5,6 +5,7 @@ import {
   BaseResponseDto,
   CreateUserRequestDto,
   GetUserByUserUuidDto,
+  UpdateFullUserProfileDto,
   UserProfileResponseDto,
   UserSignupDataDto,
 } from '@pivota-api/dtos';
@@ -15,6 +16,15 @@ export class UserController {
 
   constructor(private readonly userService: UserService) {}
 
+  /** ------------------ Update Full User Profile ------------------ */
+  @GrpcMethod('ProfileService', 'UpdateUserProfile')
+  async handleUpdateUserProfile(
+    @Payload() dto: UpdateFullUserProfileDto,
+  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`[gRPC] UpdateUserProfile request for: ${dto.userUuid}`);
+    return this.userService.updateFullProfile(dto);
+  }
+  
   /** ------------------ Signup / Create User Profile ------------------ */
   @GrpcMethod('ProfileService', 'CreateUserProfile')
 async handleCreateUserProfile(

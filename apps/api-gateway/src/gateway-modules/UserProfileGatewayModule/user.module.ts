@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { UserController } from './user.controller';
-import { PROFILE_PROTO_PATH } from '@pivota-api/protos';
+import { AUTH_PROTO_PATH, PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { UserService } from './user.service';
 
 @Module({
@@ -16,6 +16,15 @@ import { UserService } from './user.service';
           protoPath: PROFILE_PROTO_PATH,
           },
       },
+      {
+        name: 'AUTH_PACKAGE',
+        transport: Transport.GRPC,
+        options: {
+          url: process.env.AUTH_GRPC_URL || 'localhost:50051',
+          package: 'auth',
+          protoPath: AUTH_PROTO_PATH
+        }
+      }
     ]),
   ],
   controllers: [UserController],

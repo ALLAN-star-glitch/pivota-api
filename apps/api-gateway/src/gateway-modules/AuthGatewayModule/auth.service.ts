@@ -78,6 +78,10 @@ interface AuthServiceGrpc {
   revokeSessions(
     data: { userUuid: string; tokenId?: string }
   ): Observable<BaseResponseDto<null>>;
+
+  getActiveSessions(
+    data: { userUuid: string }
+  ): Observable<BaseResponseDto<SessionDto[]>>;
 }
 
 interface UserServiceGrpc {
@@ -350,6 +354,26 @@ export class AuthService {
     } catch (error) {
       this.logger.error(`Failed to revoke session via gRPC: ${error.message}`);
       return BaseResponseDto.fail('Communication error during session revocation', 'INTERNAL');
+    }
+  }
+
+  async getActiveSessions(userUuid: string): Promise<BaseResponseDto<SessionDto[]>> {
+    this.logger.log(`🔍 Fetching active sessions for user: ${userUuid}`);
+
+    try {
+      const response = await firstValueFrom(
+        this.authGrpc.getActiveSessions({ userUuid })
+      );
+
+      if (response.success) {
+        // Return the array of SessionDto objects (device, ip, lastActiveAt, etc.)
+        return BaseResponseDto.ok(response.data || [], response.message, response.code);
+      }
+      
+      return BaseResponseDto.fail(response.message, response.code);
+    } catch (error) {
+      this.logger.error(`Failed to fetch active sessions via gRPC: ${error.message}`);
+      return BaseResponseDto.fail('Communication error while fetching sessions', 'SERVICE_UNAVAILABLE');
     }
   }
 }
