@@ -4,7 +4,7 @@ import {
   HOUSE_LISTING_STATUSES, 
   HOUSE_VIEWING_STATUSES 
 } from '@pivota-api/constants';
-import { IsIn, IsString, IsNumber, IsBoolean, IsOptional, IsArray, IsObject, IsDate } from 'class-validator';
+import { IsIn, IsString, IsNumber, IsBoolean, IsOptional, IsArray, IsObject, IsDate, IsNotEmpty } from 'class-validator';
 
 /* ======================================================
    SHARED BASIC DTOS (Identity Pillar)
@@ -71,7 +71,7 @@ export class HouseImageResponseDto {
 }
 
 /* ======================================================
-   HOUSE LISTING RESPONSE
+   HOUSE LISTING RESPONSE (Rich DTO)
 ====================================================== */
 export class HouseListingResponseDto {
   @ApiProperty({ example: 'house_123abc' })
@@ -180,6 +180,35 @@ export class HouseListingResponseDto {
   @ApiProperty({ type: [HouseImageResponseDto] })
   @IsArray()
   images!: HouseImageResponseDto[];
+}
+
+/* ======================================================
+   NEW: HOUSE LISTING CREATE RESPONSE (Lean DTO)
+====================================================== */
+export class HouseListingCreateResponseDto {
+  @ApiProperty({ 
+    example: 'house_123abc', 
+    description: 'The server-generated ID for the new listing' 
+  })
+  @IsString()
+  @IsNotEmpty()
+  id!: string;
+
+  @ApiProperty({ 
+    example: 'ACTIVE', 
+    description: 'The initial status of the listing' 
+  })
+  @IsString()
+  @IsNotEmpty()
+  status!: string;
+
+  @ApiProperty({ 
+    example: '2026-02-07T18:00:00.000Z', 
+    description: 'ISO timestamp of creation' 
+  })
+  @IsString()
+  @IsNotEmpty()
+  createdAt!: string;
 }
 
 /* ======================================================

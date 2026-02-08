@@ -3,10 +3,11 @@ import { JobsService } from './jobs.service';
 import { JobsController } from './jobs.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { LISTINGS_JOBS_PROTO_PATH} from '@pivota-api/protos';
+import { SubscriptionsGatewayModule } from '../SubscriptionsGatewayModule/subscriptions-gateway.module';
 
 @Module({
   imports: [
-
+    SubscriptionsGatewayModule,
     ClientsModule.register([
       {
             name: 'JOBS_PACKAGE',
@@ -20,7 +21,8 @@ import { LISTINGS_JOBS_PROTO_PATH} from '@pivota-api/protos';
         }
 
       ]
-    )
+    ),
+
   ],
   providers: [JobsService],
   controllers: [JobsController],

@@ -175,7 +175,7 @@ export class AuthController {
       code: 'OK',
       data: null,
       error: null
-    };
+    } as BaseResponseDto<null>;
   }
 
   /* ======================================================

@@ -10,6 +10,7 @@ import {
   CreateJobApplicationDto,
   JobApplicationResponseDto,
   UpdateJobPostRequestDto,
+  JobPostCreateResponseDto,
 } from '@pivota-api/dtos';
 
 
@@ -24,7 +25,7 @@ interface ApplyToJobPostGrpcRequest extends CreateJobApplicationDto {
 interface JobsServiceGrpc {
   CreateJobPost(
     data: CreateJobPostGrpcDto,
-  ): Observable<BaseResponseDto<JobPostResponseDto>>;
+  ): Observable<BaseResponseDto<JobPostCreateResponseDto>>;
 
   GetJobPostById(
     data: { id: string },
@@ -56,14 +57,13 @@ export class JobsService {
   // ===========================================================
   // CREATE JOB POST
   // ===========================================================
-  async createJobPost(dto: CreateJobPostGrpcDto): Promise<BaseResponseDto<JobPostResponseDto>> {
+  async createJobPost(dto: CreateJobPostGrpcDto): Promise<BaseResponseDto<JobPostCreateResponseDto>> {
   // Ensure creatorId is included
   const grpcRequest = {
     ...dto,
     creatorId: dto.creatorId, // must exist here
-    creatorName: dto.creatorName,
     accountId: dto.accountId,
-    accountName: dto.accountName,
+ 
   };
 
   const res = await firstValueFrom(this.grpcService.CreateJobPost(grpcRequest));

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PlanController } from './controllers/plan.controller';
-import { PricingController } from './controllers/pricing.controller';
-import { PricingService } from './services/pricing.service';
+import { PricingController } from '../subscriptions/controllers/pricing.controller';
+import { PricingService } from '../subscriptions/services/pricing.service';
 import { PlanService } from './services/plan.service';
 import { PlanFeatureService } from './services/plan-feature.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';

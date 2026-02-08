@@ -38,7 +38,8 @@ model Permission {
   description String?
 
   moduleId    String?
-  module      Module?   @relation(fields: [moduleId], references: [id])
+  // Cascade here: If module is deleted, delete its permissions
+  module      Module?   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 
   system      Boolean   @default(false)
 
@@ -65,8 +66,9 @@ model RolePermission {
   roleId       String
   permissionId String
 
-  role       Role       @relation(fields: [roleId], references: [id])
-  permission Permission @relation(fields: [permissionId], references: [id])
+  // Cascade here: If role or permission is deleted, remove the mapping
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, permissionId])
 }
@@ -94,13 +96,13 @@ model Module {
 model Plan {
   id            String      @id @default(cuid())
   name          String      @unique
-  slug          String        @unique
+  slug          String      @unique
   description   String?
   totalListings Int         @default(0)
-  features      String
+  features      String      // Store JSON: prices, support level, etc.
   creatorId     String
 
-  isPremium     Boolean  @default(false)
+  isPremium     Boolean     @default(false)
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -111,24 +113,23 @@ model Plan {
   @@index([creatorId])
 }
 
-// ===================== PLAN → MODULE (with listingLimit) =====================
+// ===================== PLAN → MODULE (Restrictions) =====================
 
 model PlanModule {
   id           String   @id @default(cuid())
   planId       String
   moduleId     String
-  restrictions String? // Store all restrictions (listing limits, isAllowed, etc.) in JSON
+  restrictions String? 
 
-  plan   Plan   @relation(fields: [planId], references: [id])
-  module Module @relation(fields: [moduleId], references: [id])
+  // Cascade here: If plan or module is deleted, remove restrictions
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([planId, moduleId])
 }
-
-
 
 // ===================== ROLE → MODULE =====================
 
@@ -138,8 +139,9 @@ model RoleModule {
   moduleId   String
   assignable Boolean @default(false)
 
-  role   Role   @relation(fields: [roleId], references: [id])
-  module Module @relation(fields: [moduleId], references: [id])
+  // Cascade here: If role or module is deleted, remove visibility mapping
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, moduleId])
 }
@@ -158,23 +160,23 @@ model UserModule {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  module Module @relation(fields: [moduleId], references: [id])
+  // Cascade here: If module is deleted, remove user activation status
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 }
 
 // ===================== SUBSCRIPTIONS =====================
 
-// ===================== SUBSCRIPTIONS =====================
 model Subscription {
   id           String   @id @default(cuid())
-  accountUuid  String?               // <-- changed from userUuid to accountUuid
-  planId       String?              // FK to Plan, optional for listing-specific subscriptions
-  type         String   @default("PLAN") // PLAN, LISTING, LISTING_GROUP, MODULE
-  entityIds    String[]             // can have 0, 1 or more entity IDs ... for PLAN type, zero entries
-  totalAmount  Float?               // total cost of subscription (for groups or modules)
-  currency     String?              // currency code, e.g., KES, USD
-  status       String   @default("ACTIVE") // ACTIVE, PENDING, PARTIALLY_PAID, CANCELLED, EXPIRED
+  accountUuid  String?               
+  planId       String?              
+  type         String   @default("PLAN") // PLAN, LISTING, MODULE
+  entityIds    String[]             
+  totalAmount  Float?               
+  currency     String?  @default("KES")
+  status       String   @default("ACTIVE") // ACTIVE, PARTIALLY_PAID, EXPIRED
   billingCycle String?
-  amountPaid   Float?               // optional partial payment
+  amountPaid   Float?               
   startedAt    DateTime @default(now())
   expiresAt    DateTime
   endedAt      DateTime? 
@@ -183,13 +185,10 @@ model Subscription {
   updatedAt    DateTime @updatedAt
 
   plan         Plan?    @relation(fields: [planId], references: [id])
+
+  @@index([accountUuid])
+  @@index([status])
 }
-
-
-// ===================== PLAN SUBSCRIPTIONS =====================
-
-
-
 
 // ===================== AUDIT LOGS =====================
 

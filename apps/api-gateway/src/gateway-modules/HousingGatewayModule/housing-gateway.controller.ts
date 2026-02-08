@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiExtraModels,
   ApiOperation,
   ApiParam,
   ApiTags, 
@@ -30,6 +31,7 @@ import {
   UpdateHouseListingGrpcRequestDto,
   CreateHouseListingGrpcRequestDto,
   ArchiveHouseListingsGrpcRequestDto,
+  HouseListingCreateResponseDto,
 } from '@pivota-api/dtos';
 
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
@@ -41,6 +43,7 @@ import { ParseCuidPipe } from '@pivota-api/pipes';
 
 @ApiTags('Housing Module - ((Listings-Service) - MICROSERVICE)')
 @ApiBearerAuth()
+@ApiExtraModels(BaseResponseDto, HouseListingCreateResponseDto, HouseListingResponseDto, HouseViewingResponseDto, CreateHouseListingGrpcRequestDto, UpdateHouseListingGrpcRequestDto, ScheduleViewingGrpcRequestDto, ArchiveHouseListingsGrpcRequestDto)
 @Controller('housing-module')
 export class HousingGatewayController {
   private readonly logger = new Logger(HousingGatewayController.name);
@@ -59,17 +62,44 @@ export class HousingGatewayController {
   async createListing(
     @Body() dto: CreateHouseListingGrpcRequestDto,
     @Req() req: JwtRequest,
-  ): Promise<BaseResponseDto<HouseListingResponseDto>> {
-    const userId = req.user.userUuid;
+  ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> { // Changed to Lean DTO
+    const requesterUuid = req.user.userUuid;
+    const requesterRole = req.user.role;
+    const requesterAccountId = req.user.accountId;
 
-    const grpcDto: CreateHouseListingGrpcRequestDto = {
+    // 1. Identify Target: Allow Admin override or default to requester
+    const targetCreatorId = dto.creatorId || requesterUuid;
+    const targetAccountId = dto.accountId || requesterAccountId;
+
+    // 2. Permission Check
+    if (targetCreatorId !== requesterUuid || targetAccountId !== requesterAccountId) {
+      const isAdmin = ['SuperAdmin', 'SystemAdmin', 'ModuleManager'].includes(requesterRole);
+
+      if (!isAdmin) {
+        this.logger.warn(`🚫 Unauthorized Housing Listing attempt by ${requesterUuid} for User ${targetCreatorId}`);
+        return BaseResponseDto.fail(
+          'You do not have permission to create listings for other accounts or users.',
+          'FORBIDDEN',
+        );
+      }
+      this.logger.log(`👮 Admin ${requesterRole} (${requesterUuid}) creating house listing for: User ${targetCreatorId}`);
+    }
+
+    const sanitizedDto: CreateHouseListingGrpcRequestDto = {
       ...dto,
-      creatorId: userId,
+      creatorId: targetCreatorId,
+      accountId: targetAccountId,
     };
 
+    this.logger.debug(`Processing House Listing for Account ${targetAccountId} initiated by ${requesterUuid}`);
 
-    this.logger.debug(`REST createListing request by user=${userId}`);
-    return this.housingService.createHouseListing(grpcDto);
+    try {
+      // Assuming housingService follows the same lean return pattern as jobsService
+      return await this.housingService.createHouseListing(sanitizedDto);
+    } catch (error) {
+      this.logger.error(`🔥 Critical error during housing creation for user ${targetCreatorId}`, error.stack);
+      return BaseResponseDto.fail('An unexpected error occurred while creating the listing.', 'INTERNAL_ERROR');
+    }
   }
 
   // ===========================================================

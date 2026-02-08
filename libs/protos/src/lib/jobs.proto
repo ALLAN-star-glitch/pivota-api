@@ -6,7 +6,9 @@ package jobs;
 // SERVICE DEFINITION
 // ===================================================
 service JobsService {
-  rpc CreateJobPost (CreateJobPostRequest) returns (BaseJobPostResponse);
+  // Now returns a specific Lean response for Creation
+  rpc CreateJobPost (CreateJobPostRequest) returns (BaseJobPostCreateResponse);
+  
   rpc GetJobPostById (GetJobPostByIdRequest) returns (BaseJobPostResponse);
   rpc GetJobsByCategory (GetJobsByCategoryRequest) returns (ListJobPostsResponse);
   rpc ValidateJobPostIds(ValidateJobPostIdsRequest) returns (BaseValidateJobPostIdsResponse);
@@ -81,7 +83,7 @@ message JobApplication {
 }
 
 // ===================================================
-// JOB POST ENTITY (Matches JobPostResponseDto)
+// JOB POST ENTITY (Rich DTO for GET/LIST)
 // ===================================================
 message JobPost {
   string id = 1;
@@ -138,19 +140,15 @@ message CreateJobPostRequest {
   string additionalNotes = 19;
   string status = 20;
 
-  // Identity Pillars (Injected via GrpcDto)
+  // Identity Pillars (Lean: No Name strings stored anymore)
   string accountId = 21;
-  string accountName = 22;
-  string creatorId = 23;
-  string creatorName = 24;
+  string creatorId = 22;
 }
 
 message UpdateJobPostRequest {
   string id = 1;
-  // Metadata for authorization
   string creatorId = 2; 
 
-  // Partial update fields
   optional string title = 3;
   optional string description = 4;
   optional string status = 5;
@@ -188,11 +186,27 @@ message ValidateJobPostIdsRequest { repeated string ids = 1; }
 // RESPONSE MESSAGES
 // ===================================================
 
+// NEW: Ultra-Lean Data for Creation
+message JobPostCreateData {
+  string id = 1;
+  string status = 2;
+  string createdAt = 3;
+}
+
+// NEW: Ultra-Lean Base Response for Creation
+message BaseJobPostCreateResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  JobPostCreateData data = 4;
+  ErrorPayload error = 5;
+}
+
 message BaseJobPostResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-  JobPost data = 4; // Standardized key to 'data'
+  JobPost data = 4; 
   ErrorPayload error = 5;
 }
 

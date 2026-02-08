@@ -9,6 +9,7 @@ import {
   UseGuards,
   Req,
   Patch,
+  SetMetadata,
 } from '@nestjs/common';
 
 import {
@@ -21,20 +22,31 @@ import {
   CloseJobPostResponseDto,
   CreateJobApplicationDto,
   JobApplicationResponseDto,
+  JobPostCreateResponseDto,
 } from '@pivota-api/dtos';
 
 import { ParseCuidPipe } from '@pivota-api/pipes';
 
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiExtraModels, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
 import { JwtRequest } from '@pivota-api/interfaces';
-import { Roles } from '../../decorators/roles.decorator';
+// Updated Decorators
+import { Permissions } from '../../decorators/permissions.decorator';
+import { Public } from '../../decorators/public.decorator';
 import { RolesGuard } from '../../guards/role.guard';
+import { SubscriptionGuard } from '../../guards/subscription.guard';
+
+/**
+ * Helper decorator for SubscriptionGuard
+ */
+const SetModule = (slug: string) => SetMetadata('module', slug);
 
 @ApiTags('Jobs Module - ((Listings-Service) - MICROSERVICE)')
 @ApiBearerAuth()
+@ApiExtraModels(BaseResponseDto, JobPostCreateResponseDto, JobPostResponseDto, CloseJobPostResponseDto, JobApplicationResponseDto)
 @Controller('jobs-module')
+@UseGuards(JwtAuthGuard, RolesGuard, SubscriptionGuard) // Added SubscriptionGuard
 export class JobsController {
   private readonly logger = new Logger(JobsController.name);
 
@@ -43,36 +55,58 @@ export class JobsController {
   // ===========================================================
   // CREATE JOB POST
   // ===========================================================
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'ModuleManager' , 'BusinessSystemAdmin', "BusinessContentAdmin", "GeneralUser")
+  @Permissions('jobs.create')
+  @SetModule('jobs') // Triggers plan check for the 'jobs' module
   @Version('1')
   @Post('jobs')
-  @ApiOperation({summary: 'Create a new job post'})
+  @ApiOperation({ summary: 'Create a new job post' })
   async createJobPost(
     @Body() dto: CreateJobPostGrpcDto,
     @Req() req: JwtRequest,
-  ): Promise<BaseResponseDto<JobPostResponseDto>> {
-    const userId = req.user.userUuid;
-    dto.creatorId = userId;
+  ): Promise<BaseResponseDto<JobPostCreateResponseDto>> {
+    const requesterUuid = req.user.userUuid;
+    const requesterRole = req.user.role;
+    const requesterAccountId = req.user.accountId;
 
-    const accountId = req.user.accountId;
-    dto.accountId = accountId;
+    const targetCreatorId = dto.creatorId || requesterUuid;
+    const targetAccountId = dto.accountId || requesterAccountId;
 
-    const accountName = req.user.accountName;
-    dto.accountName = accountName;
+    if (targetCreatorId !== requesterUuid || targetAccountId !== requesterAccountId) {
+      // Admins check still uses requesterRole from JWT
+      const isAdmin = ['SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin'].includes(requesterRole);
 
-    const creatorName = req.user.userName
-    dto.creatorName = creatorName
+      if (!isAdmin) {
+        this.logger.warn(`🚫 Unauthorized Job Creation attempt by ${requesterUuid} for User ${targetCreatorId} / Account ${targetAccountId}`);
+        return BaseResponseDto.fail(
+          'You do not have permission to create jobs for other accounts or users.',
+          'FORBIDDEN',
+        );
+      }
 
-    this.logger.debug(`REST createJobPost request by userId=${userId}, User Name: ${creatorName},  for accounT Details: AccountID:  ${accountId} Account Name: ${accountName} `);
-    return this.jobsService.createJobPost(dto);
+      this.logger.log(`👮 Admin ${requesterRole} (${requesterUuid}) creating job for: User ${targetCreatorId}, Account ${targetAccountId}`);
+    }
+    
+    const sanitizedDto: CreateJobPostGrpcDto = {
+      ...dto,
+      creatorId: targetCreatorId,
+      accountId: targetAccountId,
+    };
+
+    this.logger.debug(`Processing Job Creation for Account ${targetAccountId} initiated by ${requesterUuid}`);
+
+    try {
+      return await this.jobsService.createJobPost(sanitizedDto);
+    } catch (error) {
+      this.logger.error(`🔥 Critical error during job creation for account ${targetAccountId}`, error.stack);
+      return BaseResponseDto.fail('An unexpected error occurred while creating the job post.', 'INTERNAL_ERROR');
+    }
   }
 
   // ===========================================================
   // UPDATE JOB POST
   // ===========================================================
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemAdmin', 'ModuleManager', 'GeneralUser')
+  @Permissions('jobs.update')
+  @SetModule('jobs')
   @Version('1')
   @Patch('jobs/:id')
   @ApiOperation({ summary: 'Update an existing job post' })
@@ -85,7 +119,7 @@ export class JobsController {
     const userId = req.user.userUuid;
     
     dto.id = id;
-    dto.creatorId = userId; // Identity enforcement
+    dto.creatorId = userId; 
 
     this.logger.debug(`REST updateJobPost request for id=${id} by user=${userId}`);
     return this.jobsService.updateJobPost(dto);
@@ -94,8 +128,8 @@ export class JobsController {
   // ===========================================================
   // CLOSE JOB POST
   // ===========================================================
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemAdmin', 'ModuleManager', 'GeneralUser')
+  @Permissions('jobs.update')
+  @SetModule('jobs')
   @Version('1')
   @Patch('jobs/:id/close')
   @ApiOperation({ summary: 'Close a job post (Status Change)' })
@@ -108,38 +142,34 @@ export class JobsController {
     const userId = req.user.userUuid;
     
     dto.id = id;
-    dto.creatorId = userId; // Identity enforcement
+    dto.creatorId = userId; 
 
     this.logger.debug(`REST closeJobPost request for id=${id} by user=${userId}`);
     return this.jobsService.closeJobPost(dto);
   }
 
- // ===========================================================
+  // ===========================================================
   // APPLY TO JOB POST
   // ===========================================================
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('GeneralUser', 'ModuleManager', 'SystemAdmin', 'SuperAdmin', 'BusinessSystemAdmin')
+  @Permissions('jobs.read') // Using 'read' permission for application access
   @Version('1')
   @Post('jobs/:id/apply')
   @ApiOperation({ summary: 'Apply for a job post' })
   @ApiParam({ name: 'id', type: String, description: 'The CUID of the Job Post' })
   async applyToJobPost(
-    // Validate the 'id' param using our new Pipe
     @Param('id', ParseCuidPipe) id: string, 
     @Body() dto: CreateJobApplicationDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<JobApplicationResponseDto>> {
     const userId = req.user.userUuid;
-
     this.logger.debug(`REST applyToJobPost validated for job=${id} by user=${userId}`);
-
     return this.jobsService.applyToJobPost(id, userId, dto);
   }
 
-  
   // ===========================================================
   // GET JOB BY ID (Public)
   // ===========================================================
+  @Public()
   @ApiParam({ name: 'id', type: String })
   @Version('1')
   @Get('/:id')
@@ -153,6 +183,7 @@ export class JobsController {
   // ===========================================================
   // GET JOBS BY CATEGORY (Public)
   // ===========================================================
+  @Public()
   @ApiParam({ name: 'categoryId', type: String })
   @Version('1')
   @Get('jobs/category/:categoryId')
@@ -166,8 +197,7 @@ export class JobsController {
   // ===========================================================
   // Validate Job Post IDs
   // ===========================================================
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemAdmin', 'ModuleManager', 'GeneralUser')
+  @Permissions('jobs.read')
   @Version('1')
   @Post('jobs/validate-ids')
   @ApiOperation({ summary: 'Validate Job Post IDs' })

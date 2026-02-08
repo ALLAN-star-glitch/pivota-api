@@ -12,6 +12,7 @@ import {
   ScheduleViewingGrpcRequestDto,
   CreateHouseListingGrpcRequestDto,
   ArchiveHouseListingsGrpcRequestDto,
+  HouseListingCreateResponseDto,
 } from '@pivota-api/dtos';
 import { HousingService } from './housing.service';
 
@@ -27,7 +28,7 @@ export class HousingController {
   @GrpcMethod('HousingService', 'CreateHouseListing')
   async createHouseListing(
     data: CreateHouseListingGrpcRequestDto,
-  ): Promise<BaseResponseDto<HouseListingResponseDto>> {
+  ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
     this.logger.debug(`CreateHouseListing Request: ${JSON.stringify(data)}`);
     return this.housingService.createHouseListing(data);
   }

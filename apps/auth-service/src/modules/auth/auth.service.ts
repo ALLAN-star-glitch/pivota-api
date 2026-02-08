@@ -298,7 +298,7 @@ async signup(
         code: 'UNAUTHORIZED',
         data: null as unknown as UserSignupDataDto,
         error: { code: 'INVALID_OTP', message: 'Verification failed' },
-      };
+      } as BaseResponseDto<UserSignupDataDto>;
     }
 
     // 2. Anchor Identity: Pre-generate the UUID
@@ -324,7 +324,7 @@ async signup(
         code: profileResponse.code || 'INTERNAL',
         error: profileResponse.error,
         data: null as unknown as UserSignupDataDto,
-      };
+      } as BaseResponseDto<UserSignupDataDto>;
     }
 
     // 4. Save Credentials Locally
@@ -373,7 +373,7 @@ async signup(
         completion: profileResponse.data.completion,
       },
       error: null,
-    };
+    } as BaseResponseDto<UserSignupDataDto>;
 
   } catch (err: unknown) {
     this.logger.error('Individual Signup Method Failure', err);
@@ -386,7 +386,7 @@ async signup(
         code: 'SERVICE_UNAVAILABLE',
         error: { code: String(rpcErr.code), message: rpcErr.message },
         data: null as unknown as UserSignupDataDto,
-      };
+      } as BaseResponseDto<UserSignupDataDto>;
     }
 
     return {
@@ -395,7 +395,7 @@ async signup(
       code: 'INTERNAL',
       error: { code: 'INTERNAL', message: err instanceof Error ? err.message : 'Unknown error' },
       data: null as unknown as UserSignupDataDto,
-    };
+    } as BaseResponseDto<UserSignupDataDto>;
   }
 }
 
@@ -429,7 +429,7 @@ async organisationSignup(
         message: 'Invalid or expired verification code.',
         code: 'UNAUTHORIZED',
         error: { code: 'INVALID_OTP', message: 'Verification failed' }
-      };
+      } as BaseResponseDto<OrganizationSignupDataDto>;
     }
 
     const adminUserUuid = randomUUID();
@@ -459,7 +459,7 @@ async organisationSignup(
         code: orgResponse.code || 'INTERNAL',
         message: orgResponse.message || 'Organisation profile creation failed',
         error: orgResponse.error,
-      };
+      } as BaseResponseDto<OrganizationSignupDataDto>;
     }
 
     // 3. Save Admin Credentials Locally
@@ -525,7 +525,7 @@ async organisationSignup(
         }
       },
       error: null
-    };
+    } as BaseResponseDto<OrganizationSignupDataDto>;
 
   } catch (err: any) {
     this.logger.error('Organisation Signup Error', err);
@@ -537,7 +537,7 @@ async organisationSignup(
         code: err.constructor.name === 'RpcException' ? 'GRPC_ERROR' : 'INTERNAL', 
         message: err.message 
       },
-    };
+    } as BaseResponseDto<OrganizationSignupDataDto>;
   }
 }
 
@@ -586,7 +586,7 @@ async organisationSignup(
         status: profile.user.status,
       } as unknown as LoginResponseDto,
       error: null,
-    };
+    } as BaseResponseDto<LoginResponseDto>;
 
 
   } catch (err: unknown) {
@@ -605,7 +605,7 @@ async organisationSignup(
           message: errorMessage,
           details: (err as any).getResponse?.()?.message || null 
         },
-      };
+      } as BaseResponseDto<LoginResponseDto>;
     }
 
     // 2. Handle gRPC Service Failures (Profile/RBAC)
@@ -621,7 +621,7 @@ async organisationSignup(
           message: rpcErr.message,
           details: rpcErr.details || null
         },
-      };
+      } as BaseResponseDto<LoginResponseDto>;
     }
 
     // 3. Fallback for Internal Errors
@@ -634,8 +634,8 @@ async organisationSignup(
         code: 'INTERNAL', 
         message: err instanceof Error ? err.message : 'Login failed',
         details: null
-      },
-    };
+      } ,
+    } as BaseResponseDto<LoginResponseDto>;
   }
 }
 
@@ -707,7 +707,7 @@ async organisationSignup(
         code: 'OK',
         data: tokens, // Standardized to 'data' to match your other DTOs
         error: null,
-      };
+      } as BaseResponseDto<TokenPairDto>;
 
     } catch (err: unknown) {
       this.logger.error(`[AUTH] Refresh Token Error: ${err instanceof Error ? err.message : 'Unknown'}`);
@@ -719,7 +719,7 @@ async organisationSignup(
           code: 'UNAUTHORIZED',
           data: null as any,
           error: { code: 'AUTH_FAILURE', message: err.message }
-        };
+        } as BaseResponseDto<TokenPairDto>;
       }
 
       return {
@@ -731,7 +731,7 @@ async organisationSignup(
           code: 'INTERNAL', 
           message: err instanceof Error ? err.message : 'Refresh failed' 
         },
-      };
+      } as BaseResponseDto<TokenPairDto>;
     }
   }
 
@@ -899,7 +899,7 @@ async signInWithGoogle(
           verificationStatus: profileData.organization.verificationStatus,
         } : undefined
       },
-    };
+    } as BaseResponseDto<LoginResponseDto>;
 
   } catch (err) {
     const errorMessage = err.details || err.message;
@@ -986,7 +986,7 @@ async generateDevToken(
       message: 'Dev tokens generated successfully',
       code: 'OK',
       data: { accessToken, refreshToken }, // Ensuring it wraps in 'data' for BaseResponseDto consistency
-    };
+    } as BaseResponseDto<TokenPairDto>;
 
   } catch (err: unknown) {
     const unknownErr = err as Error;
@@ -1080,7 +1080,7 @@ async requestOtp(data: RequestOtpDto): Promise<BaseResponseDto<null>> {
       message: 'Verification code sent to your email',
       code: 'OK',
       data: null,
-    };
+    } as BaseResponseDto<null>;
   } catch (error) {
     this.logger.error(`Failed to generate OTP for ${email}`, error);
     return {
@@ -1088,7 +1088,7 @@ async requestOtp(data: RequestOtpDto): Promise<BaseResponseDto<null>> {
       message: 'An error occurred while processing your request',
       code: 'INTERNAL_ERROR',
       data: null,
-    };
+    } as BaseResponseDto<null>;
   }
 }
 
@@ -1116,7 +1116,7 @@ async verifyOtp(data: VerifyOtpDto): Promise<BaseResponseDto<{ verified: boolean
         message: 'Invalid or expired code',
         code: 'UNAUTHORIZED',
         data: { verified: false },
-      };
+      } as BaseResponseDto<{ verified: boolean }>;
     }
 
     // 2. OTP is valid! Clean up: Delete all OTPs for this email/purpose to prevent replay
@@ -1131,7 +1131,7 @@ async verifyOtp(data: VerifyOtpDto): Promise<BaseResponseDto<{ verified: boolean
       message: 'Code verified',
       code: 'OK',
       data: { verified: true },
-    };
+    } as BaseResponseDto<{ verified: boolean }>;
   } catch (error) {
     this.logger.error(`Error verifying OTP for ${email}`, error);
     throw new RpcException({ code: 13, message: 'Internal validation failure' });
@@ -1213,7 +1213,7 @@ async verifyMfaLogin(
         organization: profile.organization,
       } as unknown as LoginResponseDto,
       error: null,
-    };
+    } as BaseResponseDto<LoginResponseDto>;
 
   } catch (err: unknown) {
     this.logger.error(`MFA Verification failed for ${verifyDto.email}`, err);
@@ -1356,7 +1356,7 @@ async getActiveSessions(userUuid: string): Promise<BaseResponseDto<SessionDto[]>
       code: 'OK',
       data: sessionDtos,
       error: null,
-    };
+    } as BaseResponseDto<SessionDto[]>;
   } catch (error) {
     this.logger.error(`🔥 Failed to fetch sessions for ${userUuid}`, error.stack);
     return BaseResponseDto.fail(

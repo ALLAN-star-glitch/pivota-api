@@ -11,6 +11,7 @@ import {
   JobApplicationResponseDto,
   CloseJobPostResponseDto,
   CreateJobPostGrpcDto,
+  JobPostCreateResponseDto,
 } from '@pivota-api/dtos';
 import { JobsService } from './jobs.service';
 
@@ -26,7 +27,7 @@ export class JobsController {
   @GrpcMethod('JobsService', 'CreateJobPost')
   async createJobPost(
     data: CreateJobPostGrpcDto,
-  ): Promise<BaseResponseDto<JobPostResponseDto>> {
+  ): Promise<BaseResponseDto<JobPostCreateResponseDto>> {
     this.logger.debug(`CreateJobPost Request: ${JSON.stringify(data)}`);
     return this.jobsService.createJobPost(data);
   }

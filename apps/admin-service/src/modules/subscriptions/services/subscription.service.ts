@@ -1,317 +1,286 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-
-
 import {
+  AccessDataDto,
   BaseResponseDto,
   SubscribeToPlanDto,
   SubscriptionResponseDto
 } from '@pivota-api/dtos';
+import { PricingService } from './pricing.service';
 
+interface PrismaPlanModule {
+  id: string;
+  restrictions: unknown; // Use unknown instead of any
+}
 
-type PlanPrices = {
-  monthly?: number;
-  quarterly?: number;
-  halfYearly?: number;
-  annually?: number;
-};
-
-type PlanFeatures = {
-  prices?: PlanPrices;
-  support?: string;
-  boost?: boolean;
-  analytics?: boolean;
-};
-
-
+interface PrismaSubscriptionWithPlan {
+  id: string;
+  plan: {
+    name: string;
+    planModules: PrismaPlanModule[];
+  } | null;
+}
 @Injectable()
 export class SubscriptionService {
   private readonly logger = new Logger(SubscriptionService.name);
 
   constructor(
     private readonly prisma: PrismaService,
-  ) {
-    
-  }
-
+    private readonly pricingService: PricingService,
+  ) {}
 
   // ---------------------------------------------------------
-  //Subscribe to Plan
+  // Subscribe to Plan
   // ---------------------------------------------------------
-async subscribeToPlan(
-  dto: SubscribeToPlanDto
-): Promise<BaseResponseDto<SubscriptionResponseDto>> {
-  try {
-    // ---------------------------------------
-    // 1. Validate user
-    // ---------------------------------------
+  async subscribeToPlan(
+    dto: SubscribeToPlanDto
+  ): Promise<BaseResponseDto<SubscriptionResponseDto>> {
+    try {
+      this.logger.debug(`Subscribing Account ${dto.subscriberUuid} to plan ${dto.planId}`);
 
-    this.logger.debug(`Subscribing Account ${dto.subscriberUuid} to plan ${dto.planId}`);  
-   
-    // ---------------------------------------
-    // 2. Validate plan
-    // ---------------------------------------
-    this.logger.debug(`Validating plan ID: ${dto.planId}`);
-    const plan = await this.prisma.plan.findUnique({ where: { id: dto.planId } });
-    if (!plan) {
-      const response = {
-        success: false,
-        message: 'Invalid plan',
-        code: 'PLAN_NOT_FOUND',
-        subscriptions: null,
-        error: { message: 'Plan does not exist' },
-      };
-      return response;
-    }
-
-
-
-    const features = JSON.parse(plan.features) as PlanFeatures;
-    this.logger.debug(`Plan Features: ${JSON.stringify(features)}`);  
-
-    // ---------------------------------------
-    // 3. Check if this is a recurring plan
-    //    (Only one active recurring plan allowed per user)
-    // ---------------------------------------
-    this.logger.debug(`Checking for active plans for account ${dto.subscriberUuid}`);  
-    const activePlan = await this.prisma.subscription.findFirst({
-      where: {
-        accountUuid: dto.subscriberUuid,
-        type: 'PLAN',
-        status: 'ACTIVE',
-      },
-    });
-
-    if (activePlan) {
-      const response = {
-        success: false,
-        message: 'Account already has an active recurring plan',
-        code: 'PLAN_ALREADY_ACTIVE',
-        subscriptions: null,
-        error: { message: 'Cannot subscribe to multiple active recurring plans' },
-      };
-      return response;
-    }
-    this.logger.debug(`No active recurring plans found for account ${dto.subscriberUuid}`);  
-
-    // ---------------------------------------
-    // 4. Pricing & expiry
-    // ---------------------------------------
-    let totalAmount = 0;
-    let amountPaid = dto.amountPaid ?? 0;
-    let billingCycle: string | null = dto.billingCycle ?? null;
-    let expiresAt: Date;
-    let allowPartial = false; //declare outside block for scope
-
-    const isFreePlan = !features.prices || Object.keys(features.prices).length === 0;
-
-    if (isFreePlan) {
-      totalAmount = 0;
-      amountPaid = 0;
-      billingCycle = null;
-      expiresAt = new Date();
-      expiresAt.setMonth(expiresAt.getMonth() + 1);
-
-      this.logger.debug(`Plan is free. Setting totalAmount is: ${totalAmount} and amountPaid to ${amountPaid},billing cycle: ${billingCycle} for account ${dto.subscriberUuid}`);
-
-      this.logger.debug(`Free plan activated for user ${dto.subscriberUuid}, expires at ${expiresAt}`);
-
-    } else {
-      if (!billingCycle) {
-        const response = {
+      const plan = await this.prisma.plan.findUnique({ where: { id: dto.planId } });
+      if (!plan) {
+        return {
           success: false,
-          message: 'Billing cycle required',
-          code: 'BILLING_CYCLE_REQUIRED',
-          subscriptions: null,
-          error: { message: 'Paid plans require a billing cycle' },
-        };
-        return response;
+          message: 'Invalid plan',
+          code: 'PLAN_NOT_FOUND',
+          subscription: null,
+          error: { message: 'Plan does not exist' },
+        } as unknown as BaseResponseDto<SubscriptionResponseDto>;
       }
 
-      totalAmount = features.prices[billingCycle];
+      const features = JSON.parse(plan.features as string) as Record<string, Record<string, number>>;
 
+      const activePlan = await this.prisma.subscription.findFirst({
+        where: {
+          accountUuid: dto.subscriberUuid,
+          type: 'PLAN',
+          status: 'ACTIVE',
+        },
+      });
 
-      if (!totalAmount || totalAmount <= 0) {
-        const response = {
+      if (activePlan) {
+        return {
           success: false,
-          message: 'Invalid billing cycle',
-          code: 'INVALID_BILLING_CYCLE',
-          subscriptions: null,
-          error: { message: 'Pricing not configured for selected cycle' },
-        };
-        return response;
+          message: 'Account already has an active recurring plan',
+          code: 'PLAN_ALREADY_ACTIVE',
+          subscription: null,
+          error: { message: 'Cannot subscribe to multiple active recurring plans' },
+        } as unknown as BaseResponseDto<SubscriptionResponseDto>;
       }
 
-      // Partial payment logic for quarterly+ plans
-      allowPartial = ['quarterly', 'halfYearly', 'annually'].includes(billingCycle);
+      const quote = this.pricingService.calculateQuote(
+        { isPremium: plan.isPremium },
+        { prices: features.prices || {} },
+        dto.billingCycle,
+        dto.amountPaid ?? 0
+      );
 
-      if (allowPartial && amountPaid > 0 && amountPaid < totalAmount) {
-        const MIN_PARTIAL_THRESHOLD = 0.5;
-        if (amountPaid / totalAmount < MIN_PARTIAL_THRESHOLD) {
-          const response = {
-            success: false,
-            message: `Minimum partial payment is ${MIN_PARTIAL_THRESHOLD * 100}%`,
-            code: 'PARTIAL_PAYMENT_TOO_LOW',
-            subscriptions: null,
-            error: { message: 'Partial payment below allowed threshold' },
-          };
-          return response;
-        }
+      const subscription = await this.prisma.subscription.create({
+        data: {
+          accountUuid: dto.subscriberUuid,
+          planId: plan.id,
+          type: 'PLAN',
+          entityIds: dto.entityIds ?? [],
+          status: quote.status,
+          billingCycle: quote.billingCycle,
+          totalAmount: quote.totalAmount,
+          amountPaid: quote.amountPaid,
+          currency: dto.currency ?? 'KES',
+          startedAt: new Date(),
+          expiresAt: quote.expiresAt,
+        },
+        include: { plan: true },
+      });
 
-        // Proportional expiry
-        expiresAt = new Date();
-        const cycleMonthsMap = { monthly: 1, quarterly: 3, halfYearly: 6, annually: 12 };
-        const fullMonths = cycleMonthsMap[billingCycle] ?? 1;
-        const proportionalMonths = fullMonths * (amountPaid / totalAmount);
-        expiresAt.setMonth(expiresAt.getMonth() + Math.floor(proportionalMonths));
-      } else if (amountPaid !== totalAmount) {
-        const response = {
-          success: false,
-          message: 'Full payment required',
-          code: 'FULL_PAYMENT_REQUIRED',
-          subscriptions: null,
-          error: { message: 'Payment must match total amount' },
-        };
-        return response;
-      } else {
-        expiresAt = new Date();
-        const monthsMap = { monthly: 1, quarterly: 3, halfYearly: 6, annually: 12 };
-        const monthsToAdd = monthsMap[billingCycle] ?? 1;
-        expiresAt.setMonth(expiresAt.getMonth() + monthsToAdd);
-      }
-    }
-
-
-
-
-    // ---------------------------------------
-    // 5. Create subscription
-    // ---------------------------------------
-    const subscription = await this.prisma.subscription.create({
-      data: {
-        accountUuid: dto.subscriberUuid,
-        planId: plan.id,
-        type: 'PLAN',
-        entityIds: dto.entityIds ?? [],
-        status: allowPartial && amountPaid < totalAmount ? 'PARTIALLY_PAID' : 'ACTIVE',
-        billingCycle,
-        totalAmount,
-        amountPaid,
-        currency: dto.currency ?? 'KES',
-        startedAt: new Date(),
-        expiresAt,
-      },
-      include: { plan: true },
-    });
-
-    this.logger.debug(`Subscription created with ID: ${subscription.id} for account ${dto.subscriberUuid}`);
-
-    // ---------------------------------------
-    // 6. Build response
-    // ---------------------------------------
-    const response = {
-      success: true,
-      message: 'Subscription created successfully',
-      code: 'SUBSCRIPTION_CREATED',
-      subscription: 
-        {
+      return {
+        success: true,
+        message: 'Subscription created successfully',
+        code: 'SUBSCRIPTION_CREATED',
+        subscription: {
           id: subscription.id,
           subscriberUuid: subscription.accountUuid,
           plan: subscription.plan.name,
-          type: subscription.type,
+          type: subscription.type as 'PLAN' | 'PAYGO',
           entityIds: subscription.entityIds ?? [],
-          status: subscription.status,
-          billingCycle: subscription.billingCycle,
+          status: subscription.status as 'ACTIVE' | 'EXPIRED' | 'CANCELLED' | 'PARTIALLY_PAID',
+          billingCycle: (subscription.billingCycle || 'monthly') as 'monthly' | 'quarterly' | 'halfYearly' | 'annually',
           totalAmount: subscription.totalAmount,
           amountPaid: subscription.amountPaid,
           currency: subscription.currency,
-          startedAt: subscription.startedAt.toISOString(),
-          expiresAt: subscription.expiresAt.toISOString(),
-          createdAt: subscription.createdAt.toISOString(),
-          updatedAt: subscription.updatedAt.toISOString(),
-      },
-
-      error: null,
-    };
-    this.logger.debug(`Subscription Response: ${JSON.stringify(response)}`);
-    return response;
-  } catch (err: unknown) {
-    const error = err as Error;
-    const response = {
-      success: false,
-      message: 'Failed to subscribe',
-      code: 'SUBSCRIPTION_FAILED',
-      subscription: null,
-      error: { message: error.message, details: error.stack },
-    };
-    return response;
+          startedAt: subscription.startedAt,
+          expiresAt: subscription.expiresAt,
+          createdAt: subscription.createdAt,
+          updatedAt: subscription.updatedAt,
+        },
+        error: null,
+      } as unknown as BaseResponseDto<SubscriptionResponseDto>;
+      
+    } catch (err: unknown) {
+      const error = err as Error;
+      this.logger.error(`Failed to subscribe: ${error.message}`);
+      return {
+        success: false,
+        message: 'Failed to subscribe',
+        code: 'SUBSCRIPTION_FAILED',
+        subscription: null,
+        error: { message: error.message, details: error.stack },
+      } as unknown as BaseResponseDto<SubscriptionResponseDto>;
+    }
   }
-}
-
 
   // ---------------------------------------------------------
-// GET ACTIVE SUBSCRIPTIONS BY ACCOUNT UUID
-// ---------------------------------------------------------
-async getSubscriptionsByAccount(
-  accountUuid: string
-): Promise<BaseResponseDto<SubscriptionResponseDto[]>> {
-  try {
-    const subscriptions = await this.prisma.subscription.findMany({
-      where: { accountUuid, status: 'ACTIVE' },
-      include: { plan: true },
-    });
+  // GET ACTIVE SUBSCRIPTIONS BY ACCOUNT
+  // ---------------------------------------------------------
+  async getSubscriptionsByAccount(
+    accountUuid: string
+  ): Promise<BaseResponseDto<SubscriptionResponseDto[]>> {
+    try {
+      const subscriptions = await this.prisma.subscription.findMany({
+        where: { accountUuid, status: 'ACTIVE' },
+        include: { plan: true },
+      });
 
-    if (!subscriptions || subscriptions.length === 0) {
-      const success = {
+      if (!subscriptions || subscriptions.length === 0) {
+        return {
+          success: false,
+          message: 'No active subscriptions found',
+          code: 'SUBSCRIPTIONS_NOT_FOUND',
+          subscriptions: null,
+          error: { message: 'No active subscriptions for this account' },
+        } as unknown as BaseResponseDto<SubscriptionResponseDto[]>;
+      }
+
+      const results = subscriptions.map((sub) => ({
+        id: sub.id,
+        subscriberUuid: sub.accountUuid,
+        plan: sub.plan.name,
+        type: sub.type as 'PLAN' | 'PAYGO',
+        status: sub.status as 'ACTIVE' | 'EXPIRED' | 'CANCELLED' | 'PARTIALLY_PAID',
+        billingCycle: (sub.billingCycle || 'monthly') as 'monthly' | 'quarterly' | 'halfYearly' | 'annually',
+        startedAt: sub.startedAt,
+        expiresAt: sub.expiresAt,
+        createdAt: sub.createdAt,
+        updatedAt: sub.updatedAt,
+        entityIds: sub.entityIds ?? [],
+        totalAmount: sub.totalAmount,
+        amountPaid: sub.amountPaid,
+        currency: sub.currency,
+      }));
+
+      return {
+        success: true,
+        message: 'Subscriptions retrieved successfully',
+        code: 'FETCHED',
+        subscriptions: results,
+        error: null,
+      } as unknown as BaseResponseDto<SubscriptionResponseDto[]>;
+
+    } catch (err: unknown) {
+      const error = err as Error;
+      return {
         success: false,
-        message: 'No active subscriptions found',
-        code: 'SUBSCRIPTIONS_NOT_FOUND',
+        message: 'Failed to fetch subscriptions',
+        code: 'FETCH_SUBSCRIPTIONS_FAILED',
         subscriptions: null,
-        error: { message: 'No active subscriptions for this account' },
-      };
-      return success;
+        error: { message: error.message, details: error.stack },
+      } as unknown as BaseResponseDto<SubscriptionResponseDto[]>;
+    }
+  }
+
+  // ---------------------------------------------------------
+  // CHECK MODULE ACCESS
+  // ---------------------------------------------------------
+  // 1. Define local interfaces for the Prisma result structure
+
+
+// ... inside SubscriptionService class
+
+async checkModuleAccess(
+  accountUuid: string,
+  moduleSlug: string
+): Promise<BaseResponseDto<AccessDataDto>> {
+  try {
+    this.logger.debug(`Checking access: Account=${accountUuid}, Module=${moduleSlug}`);
+
+    // 2. Perform the query with specific typing
+    const activeSub = (await this.prisma.subscription.findFirst({
+      where: { accountUuid, status: 'ACTIVE' },
+      include: {
+        plan: {
+          include: {
+            planModules: {
+              where: { module: { slug: moduleSlug } },
+            },
+          },
+        },
+      },
+    })) as PrismaSubscriptionWithPlan | null;
+
+    // 3. Use Guard Clauses for safety
+    if (!activeSub || !activeSub.plan) {
+      return {
+        success: true,
+        code: 'PLAN_UPGRADE_REQUIRED',
+        message: 'No active subscription found.',
+        data: { 
+          isAllowed: false, 
+          restrictions: JSON.stringify({ isAllowed: false }), 
+          reason: 'NO_ACTIVE_SUBSCRIPTION' 
+        },
+      } as unknown as BaseResponseDto<AccessDataDto>;
     }
 
+    const moduleConfig = activeSub.plan.planModules[0];
+    if (!moduleConfig) {
+      return {
+        success: true,
+        code: 'MODULE_NOT_IN_PLAN',
+        message: `Module ${moduleSlug} not included in ${activeSub.plan.name}.`,
+        data: { 
+          isAllowed: false, 
+          restrictions: JSON.stringify({ isAllowed: false }), 
+          reason: 'MODULE_NOT_IN_PLAN' 
+        },
+      } as unknown as BaseResponseDto<AccessDataDto>;
+    }
 
+    // 4. Safely parse restrictions using unknown/type-checks
+    let isAllowed = false;
+    let restrictionsStr = '{}';
 
-    const success =  {
+    if (typeof moduleConfig.restrictions === 'string') {
+      restrictionsStr = moduleConfig.restrictions;
+      const parsed = JSON.parse(restrictionsStr) as Record<string, unknown>;
+      isAllowed = parsed.isAllowed === true;
+    } else if (moduleConfig.restrictions && typeof moduleConfig.restrictions === 'object') {
+      const parsed = moduleConfig.restrictions as Record<string, unknown>;
+      isAllowed = parsed.isAllowed === true;
+      restrictionsStr = JSON.stringify(parsed);
+    }
+
+    this.logger.debug(`Access check result for Account=${accountUuid}, Module=${moduleSlug}: isAllowed=${isAllowed}, restrictions=${restrictionsStr}`); 
+    this.logger.debug(`Full moduleConfig: ${JSON.stringify(moduleConfig)}`);
+    return {
       success: true,
-      message: 'Subscriptions retrieved successfully',
-      code: 'FETCHED',
-      subscriptions: subscriptions.map((sub) => ({
-        id: sub.id,
-        accountUuid: sub.accountUuid,
-        plan: sub.plan ? sub.plan.name : undefined,
-        type: sub.type,
-        entityIds: sub.entityIds ?? [],
-        status: sub.status,
-        billingCycle: sub.billingCycle,
-        totalAmount: sub.totalAmount ?? undefined,
-        amountPaid: sub.amountPaid ?? undefined,
-        currency: sub.currency ?? 'KES',
-        startedAt: sub.startedAt.toISOString(),
-        expiresAt: sub.expiresAt.toISOString(),
-        createdAt: sub.createdAt.toISOString(),
-        updatedAt: sub.updatedAt.toISOString(),
-      })),
-      error: null,
-    };
-    return success;
-
+      code: isAllowed ? 'ACCESS_GRANTED' : 'PLAN_UPGRADE_REQUIRED',
+      message: isAllowed ? 'Access granted.' : 'Upgrade required.',
+      data: {
+        isAllowed,
+        restrictions: restrictionsStr,
+      },
+      
+    } as unknown as BaseResponseDto<AccessDataDto>;
 
   } catch (err: unknown) {
     const error = err as Error;
-    this.logger.error(`Failed to fetch subscriptions: ${error.message}`, error.stack);
-
-    const failure =  {
+    this.logger.error(`CheckModuleAccess Error: ${error.message}`);
+    return {
       success: false,
-      message: 'Failed to fetch subscriptions',
-      code: 'FETCH_SUBSCRIPTIONS_FAILED',
-      subscriptions: null,
-      error: { message: error.message, details: error.stack },
-    };
-    return failure;
+      code: 'ACCESS_CHECK_ERROR',
+      message: 'Internal error during access check.',
+      data: { isAllowed: false, restrictions: '{}', reason: 'INTERNAL_ERROR' },
+    } as unknown as BaseResponseDto<AccessDataDto>;
   }
 }
-
 }

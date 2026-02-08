@@ -43,7 +43,7 @@ export class CreateHouseListingDto {
   })
   @IsString()
   @IsNotEmpty()
-  categoryId!: string;
+  categoryId?: string;
 
   @ApiProperty({
     description: 'Whether the house is for rent or sale',
@@ -132,22 +132,13 @@ export class CreateHouseListingGrpcRequestDto extends CreateHouseListingDto {
   @ApiProperty({ description: 'The unique UUID of the human creator' })
   @IsString()
   @IsNotEmpty()
-  creatorId!: string;
+  creatorId?: string;
 
-  @ApiProperty({ description: 'The full name of the human creator' })
-  @IsString()
-  @IsNotEmpty()
-  creatorName!: string;
 
   @ApiProperty({ description: 'The unique UUID of the root account (Individual or Org)' })
   @IsString()
   @IsNotEmpty()
   accountId!: string;
-
-  @ApiProperty({ description: 'The Brand or Organization name' })
-  @IsString()
-  @IsNotEmpty()
-  accountName!: string;
 }
 
 /* ======================================================

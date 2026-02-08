@@ -270,7 +270,7 @@ export class OrganisationService  {
       message: 'Organization profile records created and provisioned successfully.',
       data: this.mapToOrganizationProfileDto(result),
       error: null,
-    };
+    } as unknown as BaseResponseDto<OrganizationProfileResponseDto>;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
@@ -323,7 +323,7 @@ export class OrganisationService  {
         createdAt: org.createdAt,
         updatedAt: org.updatedAt,
       },
-    };
+    } as unknown as BaseResponseDto<OrganizationProfileResponseDto>;
   }
 
   /* ======================================================
@@ -346,7 +346,7 @@ export class OrganisationService  {
       message: 'Member added',
       data: null,
       error: null,
-    };
+    } as BaseResponseDto<null>;
   }
 
   /* ======================================================
@@ -413,7 +413,7 @@ async getOrganisationsByType(
     message: `Found ${organizations.length} organizations of type ${typeSlug}`,
     data: mappedData,
     error: null,
-  };
+  } as BaseResponseDto<OrganizationProfileResponseDto[]>;
 }
 
   /* ======================================================

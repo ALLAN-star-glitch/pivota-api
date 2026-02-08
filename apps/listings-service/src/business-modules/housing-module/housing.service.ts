@@ -14,6 +14,7 @@ import {
   ScheduleViewingGrpcRequestDto,
   CreateHouseListingGrpcRequestDto,
   ArchiveHouseListingsGrpcRequestDto,
+  HouseListingCreateResponseDto,
 } from '@pivota-api/dtos';
 
 // Internal interface for Prisma results with relations
@@ -62,32 +63,33 @@ export class HousingService {
   // ======================================================
   // CREATE HOUSE LISTING
   // ======================================================
+  // ======================================================
+  // CREATE HOUSE LISTING (Ultra-Lean)
+  // ======================================================
   async createHouseListing(
     dto: CreateHouseListingGrpcRequestDto,
-  ): Promise<BaseResponseDto<HouseListingResponseDto>> {
+  ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
     try {
-      // 1. Validate Category
-      const category = await this.prisma.category.findFirst({
+      // 1. Validate Category (Lean check: just existence)
+      const categoryExists = await this.prisma.category.count({
         where: { id: dto.categoryId, vertical: 'HOUSING' },
       });
 
-      if (!category) {
+      if (categoryExists === 0) {
         return {
           success: false,
           message: 'Invalid category for Housing pillar',
           code: 'INVALID_CATEGORY',
           data: null,
+          error: { message: 'The provided category ID does not exist in Housing' },
         };
       }
 
-      // 2. Atomic Creation with Identity Pillars
-      // Injected by Gateway: ownerName, accountId, accountName
-      const created = (await this.prisma.houseListing.create({
+      // 2. Atomic Creation - Returning only Lean Data
+      const created = await this.prisma.houseListing.create({
         data: {
           creatorId: dto.creatorId,
-          creatorName: dto.creatorName, 
           accountId: dto.accountId,
-          accountName: dto.accountName,
           title: dto.title,
           description: dto.description,
           categoryId: dto.categoryId,
@@ -102,6 +104,7 @@ export class HousingService {
           locationNeighborhood: dto.locationNeighborhood,
           address: dto.address,
           status: 'AVAILABLE',
+          // Images are still created here, but not returned in the lean DTO
           images: dto.imageUrls
             ? {
                 create: dto.imageUrls.map((url, index) => ({
@@ -111,28 +114,38 @@ export class HousingService {
               }
             : undefined,
         },
-        include: {
-          images: true,
-          category: true,
+        // We use 'select' instead of 'include' to be ultra-efficient
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
         },
-      })) as unknown as HouseListingWithRelations;
+      });
+
+      // 3. Construct Lean Response
+      const data: HouseListingCreateResponseDto = {
+        id: created.id,
+        status: created.status,
+        // Convert Date to String to satisfy the DTO and fix the TS error
+        createdAt: created.createdAt.toISOString(),
+      };
 
       return {
         success: true,
         message: 'House listing created successfully',
         code: 'CREATED',
-        data: this.mapToResponseDto(created),
+        data,
         error: null,
       };
     } catch (error: unknown) {
       const err = error as Error;
-      this.logger.error(`CreateHouseListing Error: ${err.message}`);
+      this.logger.error(`CreateHouseListing Error: ${err.message}`, err.stack);
       return {
         success: false,
         message: 'Failed to create listing',
         code: 'ERROR',
         data: null,
-        error: { message: err.message },
+        error: { message: err.message, details: err.stack },
       };
     }
   }

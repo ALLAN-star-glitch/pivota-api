@@ -1,6 +1,7 @@
 import { Controller, Logger } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import {
+  AccessDataDto,
   BaseResponseDto,
   SubscribeToPlanDto,
   SubscriptionResponseDto,
@@ -20,10 +21,9 @@ export class SubscriptionController {
   subscribeToPlan(
     data: SubscribeToPlanDto,
   ): Promise<BaseResponseDto<SubscriptionResponseDto>> {
-    this.logger.debug(`RequestDto: ${JSON.stringify(data)}`);
+    this.logger.debug(`SubscribeToPlan Request: ${JSON.stringify(data)}`);
     return this.subscriptionService.subscribeToPlan(data);
   }
-  
 
   // ---------------------------------------
   // GET SUBSCRIPTION BY Account UUID
@@ -32,14 +32,30 @@ export class SubscriptionController {
   getSubscriptionsByUser(
     data: { accountUuid: string },
   ): Promise<BaseResponseDto<SubscriptionResponseDto[]>> {
-
-    this.logger.debug(`GetSubscriptionByAccount Request: ${JSON.stringify(data)}`);
-
-    const response = this.subscriptionService.getSubscriptionsByAccount(data.accountUuid);
-
-    this.logger.debug(`Subscription Response <Controller>: ${JSON.stringify(response)}`)
-
-    return response;
+    this.logger.debug(`GetSubscriptionsByAccount Request: ${JSON.stringify(data)}`);
+    return this.subscriptionService.getSubscriptionsByAccount(data.accountUuid);
   }
-}
 
+  // ---------------------------------------
+  // CHECK MODULE ACCESS
+  // ---------------------------------------
+  @GrpcMethod('SubscriptionService', 'CheckModuleAccess')
+async checkModuleAccess(data: {
+  accountUuid: string;
+  moduleSlug: string;
+}): Promise<BaseResponseDto<AccessDataDto>> {
+  this.logger.debug(`CheckModuleAccess Request: ${JSON.stringify(data)}`);
+
+  const result = await this.subscriptionService.checkModuleAccess(
+    data.accountUuid,
+    data.moduleSlug,
+  );
+
+  // CRITICAL: Stringify the restrictions object for gRPC wire compatibility
+  if (result.data && typeof result.data.restrictions !== 'string') {
+    result.data.restrictions = JSON.stringify(result.data.restrictions);
+  }
+
+  return result;
+}
+}

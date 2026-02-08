@@ -30,7 +30,6 @@ import { OrganisationGatewayModule } from '../gateway-modules/OrganisationProfil
     ProvidersGatewayModule,
     HousingGatewayModule,
     OrganisationGatewayModule
-
   ],
   controllers: [AppController],
   providers: [AppService],

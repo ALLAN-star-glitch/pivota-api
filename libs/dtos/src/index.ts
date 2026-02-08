@@ -73,3 +73,4 @@ export * from './lib/VerifyOtpDto';
 export * from './lib/SendOtpEventDto.dto';
 export * from './lib/ResetPasswordDto.dto';
 export * from './lib/RevokeSessionDto.dto';
+export * from './lib/check-module-access.dto';

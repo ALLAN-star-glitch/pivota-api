@@ -107,7 +107,7 @@ export class UserService {
         ),
       ),
       lastValueFrom(
-        this.plansGrpc.GetPlanIdBySlug({ slug: 'free' }).pipe(
+        this.plansGrpc.GetPlanIdBySlug({ slug: 'free-forever' }).pipe(
           timeout(5000),
           catchError(() => throwError(() => new Error('Plans service unavailable')))
         ),
@@ -213,7 +213,7 @@ export class UserService {
       message: 'Individual profile created successfully',
       data: this.mapToUserProfileResponseDto(result),
       error: null,
-    };
+    } as BaseResponseDto<UserProfileResponseDto>;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
@@ -282,7 +282,7 @@ export class UserService {
       code: 'OK', 
       data: mappedData,
       error: null,
-    };
+    } as BaseResponseDto<UserProfileResponseDto>;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
@@ -321,7 +321,7 @@ export class UserService {
       code: 'OK',
       data: this.mapToUserProfileResponseDto(userAggregate as PrismaUserAggregate),
       error: null,
-    };
+    } as BaseResponseDto<UserProfileResponseDto>;
   }
 
   /** ------------------ Fetch user by userCode ------------------ */
@@ -357,7 +357,7 @@ export class UserService {
       // Map the aggregate and place it in the 'data' key as per proto
       data: this.mapToUserProfileResponseDto(userAggregate as PrismaUserAggregate),
       error: null,
-    };
+    }   as BaseResponseDto<UserProfileResponseDto>;
   }
 
   /** ------------------ Get all users ------------------ */
@@ -376,7 +376,7 @@ export class UserService {
       code: 'OK',
       data: users.map((u) => this.mapToUserProfileResponseDto(u  as PrismaUserAggregate)),
       error: null,  
-    };
+    } as BaseResponseDto<UserProfileResponseDto[]>;
   }
 
 /* ======================================================
@@ -523,7 +523,7 @@ export class UserService {
       code: 'OK',
       data: this.mapToUserProfileResponseDto(updatedAggregate as PrismaUserAggregate),
       error: null,
-    };
+    } as BaseResponseDto<UserProfileResponseDto>;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {

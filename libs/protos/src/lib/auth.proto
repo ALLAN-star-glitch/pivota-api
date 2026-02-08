@@ -91,16 +91,23 @@ message SignupRequest {
 }
 
 message OrganisationSignupRequest {
-  string name = 1;
-  string officialEmail = 2;
-  string officialPhone = 3;
-  string physicalAddress = 4;
-  string email = 5;
-  string password = 6;
-  string phone = 7;
-  string adminFirstName = 8;
-  string adminLastName = 9;
-  string code = 10; 
+  // --- BUSINESS ENTITY DETAILS ---
+  // Mirrors NestJS OrganisationSignupRequestDto
+  string name = 1;                // Legal name
+  string officialEmail = 2;       // General business email
+  string officialPhone = 3;       // General business phone
+  string physicalAddress = 4;     // Headquarters location
+  string organizationType = 5;    // PRIVATE_LIMITED, NGO, etc.
+
+  // --- ADMIN ACCOUNT DETAILS ---
+  string email = 6;               // Admin Login email
+  string password = 7;            // Admin Password
+  string phone = 8;               // Admin personal phone (for MFA)
+  string adminFirstName = 9;
+  string adminLastName = 10;
+  
+  // --- VERIFICATION ---
+  string code = 11;               // 6-digit OTP code
 }
 
 // ------------------ Auth / Login Flow ------------------
@@ -166,6 +173,7 @@ message OrganisationSignupResponse {
   string code = 3;
   OrganisationSignupData data = 4;
   ErrorPayload error = 5;
+  string organizationType = 6;
 }
 
 message UserSignupData {

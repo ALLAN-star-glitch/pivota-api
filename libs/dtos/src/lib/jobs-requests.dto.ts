@@ -183,28 +183,12 @@ export class CreateJobPostGrpcDto extends CreateJobPostDto {
   accountId?: string;
 
   @ApiPropertyOptional({ 
-    description: 'The Brand/Organization name or Individual name for the account', 
-    example: 'Pivota Tech Ltd' 
-  })  
-  @IsOptional()
-  @IsString()
-  accountName?: string;
-
-  @ApiPropertyOptional({ 
     description: 'The unique UUID of the specific human user who is performing the action', 
     example: 'user-123-xyz' 
   })  
   @IsOptional()
   @IsString()
   creatorId?: string;
-
-  @ApiPropertyOptional({ 
-    description: 'The full name (First + Last) of the human user', 
-    example: 'Jane Doe' 
-  })  
-  @IsOptional()
-  @IsString()
-  creatorName?: string;
 }
 
 export class ValidateJobPostIdsRequestDto {

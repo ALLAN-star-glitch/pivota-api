@@ -19,6 +19,7 @@ import { SUBSCRIPTIONS_PROTO_PATH } from '@pivota-api/protos';
     ]),
   ],
   providers: [SubscriptionsGatewayService],
+  exports: [SubscriptionsGatewayService],
   controllers: [SubscriptionsGatewayController],
 })
 export class SubscriptionsGatewayModule {}

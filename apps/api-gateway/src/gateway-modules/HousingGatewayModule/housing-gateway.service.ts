@@ -13,6 +13,7 @@ import {
   UpdateHouseListingGrpcRequestDto,
   CreateHouseListingGrpcRequestDto,
   ArchiveHouseListingsGrpcRequestDto,
+  HouseListingCreateResponseDto,
 } from '@pivota-api/dtos';
 
 
@@ -20,7 +21,7 @@ import {
 interface HousingServiceGrpc {
   CreateHouseListing(
     data: CreateHouseListingGrpcRequestDto,
-  ): Observable<BaseResponseDto<HouseListingResponseDto>>;
+  ): Observable<BaseResponseDto<HouseListingCreateResponseDto>>;
 
   GetHouseListingById(
     data: GetHouseListingByIdDto,
@@ -66,7 +67,7 @@ export class HousingGatewayService {
   // ===========================================================
   // CREATE HOUSE LISTING
   // ===========================================================
-  async createHouseListing(dto: CreateHouseListingGrpcRequestDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
+  async createHouseListing(dto: CreateHouseListingGrpcRequestDto): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
     const res = await firstValueFrom(this.grpcService.CreateHouseListing(dto));
     this.logger.debug(`CreateHouseListing gRPC: ${res?.success ? 'SUCCESS' : 'FAILED'}`);
 

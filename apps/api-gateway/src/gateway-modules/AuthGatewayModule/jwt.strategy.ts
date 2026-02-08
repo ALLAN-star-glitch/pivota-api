@@ -5,6 +5,22 @@ import { JwtPayload } from '@pivota-api/interfaces';
 import { AuthService } from './auth.service';
 import { Request } from 'express';
 
+interface AuthServiceUserResponse {
+  account: {
+    uuid: string;
+    accountCode: string;
+    type: string;
+    name?: string;
+  };
+  user: {
+    uuid: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    roleName: string;
+    status: string;
+  };
+}
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   private readonly logger = new Logger(JwtStrategy.name);
@@ -30,28 +46,46 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 async validate(payload: JwtPayload) {
   this.logger.debug(`Validating JWT payload for ${payload.email}`);
 
-  const user = await this.authService.getUserFromPayload(payload);
-  if (!user) {
+  // 1. Get the response and cast to 'any' to avoid the DTO property error
+  const response = await this.authService.getUserFromPayload(payload) as unknown as AuthServiceUserResponse;
+
+  if (!response || !response.user) {
     this.logger.warn(`❌ JWT validation failed: user not found for ${payload.email}`);
     throw new UnauthorizedException('Invalid or expired token');
   }
 
+
+  // 2. Safely extract the nested objects
+  const dbUser = response.user;
+  const dbAccount = response.account;
+
+  // Now these won't be undefined in your logs!
   this.logger.debug(
-    ` Authenticated user ${user.email} (UUID: ${payload.userUuid}) with role: ${payload.role}`,
+    `✅ Authenticated user (${dbUser.firstName} ${dbUser.lastName}) ${dbUser.email} (UUID: ${payload.userUuid}) with role: ${dbUser.roleName}`,
   );
 
-  // RETURN THE FULL OBJECT
+  const rawRole = dbUser.roleName || payload.role;
+
+// Remove spaces to turn "General User" into "GeneralUser" 
+// so it matches your RolePermissionsMap keys.
+const normalizedRole = rawRole.replace(/\s+/g, '');
+
+  // 3. Return the flat object your Guards and Controllers expect
   return {
-    ...user,
+    ...dbUser, // Spreads firstName, lastName, etc.
     userUuid: payload.userUuid,
-    email: payload.email,
-    role: payload.role,
+    email: dbUser.email || payload.email,
+    
+    // Use the role name from the database (e.g., "SuperAdmin" or "General User")
+    role: normalizedRole, 
+    
+    // Fixes your 'Account: undefined' bug in the controller
+    accountId: dbAccount?.uuid || payload.accountId,
+    
+    userName: `${dbUser.firstName} ${dbUser.lastName}`,       
+    accountName: dbAccount?.name || payload.accountName, 
+    accountType: dbAccount?.type || payload.accountType,
     planSlug: payload.planSlug,
-    accountId: payload.accountId,
-    // ADD THESE THREE LINES:
-    userName: payload.userName,       
-    accountName: payload.accountName, 
-    accountType: payload.accountType,
   };
 }
 }

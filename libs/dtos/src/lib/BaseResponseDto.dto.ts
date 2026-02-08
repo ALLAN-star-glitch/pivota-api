@@ -1,8 +1,12 @@
 import { ApiProperty, ApiExtraModels } from '@nestjs/swagger';
 import { ErrorPayload } from '@pivota-api/interfaces';
+import { SubscriptionResponseDto } from './SubscriptionResponseDto.dto';
 
 @ApiExtraModels() // Tell Swagger to inspect nested generic types
 export class BaseResponseDto<T = unknown> {
+  static success(results: SubscriptionResponseDto[], arg1: string): BaseResponseDto<import("./SubscriptionResponseDto.dto").SubscriptionResponseDto[]> | PromiseLike<BaseResponseDto<import("./SubscriptionResponseDto.dto").SubscriptionResponseDto[]>> {
+    throw new Error('Method not implemented.');
+  }
   @ApiProperty({ example: true, description: 'True if operation succeeded' })
   readonly success: boolean;
 

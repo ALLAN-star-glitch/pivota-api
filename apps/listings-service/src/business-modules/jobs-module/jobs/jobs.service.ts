@@ -13,7 +13,8 @@ import {
   UpdateJobPostRequestDto,
   CloseJobPostRequestDto,
   CloseJobPostResponseDto,
-  CreateJobPostGrpcDto
+  CreateJobPostGrpcDto,
+  JobPostCreateResponseDto
 } from '@pivota-api/dtos';
 import { firstValueFrom, Observable } from 'rxjs';
 import { BaseUserResponseGrpc,   } from '@pivota-api/interfaces';
@@ -53,105 +54,76 @@ export class JobsService {
   // ======================================================
   async createJobPost(
     dto: CreateJobPostGrpcDto,
-  ): Promise<BaseResponseDto<JobPostResponseDto>> {
+  ): Promise<BaseResponseDto<JobPostCreateResponseDto>> {
     try {
-      const category = await this.prisma.category.findUnique({
+      // 1. Minimum Validation: Check if category exists but don't fetch full details
+      const categoryCount = await this.prisma.category.count({
         where: { id: dto.categoryId },
       });
 
-      if (!category) {
-        const failure = {
+      if (categoryCount === 0) {
+        return {
           success: false,
           message: 'Invalid category ID',
           code: 'CATEGORY_NOT_FOUND',
-          jobPost: null,
+          data: null,
           error: { message: 'No category exists with this ID', details: null },
         };
-        return failure;
       }
 
+      // 2. Create record - NO 'include' used here to save DB resources
       const created = await this.prisma.jobPost.create({
         data: {
           title: dto.title,
-        description: dto.description,
-        categoryId: dto.categoryId,
-        subCategoryId: dto.subCategoryId ?? null,
-        
-        // Identity Pillars from Gateway
-        creatorId: dto.creatorId,
-        creatorName: dto.creatorName,
-        accountId: dto.accountId,
-        accountName: dto.accountName,
-        
-        jobType: dto.jobType,
-        locationCity: dto.locationCity,
-        locationNeighborhood: dto.locationNeighborhood ?? '',
-        isRemote: dto.isRemote ?? false,
-        payAmount: dto.payAmount ?? 0,
-        payRate: dto.payRate,
-        isNegotiable: dto.isNegotiable ?? false,
-        
-        skills: dto.skills ?? [],
-        experienceLevel: dto.experienceLevel ?? '',
-        employmentType: dto.employmentType ?? '',
-        requiresDocuments: dto.requiresDocuments ?? false,
-        documentsNeeded: dto.documentsNeeded ?? [],
-        requiresEquipment: dto.requiresEquipment ?? false,
-        equipmentRequired: dto.equipmentRequired ?? [],
-        additionalNotes: dto.additionalNotes ?? '',
-        status: dto.status ?? 'ACTIVE',
-        },
-        include: {
-          category: true,
-          subCategory: true,
-        },
+          description: dto.description,
+          categoryId: dto.categoryId,
+          subCategoryId: dto.subCategoryId ?? null,
+          creatorId: dto.creatorId,
+          accountId: dto.accountId,
+          jobType: dto.jobType,
+          locationCity: dto.locationCity,
+          locationNeighborhood: dto.locationNeighborhood ?? '',
+          isRemote: dto.isRemote ?? false,
+          payAmount: dto.payAmount ?? 0,
+          payRate: dto.payRate,
+          isNegotiable: dto.isNegotiable ?? false,
+          skills: dto.skills ?? [],
+          experienceLevel: dto.experienceLevel ?? '',
+          employmentType: dto.employmentType ?? '',
+          requiresDocuments: dto.requiresDocuments ?? false,
+          documentsNeeded: dto.documentsNeeded ?? [],
+          requiresEquipment: dto.requiresEquipment ?? false,
+          equipmentRequired: dto.equipmentRequired ?? [],
+          additionalNotes: dto.additionalNotes ?? '',
+          status: dto.status ?? 'ACTIVE',
+        }
       });
 
-    
-      const data: JobPostResponseDto = {
-      ...created,
-      createdAt: created.createdAt.toISOString(),
-      updatedAt: created.updatedAt.toISOString(),
-      
-      // Map relations safely
-      category: created.category
-        ? { id: created.category.id, name: created.category.name }
-        : null,
-      subCategory: created.subCategory
-        ? { id: created.subCategory.id, name: created.subCategory.name }
-        : undefined,
+      // 3. Ultra-Lean Response Mapping
+      const data: JobPostCreateResponseDto = {
+        id: created.id,
+        status: created.status,
+        createdAt: created.createdAt.toISOString(),
+      };
 
-      // Map Identity Pillars directly from the created record
-      creator: {
-        id: created.creatorId,
-        fullName: created.creatorName,
-      },
-      account: {
-        id: created.accountId,
-        name: created.accountName,
-      },
-      applicationsCount: 0,
-    };
 
-      const success =  {
+      return {
         success: true,
         message: 'Job post created successfully',
         code: 'CREATED',
         data,
         error: null,
       };
-      return success;
     } catch (error) {
       const err = error as Error;
       this.logger.error(`Create job post failed: ${err.message}`, err.stack);
-      const response =  {
+      return {
         success: false,
         message: 'Failed to create job post',
         code: 'JOB_CREATION_FAILED',
         data: null,
         error: { message: err.message, details: err.stack },
       };
-      return response;
     }
   }
   

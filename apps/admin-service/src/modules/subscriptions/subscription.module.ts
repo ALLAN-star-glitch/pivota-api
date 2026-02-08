@@ -4,6 +4,8 @@ import { SubscriptionController } from './controllers/subscription.controller';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { PrismaModule } from '../../prisma/prisma.module';
+import { PricingService } from './services/pricing.service';
+import { PricingController } from './controllers/pricing.controller';
 
 @Module({
   imports: [
@@ -48,9 +50,9 @@ import { PrismaModule } from '../../prisma/prisma.module';
 
           ]),
   ],
-  providers: [SubscriptionService],
-  controllers: [SubscriptionController],
-  exports: [SubscriptionService]
+  providers: [SubscriptionService, PricingService],
+  controllers: [SubscriptionController, PricingController],
+  exports: [SubscriptionService, PricingService]
 })
 export class SubscriptionModule {}
 
