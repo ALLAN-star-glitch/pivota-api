@@ -6,7 +6,7 @@ export class SendSmsDto {
   @Matches(/^\+\d{10,15}$/, {
     message: 'Phone number must be in E.164 format, e.g., +254700000000',
   })
-  to: string;
+  to: string; 
 
   @IsString()
   @IsNotEmpty()

@@ -1,15 +1,16 @@
 import { Controller, Post, Body, Logger, UsePipes, ValidationPipe } from '@nestjs/common';
 import { SmsService } from './sms.service';
-import { SendSmsDto } from './dto/send-sms.dto';
+import { SendSmsDto } from './send-sms.dto';
+
 
 @Controller('sms')
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class SmsController {
   private readonly logger = new Logger(SmsController.name);
+  
+  constructor(private readonly smsService: SmsService) {} 
 
-  constructor(private readonly smsService: SmsService) {}
-
-  @Post('send')
+  @Post('send') 
   async sendSms(@Body() sendSmsDto: SendSmsDto) {
     const { to, message } = sendSmsDto;
     this.logger.log(`Sending SMS to: ${to}`);
