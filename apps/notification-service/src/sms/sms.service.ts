@@ -14,6 +14,21 @@ export interface SmsResponse {
   data: unknown;
 }
 
+export interface BulkSmsItemResult {
+  to: string;
+  status: 'success' | 'error';
+  data?: unknown;
+  error?: string;
+}
+
+export interface BulkSmsResponse {
+  status: 'success' | 'partial_success' | 'error';
+  totalRecipients: number;
+  sentCount: number;
+  failedCount: number;
+  results: BulkSmsItemResult[];
+}
+
 @Injectable()
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
@@ -75,5 +90,62 @@ export class SmsService {
       this.logger.error(`❌ Failed to send SMS to ${to}: ${err.message}`);
       throw new Error(`SMS sending failed: ${err.message}`);
     }
+  }
+
+  async sendBulkSms(
+    recipients: string[],
+    message: string,
+    stopOnError = false,
+  ): Promise<BulkSmsResponse> {
+    if (!Array.isArray(recipients) || recipients.length === 0) {
+      throw new BadRequestException('At least one recipient is required');
+    }
+
+    const results: BulkSmsItemResult[] = [];
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const to of recipients) {
+      try {
+        const response = await this.sendSms(to, message);
+        results.push({
+          to,
+          status: 'success',
+          data: response.data,
+        });
+        sentCount += 1;
+      } catch (error: unknown) {
+        const err = error instanceof Error ? error : new Error('Unknown SMS error');
+        results.push({
+          to,
+          status: 'error',
+          error: err.message,
+        });
+        failedCount += 1;
+
+        if (stopOnError) {
+          break;
+        }
+      }
+    }
+
+    const status: BulkSmsResponse['status'] =
+      failedCount === 0 ? 'success' : sentCount === 0 ? 'error' : 'partial_success';
+
+    return {
+      status,
+      totalRecipients: recipients.length,
+      sentCount,
+      failedCount,
+      results,
+    };
+  }
+
+  getProviderHealth() {
+    return {
+      provider: 'africastalking',
+      configured: Boolean(this.username && this.apiKey),
+      username: this.username,
+    };
   }
 }

@@ -5,6 +5,9 @@ describe('EmailService', () => {
   let service: EmailService;
 
   beforeEach(async () => {
+    process.env.MAILJET_API_KEY = process.env.MAILJET_API_KEY || 'test-key';
+    process.env.MAILJET_API_SECRET = process.env.MAILJET_API_SECRET || 'test-secret';
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [EmailService],
     }).compile();

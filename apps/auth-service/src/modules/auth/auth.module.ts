@@ -6,6 +6,16 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { RBAC_PROTO_PATH, PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { PrismaModule } from '../../prisma/prisma.module';
 
+const notificationQueueName =
+  process.env.NOTIFICATION_EMAIL_QUEUE ||
+  process.env.RABBITMQ_NOTIFICATION_QUEUE ||
+  'notification_email_queue';
+
+const rabbitMqUrl =
+  process.env.RMQ_URL ||
+  process.env.RABBITMQ_URL ||
+  'amqp://localhost:5672';
+
 @Module({
   imports: [
     PrismaModule,
@@ -42,8 +52,8 @@ import { PrismaModule } from '../../prisma/prisma.module';
         name: 'NOTIFICATION_EVENT_BUS', 
         transport: Transport.RMQ,
         options: {
-          urls: [process.env.RMQ_URL || 'amqp://localhost:5672'],
-          queue: 'notification_email_queue', // Consumed by Notification Service
+          urls: [rabbitMqUrl],
+          queue: notificationQueueName, // Consumed by Notification Service
           queueOptions: { durable: true },
         },
       },
@@ -58,7 +68,8 @@ export class AuthModule {
     console.log(
       '🚀 AuthModule: gRPC Clients & Dual RMQ Event Buses initialized.',
       '| Profile GRPC:', process.env.PROFILE_GRPC_URL,
-      '| RMQ URL:', process.env.RMQ_URL
+      '| RMQ URL:', rabbitMqUrl,
+      '| Notification Queue:', notificationQueueName,
     );
   }
 }

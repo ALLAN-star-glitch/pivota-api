@@ -1,5 +1,6 @@
 import { Module, Global } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { SmsService } from './sms.service';
 import { SmsController } from './sms.controller';
 
@@ -11,6 +12,7 @@ export interface AfricastalkingSMS {
 @Global() // Makes SmsService injectable everywhere
 @Module({
   imports: [
+    NotificationsModule,
     ConfigModule.forRoot({
       isGlobal: true, // ConfigService available globally
       envFilePath: [

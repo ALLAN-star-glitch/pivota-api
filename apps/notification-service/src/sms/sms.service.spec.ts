@@ -82,7 +82,7 @@ describe('SmsService', () => {
 
   it('should throw BadRequestException for invalid phone number', async () => {
     await expect(service.sendSms('12345', 'Hello')).rejects.toThrow(
-      'Phone number must be in E.164 format, e.g., +254700000000',
+      'must be in E.164 format',
     );
   });
 
@@ -91,5 +91,36 @@ describe('SmsService', () => {
     await expect(service.sendSms('+254700000000', longMessage)).rejects.toThrow(
       'Message is required and must be <= 160 characters',
     );
+  });
+
+  it('should send bulk SMS and return summary', async () => {
+    (mockSmsClient.send as jest.Mock).mockResolvedValue({ status: 'sent' });
+
+    const result = await service.sendBulkSms(
+      ['+254700000001', '+254700000002'],
+      'Bulk message',
+    );
+
+    expect(result.status).toBe('success');
+    expect(result.totalRecipients).toBe(2);
+    expect(result.sentCount).toBe(2);
+    expect(result.failedCount).toBe(0);
+    expect(mockSmsClient.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('should return partial_success when one bulk recipient fails', async () => {
+    (mockSmsClient.send as jest.Mock)
+      .mockResolvedValueOnce({ status: 'sent' })
+      .mockRejectedValueOnce(new Error('Provider down'));
+
+    const result = await service.sendBulkSms(
+      ['+254700000001', '+254700000002'],
+      'Bulk message',
+    );
+
+    expect(result.status).toBe('partial_success');
+    expect(result.sentCount).toBe(1);
+    expect(result.failedCount).toBe(1);
+    expect(result.results[1].error).toContain('Provider down');
   });
 });

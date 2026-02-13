@@ -289,5 +289,30 @@ async generateDevTokenOnly(
   }
 }
 
+/** ------------------ Generate Service Token (for internal microservice calls) ------------------ */
+async generateServiceToken(): Promise<string> {
+  try {
+    // For internal service calls, you can use a fixed system user or dev token
+    // Example: system user for API Gateway
+    const grpcResponse = await firstValueFrom(
+      this.authGrpc.generateDevToken({
+        userUuid: 'system-user',
+        email: 'system@pivota.io',
+        role: 'system',
+      }),
+    );
+
+    if (!grpcResponse.success || !grpcResponse.tokens?.accessToken) {
+      this.logger.error('Failed to generate service JWT token for internal requests');
+      return '';
+    }
+
+    return grpcResponse.tokens.accessToken;
+  } catch (err) {
+    this.logger.error('Error generating service JWT token', err);
+    return '';
+  }
+}
+
 
 }

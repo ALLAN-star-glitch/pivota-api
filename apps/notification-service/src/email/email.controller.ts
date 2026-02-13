@@ -1,6 +1,8 @@
 import { Controller, Logger, UsePipes, ValidationPipe } from '@nestjs/common';
 import { EventPattern, Payload, Ctx, RmqContext } from '@nestjs/microservices';
 import { EmailService } from './email.service';
+import { NotificationActivityService } from '../notifications/notification-activity.service';
+import { NotificationsRealtimeService } from '../notifications/notifications-realtime.service';
 import { 
   OrganizationOnboardedEventDto,
   UserLoginEmailDto,
@@ -12,7 +14,11 @@ import {
 export class EmailController {
   private readonly logger = new Logger(EmailController.name);
 
-  constructor(private readonly emailService: EmailService) {}
+  constructor(
+    private readonly emailService: EmailService,
+    private readonly activityService: NotificationActivityService,
+    private readonly realtimeService: NotificationsRealtimeService,
+  ) {}
 
   @EventPattern('user.onboarded')
   async handleSignupEmail(@Payload() data: UserOnboardedEventDto, @Ctx() context: RmqContext) {
@@ -40,31 +46,60 @@ export class EmailController {
     await this.processEvent(context, () => this.emailService.sendLoginEmail(data), data.to);
   }
 
-  private async processEvent(context: RmqContext, action: () => Promise<void>, identifier: string) {
-  const channel = context.getChannelRef();
-  const originalMsg = context.getMessage();
-  const pattern = context.getPattern();
-  
-  this.logger.log(`[RMQ] Received event: ${pattern} for ${identifier}`);
-  
-  const startTime = Date.now();
-  try {
-    await action();
-    
-    //  SUCCESS: Tell RabbitMQ to delete the message
-    channel.ack(originalMsg);
-    
-    const duration = Date.now() - startTime;
-    this.logger.log(`[RMQ] Successfully processed ${pattern} for ${identifier} (${duration}ms)`);
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    this.logger.error(`[RMQ] Failed ${pattern} for ${identifier} after ${duration}ms: ${error.message}`);
-    
-    // ❌ FAILURE: Tell RabbitMQ to put the message back in the queue to try again
-    // The 'true' argument means "requeue"
-    channel.nack(originalMsg, false, true); 
-    
-    throw error; 
+  private async processEvent(
+    context: RmqContext,
+    action: () => Promise<void>,
+    identifier: string,
+  ) {
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+    const pattern = context.getPattern();
+
+    this.logger.log(`[RMQ] Received event: ${pattern} for ${identifier}`);
+
+    const startTime = Date.now();
+    try {
+      await action();
+
+      // SUCCESS: Tell RabbitMQ to delete the message
+      channel.ack(originalMsg);
+
+      const duration = Date.now() - startTime;
+      this.logger.log(
+        `[RMQ] Successfully processed ${pattern} for ${identifier} (${duration}ms)`,
+      );
+
+      const activity = this.activityService.record({
+        channel: 'email',
+        status: 'success',
+        source: `rmq.${String(pattern)}`,
+        recipient: identifier,
+        metadata: { durationMs: duration },
+      });
+      this.realtimeService.publishActivity(activity);
+    } catch (error: unknown) {
+      const duration = Date.now() - startTime;
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown email failure';
+      this.logger.error(
+        `[RMQ] Failed ${pattern} for ${identifier} after ${duration}ms: ${errorMessage}`,
+      );
+
+      const activity = this.activityService.record({
+        channel: 'email',
+        status: 'error',
+        source: `rmq.${String(pattern)}`,
+        recipient: identifier,
+        metadata: { durationMs: duration },
+        error: errorMessage,
+      });
+      this.realtimeService.publishActivity(activity);
+
+      // FAILURE: Tell RabbitMQ to put the message back in the queue to try again.
+      // The third argument set to true means "requeue".
+      channel.nack(originalMsg, false, true);
+
+      throw error;
+    }
   }
-}
 }
