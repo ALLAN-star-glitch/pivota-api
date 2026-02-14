@@ -82,6 +82,7 @@ message CreateOrgProfileRequest {
   string adminFirstName = 8;    
   string adminLastName = 9;  
   string organizationType = 10; 
+  string planSlug = 11; // Optional field to specify the subscription plan during organization creation 
 }
 
 message OrgProfileResponse {
@@ -141,6 +142,7 @@ message CreateUserProfileRequest {
   string lastName = 3;
   string email = 4;
   string phone = 5;
+  string planSlug = 6; // Optional, can be used for profile badges or default settings
 }
 
 message GetUserByUuidRequest { string userUuid = 1; }

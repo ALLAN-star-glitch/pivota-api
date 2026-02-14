@@ -26,27 +26,20 @@ import {
   CreateUserRequestDto,
   UserSignupRequestDto,
   UserLoginEmailDto,
-  UserOnboardedEventDto,
-  OrganizationOnboardedEventDto,
   UserProfileResponseDto,
   VerifyOtpDto,
   RequestOtpDto,
   SendOtpEventDto,
   ResetPasswordDto,
 } from '@pivota-api/dtos';
-import { firstValueFrom, Observable } from 'rxjs';
+import { firstValueFrom, lastValueFrom, Observable } from 'rxjs';
 import { BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
 import { randomUUID } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import * as dotenv from 'dotenv';
+import { HttpService } from '@nestjs/axios';
 
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
-
-interface GrpcError {
-  code: number | string;
-  message: string;
-  details?: unknown;
-}
 
 // ---------------- gRPC Interfaces ----------------
 interface ProfileServiceGrpc {
@@ -79,6 +72,7 @@ export class AuthService implements OnModuleInit {
   constructor(
   private readonly jwtService: JwtService,
   private readonly prisma: PrismaService,
+  private readonly httpService: HttpService,
   
   // gRPC Clients
   @Inject('PROFILE_GRPC') private readonly grpcClient: ClientGrpc,
@@ -110,7 +104,6 @@ export class AuthService implements OnModuleInit {
 
   
 
-  // ------------------ Validate User ------------------
  /** ------------------ Validate User ------------------ */
 async validateUser(email: string, password: string): Promise<UserProfileResponseDto | null> {
   const MAX_FAILED_ATTEMPTS = 5;
@@ -279,8 +272,7 @@ async signup(
   const profileGrpcService = this.getProfileGrpcService();
 
   try {
-    // 1. VERIFY OTP (Initial Check)
-    // We check existence and expiration before any gRPC overhead.
+    // 1. VERIFY OTP
     const validOtp = await this.prisma.otp.findFirst({
       where: {
         email: signupDto.email,
@@ -292,20 +284,17 @@ async signup(
 
     if (!validOtp) {
       this.logger.warn(`[AUTH] Blocked signup attempt: Invalid/Expired OTP for ${signupDto.email}`);
-      return {
-        success: false,
-        message: 'Invalid or expired verification code.',
-        code: 'UNAUTHORIZED',
-        data: null as unknown as UserSignupDataDto,
-        error: { code: 'INVALID_OTP', message: 'Verification failed' },
-      } as BaseResponseDto<UserSignupDataDto>;
+      return BaseResponseDto.fail(
+        'Invalid or expired verification code.', 
+        'UNAUTHORIZED', 
+        { code: 'INVALID_OTP' }
+      );
     }
 
-    // 2. Anchor Identity: Pre-generate the UUID
+    // 2. Anchor Identity
     const userUuid = randomUUID();
 
-    // 3. Call Profile Service (gRPC Outbound)
-    // This creates the Account, User, and Profile records in the Profile DB
+    // 3. Call Profile Service
     const profileResponse = await firstValueFrom(
       profileGrpcService.createUserProfile({
         userUuid: userUuid,
@@ -313,22 +302,23 @@ async signup(
         firstName: signupDto.firstName,
         lastName: signupDto.lastName,
         phone: signupDto.phone,
+        planSlug: signupDto.planSlug,
       }),
     );
 
+    // CAPTURE PROFILE SERVICE FAILURES PROPERLY
     if (!profileResponse.success || !profileResponse.data) {
-      this.logger.error(`[gRPC ERROR] Profile Service failed for ${signupDto.email}: ${profileResponse.message}`);
-      return {
-        success: false,
-        message: profileResponse.message || 'Identity creation failed',
-        code: profileResponse.code || 'INTERNAL',
-        error: profileResponse.error,
-        data: null as unknown as UserSignupDataDto,
-      } as BaseResponseDto<UserSignupDataDto>;
+      this.logger.error(`[PROFILE FAIL] ${signupDto.email}: ${profileResponse.message}`);
+      
+      // Forward the exact message and code from the profile service (e.g., "A user with this phone number already exists")
+      return BaseResponseDto.fail(
+        profileResponse.message, 
+        profileResponse.code, 
+        profileResponse.error
+      );
     }
 
     // 4. Save Credentials Locally
-    // Only happens if Step 3 succeeded.
     const hashedPassword = await bcrypt.hash(signupDto.password, 10);
     await this.prisma.credential.create({
       data: {
@@ -339,63 +329,95 @@ async signup(
       },
     });
 
-    // 5. CLEANUP: Delete the used OTP (The "Commit" Step)
-    // We only delete the OTP once we are certain the user records are permanent.
+    // 5. CLEANUP
     await this.prisma.otp.deleteMany({
       where: { email: signupDto.email, purpose: 'SIGNUP' },
     });
 
-    this.logger.log(`[AUTH] Registration complete and OTP burned for: ${signupDto.email}`);
+    /* ======================================================
+       6. PREMIUM BRANCH: PAYMENT HAND-OFF
+    ====================================================== */
+    if (profileResponse.code === 'PAYMENT_REQUIRED') {
+      try {
+        const paymentPayload = {
+          accountUuid: profileResponse.data.account.uuid,
+          userUuid: profileResponse.data.user.uuid,
+          email: signupDto.email,
+          firstName: signupDto.firstName,
+          lastName: signupDto.lastName,
+          phone: signupDto.phone, 
+          planSlug: signupDto.planSlug,
+          amount: 2500, 
+          currency: 'KES',
+          callbackUrl: 'https://app.pivota.com/onboarding/payment-status'
+        };
+
+        const paymentInitResponse = await lastValueFrom(
+          this.httpService.post(
+            `${process.env.PAYMENT_SERVICE_URL}/api/v1/payments/initiate`,
+            paymentPayload,
+            { headers: { 'x-internal-api-key': process.env.INTERNAL_API_KEY } }
+          )
+        );
+
+        return BaseResponseDto.ok(
+          {
+            account: profileResponse.data.account,
+            user: profileResponse.data.user,
+            redirectUrl: paymentInitResponse.data.redirectUrl,
+            merchantReference: paymentInitResponse.data.merchantReference,
+          } as UserSignupDataDto,
+          'Payment required to activate account',
+          'PAYMENT_REQUIRED'
+        );
+
+      } catch (paymentErr: unknown) {
+        const message = paymentErr instanceof Error ? paymentErr.message : 'Payment service unreachable';
+        this.logger.error(`[PAYMENT BRIDGE DOWN] ${signupDto.email}: ${message}`);
+
+        return BaseResponseDto.ok(
+          {
+            account: profileResponse.data.account,
+            user: profileResponse.data.user,
+            profile: profileResponse.data.profile,
+            completion: profileResponse.data.completion,
+            redirectUrl: null,
+          } as UserSignupDataDto,
+          'Account created. Our payment system is busy. Please login to subscribe.',
+          'PAYMENT_SERVICE_OFFLINE'
+        );
+      }
+    }
 
     /* ======================================================
-       6. ASYNC EVENT EMISSION
+       7. FREEMIUM BRANCH: NOTIFICATION
     ====================================================== */
-    const onboardedPayload: UserOnboardedEventDto = {
+    this.notificationBus.emit('user.onboarded', {
       accountId: profileResponse.data.account.accountCode,
       firstName: signupDto.firstName,
       email: signupDto.email,
       plan: 'Free Forever',
-    };
+    });
 
-    this.notificationBus.emit('user.onboarded', onboardedPayload);
-
-    /* ======================================================
-       7. CONSTRUCT SUCCESS RESPONSE
-    ====================================================== */
-    return {
-      success: true,
-      message: 'Signup successful',
-      code: 'CREATED',
-      data: {
+    return BaseResponseDto.ok(
+      {
         account: profileResponse.data.account,
         user: profileResponse.data.user,
         profile: profileResponse.data.profile,
         completion: profileResponse.data.completion,
-      },
-      error: null,
-    } as BaseResponseDto<UserSignupDataDto>;
+      } as UserSignupDataDto,
+      'Signup successful',
+      'CREATED'
+    );
 
   } catch (err: unknown) {
-    this.logger.error('Individual Signup Method Failure', err);
+    const errorMessage = err instanceof Error ? err.message : 'Unexpected failure';
+    this.logger.error(`[AUTH SIGNUP CRASH] ${errorMessage}`);
 
-    if (err instanceof RpcException) {
-      const rpcErr = err.getError() as unknown as GrpcError;
-      return {
-        success: false,
-        message: 'Identity service is currently unreachable.',
-        code: 'SERVICE_UNAVAILABLE',
-        error: { code: String(rpcErr.code), message: rpcErr.message },
-        data: null as unknown as UserSignupDataDto,
-      } as BaseResponseDto<UserSignupDataDto>;
-    }
-
-    return {
-      success: false,
-      message: 'An unexpected error occurred during signup.',
-      code: 'INTERNAL',
-      error: { code: 'INTERNAL', message: err instanceof Error ? err.message : 'Unknown error' },
-      data: null as unknown as UserSignupDataDto,
-    } as BaseResponseDto<UserSignupDataDto>;
+    return BaseResponseDto.fail(
+      errorMessage,
+      'INTERNAL_ERROR'
+    );
   }
 }
 
@@ -405,14 +427,12 @@ async signup(
    ORGANISATION SIGNUP (Updated with OTP Guard)
 ====================================================== */
 async organisationSignup(
-  // We extend the DTO to include the 6-digit verification code
   dto: OrganisationSignupRequestDto,
 ): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
-  this.logger.log(`Starting Org Signup for: ${dto.name}`);
+  this.logger.log(`Starting Org Signup for: ${dto.name} [Plan: ${dto.planSlug || 'free'}]`);
 
   try {
-    // 1. VERIFY OTP (The Gatekeeper)
-    // Ensure the admin's email is verified before touching gRPC or DBs
+    // 1. VERIFY OTP
     const validOtp = await this.prisma.otp.findFirst({
       where: {
         email: dto.email,
@@ -424,12 +444,11 @@ async organisationSignup(
 
     if (!validOtp) {
       this.logger.warn(`[AUTH] Org Signup blocked: Invalid OTP for ${dto.email}`);
-      return {
-        success: false,
-        message: 'Invalid or expired verification code.',
-        code: 'UNAUTHORIZED',
-        error: { code: 'INVALID_OTP', message: 'Verification failed' }
-      } as BaseResponseDto<OrganizationSignupDataDto>;
+      return BaseResponseDto.fail(
+        'Invalid or expired verification code.', 
+        'UNAUTHORIZED', 
+        { code: 'INVALID_OTP' }
+      );
     }
 
     const adminUserUuid = randomUUID();
@@ -446,6 +465,7 @@ async organisationSignup(
       adminFirstName: dto.adminFirstName,
       adminLastName: dto.adminLastName,
       organizationType: dto.organizationType || 'PRIVATE_LIMITED',
+      planSlug: dto.planSlug || 'free-plan',
     };
 
     const profileGrpcService = this.getProfileGrpcService();
@@ -453,13 +473,13 @@ async organisationSignup(
       profileGrpcService.createOrganizationProfile(createOrgProfileReq),
     );
 
+    // Properly capture Profile Service failures (duplicates, etc.)
     if (!orgResponse.success || !orgResponse.data) {
-      return {
-        success: false,
-        code: orgResponse.code || 'INTERNAL',
-        message: orgResponse.message || 'Organisation profile creation failed',
-        error: orgResponse.error,
-      } as BaseResponseDto<OrganizationSignupDataDto>;
+      return BaseResponseDto.fail(
+        orgResponse.message || 'Organisation profile creation failed',
+        orgResponse.code || 'INTERNAL_ERROR',
+        orgResponse.error
+      );
     }
 
     // 3. Save Admin Credentials Locally
@@ -473,35 +493,79 @@ async organisationSignup(
       },
     });
 
-    // 4. CLEANUP: Delete the used OTP
-    // Only delete once the Profile Service and Credentials creation are successful
+    // 4. CLEANUP
     await this.prisma.otp.deleteMany({
       where: { email: dto.email, purpose: 'SIGNUP' }
     });
 
-    this.logger.log(`Org credentials anchored and OTP cleared for: ${dto.email}`);
+    /* ======================================================
+       5. PREMIUM BRANCH: PAYMENT HAND-OFF
+    ====================================================== */
+    if (orgResponse.code === 'PAYMENT_REQUIRED') {
+      try {
+        const paymentPayload = {
+          accountUuid: orgResponse.data.account.uuid,
+          userUuid: orgResponse.data.admin.uuid,
+          email: dto.email,
+          firstName: dto.adminFirstName,
+          lastName: dto.adminLastName,
+          planSlug: dto.planSlug,
+          amount: 5000, 
+          currency: 'KES',
+          callbackUrl: 'https://app.pivota.com/onboarding/payment-status'
+        };
+
+        const paymentInitResponse = await lastValueFrom(
+          this.httpService.post(
+            `${process.env.PAYMENT_SERVICE_URL}/api/v1/payments/initiate`,
+            paymentPayload,
+            { headers: { 'x-internal-api-key': process.env.INTERNAL_API_KEY } }
+          )
+        );
+
+        return BaseResponseDto.ok(
+          {
+            orgCode: orgResponse.data.orgCode,
+            admin: orgResponse.data.admin,
+            account: orgResponse.data.account,
+            redirectUrl: paymentInitResponse.data.redirectUrl,
+            merchantReference: paymentInitResponse.data.merchantReference,
+          } as unknown as OrganizationSignupDataDto,
+          'Payment required to activate organization account',
+          'PAYMENT_REQUIRED'
+        );
+
+      } catch (paymentErr: unknown) {
+        const message = paymentErr instanceof Error ? paymentErr.message : 'Payment service unreachable';
+        this.logger.error(`[PAYMENT BRIDGE DOWN] Org ${dto.name}: ${message}`);
+
+        return BaseResponseDto.ok(
+          {
+            orgCode: orgResponse.data.orgCode,
+            admin: orgResponse.data.admin,
+            account: orgResponse.data.account,
+            redirectUrl: null,
+          } as unknown as OrganizationSignupDataDto,
+          'Organization registered. Our payment system is busy. Please login to complete subscription.',
+          'PAYMENT_SERVICE_OFFLINE'
+        );
+      }
+    }
 
     /* ======================================================
-       5. ASYNC EVENT EMISSION (Organization Onboarded)
+       6. FREEMIUM BRANCH: ASYNC EVENT EMISSION
     ====================================================== */
-    const orgOnboardedPayload: OrganizationOnboardedEventDto = {
+    this.notificationBus.emit('organization.onboarded', {
       accountId: orgResponse.data.account.accountCode,
       name: dto.name,
       adminFirstName: orgResponse.data.admin.firstName,
       adminEmail: dto.email,
       orgEmail: dto.officialEmail,
       plan: 'Free Forever',
-    };
+    });
 
-    this.notificationBus.emit('organization.onboarded', orgOnboardedPayload);
-    this.logger.log(`✅ Organization onboarding events dispatched for: ${dto.name}`);
-
-    // 6. Return the full data shape
-    return {
-      success: true,
-      code: 'CREATED',
-      message: 'Organization and Admin User created successfully',
-      data: {
+    return BaseResponseDto.ok(
+      {
         organization: {
           id: String(orgResponse.data.id),
           uuid: orgResponse.data.uuid,
@@ -523,21 +587,16 @@ async organisationSignup(
           type: orgResponse.data.account.type,
           accountCode: orgResponse.data.account.accountCode,
         }
-      },
-      error: null
-    } as BaseResponseDto<OrganizationSignupDataDto>;
+      } as OrganizationSignupDataDto,
+      'Organization and Admin User created successfully',
+      'CREATED'
+    );
 
-  } catch (err: any) {
-    this.logger.error('Organisation Signup Error', err);
-    return {
-      success: false,
-      message: err.message || 'Internal Auth Error during Org Signup',
-      code: 'INTERNAL',
-      error: { 
-        code: err.constructor.name === 'RpcException' ? 'GRPC_ERROR' : 'INTERNAL', 
-        message: err.message 
-      },
-    } as BaseResponseDto<OrganizationSignupDataDto>;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unexpected Auth failure';
+    this.logger.error(`[ORG SIGNUP CRASH] ${message}`);
+
+    return BaseResponseDto.fail(message, 'INTERNAL_ERROR');
   }
 }
 
@@ -817,7 +876,8 @@ async signInWithGoogle(
             email,
             firstName: given_name || 'User',
             lastName: family_name || '',
-            phone: null, // Best practice: send null, not empty string ""
+            phone: null,
+            planSlug: "free-forever"
           }),
         );
 
@@ -1003,10 +1063,9 @@ async requestOtp(data: RequestOtpDto): Promise<BaseResponseDto<null>> {
     // 1. Check if user already exists
     const existingUser = await this.prisma.credential.findUnique({
       where: { email },
-      select: { id: true }, // Lightweight check
+      select: { id: true }, 
     });
 
-    // 2. Business Logic based on Purpose
     // 2. Business Logic based on Purpose
     switch (purpose) {
       case 'SIGNUP':
@@ -1014,47 +1073,66 @@ async requestOtp(data: RequestOtpDto): Promise<BaseResponseDto<null>> {
           return BaseResponseDto.fail('This email is already registered.', 'CONFLICT');
         }
         break;
-
       case 'PASSWORD_RESET':
         if (!existingUser) {
           this.logger.log(`[OTP] Password reset requested for non-existent: ${email}`);
           return BaseResponseDto.ok(null, 'If an account exists, a code has been sent.');
         }
         break;
-
       case '2FA':
-        if (!existingUser) {
-          return BaseResponseDto.fail('Account not found.', 'NOT_FOUND');
-        }
+        if (!existingUser) return BaseResponseDto.fail('Account not found.', 'NOT_FOUND');
         break;
-
       case 'CHANGE_EMAIL':
-        if (existingUser) {
-          return BaseResponseDto.fail('This email is already in use.', 'CONFLICT');
-        }
+        if (existingUser) return BaseResponseDto.fail('This email is already in use.', 'CONFLICT');
         break;
-
       case 'CHANGE_PHONE':
-        // Note: For phone changes, the 'email' in the DTO is still the user's primary ID
-        // so we can find them, but the OTP is being sent to a phone (usually via SMS).
-        if (!existingUser) {
-          return BaseResponseDto.fail('User account not found.', 'NOT_FOUND');
-        }
+        if (!existingUser) return BaseResponseDto.fail('User account not found.', 'NOT_FOUND');
         break;
-
       default:
         return BaseResponseDto.fail('Invalid request purpose.', 'BAD_REQUEST');
     }
+
+    /* ---------- UPDATED: ALLOW 3 ATTEMPTS PER MINUTE ---------- */
+    const oneMinuteAgo = new Date(Date.now() - 60000);
+
+    // Count how many OTPs were sent to this email for this purpose in the last 60 seconds
+    const otpCount = await this.prisma.otp.count({
+      where: { 
+        email, 
+        purpose,
+        createdAt: { gte: oneMinuteAgo } 
+      },
+    });
+
+    // If we have 3 records created in the last 60s, block the 4th attempt
+    if (otpCount >= 3) {
+  
+      this.logger.warn(`[OTP] Rate limited: ${email} reached 3 attempts limit.`);
+      
+      return BaseResponseDto.fail(
+        'Maximum verification attempts reached. Please try again later.',
+        'TOO_MANY_REQUESTS'
+      );
+    }
+    
+    /* --------------------------------------------------------- */
    
- 
     // 3. Generate 6-digit code
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const EXPIRES_IN_MINUTES = 10;
     const expiresAt = new Date(Date.now() + EXPIRES_IN_MINUTES * 60000);
 
     // 4. Save to DB 
-    // Optimization: Delete old OTPs for this email/purpose first to prevent clutter
-    await this.prisma.otp.deleteMany({ where: { email, purpose } });
+    // CRITICAL: We only delete OTPs older than 10 minutes (expired).
+    // Deleting all records here would reset our 'otpCount' to 0 every time.
+    const expiryThreshold = new Date(Date.now() - 10 * 60000);
+    await this.prisma.otp.deleteMany({ 
+      where: { 
+        email, 
+        purpose,
+        createdAt: { lt: expiryThreshold }
+      } 
+    });
 
     await this.prisma.otp.create({
       data: {
@@ -1069,28 +1147,21 @@ async requestOtp(data: RequestOtpDto): Promise<BaseResponseDto<null>> {
     this.logger.log(`[RMQ Outbound] Emitting otp.requested for ${email} (${purpose})`);
 
     const otpPayload: SendOtpEventDto = {
-      email: email,
+      email,
       code: otpCode,
-      purpose: purpose,
+      purpose,
     };
     this.notificationBus.emit('otp.requested', otpPayload);
 
-    return {
-      success: true,
-      message: 'Verification code sent to your email',
-      code: 'OK',
-      data: null,
-    } as BaseResponseDto<null>;
-  } catch (error) {
-    this.logger.error(`Failed to generate OTP for ${email}`, error);
-    return {
-      success: false,
-      message: 'An error occurred while processing your request',
-      code: 'INTERNAL_ERROR',
-      data: null,
-    } as BaseResponseDto<null>;
+    return BaseResponseDto.ok(null, 'Verification code sent to your email');
+
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    this.logger.error(`Failed to generate OTP for ${email}`, message);
+    return BaseResponseDto.fail('An error occurred while processing your request', 'INTERNAL_ERROR');
   }
 }
+
 
 
 /** ------------------ Verify OTP ------------------ */

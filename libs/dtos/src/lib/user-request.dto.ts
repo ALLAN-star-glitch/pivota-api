@@ -19,18 +19,24 @@ import {
 ====================================================== */
 
 export class UserSignupRequestDto {
-  @ApiProperty({ description: 'User first name', example: 'Jane' })
+  @ApiProperty({ 
+    description: 'Legal first name of the user', 
+    example: 'Jane' 
+  })
   @IsString()
   @IsNotEmpty()
   firstName!: string;
 
-  @ApiProperty({ description: 'User last name', example: 'Doe' })
+  @ApiProperty({ 
+    description: 'Legal last name of the user', 
+    example: 'Doe' 
+  })
   @IsString()
   @IsNotEmpty()
   lastName!: string;
 
   @ApiProperty({
-    description: 'Login email and primary contact for the user',
+    description: 'Unique login email address',
     example: 'jane.doe@pivota.com',
   })
   @IsEmail()
@@ -38,7 +44,7 @@ export class UserSignupRequestDto {
   email!: string;
 
   @ApiProperty({
-    description: 'International phone number (e.g., +254...)',
+    description: 'International format phone number',
     example: '+254700111222',
   })
   @IsNotEmpty()
@@ -46,14 +52,31 @@ export class UserSignupRequestDto {
   phone!: string;
 
   @ApiProperty({
-    description: 'Secure password for the individual account',
+    description: 'Secure password (minimum 8 characters)',
     example: 'StrongPass@2026',
+    minLength: 8,
   })
   @IsString()
   @IsNotEmpty()
   @MinLength(8)
   password!: string;
 
+  @ApiPropertyOptional({
+    description: 'Target subscription tier. Defaults to free-forever if not provided.',
+    example: 'business-pro',
+    enum: ['free-forever', 'business-pro', 'contractor-premium'],
+    default: 'free-forever'
+  })
+  @IsString()
+  @IsOptional()
+  planSlug?: string;
+
+  @ApiProperty({
+    description: '6-digit OTP received via email/SMS',
+    example: '123456',
+    minLength: 6,
+    maxLength: 6
+  })
   @IsString()
   @Length(6, 6, { message: 'Verification code must be exactly 6 digits' })
   @IsNotEmpty()
@@ -94,6 +117,10 @@ export class CreateUserRequestDto {
   @IsPhoneNumber(undefined)
   @IsNotEmpty()
   phone!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  planSlug!: string; // Mandatory here
 }
 
 /* ======================================================

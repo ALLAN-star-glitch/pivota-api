@@ -87,7 +87,8 @@ message SignupRequest {
   string email = 3;
   string password = 4;
   string phone = 5;
-  string code = 6; 
+  string planSlug = 6;
+  string code = 7; 
 }
 
 message OrganisationSignupRequest {
@@ -108,6 +109,7 @@ message OrganisationSignupRequest {
   
   // --- VERIFICATION ---
   string code = 11;               // 6-digit OTP code
+  string planSlug = 12;           // Subscription plan for the organization
 }
 
 // ------------------ Auth / Login Flow ------------------

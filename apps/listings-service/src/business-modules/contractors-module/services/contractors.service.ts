@@ -21,8 +21,8 @@ interface ServiceOfferingWithReviews {
   externalId: string;
   creatorId: string;    
   accountId: string;    
-  creatorName: string | null;
-  accountName: string;
+  creatorName: string | null; // Keep as null if the DB column still exists
+  accountName: string | null; // Changed to nullable
   contractorType: string;
   isVerified: boolean;
   title: string;
@@ -50,9 +50,6 @@ export class ContractorsService {
     private readonly pricingService: ContractorsPricingService,
   ) {}
 
-  /**
-   * Safe parsing for stored JSON availability
-   */
   private parseAvailability(availabilityStr: string | null): DayAvailabilityDto[] | undefined {
     if (!availabilityStr) return undefined;
     try {
@@ -64,7 +61,7 @@ export class ContractorsService {
   }
 
   /**
-   * Maps Prisma result to the Nested Identity Pillar Response DTO
+   * Maps Prisma result to Response DTO
    */
   private mapToResponseDto(item: ServiceOfferingWithReviews): ServiceOfferingResponseDto {
     const reviews = item.reviews || [];
@@ -75,14 +72,14 @@ export class ContractorsService {
       id: item.id,
       externalId: item.externalId,
       
-      // Identity Pillar: Mapping flat DB fields to nested DTO objects
+      // Mapped without requiring Names from the DB record
       creator: {
         id: item.creatorId,
         fullName: item.creatorName ?? undefined,
       },
       account: {
         id: item.accountId,
-        name: item.accountName,
+        name: item.accountName ?? 'Private Account', // Fallback for missing names
       },
       contractorType: item.contractorType,
       isVerified: item.isVerified,
@@ -108,23 +105,23 @@ export class ContractorsService {
   }
 
   /**
-   * Persists a new service offering with Identity Anchors
+   * Persists a new service offering
    */
   async createServiceOffering(
     dto: CreateServiceGrpcOfferingDto,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
     try {
-      // 1. Dynamic Validation (Pricing, Experience, etc.)
       await this.pricingService.validateOfferingPricing(dto);
 
-      // 2. Persist to Database
+      // Persist to Database - Ignoring Name fields as they are removed from Gateway
       const created = await this.prisma.serviceOffering.create({
         data: {
-          creatorId: dto.creatorId,
-          accountId: dto.accountId,
-          creatorName: dto.creatorName ?? null,
-          accountName: dto.accountName,
-  
+          creatorId: dto.creatorId, // Handled by Gateway fallback logic
+          accountId: dto.accountId, // Handled by Gateway fallback logic
+          
+          // These are now ignored or set to null
+          creatorName: null,
+          accountName: 'Professional Provider', // Default placeholder if column is NOT NULL
           
           title: dto.title,
           description: dto.description,
@@ -138,7 +135,6 @@ export class ContractorsService {
           locationCity: dto.locationCity,
           locationNeighborhood: dto.locationNeighborhood ?? null,
           availability: dto.availability ? JSON.stringify(dto.availability) : null,
-      
         },
         include: {
           reviews: { select: { rating: true } },

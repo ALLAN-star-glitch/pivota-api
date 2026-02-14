@@ -17,7 +17,9 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
-
+/* -------------------------------
+   JOB APPLICATION ATTACHMENTS
+--------------------------------- */
 export class JobApplicationAttachmentDto {
   @ApiProperty({
     description: 'The category of the attachment. Use COVER_LETTER for written pitches.',
@@ -61,6 +63,9 @@ export class JobApplicationAttachmentDto {
   isPrimary?: boolean;
 }
 
+/* -------------------------------
+   CREATE JOB POST DTO (USER)
+--------------------------------- */
 export class CreateJobPostDto {
   @ApiProperty({ description: 'Title of the job post', example: 'Frontend Developer Needed' })
   @IsString()
@@ -99,7 +104,6 @@ export class CreateJobPostDto {
   isRemote?: boolean = false;
 
   /* --- Financial Logic --- */
-
   @ApiPropertyOptional({ description: 'Payment amount for the job', example: 5000 })
   @IsOptional()
   @IsNumber()
@@ -119,8 +123,6 @@ export class CreateJobPostDto {
   @IsOptional()
   @IsBoolean()
   isNegotiable?: boolean = false;
-
-  /* ------------------------ */
 
   @ApiPropertyOptional({ example: false })
   @IsOptional()
@@ -172,25 +174,34 @@ export class CreateJobPostDto {
   status?: string = 'ACTIVE';
 }
 
-export class CreateJobPostGrpcDto extends CreateJobPostDto {
-
-  @ApiPropertyOptional({ 
-    description: 'The unique UUID of the root account (Individual or Org)', 
-    example: 'acc-789-uvw' 
-  })  
-  @IsOptional()
-  @IsString()
-  accountId?: string;
-
-  @ApiPropertyOptional({ 
-    description: 'The unique UUID of the specific human user who is performing the action', 
-    example: 'user-123-xyz' 
-  })  
+/* -------------------------------
+   ADMIN CREATE JOB POST DTO
+--------------------------------- */
+export class AdminCreateJobPostDto extends CreateJobPostDto {
+@ApiProperty({ 
+    description: 'The UUID of the user posting the job. Leave empty for organization-level posts.', 
+    example: '8400a033-eb84-4bd6-b87f-f5e11cba1cd3',
+    required: false // Highlights in Swagger that this is optional
+  })
   @IsOptional()
   @IsString()
   creatorId?: string;
+
 }
 
+export class CreateJobGrpcRequestDto extends CreateJobPostDto {
+  @ApiProperty({ description: 'The UUID of the user creating the job post', example: 'user-123-xyz' })
+  @IsString()
+  creatorId!: string;
+
+  @ApiProperty({ description: 'The account UUID that will own the job post', example: 'acc-789-uvw' })
+  @IsString()
+  accountId!: string;
+}
+
+/* -------------------------------
+   VALIDATE MULTIPLE JOB IDS
+--------------------------------- */
 export class ValidateJobPostIdsRequestDto {
   @IsArray()
   @ArrayNotEmpty()
@@ -202,28 +213,31 @@ export class ValidateJobPostIdsRequestDto {
   ids!: string[];
 }
 
+/* -------------------------------
 
+   BASE CLOSE JOB POST DTO
+--------------------------------- */
 export class CloseJobPostRequestDto {
-  @ApiProperty({ 
-    description: 'The unique CUID/ID of the job post to be closed', 
-    example: 'clv1234567890' 
+  @ApiProperty({
+    description: 'The unique CUID/ID of the job post to be closed',
+    example: 'clv1234567890',
   })
   @IsString()
   @IsNotEmpty()
   id!: string;
 
-  @ApiProperty({ 
-    description: 'The UUID of the employer/creator authorized to close this post', 
-    example: 'user-uuid-999' 
+  @ApiProperty({
+    description: 'UUID of the employer/creator authorized to close this post',
+    example: 'user-uuid-999',
   })
   @IsString()
   @IsNotEmpty()
   creatorId!: string;
 
-  @ApiPropertyOptional({ 
-    description: 'Optional reason for closing the job post', 
+  @ApiPropertyOptional({
+    description: 'Optional reason for closing the job post (max 255 characters)',
     example: 'Position filled internally',
-    maxLength: 255 
+    maxLength: 255,
   })
   @IsOptional()
   @IsString()
@@ -231,40 +245,75 @@ export class CloseJobPostRequestDto {
   reason?: string;
 }
 
-
-export class CreateJobApplicationDto {
+/* -------------------------------
+   CLOSE OWN JOB POST DTO
+--------------------------------- */
+export class CloseOwnJobPostRequestDto extends PartialType(CloseJobPostRequestDto) {
   @ApiProperty({
-    description: 'Confirmation that the worker possesses the tools required by the job post.',
-    example: true
+    description: 'The unique CUID/ID of the job post to be closed (user can only close their own jobs)',
+    example: 'clv1234567890',
   })
+  @IsString()
+  @IsNotEmpty()
+  override id!: string;
+
+  // Note: creatorId is automatically assigned from the authenticated user context
+}
+
+/* -------------------------------
+   CLOSE JOB POST FOR ADMIN DTO
+--------------------------------- */
+export class CloseAdminJobPostRequestDto extends PartialType(CloseJobPostRequestDto) {
+  @ApiProperty({
+    description: 'The unique CUID/ID of the job post to be closed',
+    example: 'clv1234567890',
+  })
+  @IsString()
+  @IsNotEmpty()
+  override id!: string;
+
+  @ApiProperty({
+    description: 'UUID of the user who originally created the job post',
+    example: 'user-123-xyz',
+  })
+  @IsString()
+  @IsNotEmpty()
+  override creatorId!: string;
+
+  @ApiProperty({
+    description: 'UUID of the account that owns the job post',
+    example: 'acc-789-uvw',
+  })
+  @IsString()
+  @IsNotEmpty()
+  accountId!: string;
+}
+
+
+/* -------------------------------
+   CREATE JOB APPLICATION
+--------------------------------- */
+export class CreateJobApplicationDto {
+  @ApiProperty({ description: 'Confirmation that the worker possesses the tools required by the job post.', example: true })
   @IsBoolean()  
   hasRequiredEquipment!: boolean;
 
-  @ApiPropertyOptional({ 
-    description: 'The salary or daily rate the applicant is asking for',
-    example: 2500.00
-  })
+  @ApiPropertyOptional({ description: 'The salary or daily rate the applicant is asking for', example: 2500.00 })
   @IsOptional()
   @IsNumber()
   expectedPay?: number;
 
-  @ApiPropertyOptional({ 
-    description: 'ISO 8601 date for when the applicant can start',
-    example: '2025-01-15T09:00:00Z' 
-  })
+  @ApiPropertyOptional({ description: 'ISO 8601 date for when the applicant can start', example: '2025-01-15T09:00:00Z' })
   @IsOptional()
   @IsDateString()
   availabilityDate?: string;
 
-  @ApiPropertyOptional({ 
-    description: 'Notes on availability (e.g., night shifts only)',
-    example: 'Available immediately.' 
-  })
+  @ApiPropertyOptional({ description: 'Notes on availability (e.g., night shifts only)', example: 'Available immediately.' })
   @IsOptional()
   @IsString()
   availabilityNotes?: string;
 
-  // --- Referral Details ---
+  // Referral Details
   @ApiPropertyOptional({ example: 'Jane Kamau' })
   @IsOptional()
   @IsString()
@@ -285,11 +334,8 @@ export class CreateJobApplicationDto {
   @IsString()
   referrerRelationship?: string;
 
-  // --- Attachments ---
-  @ApiPropertyOptional({ 
-    type: [JobApplicationAttachmentDto],
-    description: 'CV, Pitch, and supporting documents.' 
-  })
+  // Attachments
+  @ApiPropertyOptional({ type: [JobApplicationAttachmentDto], description: 'CV, Pitch, and supporting documents.' })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -297,11 +343,32 @@ export class CreateJobApplicationDto {
   attachments?: JobApplicationAttachmentDto[];
 }
 
+/* -------------------------------
+   UPDATE JOB POST FOR OWN USER
+--------------------------------- */
+export class UpdateOwnJobPostRequestDto extends PartialType(CreateJobPostDto) {
+  @ApiProperty({ description: 'The internal DB ID of the job post to update', example: 'cl3k1n4fj0000xyz123abc' })
+  @IsString()
+  @IsNotEmpty()
+  id!: string;
 
-export class UpdateJobPostRequestDto extends PartialType(CreateJobPostGrpcDto) {
-    @ApiPropertyOptional({ 
-      description: 'The internal DB ID of the job post', 
-      example: 'cl3k1n4fj0000xyz123abc' 
-    })
-    id?: string;
+  // Optional override fields — users cannot set creatorId or accountId
+}
+
+/* -------------------------------
+   UPDATE JOB POST FOR ADMIN
+--------------------------------- */
+export class UpdateAdminJobPostRequestDto extends PartialType(CreateJobPostDto) {
+  @ApiProperty({ description: 'The internal DB ID of the job post to update', example: 'cl3k1n4fj0000xyz123abc' })
+  @IsString()
+  @IsNotEmpty()
+  id!: string;
+
+  @ApiProperty({ description: 'UUID of the user the admin is updating the job for', example: 'user-123-xyz' })
+  @IsString()
+  creatorId!: string;
+
+  @ApiProperty({ description: 'UUID of the account that owns the job', example: 'acc-789-uvw' })
+  @IsString()
+  accountId!: string;
 }

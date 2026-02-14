@@ -32,11 +32,13 @@ export class OrganisationSignupRequestDto {
   @ApiProperty({
     description: 'The registered legal name of the business or organization',
     example: 'Pivota Tech Solutions',
+    minLength: 3,
   })
   @IsString()
   @IsNotEmpty()
   @MinLength(3)
   name!: string;
+  
 
   @ApiProperty({
     description: 'General contact email for the business entity',
@@ -52,7 +54,7 @@ export class OrganisationSignupRequestDto {
   })
   @IsNotEmpty()
   @IsPhoneNumber(undefined, { message: 'Invalid official company phone number' })
-  officialPhone!: string; // 👈 Added for business profile
+  officialPhone!: string;
 
   @ApiProperty({
     description: 'Physical location or headquarters of the organization',
@@ -64,7 +66,7 @@ export class OrganisationSignupRequestDto {
 
   // --- ADMIN ACCOUNT DETAILS ---
   @ApiProperty({
-    description: 'Login email for the organization admin',
+    description: 'Login email for the organization admin. This will be the primary identity.',
     example: 'admin@pivotatech.co.ke',
   })
   @IsEmail()
@@ -72,8 +74,9 @@ export class OrganisationSignupRequestDto {
   email!: string;
 
   @ApiProperty({
-    description: 'Password for the organization admin account',
+    description: 'Secure password for the admin account',
     example: 'StrongPass@123',
+    minLength: 8,
   })
   @IsString()
   @IsNotEmpty()
@@ -81,7 +84,7 @@ export class OrganisationSignupRequestDto {
   password!: string;
 
   @ApiProperty({
-    description: 'International phone number for the admin. Must include country code.',
+    description: 'International phone number for the admin.',
     example: '+254711222333',
   })
   @IsNotEmpty()
@@ -90,16 +93,22 @@ export class OrganisationSignupRequestDto {
   })
   phone!: string;
 
-  @ApiProperty({ description: 'Admin first name', example: 'John' })
+  @ApiProperty({ description: 'Admin legal first name', example: 'John' })
   @IsString()
   @IsNotEmpty()
   adminFirstName!: string;
 
-  @ApiProperty({ description: 'Admin last name', example: 'Doe' })
+  @ApiProperty({ description: 'Admin legal last name', example: 'Doe' })
   @IsString()
   @IsNotEmpty()
   adminLastName!: string;
 
+  @ApiProperty({
+    description: '6-digit OTP verification code sent to the admin email',
+    example: '123456',
+    minLength: 6,
+    maxLength: 6
+  })
   @IsString()
   @Length(6, 6, { message: 'Verification code must be exactly 6 digits' })
   @IsNotEmpty()
@@ -116,6 +125,15 @@ export class OrganisationSignupRequestDto {
     message: `organizationType must be one of: ${ALLOWED_ORG_TYPES.join(', ')}`
   })
   organizationType!: string;
+
+  @ApiPropertyOptional({
+    description: 'Target subscription plan. If not the free-plan, signup will return a payment redirect.',
+    example: 'org-premium-tier',
+    default: 'free-plan'
+  })
+  @IsOptional()
+  @IsString()
+  planSlug?: string; 
 }
 
 /* ======================================================
@@ -201,6 +219,13 @@ export class CreateOrganisationRequestDto {
   @IsString()
   @IsIn(ALLOWED_ORG_TYPES)
   organizationType!: string;
+
+  @ApiPropertyOptional({
+    description: 'The subscription plan for the organization',
+    example: 'free-plan',
+  })
+  @IsString()
+  planSlug!: string; // mandatory here
 }
 
 /* ======================================================

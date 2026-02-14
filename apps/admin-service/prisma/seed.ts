@@ -1,25 +1,27 @@
 // -----------------------------------------------------
 // PivotaConnect RBAC Seeding — Production Grade (Standardized)
+// Includes Organization Membership Logic
 // -----------------------------------------------------
 import 'dotenv/config';
 import { PrismaClient } from '../generated/prisma/client.js';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { plans } from './plans.config.js'; // Imports our production-grade plans
+import { plans } from './plans.config.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.ADMIN_SERVICE_DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
   const startTime = Date.now();
-  console.log('\n🚀 Starting Standardized Seed Process...');
+  console.log('\n🚀 Starting Production-Grade RBAC Seed Process...');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  // ---------- 1) CLEANUP (Cascading Integrity) ----------
+  // ---------- 1) CLEANUP ----------
   const activeModuleSlugs = [
-    'houses', 'jobs', 'help-and-support', 'dashboard', 
-    'user-management', 'analytics', 'system-settings', 'module-management'
+    'houses', 'jobs', 'help-and-support', 'services',
+    'dashboard', 'user-management', 'analytics',
+    'system-settings', 'module-management'
   ];
-  
+
   const deletedModules = await prisma.module.deleteMany({
     where: { slug: { notIn: activeModuleSlugs } }
   });
@@ -30,14 +32,17 @@ async function main() {
   // ---------- 2) ROLES ----------
   console.log('👤 Seeding Roles...');
   const roles = [
+    // SYSTEM ROLES (Supersets of Business Roles)
     { name: 'Super Admin', description: 'Full system access', scope: 'SYSTEM', roleType: 'SuperAdmin', status: 'Active', immutable: true },
-    { name: 'System Admin', description: 'System administrative tasks', scope: 'SYSTEM', roleType: 'SystemAdmin', status: 'Active', immutable: true },
+    { name: 'System Admin', description: 'Full system & org admin privileges', scope: 'SYSTEM', roleType: 'SystemAdmin', status: 'Active', immutable: true },
     { name: 'Compliance Admin', description: 'KYC & verification', scope: 'SYSTEM', roleType: 'ComplianceAdmin', status: 'Active', immutable: true },
     { name: 'Analytics Admin', description: 'View analytics & metrics', scope: 'SYSTEM', roleType: 'AnalyticsAdmin', status: 'Active', immutable: true },
     { name: 'Module Manager', description: 'Manage modules & rules', scope: 'SYSTEM', roleType: 'ModuleManager', status: 'Active', immutable: true },
-    { name: 'Business System Admin', description: 'Primary client admin', scope: 'BUSINESS', roleType: 'BusinessSystemAdmin', status: 'Active', immutable: false },
-    { name: 'Business Content Manager', description: 'Module-scoped moderator', scope: 'BUSINESS', roleType: 'BusinessContentManager', status: 'Active', immutable: false },
-    { name: 'General User', description: 'Default user', scope: 'BUSINESS', roleType: 'GeneralUser', status: 'Active', immutable: false },
+
+    // ORGANIZATION ROLES
+    { name: 'Business System Admin', description: 'Primary org admin; invite members & manage all content', scope: 'BUSINESS', roleType: 'BusinessSystemAdmin', status: 'Active', immutable: false },
+    { name: 'Business Content Manager', description: 'Org content-focused admin; invite members; moderate content', scope: 'BUSINESS', roleType: 'BusinessContentManager', status: 'Active', immutable: false },
+    { name: 'General User', description: 'Default org member', scope: 'BUSINESS', roleType: 'GeneralUser', status: 'Active', immutable: false },
   ];
 
   for (const role of roles) {
@@ -47,6 +52,7 @@ async function main() {
       create: role,
     });
   }
+
   const dbRoles = await prisma.role.findMany();
 
   // ---------- 3) MODULES ----------
@@ -55,6 +61,7 @@ async function main() {
     { slug: 'houses', name: 'Houses', description: 'Housing & rentals' },
     { slug: 'jobs', name: 'Jobs', description: 'Job listings & hiring' },
     { slug: 'help-and-support', name: 'Help and Support', description: 'Community & social aid services' },
+    { slug: 'services', name: 'Contractor Services', description: 'Professional service offerings & SmartMatch' },
     { slug: 'dashboard', name: 'Dashboard', system: true },
     { slug: 'user-management', name: 'User Management', system: true },
     { slug: 'analytics', name: 'Analytics', system: true },
@@ -69,11 +76,12 @@ async function main() {
       create: { ...mod, system: !!mod.system },
     });
   }
+
   const dbModules = await prisma.module.findMany();
   const getModule = (slug: string) => dbModules.find(m => m.slug === slug);
 
-  // ---------- 4) PERMISSIONS REGISTRY (Standardized) ----------
-  console.log('\n🔐 Generating Standardized Permission Registry...');
+  // ---------- 4) PERMISSIONS ----------
+  console.log('\n🔐 Generating Permissions Registry...');
   const systemPermissions = [
     { action: 'role.create', moduleSlug: 'user-management' },
     { action: 'role.update', moduleSlug: 'user-management' },
@@ -82,15 +90,20 @@ async function main() {
     { action: 'analytics.view', moduleSlug: 'analytics' },
     { action: 'module.rules.manage', moduleSlug: 'module-management' },
     { action: 'system-settings.manage', moduleSlug: 'system-settings' },
+    { action: 'subscription.bypass', moduleSlug: 'dashboard' },
+    { action: 'organization.invite-member', moduleSlug: 'user-management' }, // Distinguish between system vs content managers
   ];
 
-  const businessModuleSlugs = ['houses', 'jobs', 'help-and-support'];
+  const businessModuleSlugs = ['houses', 'jobs', 'help-and-support', 'services'];
   const permissionData = [...systemPermissions];
 
   for (const slug of businessModuleSlugs) {
-    // Only generate {module}.{action} to match Gateway config
-    ['create', 'read', 'update', 'delete', 'approve', 'moderate'].forEach(act => {
+    ['read', 'approve', 'moderate'].forEach(act => {
       permissionData.push({ action: `${slug}.${act}`, moduleSlug: slug });
+    });
+    ['create', 'update', 'delete'].forEach(act => {
+      permissionData.push({ action: `${slug}.${act}.own`, moduleSlug: slug });
+      permissionData.push({ action: `${slug}.${act}.any`, moduleSlug: slug });
     });
   }
 
@@ -107,33 +120,37 @@ async function main() {
       },
     });
   }
+
   const dbPermissions = await prisma.permission.findMany();
 
-  // ---------- 5) HIERARCHICAL MAPPING (Gateway Alignment) ----------
-  console.log('\n🔗 Mapping Role Hierarchy (Syncing with Gateway)...');
-  
-  const roleMapping = {
+  // ---------- 5) ROLE → PERMISSION MAPPING ----------
+  console.log('\n🔗 Mapping Role Permissions (System Supersets & Org Logic)...');
+  const roleMapping: Record<string, string[]> = {
     SuperAdmin: dbPermissions.map(p => p.action),
-    SystemAdmin: ['role.create','role.update','role.assign','user.view','system-settings.manage'],
-    ModuleManager: ['module.rules.manage'],
-    AnalyticsAdmin: ['analytics.view'],
-    ComplianceAdmin: ['user.view'],
+    SystemAdmin: dbPermissions.filter(p => p.action !== 'subscription.bypass').map(p => p.action),
+    ModuleManager: ['module.rules.manage','houses.read','jobs.read','help-and-support.read','services.read'],
+    AnalyticsAdmin: ['analytics.view','houses.read','jobs.read','help-and-support.read','services.read'],
+    ComplianceAdmin: ['user.view','houses.read','jobs.read','help-and-support.read','services.read'],
+
     BusinessSystemAdmin: [
-      'houses.read', 'houses.create', 'houses.update', 'houses.delete', 'houses.approve', 'houses.moderate',
-      'jobs.read', 'jobs.create', 'jobs.update', 'jobs.delete', 'jobs.approve', 'jobs.moderate',
-      'help-and-support.read', 'help-and-support.create', 'help-and-support.update', 'help-and-support.delete',
-      'role.assign', 'role.create', 'user.view', 'analytics.view'
+      ...['houses','jobs','help-and-support','services'].flatMap(slug => [
+        `${slug}.read`, `${slug}.create.any`, `${slug}.update.any`, `${slug}.delete.any`,
+        `${slug}.approve`, `${slug}.moderate`
+      ]),
+      'role.assign','role.create','user.view','analytics.view','organization.invite-member'
     ],
     BusinessContentManager: [
-      'houses.read', 'houses.create', 'houses.update', 'houses.delete', 'houses.approve', 'houses.moderate',
-      'jobs.read', 'jobs.create', 'jobs.update', 'jobs.delete', 'jobs.approve', 'jobs.moderate',
-      'help-and-support.read', 'help-and-support.create', 'help-and-support.update', 'help-and-support.delete',
-      'analytics.view'
+      ...['houses','jobs','help-and-support'].flatMap(slug => [
+        `${slug}.read`, `${slug}.create.own`, `${slug}.update.own`, `${slug}.delete.own`,
+        `${slug}.approve`, `${slug}.moderate`
+      ]),
+      'services.read','services.update.own','services.moderate',
+      'analytics.view','organization.invite-member'
     ],
     GeneralUser: [
-      'houses.read', 'houses.create',
-      'jobs.read', 'jobs.create',
-      'help-and-support.read', 'help-and-support.create',
+      ...['houses','jobs','help-and-support','services'].flatMap(slug => [
+        `${slug}.read`, `${slug}.create.own`
+      ]),
       'analytics.view'
     ],
   };
@@ -142,7 +159,6 @@ async function main() {
     const role = dbRoles.find(r => r.roleType === roleType);
     if (!role) continue;
 
-    // Hard reset for this role to ensure strict code alignment
     await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
 
     const permsToAssign = dbPermissions.filter(p => actions.includes(p.action));
@@ -153,13 +169,14 @@ async function main() {
     console.log(`   - ${roleType.padEnd(22)}: ${permsToAssign.length} permissions mapped`);
   }
 
-  // ---------- 6) ROLE MODULE VISIBILITY (Shared Nav) ----------
-  console.log('\n🗺️ Mapping Role Visibility...');
+  // ---------- 6) ROLE MODULE VISIBILITY ----------
+  console.log('\n🗺️ Mapping Role Module Visibility...');
   const roleModuleConfig = [
     { roleType: 'SuperAdmin', slugs: dbModules.map(m => m.slug), assignable: false },
-    { roleType: 'BusinessSystemAdmin', slugs: ['houses', 'jobs', 'help-and-support', 'dashboard'], assignable: true },
-    { roleType: 'BusinessContentManager', slugs: ['houses', 'jobs', 'help-and-support', 'dashboard'], assignable: true },
-    { roleType: 'GeneralUser', slugs: ['houses', 'jobs', 'help-and-support', 'dashboard'], assignable: false },
+    { roleType: 'SystemAdmin', slugs: dbModules.map(m => m.slug), assignable: false },
+    { roleType: 'BusinessSystemAdmin', slugs: ['houses','jobs','help-and-support','services','dashboard'], assignable: true },
+    { roleType: 'BusinessContentManager', slugs: ['houses','jobs','help-and-support','services','dashboard'], assignable: true },
+    { roleType: 'GeneralUser', slugs: ['houses','jobs','help-and-support','services','dashboard'], assignable: false },
   ];
 
   for (const cfg of roleModuleConfig) {
@@ -176,9 +193,8 @@ async function main() {
     }
   }
 
-
   // ---------- 7) PLANS & PLAN MODULES ----------
-  console.log('\n💳 Seeding Plans & Restrictions...');
+  console.log('\n💳 Seeding Plans & Module Restrictions...');
   for (const plan of plans) {
     const { modules: planModulesData, ...dbPlanFields } = plan;
 
@@ -191,7 +207,7 @@ async function main() {
         features: JSON.stringify(plan.features),
       },
       create: {
-        ...dbPlanFields, 
+        ...dbPlanFields,
         creatorId: 'system',
         features: JSON.stringify(plan.features),
       },
@@ -206,20 +222,17 @@ async function main() {
       await prisma.planModule.upsert({
         where: { planId_moduleId: { planId: createdPlan.id, moduleId: dbMod.id } },
         update: { restrictions: JSON.stringify(mod.restrictions) },
-        create: {
-          planId: createdPlan.id,
-          moduleId: dbMod.id,
-          restrictions: JSON.stringify(mod.restrictions),
-        },
+        create: { planId: createdPlan.id, moduleId: dbMod.id, restrictions: JSON.stringify(mod.restrictions) },
       });
+
       const duration = mod.restrictions.listingDurationDays ?? '∞';
       console.log(`      └─ ${mod.slug.padEnd(18)} | Duration: ${duration} days`);
     }
   }
 
-  const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+  const durationTime = ((Date.now() - startTime) / 1000).toFixed(2);
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`✨ Seed process completed in ${duration}s`);
+  console.log(`✨ Production-grade RBAC Seed Completed in ${durationTime}s`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 }
 

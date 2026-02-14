@@ -10,6 +10,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 import { AppModule } from './app/app.module';
 import { GlobalHttpExceptionFilter } from '@pivota-api/filters';
+import { LoggingInterceptor, TimeoutInterceptor, TransformInterceptor } from '@pivota-api/interceptors';
 
 // Load environment variables
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
@@ -64,6 +65,14 @@ async function bootstrap() {
   // Global exception filter only
   app.useGlobalFilters(new GlobalHttpExceptionFilter());
   logger.log(' GlobalHttpExceptionFilter registered');
+
+
+  // Global interceptors 
+  app.useGlobalInterceptors(
+    new LoggingInterceptor(),
+    new TransformInterceptor(),
+    new TimeoutInterceptor()
+  );
 
   app.enableShutdownHooks();
   logger.log('🔌 Shutdown hooks enabled');

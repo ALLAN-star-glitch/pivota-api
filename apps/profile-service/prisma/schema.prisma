@@ -16,6 +16,7 @@ model Account {
   // Individual: "John Doe" | Organization: "Pivota NGO"
   name        String?
   type        String   @default("INDIVIDUAL") // INDIVIDUAL | ORGANIZATION
+  status      String   @default("ACTIVE") // ACTIVE, PENDING_PAYMENT, SUSPENDED, DEACTIVATED
 
   // --- THE TRUST ANCHOR ---
   // The master flag used for gRPC/JWT and UI badges

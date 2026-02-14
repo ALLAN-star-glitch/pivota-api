@@ -5,17 +5,30 @@ package jobs;
 // ===================================================
 // SERVICE DEFINITION
 // ===================================================
-service JobsService {
-  // Now returns a specific Lean response for Creation
+service JobsService {  
+  // --- Creation Flows ---
   rpc CreateJobPost (CreateJobPostRequest) returns (BaseJobPostCreateResponse);
+  rpc CreateAdminJobPost (CreateJobPostRequest) returns (BaseJobPostCreateResponse);
   
+  // --- Discovery Flows ---
   rpc GetJobPostById (GetJobPostByIdRequest) returns (BaseJobPostResponse);
   rpc GetJobsByCategory (GetJobsByCategoryRequest) returns (ListJobPostsResponse);
   rpc ValidateJobPostIds(ValidateJobPostIdsRequest) returns (BaseValidateJobPostIdsResponse);
   
+  // --- Update Flows ---
   rpc UpdateJobPost (UpdateJobPostRequest) returns (BaseJobPostResponse);
+  rpc UpdateAdminJobPost (UpdateJobPostRequest) returns (BaseJobPostResponse);
+  
+  // --- Closure Flows ---
   rpc CloseJobPost (CloseJobPostRequest) returns (BaseCloseJobPostResponse);
+  rpc CloseAdminJobPost (CloseJobPostRequest) returns (BaseCloseJobPostResponse);
+  
+  // --- Application Flows ---
   rpc ApplyToJobPost (CreateJobApplicationRequest) returns (BaseJobApplicationResponse);
+
+  rpc GetOwnJobs (GetOwnJobsRequest) returns (ListJobPostsResponse);
+
+  rpc GetAdminJobs (GetAdminJobsRequest) returns (ListJobPostsResponse);
 }
 
 // ===================================================
@@ -83,7 +96,7 @@ message JobApplication {
 }
 
 // ===================================================
-// JOB POST ENTITY (Rich DTO for GET/LIST)
+// JOB POST ENTITY
 // ===================================================
 message JobPost {
   string id = 1;
@@ -140,22 +153,36 @@ message CreateJobPostRequest {
   string additionalNotes = 19;
   string status = 20;
 
-  // Identity Pillars (Lean: No Name strings stored anymore)
+  // Identity Pillars
   string accountId = 21;
   string creatorId = 22;
+  
+  // Optional for Denormalization (Shared Nav support)
+  optional string creatorName = 23;
+  optional string accountName = 24;
 }
 
 message UpdateJobPostRequest {
   string id = 1;
-  string creatorId = 2; 
+  string creatorId = 2; // Required for ownership check or target user identification
 
-  optional string title = 3;
-  optional string description = 4;
-  optional string status = 5;
-  optional double payAmount = 6;
-  optional bool isNegotiable = 7;
-  optional string locationCity = 8;
-  optional string locationNeighborhood = 9;
+  optional string accountId = 3; // Required for Admin Flow validation
+  optional string title = 4;
+  optional string description = 5;
+  optional string status = 6;
+  optional double payAmount = 7;
+  optional bool isNegotiable = 8;
+  optional string locationCity = 9;
+  optional string locationNeighborhood = 10;
+  optional string creatorName = 11;
+  optional string accountName = 12;
+}
+
+message CloseJobPostRequest {
+  string id = 1;
+  string creatorId = 2;
+  optional string accountId = 3; // Included to satisfy Admin DTO requirements
+  optional string reason = 4;
 }
 
 message CreateJobApplicationRequest {
@@ -172,12 +199,6 @@ message CreateJobApplicationRequest {
   repeated Attachment attachments = 11;
 }
 
-message CloseJobPostRequest {
-  string id = 1;
-  string creatorId = 2;
-  string reason = 3;
-}
-
 message GetJobPostByIdRequest { string id = 1; }
 message GetJobsByCategoryRequest { string categoryId = 1; }
 message ValidateJobPostIdsRequest { repeated string ids = 1; }
@@ -186,14 +207,12 @@ message ValidateJobPostIdsRequest { repeated string ids = 1; }
 // RESPONSE MESSAGES
 // ===================================================
 
-// NEW: Ultra-Lean Data for Creation
 message JobPostCreateData {
   string id = 1;
   string status = 2;
   string createdAt = 3;
 }
 
-// NEW: Ultra-Lean Base Response for Creation
 message BaseJobPostCreateResponse {
   bool success = 1;
   string code = 2;
@@ -252,4 +271,15 @@ message BaseValidateJobPostIdsResponse {
   string message = 3;
   ValidateJobIdsData data = 4;
   ErrorPayload error = 5;
+}
+
+message GetOwnJobsRequest {
+  string creatorId = 1;
+  optional string status = 2; // Added to allow the user to filter their own view
+}
+
+message GetAdminJobsRequest {
+  optional string creatorId = 1;
+  optional string accountId = 2;
+  optional string status = 3;
 }

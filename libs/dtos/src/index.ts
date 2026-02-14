@@ -74,3 +74,5 @@ export * from './lib/SendOtpEventDto.dto';
 export * from './lib/ResetPasswordDto.dto';
 export * from './lib/RevokeSessionDto.dto';
 export * from './lib/check-module-access.dto';
+export * from './lib/GetOwnJobFiltersDto.dto';
+export * from './lib/GetJobsAdminFilterDto.dto';

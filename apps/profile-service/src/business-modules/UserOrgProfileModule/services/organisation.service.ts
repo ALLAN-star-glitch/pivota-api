@@ -6,6 +6,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { Prisma } from '../../../../generated/prisma/client'
 import {
   BaseResponseDto,
   RoleIdResponse,
@@ -120,110 +121,140 @@ export class OrganisationService  {
   /* ======================================================
      CREATE ORGANIZATION PROFILE
   ====================================================== */
-  async createOrganizationProfile(
-  data: CreateOrganisationRequestDto,
+async createOrganizationProfile(
+  data: CreateOrganisationRequestDto & { planSlug?: string },
 ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
-  this.logger.log(`Initiating organization creation: ${data.name} (Admin: ${data.email})`);
+  this.logger.log(`Initiating organization creation: ${data.name} (Admin: ${data.email}) [Plan: ${data.planSlug || 'free'}]`);
 
   const orgUuid = randomUUID();
   const accountUuid = randomUUID();
   const orgCode = `ORG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+  const targetPlanSlug = data.planSlug || 'free';
 
   try {
-    /* ---------- 1. PRE-CHECKS: RBAC ROLE & PLAN ---------- */
+    /* ---------- 1. PRE-CHECKS ---------- */
     const [roleRes, planRes] = await Promise.all([
       lastValueFrom(
         this.rbacGrpc.GetRoleIdByType({ roleType: 'BusinessSystemAdmin' }).pipe(
           timeout(5000),
           catchError(() => throwError(() => new Error('RBAC service unavailable')))
         ),
-      ),
+      ).catch(() => null),
       lastValueFrom(
-        this.plansGrpc.GetPlanIdBySlug({ slug: 'free' }).pipe(
+        this.plansGrpc.GetPlanIdBySlug({ slug: targetPlanSlug }).pipe(
           timeout(5000),
-          catchError(() => throwError(() => new Error('Plans service unavailable')))
+          catchError(() => throwError(() => new Error(`Plan slug: ${targetPlanSlug} not found`)))
         ),
-      ),
+      ).catch(() => null),
     ]);
 
-    if (!roleRes?.data?.roleId) throw new Error('System Role: BusinessSystemAdmin not found');
-    if (!planRes?.data?.planId) throw new Error('Default Plan: free not found');
+    if (!roleRes?.data?.roleId) {
+      return BaseResponseDto.fail('System Role: BusinessSystemAdmin not found', 'NOT_FOUND');
+    }
+    if (!planRes?.data?.planId) {
+      return BaseResponseDto.fail(`Plan: ${targetPlanSlug} not found`, 'NOT_FOUND');
+    }
 
-    /* ---------- 2. ATOMIC DATABASE TRANSACTION ---------- */
-    const result = await this.prisma.$transaction(async (tx) => {
-      // A. Create the Root Billing Account
-      const account = await tx.account.create({
-        data: {
-          uuid: accountUuid,
-          accountCode: `ACC-${orgCode}`,
-          type: 'ORGANIZATION',
-          name: data.name
-        },
-      });
+    const isPremium = targetPlanSlug !== 'free';
 
-      // B. Create Organization with Nested Profile
-      const organization = await tx.organization.create({
-        data: {
-          uuid: orgUuid,
-          orgCode,
-          name: data.name,
-          accountId: account.uuid,
-          profile: {
-            create: {
-              officialEmail: data.officialEmail,
-              officialPhone: data.officialPhone,
-              physicalAddress: data.physicalAddress,
-              typeSlug: data.organizationType || 'PRIVATE_LIMITED',
+    /* ---------- 2. DATABASE TRANSACTION ---------- */
+    let result;
+    try {
+      result = await this.prisma.$transaction(async (tx) => {
+        const account = await tx.account.create({
+          data: {
+            uuid: accountUuid,
+            accountCode: `ACC-${orgCode}`,
+            type: 'ORGANIZATION',
+            name: data.name,
+            status: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
+          },
+        });
+
+        const organization = await tx.organization.create({
+          data: {
+            uuid: orgUuid,
+            orgCode,
+            name: data.name,
+            accountId: account.uuid,
+            verificationStatus: isPremium ? 'PENDING_PAYMENT' : 'PENDING',
+            profile: {
+              create: {
+                officialEmail: data.officialEmail,
+                officialPhone: data.officialPhone,
+                physicalAddress: data.physicalAddress,
+                typeSlug: data.organizationType || 'PRIVATE_LIMITED',
+              },
             },
           },
-        },
-      });
+        });
 
-      // C. Create the Admin User Identity
-      const admin = await tx.user.create({
-        data: {
-          uuid: data.adminUserUuid,
-          userCode: `USR-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-          email: data.email,
-          phone: data.phone,
-          firstName: data.adminFirstName,
-          lastName: data.adminLastName,
-          roleName: 'Business System Admin',
-          accountId: account.uuid,
-          profile: {
-            create: {
-              bio: `Administrator for ${data.name}`,
+        const admin = await tx.user.create({
+          data: {
+            uuid: data.adminUserUuid,
+            userCode: `USR-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+            email: data.email,
+            phone: data.phone,
+            firstName: data.adminFirstName,
+            lastName: data.adminLastName,
+            roleName: 'Business System Admin',
+            accountId: account.uuid,
+            status: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
+            profile: {
+              create: { bio: `Administrator for ${data.name}` }
             }
-          }
-        },
-        include: { profile: true } 
+          },
+          include: { profile: true } 
+        });
+
+        await tx.organizationMember.create({
+          data: {
+            organizationUuid: organization.uuid,
+            userUuid: admin.uuid,
+            roleName: 'Business System Admin',
+          },
+        });
+
+        const completion = await tx.profileCompletion.create({
+          data: {
+            organizationUuid: organization.uuid,
+            percentage: 40, 
+            missingFields: { set: ['KRA_PIN', 'REGISTRATION_NO', 'WEBSITE'] },
+            isComplete: false,
+          },
+        });
+
+        return { account, organization, admin, completion };
       });
+    } catch (dbError: unknown) {
+      if (dbError instanceof Prisma.PrismaClientKnownRequestError && dbError.code === 'P2002') {
+        const targets = (dbError.meta?.target as string | string[]) || '';
+        const targetString = Array.isArray(targets) ? targets.join(',').toLowerCase() : targets.toLowerCase();
+        const errorMessage = dbError.message.toLowerCase();
 
-      // D. Create Membership
-      await tx.organizationMember.create({
-        data: {
-          organizationUuid: organization.uuid,
-          userUuid: admin.uuid,
-          roleName: 'Business System Admin',
-        },
-      });
+        this.logger.warn(`Org Unique constraint violation. Targets: [${targetString}] | Msg: ${errorMessage}`);
 
-      // E. Initialize Tracker
-      const completion = await tx.profileCompletion.create({
-        data: {
-          organizationUuid: organization.uuid,
-          percentage: 40, 
-          missingFields: { set: ['KRA_PIN', 'REGISTRATION_NO', 'WEBSITE'] },
-          isComplete: false,
-        },
-      });
+        if (targetString.includes('officialemail') || errorMessage.includes('officialemail')) {
+          return BaseResponseDto.fail('This organization email is already registered', 'ALREADY_EXISTS');
+        }
+        if (targetString.includes('officialphone') || errorMessage.includes('officialphone')) {
+          return BaseResponseDto.fail('This organization phone number is already registered', 'ALREADY_EXISTS');
+        }
+        if (targetString.includes('email') || errorMessage.includes('email')) {
+          return BaseResponseDto.fail('Admin email is already registered to another account', 'ALREADY_EXISTS');
+        }
+        if (targetString.includes('name') || errorMessage.includes('name')) {
+          return BaseResponseDto.fail('An organization with this name already exists', 'ALREADY_EXISTS');
+        }
 
-      return { account, organization, admin, completion };
-    });
+        return BaseResponseDto.fail('Organization details already exist in our system', 'ALREADY_EXISTS', dbError.meta);
+      }
+      const msg = dbError instanceof Error ? dbError.message : 'Database error during Org creation';
+      return BaseResponseDto.fail(msg, 'INTERNAL_ERROR');
+    }
 
-    /* ---------- 3. POST-DB: EXTERNAL SYNCING (WITH ROLLBACK) ---------- */
+    /* ---------- 3. POST-DB: SYNCING ---------- */
     try {
-      // Assign the role in the RBAC service
       await lastValueFrom(
         this.rbacGrpc.AssignRoleToUser({
           userUuid: data.adminUserUuid,
@@ -231,25 +262,22 @@ export class OrganisationService  {
         }),
       );
 
-      // Initialize the subscription
-      const subRes = await lastValueFrom(
-        this.subscriptionGrpc.SubscribeToPlan({
-          subscriberUuid: accountUuid,
-          planId: planRes.data.planId,
-          billingCycle: null
-        }),
-      );
+      if (!isPremium) {
+        const subRes = await lastValueFrom(
+          this.subscriptionGrpc.SubscribeToPlan({
+            subscriberUuid: accountUuid,
+            planId: planRes.data.planId,
+            billingCycle: null
+          }),
+        );
 
-      if (!subRes.success) {
-        throw new Error(`Subscription Service Error: ${subRes.message}`);
+        if (!subRes.success) throw new Error(subRes.message);
       }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (syncError: any) {
-      this.logger.error(`Post-DB Sync failed for Org. Rolling back records for ${data.name}`);
+    } catch (syncError: unknown) {
+      const msg = syncError instanceof Error ? syncError.message : 'Sync failed';
+      this.logger.error(`Post-DB Sync failed for Org ${data.name}: ${msg}`);
       
-      // COMPENSATING ACTION: Manual Rollback
-      // We delete everything tied to this failed onboarding attempt
       await this.prisma.$transaction([
         this.prisma.profileCompletion.deleteMany({ where: { organizationUuid: orgUuid } }),
         this.prisma.organizationMember.deleteMany({ where: { organizationUuid: orgUuid } }),
@@ -260,26 +288,20 @@ export class OrganisationService  {
         this.prisma.account.delete({ where: { uuid: accountUuid } }),
       ]);
 
-      throw new Error(`Organization provisioning failed: ${syncError.message}`);
+      return BaseResponseDto.fail(`Organization provisioning failed: ${msg}`, 'INTERNAL_ERROR');
     }
 
-    /* ---------- 4. RESPONSE ---------- */
-    return {
-      success: true,
-      code: 'CREATED',
-      message: 'Organization profile records created and provisioned successfully.',
-      data: this.mapToOrganizationProfileDto(result),
-      error: null,
-    } as unknown as BaseResponseDto<OrganizationProfileResponseDto>;
+    /* ---------- 4. SUCCESS RESPONSE ---------- */
+    return BaseResponseDto.ok(
+      this.mapToOrganizationProfileDto(result),
+      isPremium ? 'Organization created. Payment required.' : 'Organization created successfully',
+      isPremium ? 'PAYMENT_REQUIRED' : 'CREATED'
+    );
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
-    this.logger.error(`Organization profile creation failed: ${err.message}`, err.stack);
-    
-    throw new RpcException({
-      code: err.code === 'P2002' ? 6 : 13,
-      message: err.message || 'Failed to complete organization profile creation',
-    });
+  } catch (err: unknown) {
+    const finalMsg = err instanceof Error ? err.message : 'Critical organization creation failure';
+    this.logger.error(finalMsg);
+    return BaseResponseDto.fail(finalMsg, 'INTERNAL_ERROR');
   }
 }
 

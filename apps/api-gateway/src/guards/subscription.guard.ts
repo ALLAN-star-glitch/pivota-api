@@ -1,3 +1,7 @@
+// Admin bypass: System-level operators are not subject to commercial subscription limits.
+// If business logic diverges in future (workflow differences), consider endpoint separation.
+
+
 import {
   CanActivate,
   ExecutionContext,
@@ -59,6 +63,7 @@ export class SubscriptionGuard implements CanActivate {
         );
       }
 
+      
       // 4. ATTACH RESTRICTIONS
       let restrictions = response.data.restrictions;
       if (typeof restrictions === 'string') {

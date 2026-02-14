@@ -15,6 +15,7 @@ import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt.guard';
 import {
+  
   LoginRequestDto,
   SessionDto,
   GoogleLoginRequestDto,
@@ -45,6 +46,7 @@ import {
 import { JwtRequest } from '@pivota-api/interfaces';
 import { RolesGuard } from '../../guards/role.guard';
 import { Roles } from '../../decorators/roles.decorator';
+import { ThrottlerGuard, Throttle} from '@nestjs/throttler';
 
 
 @ApiTags('AuthModule - ((Auth-Service) - MICROSERVICE)')
@@ -68,8 +70,10 @@ export class AuthController {
 
   constructor(private readonly authService: AuthService) {}
 
-  // ===================== OTP: REQUEST =====================
+ // ===================== OTP: REQUEST =====================
   @Version('1')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) 
   @Post('otp/request')
   @ApiOperation({ summary: 'Request a security code (OTP) via email' })
   @ApiBody({ type: RequestOtpDto })
@@ -78,12 +82,34 @@ export class AuthController {
     description: 'OTP sent successfully',
     type: BaseResponseDto,
   })
+  @ApiResponse({
+    status: 409, 
+    description: 'Conflict: Email or Phone already registered',
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Too Many Requests: IP or Email rate limit exceeded',
+  })
   async requestOtp(
     @Body() dto: RequestOtpDto
   ): Promise<BaseResponseDto<null>> {
     this.logger.log(`📩 OTP Request for: ${dto.email}`);
-    return this.authService.requestOtp(dto);
+    
+    // 1. Resolve the promise immediately
+    const result = await this.authService.requestOtp(dto);
+
+    // 2. Check the resolved result
+    if (!result.success) {
+      this.logger.warn(`⚠️ OTP Request failed for ${dto.email}: ${result.message}`);
+      
+      // 3. Throw the DATA, not the PROMISE
+      throw result; 
+    }
+
+    return result;
   }
+ 
+
 
   // ===================== OTP: VERIFY =====================
   @Version('1')
@@ -134,7 +160,14 @@ export class AuthController {
     @Body() signupDto: UserSignupRequestDto  
   ): Promise<BaseResponseDto<UserSignupDataDto>> {
     this.logger.log(`📩 Signup request: ${signupDto.email}`);
-    return this.authService.signup(signupDto);
+    const response = await this.authService.signup(signupDto);
+    if (!response.success) {
+      this.logger.warn(`⚠️ Signup failed for ${signupDto.email}: ${response.message}`);
+      throw response; // Let the global exception filter handle the error response  
+    } else {
+      this.logger.log(`✅ Signup successful for: ${signupDto.email}`);
+    }
+    return response;
   }
 
   // ===================== ORGANISATION SIGNUP =====================
@@ -373,3 +406,5 @@ export class AuthController {
     return this.authService.getActiveSessions(finalUserUuid);
   }
 }
+
+

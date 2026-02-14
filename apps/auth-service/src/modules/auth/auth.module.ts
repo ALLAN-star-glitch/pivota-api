@@ -5,9 +5,13 @@ import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { RBAC_PROTO_PATH, PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { PrismaModule } from '../../prisma/prisma.module';
-
+import { HttpModule } from '@nestjs/axios';
 @Module({
   imports: [
+    HttpModule.register({
+      timeout: 10000, // 10 seconds for Pesapal/Spring Boot latency
+      maxRedirects: 5,
+    }),
     PrismaModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,

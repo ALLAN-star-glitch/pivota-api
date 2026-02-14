@@ -1,5 +1,3 @@
-// gateway/src/config/permissions.config.ts
-
 export const RolePermissionsMap: Record<string, string[]> = {
   /**
    * FULL SYSTEM BYPASS
@@ -10,20 +8,27 @@ export const RolePermissionsMap: Record<string, string[]> = {
    * SYSTEM LEVEL ROLES
    */
   SystemAdmin: [
-    'role.create', 
-    'role.update', 
-    'role.assign', 
-    'user.view', 
-    'system-settings.manage'
+    'role.create',
+    'role.update',
+    'role.assign',
+    'user.view',
+    'system-settings.manage',
+    'subscription.bypass'
   ],
+
   ModuleManager: [
-    'module.rules.manage'
+    'module.rules.manage',
+    'houses.read', 'jobs.read', 'help-and-support.read', 'services.read'
   ],
+
   AnalyticsAdmin: [
-    'analytics.view'
+    'analytics.view',
+    'houses.read', 'jobs.read', 'help-and-support.read', 'services.read'
   ],
+
   ComplianceAdmin: [
-    'user.view'
+    'user.view',
+    'houses.read', 'jobs.read', 'help-and-support.read', 'services.read'
   ],
 
   /**
@@ -31,37 +36,72 @@ export const RolePermissionsMap: Record<string, string[]> = {
    */
   BusinessSystemAdmin: [
     // Houses
-    'houses.read', 'houses.create', 'houses.update', 'houses.delete', 'houses.approve', 'houses.moderate',
+    'houses.read',
+    'houses.create.any', 'houses.update.any', 'houses.delete.any',
+    'houses.approve', 'houses.moderate',
+
     // Jobs
-    'jobs.read', 'jobs.create', 'jobs.update', 'jobs.delete', 'jobs.approve', 'jobs.moderate',
+    'jobs.read',
+    'jobs.create.any', 'jobs.update.any', 'jobs.delete.any',
+    'jobs.approve', 'jobs.moderate',
+
     // Help & Support
-    'help-and-support.read', 'help-and-support.create', 'help-and-support.update', 'help-and-support.delete',
-    // Management
-    'role.assign', 'role.create', 'user.view', 'analytics.view'
+    'help-and-support.read',
+    'help-and-support.create.any', 'help-and-support.update.any', 'help-and-support.delete.any',
+    'help-and-support.approve', 'help-and-support.moderate',
+
+    // Services (Contractors)
+    'services.read',
+    'services.create.any', 'services.update.any', 'services.delete.any',
+    'services.approve', 'services.moderate',
+
+    // Management & Organization
+    'role.assign', 'role.create', 'user.view', 'analytics.view',
+    'subscription.bypass',
+    'organization.invite-member'
   ],
 
   BusinessContentManager: [
     // Houses
-    'houses.read', 'houses.create', 'houses.update', 'houses.delete', 'houses.approve', 'houses.moderate',
+    'houses.read',
+    'houses.create.own', 'houses.update.own', 'houses.delete.own',
+    'houses.approve', 'houses.moderate',
+
     // Jobs
-    'jobs.read', 'jobs.create', 'jobs.update', 'jobs.delete', 'jobs.approve', 'jobs.moderate',
+    'jobs.read',
+    'jobs.create.own', 'jobs.update.own', 'jobs.delete.own',
+    'jobs.approve', 'jobs.moderate',
+
     // Help & Support
-    'help-and-support.read', 'help-and-support.create', 'help-and-support.update', 'help-and-support.delete',
-    // Analytics
-    'analytics.view'
+    'help-and-support.read',
+    'help-and-support.create.own', 'help-and-support.update.own', 'help-and-support.delete.own',
+    'help-and-support.approve', 'help-and-support.moderate',
+
+    // Services (Contractors)
+    'services.read', 'services.update.own', 'services.moderate',
+
+    // Analytics & Org Invite
+    'analytics.view',
+    'organization.invite-member'
   ],
 
   /**
    * INDIVIDUAL/CLIENT ROLES
    */
   GeneralUser: [
-    'houses.read', 
-    'houses.create',
-    'jobs.read', 
-    'jobs.create',
-    'help-and-support.read', 
-    'help-and-support.create',
-    'analytics.view'
+    // Houses
+    'houses.read', 'houses.create.own',
 
+    // Jobs
+    'jobs.read', 'jobs.create.own',
+
+    // Help & Support
+    'help-and-support.read', 'help-and-support.create.own',
+
+    // Services (Contractors)
+    'services.read', 'services.create.own',
+
+    // Analytics
+    'analytics.view'
   ],
 };

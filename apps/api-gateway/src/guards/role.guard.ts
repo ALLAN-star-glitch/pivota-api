@@ -77,14 +77,14 @@ export class RolesGuard implements CanActivate {
 
     if (!hasPermission) {
       this.logger.warn(
-        `Forbidden: User ${user.id} [${userRole}] lacks: [${requiredPermissions.join(', ')}]`
+        `Forbidden: User ${user.uuid} [${userRole}] lacks: [${requiredPermissions.join(', ')}]`
       );
       throw new ForbiddenException(
         `Insufficient permissions for this action.`,
       );
     }
 
-    this.logger.debug(`Access granted: User ${user.id} | Role: ${userRole}`);
+    this.logger.debug(`Access granted: User ${user.uuid} | Role: ${userRole}`);
     return true;
   }
 

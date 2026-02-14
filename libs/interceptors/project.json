@@ -1,0 +1,20 @@
+{
+  "name": "interceptors",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/interceptors/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/interceptors",
+        "tsConfig": "libs/interceptors/tsconfig.lib.json",
+        "packageJson": "libs/interceptors/package.json",
+        "main": "libs/interceptors/src/index.ts",
+        "assets": ["libs/interceptors/*.md"]
+      }
+    }
+  }
+}

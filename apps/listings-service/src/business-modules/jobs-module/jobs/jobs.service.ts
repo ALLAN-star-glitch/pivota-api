@@ -10,20 +10,42 @@ import {
   ValidateJobPostIdsRequestDto,
   CreateJobApplicationDto,
   JobApplicationResponseDto,
-  UpdateJobPostRequestDto,
   CloseJobPostRequestDto,
   CloseJobPostResponseDto,
-  CreateJobPostGrpcDto,
-  JobPostCreateResponseDto
+  JobPostCreateResponseDto,
+  AdminCreateJobPostDto,
+  CreateJobPostDto,
+  UpdateAdminJobPostRequestDto,
+  UpdateOwnJobPostRequestDto,
+  CloseAdminJobPostRequestDto,
+  CloseOwnJobPostRequestDto,
+  UserProfileResponseDto,
+  CreateJobGrpcRequestDto
 } from '@pivota-api/dtos';
 import { firstValueFrom, Observable } from 'rxjs';
 import { BaseUserResponseGrpc,   } from '@pivota-api/interfaces';
 import { ClientGrpc } from '@nestjs/microservices';
+import { Category, JobPost } from '../../../../generated/prisma/client';
+
+interface JobPersistenceData extends CreateJobGrpcRequestDto {
+  creatorName: string;
+  accountName: string;
+  accountId: string; // Ensures accountId is present even if it was optional in the DTO
+}
+
+interface UpdatePersistenceData extends Partial<JobPersistenceData> {
+  id: string;
+}
 
 interface UserServiceGrpc {
 
-  getUserProfileByUuid(data: GetUserByUserUuidDto): Observable<BaseResponseDto<UserResponseDto> | null>;
+  getUserProfileByUuid(data: GetUserByUserUuidDto): Observable<BaseResponseDto<UserProfileResponseDto> | null>;
 }
+
+type JobPostWithRelations = JobPost & {
+  category: Category | null;
+  subCategory: Category | null;
+};
 
 
 @Injectable()
@@ -34,176 +56,166 @@ export class JobsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject('PROFILE_GRPC') private readonly userService: ClientGrpc, 
-  ) {}
-
-  onModuleInit() {
-    this.userGrpcService = this.userService.getService<UserServiceGrpc>('ProfileService');
-    
+  ) {
+     this.userGrpcService = this.userService.getService<UserServiceGrpc>('ProfileService');
   }
 
 
-  private getGrpcService(): UserServiceGrpc {
-    if (!this.userGrpcService) {
-      this.userGrpcService = this.userService.getService<UserServiceGrpc>('ProfileService');
-    }
-    return this.userGrpcService;
-  }
-
-  // ======================================================
-  // CREATE JOB POST
-  // ======================================================
-  async createJobPost(
-    dto: CreateJobPostGrpcDto,
-  ): Promise<BaseResponseDto<JobPostCreateResponseDto>> {
-    try {
-      // 1. Minimum Validation: Check if category exists but don't fetch full details
-      const categoryCount = await this.prisma.category.count({
-        where: { id: dto.categoryId },
-      });
-
-      if (categoryCount === 0) {
-        return {
-          success: false,
-          message: 'Invalid category ID',
-          code: 'CATEGORY_NOT_FOUND',
-          data: null,
-          error: { message: 'No category exists with this ID', details: null },
-        };
-      }
-
-      // 2. Create record - NO 'include' used here to save DB resources
-      const created = await this.prisma.jobPost.create({
-        data: {
-          title: dto.title,
-          description: dto.description,
-          categoryId: dto.categoryId,
-          subCategoryId: dto.subCategoryId ?? null,
-          creatorId: dto.creatorId,
-          accountId: dto.accountId,
-          jobType: dto.jobType,
-          locationCity: dto.locationCity,
-          locationNeighborhood: dto.locationNeighborhood ?? '',
-          isRemote: dto.isRemote ?? false,
-          payAmount: dto.payAmount ?? 0,
-          payRate: dto.payRate,
-          isNegotiable: dto.isNegotiable ?? false,
-          skills: dto.skills ?? [],
-          experienceLevel: dto.experienceLevel ?? '',
-          employmentType: dto.employmentType ?? '',
-          requiresDocuments: dto.requiresDocuments ?? false,
-          documentsNeeded: dto.documentsNeeded ?? [],
-          requiresEquipment: dto.requiresEquipment ?? false,
-          equipmentRequired: dto.equipmentRequired ?? [],
-          additionalNotes: dto.additionalNotes ?? '',
-          status: dto.status ?? 'ACTIVE',
-        }
-      });
-
-      // 3. Ultra-Lean Response Mapping
-      const data: JobPostCreateResponseDto = {
-        id: created.id,
-        status: created.status,
-        createdAt: created.createdAt.toISOString(),
-      };
-
-
-      return {
-        success: true,
-        message: 'Job post created successfully',
-        code: 'CREATED',
-        data,
-        error: null,
-      };
-    } catch (error) {
-      const err = error as Error;
-      this.logger.error(`Create job post failed: ${err.message}`, err.stack);
-      return {
-        success: false,
-        message: 'Failed to create job post',
-        code: 'JOB_CREATION_FAILED',
-        data: null,
-        error: { message: err.message, details: err.stack },
-      };
-    }
-  }
-  
-
-  // ======================================================
-  // GET JOB POST BY ID
-  // ======================================================
-  async getJobPostById(id: string): Promise<BaseResponseDto<JobPostResponseDto>> {
+// ======================================================
+// 1. ADMIN FLOW (With gRPC Validation)
+// ======================================================
+async createAdminJobPost(
+  dto: CreateJobGrpcRequestDto,
+): Promise<BaseResponseDto<JobPostCreateResponseDto>> {
   try {
-    // 1. Fetch Job from DB with relations
-    // We cast as 'any' to allow clean mapping of category/subCategory objects
+    // Identity Validation: Verify the User exists and get their Account info
+    const userProfile = await firstValueFrom(
+      this.userGrpcService.getUserProfileByUuid({ userUuid: dto.creatorId })
+    );
+
+    if (!userProfile?.success || !userProfile.data) {
+      this.logger.error(`❌ Admin Validation Failed: Creator ${dto.creatorId} not found.`);
+      return BaseResponseDto.fail('The specified Creator does not exist.', 'USER_NOT_FOUND');
+    }
+
+    // Security check: Ensure the Admin didn't provide a mismatched account ID
+    if (userProfile.data.account.uuid !== dto.accountId) {
+      return BaseResponseDto.fail('The Creator does not belong to the specified Account.', 'ACCOUNT_MISMATCH');
+    }
+
+    // Resolve Names for denormalization (shared nav support)
+    const creatorName = `${userProfile.data.user.firstName} ${userProfile.data.user.lastName}`;
+    const accountName = userProfile.data.organization?.name || creatorName;
+
+    return await this.persistJobToDb({
+      ...dto,
+      accountId: userProfile.data.account.uuid, // Ensure we use the account ID from the profile, not just trust the input
+      creatorName,
+      accountName,
+    });
+  } catch (error) {
+    this.logger.error(`🔥 Admin Job Creation Error: ${error.message}`);
+    return BaseResponseDto.fail('Internal failure during admin job creation.', 'ERROR');
+  }
+}
+
+// ======================================================
+// 2. STANDARD FLOW (Fast / Trusted Gateway IDs)
+// ======================================================
+async createJobPost(
+  dto: CreateJobPostDto & { creatorId: string; accountId: string, creatorName?: string; accountName?: string},
+): Promise<BaseResponseDto<JobPostCreateResponseDto>> {
+  try {
+    // For standard users, we skip the gRPC call to the Profile Service
+    // and rely on the IDs passed from the Gateway (extracted from JWT).
+    return await this.persistJobToDb({
+      ...dto,
+      creatorName: dto.creatorName || 'Creator', // Fallback name if not provided by gateway (though ideally it should be)  
+      accountName: dto.accountName || 'Account',
+    });
+  } catch (error) {
+    this.logger.error(`🔥 Job Creation Error: ${error.message}`);
+    return BaseResponseDto.fail('Internal failure during job creation.', 'INTERNAL_ERROR');
+  }
+}
+
+// ======================================================
+// 3. CORE PERSISTENCE (Private Helper)
+// ======================================================
+private async persistJobToDb(data: JobPersistenceData): Promise<BaseResponseDto<JobPostCreateResponseDto>> {
+  // Category Validation
+  const categoryCount = await this.prisma.category.count({
+    where: { id: data.categoryId },
+  });
+
+  if (categoryCount === 0) {
+    return BaseResponseDto.fail('Invalid category ID provided.', 'CATEGORY_NOT_FOUND');
+  }
+
+  const created = await this.prisma.jobPost.create({
+    data: {
+      title: data.title,
+      description: data.description,
+      categoryId: data.categoryId,
+      subCategoryId: data.subCategoryId ?? null,
+      creatorId: data.creatorId,
+      accountId: data.accountId,
+      creatorName: data.creatorName,
+      accountName: data.accountName,
+      jobType: data.jobType,
+      locationCity: data.locationCity,
+      locationNeighborhood: data.locationNeighborhood ?? '',
+      isRemote: data.isRemote ?? false,
+      payAmount: data.payAmount ?? 0,
+      payRate: data.payRate,
+      isNegotiable: data.isNegotiable ?? false,
+      skills: data.skills ?? [],
+      experienceLevel: data.experienceLevel ?? '',
+      employmentType: data.employmentType ?? '',
+      requiresDocuments: data.requiresDocuments ?? false,
+      documentsNeeded: data.documentsNeeded ?? [],
+      requiresEquipment: data.requiresEquipment ?? false,
+      equipmentRequired: data.equipmentRequired ?? [],
+      additionalNotes: data.additionalNotes ?? '',
+      status: data.status ?? 'ACTIVE',
+    },
+  });
+
+  return {
+    success: true,
+    message: 'Job post created successfully',
+    code: 'CREATED',
+    data: {
+      id: created.id,
+      status: created.status,
+      createdAt: created.createdAt.toISOString(),
+    },
+  };
+}
+
+// ======================================================
+// GET JOB POST BY ID
+// ======================================================
+async getJobPostById(id: string): Promise<BaseResponseDto<JobPostResponseDto>> {
+  try {
+    // 1. Fetch Job from DB with relations using strictly typed result
     const job = await this.prisma.jobPost.findUnique({
       where: { id },
       include: {
         category: true,
         subCategory: true,
       },
-    });
+    }) as JobPostWithRelations | null;
 
     if (!job) {
-      return {
-        success: false,
-        message: 'Job post not found',
-        code: 'JOB_NOT_FOUND',
-        data: null,
-        error: { message: 'No job post exists with this ID', details: null },
-      };
+      return BaseResponseDto.fail(
+        'Job post not found', 
+        'NOT_FOUND'
+      );
     }
 
-    // 2. Count applications only (Removed Booking logic)
-    const applicationsCount = await this.prisma.jobPostApplication.count({ 
-      where: { jobPostId: job.id } 
-    });
-
-    // 3. Construct Response using spread operator
-    // Using denormalized names (job.creatorName / job.accountName)
-    const jobPost: JobPostResponseDto = {
-      ...job,
-      createdAt: job.createdAt.toISOString(),
-      updatedAt: job.updatedAt.toISOString(),
-      
-      category: job.category
-        ? { id: job.category.id, name: job.category.name }
-        : null,
-      
-      subCategory: job.subCategory
-        ? { id: job.subCategory.id, name: job.subCategory.name }
-        : undefined,
-
-      // Identity Pillar (Now from DB, no gRPC needed)
-      creator: {
-        id: job.creatorId,
-        fullName: job.creatorName,
-      },
-      account: {
-        id: job.accountId,
-        name: job.accountName,
-      },
-      
-      applicationsCount,
-      // bookingsCount removed as per your request
-    };
+    // 2. Map the data using the shared helper for consistent shape
+    const data = await this.mapToResponseDto(job);
 
     return {
       success: true,
       message: 'Job post fetched successfully',
-      code: 'FETCHED',
-      data: jobPost,
+      code: 'OK',
+      data: data,
       error: null,
     };
+
   } catch (error) {
     const err = error as Error;
     this.logger.error(`Fetch job post failed: ${err.message}`, err.stack);
-    return {
-      success: false,
-      message: 'Failed to fetch job post',
-      code: 'FETCH_FAILED',
-      data: null,
-      error: { message: err.message, details: err.stack },
-    };
+
+    return BaseResponseDto.fail(
+      'Failed to fetch job post',
+      'NOT_FOUND'
+    );
+    
+  } finally {
+    this.logger.log(`[JOBS] Finished fetching job post: ${id}`);
   }
 }
 
@@ -214,71 +226,30 @@ async getJobsByCategory(categoryId: string): Promise<BaseResponseDto<JobPostResp
   this.logger.log(`[JOBS] Fetching feed for category: ${categoryId}`);
 
   try {
-    // 1. Fetch all jobs in the category with relations
     const jobs = await this.prisma.jobPost.findMany({
-      where: { categoryId, status: 'ACTIVE' }, // Only show active jobs in feed
+      where: { categoryId, status: 'ACTIVE' },
       include: { 
         category: true, 
         subCategory: true 
       },
-      orderBy: { createdAt: 'desc' } // Newest first
-    });
+      orderBy: { createdAt: 'desc' }
+    }) as JobPostWithRelations[];
 
-    // 2. Map the results (Removing gRPC and Bookings)
-    const jobsWithCounts: JobPostResponseDto[] = await Promise.all(
-      jobs.map(async (job) => {
-        // We still count applications as they are dynamic
-        const applicationsCount = await this.prisma.jobPostApplication.count({ 
-          where: { jobPostId: job.id } 
-        });
-
-        return {
-          ...job,
-          createdAt: job.createdAt.toISOString(),
-          updatedAt: job.updatedAt.toISOString(),
-          
-          category: job.category
-            ? { id: job.category.id, name: job.category.name }
-            : null,
-            
-          subCategory: job.subCategory
-            ? { id: job.subCategory.id, name: job.subCategory.name }
-            : undefined,
-
-          // Identity Pillars (Using denormalized names from DB)
-          creator: { 
-            id: job.creatorId, 
-            fullName: job.creatorName, 
-          },
-          account: {
-            id: job.accountId,
-            name: job.accountName,
-          },
-
-          applicationsCount,
-          // bookingsCount removed
-        };
-      }),
+    const jobsWithCounts = await Promise.all(
+      jobs.map((job) => this.mapToResponseDto(job))
     );
 
     return {
       success: true,
-      message: `Successfully fetched ${jobs.length} jobs`, 
-      code: 'FETCHED',
+      message: `Successfully fetched ${jobs.length} jobs`,
+      code: 'OK',
       data: jobsWithCounts,
       error: null,
     };
-
   } catch (error) {
     const err = error as Error;
     this.logger.error(`Fetch jobs by category failed: ${err.message}`, err.stack);
-    return {
-      success: false,
-      message: 'Failed to fetch jobs',
-      code: 'FETCH_FAILED',
-      data: null,
-      error: { message: err.message, details: err.stack },
-    };
+    return BaseResponseDto.fail('Failed to fetch jobs', 'NOT_FOUND');
   }
 }
 
@@ -315,78 +286,160 @@ async validateJobPostIds(dto: ValidateJobPostIdsRequestDto): Promise<BaseRespons
 }
 
 // ======================================================
-// UPDATE JOB POST
+// 1. UPDATE OWN JOB POST (Standard - Ownership Check)
 // ======================================================
 async updateJobPost(
-    dto: UpdateJobPostRequestDto
+  dto: UpdateOwnJobPostRequestDto & { creatorId: string }
 ): Promise<BaseResponseDto<JobPostResponseDto>> {
   try {
-    const existing = await this.prisma.jobPost.findUnique({ where: { id: dto.id } });
+    // We verify ownership using the creatorId passed from the Gateway JWT
+    const existing = await this.prisma.jobPost.findUnique({ 
+      where: { id: dto.id },
+      select: { creatorId: true }
+    });
     
     if (!existing || existing.creatorId !== dto.creatorId) {
-      return { success: false, message: 'Unauthorized or not found', code: 'UNAUTHORIZED', data: null, error: null };
+      this.logger.warn(`⚠️ Unauthorized update attempt: User ${dto.creatorId} tried to edit Job ${dto.id}`);
+      return BaseResponseDto.fail('Job post not found or unauthorized.', 'UNAUTHORIZED');
     }
 
-    const updated = await this.prisma.jobPost.update({
-      where: { id: dto.id },
-      data: { ...dto },
-      include: { category: true, subCategory: true }
-    });
-
-    return this.getJobPostById(updated.id); // Reuse your detailed fetcher
+    return await this.performUpdate(dto);
   } catch (error) {
-    return { success: false, message: 'Update failed', code: 'UPDATE_FAILED', data: null, error: null };
+    this.logger.error(`🔥 Job update failed: ${error.message}`);
+    return BaseResponseDto.fail('Failed to update job post.', 'INTERNAL_ERROR');
   }
 }
 
 // ======================================================
-// CLOSE JOB POST (Soft Delete)
+// 2. UPDATE ADMIN JOB POST (Admin - Identity Validation)
 // ======================================================
-async closeJobPost(dto: CloseJobPostRequestDto): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
+async updateAdminJobPost(
+  dto: UpdateAdminJobPostRequestDto
+): Promise<BaseResponseDto<JobPostResponseDto>> {
   try {
-    // 1. Verify ownership and current status
+    // 1. Validation: Does the job exist?
+    const existing = await this.prisma.jobPost.findUnique({ where: { id: dto.id } });
+    if (!existing) {
+      return BaseResponseDto.fail('Job post not found.', 'NOT_FOUND');
+    }
+
+    // 2. gRPC Validation: Ensure the provided creator/account identity is valid
+    const userProfile = await firstValueFrom(
+      this.userGrpcService.getUserProfileByUuid({ userUuid: dto.creatorId })
+    );
+
+    if (!userProfile?.success || !userProfile.data) {
+      return BaseResponseDto.fail('Target creator does not exist.', 'USER_NOT_FOUND');
+    }
+
+    // 3. Prevent linking to the wrong account
+    if (userProfile.data.account.uuid !== dto.accountId) {
+      return BaseResponseDto.fail('Creator/Account mismatch.', 'BAD_REQUEST');
+    }
+
+    // 4. Update denormalized names if necessary
+    const creatorName = `${userProfile.data.user.firstName} ${userProfile.data.user.lastName}`;
+    const accountName = userProfile.data.organization?.name || creatorName;
+
+    return await this.performUpdate({
+      ...dto,
+      creatorName,
+      accountName
+    });
+  } catch (error) {
+    this.logger.error(`🔥 Admin job update failed: ${error.message}`);
+    return BaseResponseDto.fail('Internal failure during admin update.', 'ERROR');
+  }
+}
+
+
+// ======================================================
+// 3. CORE UPDATE PERSISTENCE (Private Helper)
+// ======================================================
+private async performUpdate(
+  data: UpdatePersistenceData 
+): Promise<BaseResponseDto<JobPostResponseDto>> {
+  const { id, ...updateFields } = data;
+
+  // Perform the update
+  const updated = await this.prisma.jobPost.update({
+    where: { id },
+    data: {
+      ...updateFields,
+      // Ensure we don't accidentally wipe IDs if they aren't in the update fields
+      updatedAt: new Date(),
+    },
+  });
+
+  // Reuse your high-quality fetcher to return the full DTO with counts
+  return this.getJobPostById(updated.id);
+}
+
+// ======================================================
+// 1. CLOSE OWN JOB POST (Standard - Ownership Check)
+// ======================================================
+async closeJobPost(
+  dto: CloseOwnJobPostRequestDto & { creatorId: string }
+): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
+  try {
+    // 1. Verify job exists and belongs to the user
     const job = await this.prisma.jobPost.findUnique({
       where: { id: dto.id },
       select: { creatorId: true, status: true }
     });
 
     if (!job || job.creatorId !== dto.creatorId) {
-      return { 
-        success: false, 
-        message: 'Job post not found or unauthorized', 
-        code: 'NOT_FOUND_OR_UNAUTHORIZED', 
-        data: null 
-      };
+      this.logger.warn(`⚠️ Unauthorized Close: User ${dto.creatorId} tried to close Job ${dto.id}`);
+      return BaseResponseDto.fail('Job post not found or unauthorized', 'NOT_FOUND_OR_UNAUTHORIZED');
     }
 
-    // 2. Perform the update to get the updated object back
-    const updatedJob = await this.prisma.jobPost.update({
+    return await this.executeClosurePersistence(dto.id);
+  } catch (error) {
+    this.logger.error(`🔥 Close job failed: ${error.message}`);
+    return BaseResponseDto.fail('An error occurred while closing the job', 'ERROR');
+  }
+}
+
+// ======================================================
+// 2. CLOSE ADMIN JOB POST (Admin - Bypass Ownership)
+// ======================================================
+async closeAdminJobPost(
+  dto: CloseAdminJobPostRequestDto
+): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
+  try {
+    // 1. Just check if the job exists
+    const job = await this.prisma.jobPost.findUnique({
       where: { id: dto.id },
-      data: { 
-        status: 'CLOSED',
-        // updatedAt is handled by Prisma automatically
-      }
+      select: { id: true }
     });
 
-    return { 
-      success: true, 
-      message: 'Job closed successfully', 
-      code: 'CLOSED', 
-      data: {
-        id: updatedJob.id,
-        status: updatedJob.status,
-        isClosed: updatedJob.status === 'CLOSED',
-        closedAt: updatedJob.updatedAt
-      }
-    };
+    if (!job) {
+      return BaseResponseDto.fail('Job post not found', 'NOT_FOUND');
+    }
+
+    this.logger.log(`👮 Admin is closing job ${dto.id}`);
+    return await this.executeClosurePersistence(dto.id);
   } catch (error) {
-    return { 
-      success: false, 
-      message: 'An error occurred while closing the job', 
-      code: 'ERROR', 
-      data: null 
-    };
+    this.logger.error(`🔥 Admin close job failed: ${error.message}`);
+    return BaseResponseDto.fail('Internal failure during admin closure', 'ERROR');
   }
+}
+
+// ======================================================
+// 3. CORE CLOSURE PERSISTENCE (Private Helper)
+// ======================================================
+private async executeClosurePersistence(jobId: string): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
+  const updatedJob = await this.prisma.jobPost.update({
+    where: { id: jobId },
+    data: { status: 'CLOSED' }
+  });
+
+  return BaseResponseDto.ok({
+    id: updatedJob.id,
+    status: updatedJob.status,
+    isClosed: updatedJob.status === 'CLOSED',
+    closedAt: updatedJob.updatedAt
+  }, 'Job closed successfully', 'CLOSED');
 }
 
 async applyToJobPost(
@@ -518,6 +571,151 @@ async applyToJobPost(
     };
   });
 }
+
+// ======================================================
+  // 1. GET OWN JOB LISTINGS (Standard Flow)
+  // ======================================================
+  async getOwnJobs(creatorId: string, status?: string): Promise<BaseResponseDto<JobPostResponseDto[]>> {
+    try {
+      const jobs: JobPostWithRelations[] = await this.prisma.jobPost.findMany({
+        where: {
+          creatorId,
+          ...(status && { status: status as JobPost['status'] }),
+        },
+        include: { category: true, subCategory: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (jobs.length === 0) {
+      return BaseResponseDto.fail('No jobs matching your criteria were found.', 'NOT_FOUND');
+    }
+
+      const mappedJobs = await Promise.all(jobs.map((job) => this.mapToResponseDto(job)));
+
+      return BaseResponseDto.ok(mappedJobs, 'Own job listings fetched successfully', 'FETCHED');
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(`🔥 Failed to fetch own jobs for user ${creatorId}: ${err.message}`);
+      return BaseResponseDto.fail('Failed to fetch your job listings', 'FETCH_FAILED');
+    }
+  }
+
+ async getAdminJobs(query: {
+  creatorId?: string;
+  accountId?: string;
+  status?: string;
+}): Promise<BaseResponseDto<JobPostResponseDto[]>> {
+  try {
+    // 1. VALIDATE CREATOR
+    if (query.creatorId) {
+      try {
+        const creatorRes = await firstValueFrom(
+          this.userGrpcService.getUserProfileByUuid({ userUuid: query.creatorId })
+        );
+        
+        if (!creatorRes?.success) {
+          return BaseResponseDto.fail(creatorRes?.message || 'Creator not found', 'NOT_FOUND');
+        }
+      } catch (grpcError) {
+        // This catches the "13 INTERNAL: User not found" error from your logs
+        this.logger.warn(`[gRPC] Creator lookup failed: ${grpcError.message}`);
+        return BaseResponseDto.fail('The provided creator ID does not exist', 'CREATOR_NOT_FOUND');
+      }
+    }
+
+
+    // 2. VALIDATE ACCOUNT
+    if (query.accountId) {
+      try {
+        const accountRes = await firstValueFrom(
+          this.userGrpcService.getUserProfileByUuid({ userUuid: query.accountId })
+        );
+
+        if (!accountRes?.success) {
+          return BaseResponseDto.fail(accountRes?.message || 'Account not found', 'NOT_FOUND');
+        }
+      } catch (grpcError) {
+        this.logger.warn(`[gRPC] Account lookup failed: ${grpcError.message}`);
+        return BaseResponseDto.fail('The provided account ID does not exist', 'ACCOUNT_NOT_FOUND');
+      }
+    }
+
+    // 3. FETCH JOBS
+    const jobs = await this.prisma.jobPost.findMany({
+      where: {
+        ...(query.creatorId && { creatorId: query.creatorId }),
+        ...(query.accountId && { accountId: query.accountId }),
+        ...(query.status && { status: query.status  }),
+      },
+      include: { category: true, subCategory: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (jobs.length === 0) {
+      return BaseResponseDto.fail('No jobs matching your criteria were found.', 'NOT_FOUND');
+    }
+
+    const mappedJobs = await Promise.all(jobs.map((job) => this.mapToResponseDto(job as JobPostWithRelations)));
+    return BaseResponseDto.ok(mappedJobs, `Successfully found ${jobs.length} jobs`, 'FETCHED');
+
+  } catch (error) {
+    this.logger.error(`🔥 Unexpected failure in getAdminJobs: ${error.message}`);
+    return BaseResponseDto.fail('Internal server error while processing listings', 'INTERNAL_ERROR');
+  }
+}
+
+  // ======================================================
+  // 3. PRIVATE MAPPING HELPER (No 'any' types)
+  // ======================================================
+  private async mapToResponseDto(job: JobPostWithRelations): Promise<JobPostResponseDto> {
+    const applicationsCount = await this.prisma.jobPostApplication.count({
+      where: { jobPostId: job.id },
+    });
+
+    return {
+      id: job.id,
+      title: job.title,
+      description: job.description,
+      jobType: job.jobType,
+      locationCity: job.locationCity,
+      locationNeighborhood: job.locationNeighborhood,
+      isRemote: job.isRemote,
+      payAmount: job.payAmount,
+      payRate: job.payRate,
+      isNegotiable: job.isNegotiable,
+      skills: job.skills,
+      experienceLevel: job.experienceLevel,
+      employmentType: job.employmentType,
+      requiresDocuments: job.requiresDocuments,
+      documentsNeeded: job.documentsNeeded,
+      requiresEquipment: job.requiresEquipment,
+      equipmentRequired: job.equipmentRequired,
+      additionalNotes: job.additionalNotes,
+      status: job.status,
+      createdAt: job.createdAt.toISOString(),
+      updatedAt: job.updatedAt.toISOString(),
+      
+      category: job.category ? { 
+        id: job.category.id, 
+        name: job.category.name 
+      } : null,
+      
+      subCategory: job.subCategory ? { 
+        id: job.subCategory.id, 
+        name: job.subCategory.name 
+      } : undefined,
+
+      creator: {
+        id: job.creatorId,
+        fullName: job.creatorName,
+      },
+      account: {
+        id: job.accountId,
+        name: job.accountName,
+      },
+      applicationsCount,
+    };
+  }
 
 
 }
