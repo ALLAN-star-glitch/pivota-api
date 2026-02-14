@@ -18,7 +18,10 @@ To run the dev server for your app, use:
 
 ```sh
 npx nx serve api-gateway
+npx prisma generate --schema=apps/auth-service/prisma/schema.prisma
+
 ```
+npm run start:dev:auth
 
 To create a production bundle:
 

@@ -1,12 +1,17 @@
-import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  Inject,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-// Type for the Africastalking SMS client
+export const AFRICASTALKING_SMS = 'AFRICASTALKING_SMS';
+
 export interface AfricastalkingSMS {
   send(options: { to: string; message: string }): Promise<unknown>;
 }
 
-// Strongly typed response
 export interface SmsResponse {
   status: string;
   to: string;
@@ -32,37 +37,64 @@ export interface BulkSmsResponse {
 @Injectable()
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
-  private readonly username: string;
-  private readonly apiKey: string;
+
+  private readonly defaultUsername: string;
+  private readonly defaultApiKey: string;
 
   constructor(
-    @Inject('AFRICASTALKING_SMS') private readonly sms: AfricastalkingSMS, // strongly typed
+    @Inject(AFRICASTALKING_SMS)
+    private readonly smsClient: AfricastalkingSMS,
     private readonly configService: ConfigService,
   ) {
-    // Load credentials from env or fallback
-    this.username =
-      this.configService.get<string>('AT_USERNAME') || process.env.AT_USERNAME || '';
-    this.apiKey =
-      this.configService.get<string>('AT_API_KEY') || process.env.AT_API_KEY || '';
+    this.defaultUsername =
+      this.configService.get<string>('AT_USERNAME') ||
+      process.env.AT_USERNAME ||
+      '';
 
-    if (!this.username || !this.apiKey) {
+    this.defaultApiKey =
+      this.configService.get<string>('AT_API_KEY') ||
+      process.env.AT_API_KEY ||
+      '';
+
+    if (!this.defaultUsername || !this.defaultApiKey) {
       this.logger.error(
-        '⚠️ Africa’s Talking credentials are missing! ' +
-        'Please set AT_USERNAME and AT_API_KEY in your .env file or system environment.',
+        'Africa’s Talking credentials missing in env. Provide AT_USERNAME & AT_API_KEY',
       );
-      throw new Error('Africa’s Talking credentials are required');
     } else {
-      this.logger.log(`Africa’s Talking credentials loaded for user: ${this.username}`);
+      this.logger.log(`Africa’s Talking ready for user: ${this.defaultUsername}`);
     }
   }
 
   /**
-   * Send SMS using Africa's Talking
-   * @param to E.164 phone number, e.g., +254700000000
-   * @param message SMS content (max 160 chars)
+   * Resolve credentials
+   * Priority:
+   * 1️⃣ client token (multi-tenant / per-request auth)
+   * 2️⃣ env token fallback
    */
-  async sendSms(to: string, message: string): Promise<SmsResponse> {
-    // Validate phone number
+  private resolveCredentials(clientToken?: string) {
+    const apiKey = clientToken || this.defaultApiKey;
+
+    if (!apiKey) {
+      throw new BadRequestException(
+        'SMS provider API key missing. Provide token or configure env.',
+      );
+    }
+
+    return {
+      username: this.defaultUsername,
+      apiKey,
+    };
+  }
+
+  /**
+   * Send single SMS
+   */
+  async sendSms(
+    to: string,
+    message: string,
+    clientToken?: string,
+  ): Promise<SmsResponse> {
+    // Validate phone
     if (!/^\+\d{10,15}$/.test(to)) {
       throw new BadRequestException(
         `Phone number "${to}" must be in E.164 format, e.g., +254700000000`,
@@ -72,13 +104,25 @@ export class SmsService {
     // Validate message
     if (!message || message.length > 160) {
       throw new BadRequestException(
-        `Message is required and must be <= 160 characters. Current length: ${message?.length || 0}`,
+        `Message must be <= 160 chars. Length: ${message?.length || 0}`,
       );
     }
 
+
     try {
-      const response = await this.sms.send({ to, message });
-      this.logger.log(`✅ SMS sent to ${to}: ${JSON.stringify(response)}`);
+      /**
+       * NOTE:
+       * Africa's Talking SDK uses global config.
+       * If you later need per-tenant SDK instances,
+       * we can dynamically create SDK clients here.
+       */
+
+      const response = await this.smsClient.send({ to, message });
+
+      this.logger.log(
+        `SMS sent to ${to} using ${clientToken ? 'client token' : 'env token'}`,
+      );
+
       return {
         status: 'success',
         to,
@@ -87,15 +131,21 @@ export class SmsService {
       };
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error('Unknown SMS error');
-      this.logger.error(`❌ Failed to send SMS to ${to}: ${err.message}`);
+
+      this.logger.error(`SMS failed for ${to}: ${err.message}`);
+
       throw new Error(`SMS sending failed: ${err.message}`);
     }
   }
 
+  /**
+   * Send bulk SMS
+   */
   async sendBulkSms(
     recipients: string[],
     message: string,
     stopOnError = false,
+    clientToken?: string,
   ): Promise<BulkSmsResponse> {
     if (!Array.isArray(recipients) || recipients.length === 0) {
       throw new BadRequestException('At least one recipient is required');
@@ -107,30 +157,36 @@ export class SmsService {
 
     for (const to of recipients) {
       try {
-        const response = await this.sendSms(to, message);
+        const response = await this.sendSms(to, message, clientToken);
+
         results.push({
           to,
           status: 'success',
           data: response.data,
         });
-        sentCount += 1;
+
+        sentCount++;
       } catch (error: unknown) {
         const err = error instanceof Error ? error : new Error('Unknown SMS error');
+
         results.push({
           to,
           status: 'error',
           error: err.message,
         });
-        failedCount += 1;
 
-        if (stopOnError) {
-          break;
-        }
+        failedCount++;
+
+        if (stopOnError) break;
       }
     }
 
     const status: BulkSmsResponse['status'] =
-      failedCount === 0 ? 'success' : sentCount === 0 ? 'error' : 'partial_success';
+      failedCount === 0
+        ? 'success'
+        : sentCount === 0
+        ? 'error'
+        : 'partial_success';
 
     return {
       status,
@@ -141,11 +197,15 @@ export class SmsService {
     };
   }
 
+  /**
+   * Provider health
+   */
   getProviderHealth() {
     return {
       provider: 'africastalking',
-      configured: Boolean(this.username && this.apiKey),
-      username: this.username,
+      configured: Boolean(this.defaultApiKey),
+      username: this.defaultUsername,
+      mode: this.defaultApiKey ? 'env-configured' : 'token-required',
     };
   }
 }

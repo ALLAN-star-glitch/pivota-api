@@ -9,27 +9,24 @@ import {
   Version,
 } from '@nestjs/common';
 import { BaseResponseDto, SessionDto } from '@pivota-api/dtos';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClientInfo } from '../../decorators/client-info.decorator';
 import { Roles } from '../../decorators/roles.decorator';
 import { RolesGuard } from '../../guards/role.guard';
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
 import { NotificationActivityQueryDto } from './dto/notification-activity-query.dto';
+import { SmsActivityQueryDto } from './dto/sms-activity-query.dto';
 import { SendNotificationBulkSmsDto } from './dto/send-notification-bulk-sms.dto';
 import { SendNotificationSmsDto } from './dto/send-notification-sms.dto';
-import { SmsActivityQueryDto } from './dto/sms-activity-query.dto';
 import { NotificationsGatewayService } from './notifications-gateway.service';
 
+// Pick only necessary client info from SessionDto for SMS logging/tracking
 type NotificationClientInfo = Pick<
   SessionDto,
   'device' | 'ipAddress' | 'userAgent' | 'os'
 >;
 
-@ApiTags('Notifications Module - ((Notification-Service) - API)')
+@ApiTags('Notifications Module - Notification Service API')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('notifications-gateway')
@@ -40,6 +37,7 @@ export class NotificationsGatewayController {
     private readonly notificationsGatewayService: NotificationsGatewayService,
   ) {}
 
+  // ------------------- SINGLE SMS -------------------
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SuperAdmin', 'SystemsAdmin')
   @Version('1')
@@ -47,12 +45,13 @@ export class NotificationsGatewayController {
   @ApiOperation({ summary: 'Send single SMS via notification service' })
   async sendSms(
     @Body() dto: SendNotificationSmsDto,
-    @ClientInfo() clientInfo: NotificationClientInfo,
+    @ClientInfo() clientInfo?: NotificationClientInfo, // made optional
   ): Promise<BaseResponseDto<unknown>> {
-    this.logger.debug(`Notification SMS send request for ${dto.to}`);
+    this.logger.debug(`SMS send request for recipient: ${dto.to}`);
     return this.notificationsGatewayService.sendSms(dto, clientInfo);
   }
 
+  // ------------------- BULK SMS -------------------
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SuperAdmin', 'SystemsAdmin')
   @Version('1')
@@ -60,17 +59,18 @@ export class NotificationsGatewayController {
   @ApiOperation({ summary: 'Send bulk SMS via notification service' })
   async sendBulkSms(
     @Body() dto: SendNotificationBulkSmsDto,
-    @ClientInfo() clientInfo: NotificationClientInfo,
+    @ClientInfo() clientInfo?: NotificationClientInfo, // optional
   ): Promise<BaseResponseDto<unknown>> {
     this.logger.debug(
-      `Notification bulk SMS send request for ${dto.recipients.length} recipients`,
+      `Bulk SMS send request for ${dto.recipients.length} recipients`,
     );
     return this.notificationsGatewayService.sendBulkSms(dto, clientInfo);
   }
 
+  // ------------------- NOTIFICATION ACTIVITIES -------------------
   @Version('1')
   @Get('activities')
-  @ApiOperation({ summary: 'Fetch notification activities across channels' })
+  @ApiOperation({ summary: 'Fetch notification activities across all channels' })
   async getActivities(
     @Query() query: NotificationActivityQueryDto,
   ): Promise<BaseResponseDto<unknown>> {
@@ -86,6 +86,7 @@ export class NotificationsGatewayController {
     return this.notificationsGatewayService.getSmsActivities(query);
   }
 
+  // ------------------- REALTIME / HEALTH / STATS -------------------
   @Version('1')
   @Get('sms/realtime')
   @ApiOperation({ summary: 'Fetch realtime SMS/WebSocket stats' })
@@ -95,28 +96,28 @@ export class NotificationsGatewayController {
 
   @Version('1')
   @Get('sms/health')
-  @ApiOperation({ summary: 'Fetch SMS provider health' })
+  @ApiOperation({ summary: 'Fetch SMS provider health status' })
   async getSmsHealth(): Promise<BaseResponseDto<unknown>> {
     return this.notificationsGatewayService.getSmsHealth();
   }
 
   @Version('1')
   @Get('stats')
-  @ApiOperation({ summary: 'Fetch notification realtime stats' })
+  @ApiOperation({ summary: 'Fetch notification realtime stats across channels' })
   async getStats(): Promise<BaseResponseDto<unknown>> {
     return this.notificationsGatewayService.getStats();
   }
 
   @Version('1')
   @Get('status')
-  @ApiOperation({ summary: 'Fetch notification service health and realtime status' })
+  @ApiOperation({ summary: 'Fetch notification service health and status' })
   async getStatus(): Promise<BaseResponseDto<unknown>> {
     return this.notificationsGatewayService.getStatus();
   }
 
   @Version('1')
   @Get('ws-info')
-  @ApiOperation({ summary: 'Get WebSocket usage information for notifications stream' })
+  @ApiOperation({ summary: 'Get WebSocket usage info for notifications stream' })
   async getWsInfo(): Promise<BaseResponseDto<unknown>> {
     return this.notificationsGatewayService.getWsInfo();
   }
