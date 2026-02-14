@@ -7,6 +7,7 @@ import {
   Query,
   UseGuards,
   Version,
+  Param,
 } from '@nestjs/common';
 import { BaseResponseDto, SessionDto } from '@pivota-api/dtos';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -20,7 +21,7 @@ import { SendNotificationBulkSmsDto } from './dto/send-notification-bulk-sms.dto
 import { SendNotificationSmsDto } from './dto/send-notification-sms.dto';
 import { NotificationsGatewayService } from './notifications-gateway.service';
 
-// Pick only necessary client info from SessionDto for SMS logging/tracking
+/** Pick only necessary client info for logging/tracking */
 type NotificationClientInfo = Pick<
   SessionDto,
   'device' | 'ipAddress' | 'userAgent' | 'os'
@@ -37,34 +38,51 @@ export class NotificationsGatewayController {
     private readonly notificationsGatewayService: NotificationsGatewayService,
   ) {}
 
+  // ------------------- HELPER -------------------
+  /**
+   * Safely convert any service response into a BaseResponseDto
+   */
+  private toBaseResponseDto<T>(serviceResponse: {
+    success: boolean;
+    message: string;
+    data?: T;
+  }): BaseResponseDto<T> {
+    return {
+      status: serviceResponse.success ? 'success' : 'error',
+      code: serviceResponse.success ? '200' : '500',
+      message: serviceResponse.message,
+      data: serviceResponse.data,
+    } as unknown as BaseResponseDto<T>;
+  }
+
   // ------------------- SINGLE SMS -------------------
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('SuperAdmin', 'SystemsAdmin')
   @Version('1')
   @Post('sms/send')
-  @ApiOperation({ summary: 'Send single SMS via notification service' })
+  @ApiOperation({ summary: 'Send a single SMS via notification service' })
   async sendSms(
     @Body() dto: SendNotificationSmsDto,
-    @ClientInfo() clientInfo?: NotificationClientInfo, // made optional
+    @ClientInfo() clientInfo?: NotificationClientInfo,
   ): Promise<BaseResponseDto<unknown>> {
-    this.logger.debug(`SMS send request for recipient: ${dto.to}`);
-    return this.notificationsGatewayService.sendSms(dto, clientInfo);
+    this.logger.debug(`Sending SMS to recipient: ${dto.to}`);
+    const response = await this.notificationsGatewayService.sendSms(dto, clientInfo);
+    return this.toBaseResponseDto(response);
   }
 
   // ------------------- BULK SMS -------------------
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('SuperAdmin', 'SystemsAdmin')
   @Version('1')
   @Post('sms/send/bulk')
   @ApiOperation({ summary: 'Send bulk SMS via notification service' })
   async sendBulkSms(
     @Body() dto: SendNotificationBulkSmsDto,
-    @ClientInfo() clientInfo?: NotificationClientInfo, // optional
+    @ClientInfo() clientInfo?: NotificationClientInfo,
   ): Promise<BaseResponseDto<unknown>> {
-    this.logger.debug(
-      `Bulk SMS send request for ${dto.recipients.length} recipients`,
-    );
-    return this.notificationsGatewayService.sendBulkSms(dto, clientInfo);
+    this.logger.debug(`Sending bulk SMS to ${dto.recipients.length} recipients`);
+    const response = await this.notificationsGatewayService.sendBulkSms(dto, clientInfo);
+    return this.toBaseResponseDto(response);
   }
 
   // ------------------- NOTIFICATION ACTIVITIES -------------------
@@ -74,7 +92,10 @@ export class NotificationsGatewayController {
   async getActivities(
     @Query() query: NotificationActivityQueryDto,
   ): Promise<BaseResponseDto<unknown>> {
-    return this.notificationsGatewayService.getActivities(query);
+    // Map status to string if needed to satisfy service type
+    const safeQuery = { ...query, status: String(query.status) } as unknown;
+    const response = await this.notificationsGatewayService.getActivities(safeQuery);
+    return this.toBaseResponseDto(response);
   }
 
   @Version('1')
@@ -83,7 +104,9 @@ export class NotificationsGatewayController {
   async getSmsActivities(
     @Query() query: SmsActivityQueryDto,
   ): Promise<BaseResponseDto<unknown>> {
-    return this.notificationsGatewayService.getSmsActivities(query);
+    const safeQuery = { ...query, status: String(query.status) } as unknown;
+    const response = await this.notificationsGatewayService.getSmsActivities(safeQuery);
+    return this.toBaseResponseDto(response);
   }
 
   // ------------------- REALTIME / HEALTH / STATS -------------------
@@ -91,34 +114,77 @@ export class NotificationsGatewayController {
   @Get('sms/realtime')
   @ApiOperation({ summary: 'Fetch realtime SMS/WebSocket stats' })
   async getSmsRealtime(): Promise<BaseResponseDto<unknown>> {
-    return this.notificationsGatewayService.getSmsRealtime();
+    const response = await this.notificationsGatewayService.getSmsRealtime();
+    return this.toBaseResponseDto(response);
   }
 
   @Version('1')
   @Get('sms/health')
   @ApiOperation({ summary: 'Fetch SMS provider health status' })
   async getSmsHealth(): Promise<BaseResponseDto<unknown>> {
-    return this.notificationsGatewayService.getSmsHealth();
+    const response = await this.notificationsGatewayService.getSmsHealth();
+    return this.toBaseResponseDto(response);
   }
 
   @Version('1')
   @Get('stats')
   @ApiOperation({ summary: 'Fetch notification realtime stats across channels' })
   async getStats(): Promise<BaseResponseDto<unknown>> {
-    return this.notificationsGatewayService.getStats();
+    const response = await this.notificationsGatewayService.getStats();
+    return this.toBaseResponseDto(response);
   }
 
   @Version('1')
   @Get('status')
-  @ApiOperation({ summary: 'Fetch notification service health and status' })
+  @ApiOperation({ summary: 'Fetch combined notification service health and status' })
   async getStatus(): Promise<BaseResponseDto<unknown>> {
-    return this.notificationsGatewayService.getStatus();
+    const response = await this.notificationsGatewayService.getStatus();
+    return this.toBaseResponseDto(response);
   }
 
   @Version('1')
   @Get('ws-info')
   @ApiOperation({ summary: 'Get WebSocket usage info for notifications stream' })
   async getWsInfo(): Promise<BaseResponseDto<unknown>> {
-    return this.notificationsGatewayService.getWsInfo();
+    const response = await this.notificationsGatewayService.getWsInfo();
+    return this.toBaseResponseDto(response);
+  }
+
+  // ------------------- EXTENDED FUNCTIONALITY -------------------
+  @Version('1')
+  @Post('sms/retry-failed')
+  @ApiOperation({ summary: 'Retry sending failed SMS messages' })
+  async retryFailedSms(): Promise<BaseResponseDto<unknown>> {
+    this.logger.debug('Retrying failed SMS messages');
+    const response = await this.notificationsGatewayService.retryFailedSms();
+    return this.toBaseResponseDto(response);
+  }
+
+  @Version('1')
+  @Get('sms/daily-summary')
+  @ApiOperation({ summary: 'Get daily SMS summary' })
+  async getDailySmsSummary(@Query('date') date?: string): Promise<BaseResponseDto<unknown>> {
+    const summaryDate = date ? new Date(date) : undefined;
+    const response = await this.notificationsGatewayService.getDailySmsSummary(summaryDate);
+    return this.toBaseResponseDto(response);
+  }
+
+  @Version('1')
+  @Post('sms/cancel/:referenceId')
+  @ApiOperation({ summary: 'Cancel a scheduled SMS by referenceId' })
+  async cancelScheduledSms(@Param('referenceId') referenceId: string): Promise<BaseResponseDto<unknown>> {
+    const response = await this.notificationsGatewayService.cancelScheduledSms(referenceId);
+    return this.toBaseResponseDto(response);
+  }
+
+  @Version('1')
+  @Post('notification/test')
+  @ApiOperation({ summary: 'Send a test notification (SMS or Email)' })
+  async sendTestNotification(
+    @Body('channel') channel: 'sms' | 'email',
+    @Body('to') to: string,
+  ): Promise<BaseResponseDto<unknown>> {
+    const response = await this.notificationsGatewayService.sendTestNotification(channel, to);
+    return this.toBaseResponseDto(response);
   }
 }

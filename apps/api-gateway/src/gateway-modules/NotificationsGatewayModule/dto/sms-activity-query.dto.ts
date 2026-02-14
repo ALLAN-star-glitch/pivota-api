@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -15,174 +16,156 @@ import {
   Min,
 } from 'class-validator';
 
-// -------------------- Single SMS --------------------
-/**
- * DTO for sending a single SMS notification
- */
+// ---------------- Single SMS ----------------
 export class SendNotificationSmsDto {
-  /** Recipient phone number in E.164 format, e.g., +254700000000 */
+  @ApiProperty({ example: '+254742748416', description: 'Recipient phone number in E.164 format' })
   @IsString()
-  @IsNotEmpty({ message: 'Recipient phone number is required' })
-  @Matches(/^\+\d{10,15}$/, {
-    message: 'Phone number must be in E.164 format, e.g., +254700000000',
-  })
+  @IsNotEmpty()
+  @Matches(/^\+\d{10,15}$/)
   to: string;
 
-  /** SMS message content (max 160 characters) */
+  @ApiProperty({ example: 'Your verification code is 123456', maxLength: 160 })
   @IsString()
-  @IsNotEmpty({ message: 'Message cannot be empty' })
-  @MaxLength(160, { message: 'SMS message cannot exceed 160 characters' })
+  @IsNotEmpty()
+  @MaxLength(160)
   message: string;
 
-  /** Optional sender ID (up to 11 characters) */
+  @ApiPropertyOptional({ example: 'PIVOTA', maxLength: 11 })
   @IsOptional()
   @IsString()
-  @MaxLength(11, { message: 'senderId cannot exceed 11 characters' })
+  @MaxLength(11)
   senderId?: string;
 
-  /** Optional internal receiver ID for tracking */
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   receiverId?: string;
 
-  /** Optional internal reference ID */
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   referenceId?: string;
 
-  /** Optional category of message */
+  @ApiPropertyOptional({ enum: ['system', 'transactional', 'marketing'] })
   @IsOptional()
-  @IsIn(['system', 'transactional', 'marketing'], {
-    message: 'category must be one of system, transactional, marketing',
-  })
+  @IsIn(['system', 'transactional', 'marketing'])
   category?: 'system' | 'transactional' | 'marketing';
 
-  /** Optional priority level */
+  @ApiPropertyOptional({ enum: ['low', 'normal', 'high'] })
   @IsOptional()
-  @IsIn(['low', 'normal', 'high'], { message: 'priority must be one of low, normal, high' })
+  @IsIn(['low', 'normal', 'high'])
   priority?: 'low' | 'normal' | 'high';
 
-  /** Optional scheduled date/time for sending */
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
   @IsOptional()
   @Type(() => Date)
-  @IsDate({ message: 'scheduledAt must be a valid date' })
+  @IsDate()
   scheduledAt?: Date;
 
-  /** Optional language code (e.g., 'en', 'sw', 'fr') */
+  @ApiPropertyOptional({ example: 'en' })
   @IsOptional()
-  @IsString({ message: 'language must be a string' })
+  @IsString()
   language?: string;
 
-  /** Whether to request a delivery report (default: true) */
+  @ApiPropertyOptional({ default: true })
   @IsOptional()
-  @IsBoolean({ message: 'requestDeliveryReport must be a boolean' })
+  @IsBoolean()
   requestDeliveryReport?: boolean = true;
 
-  /** Optional metadata for logging, template variables, or tracing */
+  @ApiPropertyOptional({ type: Object })
   @IsOptional()
   metadata?: Record<string, unknown>;
 }
 
-// -------------------- Bulk SMS --------------------
-/**
- * DTO for sending bulk SMS notifications
- */
+// ---------------- Bulk SMS ----------------
 export class SendNotificationBulkSmsDto {
-  /** List of recipients in E.164 format (at least one required) */
+  @ApiProperty({ type: [String], example: ['+254742748416', '+254712345678'] })
   @IsArray()
-  @ArrayMinSize(1, { message: 'At least one recipient is required' })
+  @ArrayMinSize(1)
   @IsString({ each: true })
-  @Matches(/^\+\d{10,15}$/, {
-    each: true,
-    message: 'Each recipient must be in E.164 format, e.g., +254700000000',
-  })
+  @Matches(/^\+\d{10,15}$/, { each: true })
   recipients: string[];
 
-  /** SMS message content (max 160 characters) */
+  @ApiProperty({ example: 'System maintenance tonight', maxLength: 160 })
   @IsString()
-  @IsNotEmpty({ message: 'Message cannot be empty' })
-  @MaxLength(160, { message: 'SMS message cannot exceed 160 characters' })
+  @IsNotEmpty()
+  @MaxLength(160)
   message: string;
 
-  /** Stop sending to remaining recipients on first error (default: false) */
+  @ApiPropertyOptional({ default: false })
   @IsOptional()
-  @IsBoolean({ message: 'stopOnError must be a boolean' })
+  @IsBoolean()
   stopOnError?: boolean = false;
 
-  /** Optional sender ID (up to 11 characters) */
+  @ApiPropertyOptional({ example: 'PIVOTA', maxLength: 11 })
   @IsOptional()
   @IsString()
-  @MaxLength(11, { message: 'senderId cannot exceed 11 characters' })
+  @MaxLength(11)
   senderId?: string;
 
-  /** Optional category of message */
+  @ApiPropertyOptional({ enum: ['system', 'transactional', 'marketing'] })
   @IsOptional()
-  @IsIn(['system', 'transactional', 'marketing'], {
-    message: 'category must be one of system, transactional, marketing',
-  })
+  @IsIn(['system', 'transactional', 'marketing'])
   category?: 'system' | 'transactional' | 'marketing';
 
-  /** Optional priority level */
+  @ApiPropertyOptional({ enum: ['low', 'normal', 'high'] })
   @IsOptional()
-  @IsIn(['low', 'normal', 'high'], { message: 'priority must be one of low, normal, high' })
+  @IsIn(['low', 'normal', 'high'])
   priority?: 'low' | 'normal' | 'high';
 
-  /** Optional scheduled date/time for sending */
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
   @IsOptional()
   @Type(() => Date)
-  @IsDate({ message: 'scheduledAt must be a valid date' })
+  @IsDate()
   scheduledAt?: Date;
 
-  /** Optional language code */
+  @ApiPropertyOptional({ example: 'en' })
   @IsOptional()
-  @IsString({ message: 'language must be a string' })
+  @IsString()
   language?: string;
 
-  /** Whether to request a delivery report (default: true) */
+  @ApiPropertyOptional({ default: true })
   @IsOptional()
-  @IsBoolean({ message: 'requestDeliveryReport must be a boolean' })
+  @IsBoolean()
   requestDeliveryReport?: boolean = true;
 
-  /** Optional metadata for logging, template variables, or tracing */
+  @ApiPropertyOptional({ type: Object })
   @IsOptional()
   metadata?: Record<string, unknown>;
 }
 
-// -------------------- SMS Activity Query --------------------
-/**
- * DTO for querying SMS activity logs
- */
+// ---------------- SMS Activity Query ----------------
 export class SmsActivityQueryDto {
-  /** Filter by SMS status */
+  @ApiPropertyOptional({ enum: ['success', 'error'] })
   @IsOptional()
-  @IsIn(['success', 'error'], { message: 'status must be either success or error' })
+  @IsIn(['success', 'error'])
   status?: 'success' | 'error';
 
-  /** Filter by recipient phone number */
+  @ApiPropertyOptional({ example: '+254742748416' })
   @IsOptional()
-  @IsString({ message: 'to must be a string' })
+  @IsString()
   to?: string;
 
-  /** Pagination limit (default: 50, min: 1, max: 200) */
+  @ApiPropertyOptional({ default: 50, minimum: 1, maximum: 200 })
   @IsOptional()
   @Transform(({ value }) => {
     const num = Number(value);
     return isNaN(num) ? 50 : num;
   })
-  @IsInt({ message: 'limit must be an integer' })
-  @Min(1, { message: 'limit must be at least 1' })
-  @Max(200, { message: 'limit cannot exceed 200' })
+  @IsInt()
+  @Min(1)
+  @Max(200)
   limit?: number = 50;
 
-  /** Optional start date filter */
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
   @IsOptional()
   @Type(() => Date)
-  @IsDate({ message: 'startDate must be a valid date' })
+  @IsDate()
   startDate?: Date;
 
-  /** Optional end date filter */
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
   @IsOptional()
   @Type(() => Date)
-  @IsDate({ message: 'endDate must be a valid date' })
+  @IsDate()
   endDate?: Date;
 }

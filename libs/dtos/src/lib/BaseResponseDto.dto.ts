@@ -3,6 +3,9 @@ import { ErrorPayload } from '@pivota-api/interfaces';
 
 @ApiExtraModels() // Tell Swagger to inspect nested generic types
 export class BaseResponseDto<T = unknown> {
+  status(status: any) {
+    throw new Error('Method not implemented.');
+  }
   @ApiProperty({ example: true, description: 'True if operation succeeded' })
   readonly success: boolean;
 

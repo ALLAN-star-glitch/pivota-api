@@ -1,6 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
-  IsIn,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -8,36 +8,69 @@ import {
   Min,
   IsDateString,
 } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+
+/**
+ * Notification delivery channels supported
+ */
+export enum NotificationChannel {
+  SMS = 'sms',
+  EMAIL = 'email',
+}
+
+/**
+ * Notification status values
+ */
+export enum NotificationStatus {
+  SUCCESS = 'success',
+  ERROR = 'error',
+  PENDING = 'pending',
+}
 
 /**
  * DTO for querying notification activities
+ * Used in:
+ * GET /notifications-gateway/notifications/activities
  */
 export class NotificationActivityQueryDto {
-  /**
-   * Filter by channel type: 'sms' or 'email'
-   */
+  @ApiPropertyOptional({
+    enum: NotificationChannel,
+    description: 'Filter by notification channel',
+    example: 'sms',
+  })
   @IsOptional()
-  @IsIn(['sms', 'email'], { message: 'channel must be either sms or email' })
-  channel?: 'sms' | 'email';
+  @Transform(({ value }) => value?.toLowerCase()?.trim())
+  @IsEnum(NotificationChannel, {
+    message: 'channel must be one of: sms, email',
+  })
+  channel?: NotificationChannel;
 
-  /**
-   * Filter by status: 'success' or 'error'
-   */
+  @ApiPropertyOptional({
+    enum: NotificationStatus,
+    description: 'Filter by delivery status',
+    example: 'success',
+  })
   @IsOptional()
-  @IsIn(['success', 'error'], { message: 'status must be either success or error' })
-  status?: 'success' | 'error';
+  @Transform(({ value }) => value?.toLowerCase()?.trim())
+  @IsEnum(NotificationStatus, {
+    message: 'status must be one of: success, error, pending',
+  })
+  status?: NotificationStatus;
 
-  /**
-   * Filter by recipient (email or phone number)
-   */
+  @ApiPropertyOptional({
+    description: 'Recipient phone or email',
+    example: '+254742748416',
+  })
   @IsOptional()
+  @Transform(({ value }) => value?.trim())
   @IsString({ message: 'recipient must be a string' })
   recipient?: string;
 
-  /**
-   * Limit number of results returned
-   * Default: 50, Min: 1, Max: 200
-   */
+  @ApiPropertyOptional({
+    description: 'Max results to return (1–200)',
+    example: 50,
+    default: 50,
+  })
   @IsOptional()
   @Transform(({ value }) => {
     if (value === undefined || value === null || value === '') return 50;
@@ -47,18 +80,20 @@ export class NotificationActivityQueryDto {
   @IsInt({ message: 'limit must be an integer' })
   @Min(1, { message: 'limit must be at least 1' })
   @Max(200, { message: 'limit cannot exceed 200' })
-  limit?: number = 50;
+  limit = 50;
 
-  /**
-   * Filter notifications starting from this ISO date
-   */
+  @ApiPropertyOptional({
+    description: 'Start date (ISO format)',
+    example: '2026-02-01T00:00:00Z',
+  })
   @IsOptional()
   @IsDateString({}, { message: 'startDate must be a valid ISO date string' })
   startDate?: string;
 
-  /**
-   * Filter notifications up to this ISO date
-   */
+  @ApiPropertyOptional({
+    description: 'End date (ISO format)',
+    example: '2026-02-14T23:59:59Z',
+  })
   @IsOptional()
   @IsDateString({}, { message: 'endDate must be a valid ISO date string' })
   endDate?: string;
