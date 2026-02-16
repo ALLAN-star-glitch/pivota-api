@@ -1,160 +1,207 @@
 // -----------------------------------------------------
-// PivotaConnect RBAC Seeding — Updated to use `houses`
-// No plans or module rules seeding
+// PivotaConnect RBAC Seeding — Production Grade (Standardized)
+// Includes Organization Membership Logic
 // -----------------------------------------------------
 import 'dotenv/config';
 import { PrismaClient } from '../generated/prisma/client.js';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { plans } from './plans.config.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.ADMIN_SERVICE_DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log('🌱 Seeding PivotaConnect RBAC — system + business modules (MVP1)');
+  const startTime = Date.now();
+  console.log('\n🚀 Starting Production-Grade RBAC Seed Process...');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  // ---------- 1) ROLES ----------
+  // ---------- 1) CLEANUP ----------
+  const activeModuleSlugs = [
+    'houses', 'jobs', 'help-and-support', 'services',
+    'dashboard', 'user-management', 'analytics',
+    'system-settings', 'module-management', 'registry' // Added registry
+  ];
+
+  const deletedModules = await prisma.module.deleteMany({
+    where: { slug: { notIn: activeModuleSlugs } }
+  });
+  if (deletedModules.count > 0) {
+    console.log(`🧹 Cleaned up ${deletedModules.count} legacy modules via Cascade.`);
+  }
+
+  // ---------- 2) ROLES ----------
+  console.log('👤 Seeding Roles...');
   const roles = [
+    // SYSTEM ROLES (Supersets of Business Roles)
     { name: 'Super Admin', description: 'Full system access', scope: 'SYSTEM', roleType: 'SuperAdmin', status: 'Active', immutable: true },
-    { name: 'System Admin', description: 'System administrative tasks', scope: 'SYSTEM', roleType: 'SystemAdmin', status: 'Active', immutable: true },
+    { name: 'System Admin', description: 'Full system & org admin privileges', scope: 'SYSTEM', roleType: 'SystemAdmin', status: 'Active', immutable: true },
     { name: 'Compliance Admin', description: 'KYC & verification', scope: 'SYSTEM', roleType: 'ComplianceAdmin', status: 'Active', immutable: true },
     { name: 'Analytics Admin', description: 'View analytics & metrics', scope: 'SYSTEM', roleType: 'AnalyticsAdmin', status: 'Active', immutable: true },
     { name: 'Module Manager', description: 'Manage modules & rules', scope: 'SYSTEM', roleType: 'ModuleManager', status: 'Active', immutable: true },
-    { name: 'Business System Admin', description: 'Primary client admin', scope: 'BUSINESS', roleType: 'BusinessSystemAdmin', status: 'Active', immutable: false },
-    { name: 'Business Content Manager', description: 'Module-scoped moderator', scope: 'BUSINESS', roleType: 'BusinessContentManager', status: 'Active', immutable: false },
-    { name: 'General User', description: 'Default user', scope: 'BUSINESS', roleType: 'GeneralUser', status: 'Active', immutable: false },
+
+    // ORGANIZATION ROLES
+    { name: 'Business System Admin', description: 'Primary org admin; invite members & manage all content', scope: 'BUSINESS', roleType: 'BusinessSystemAdmin', status: 'Active', immutable: false },
+    { name: 'Business Content Manager', description: 'Org content-focused admin; invite members; moderate content', scope: 'BUSINESS', roleType: 'BusinessContentManager', status: 'Active', immutable: false },
+    { name: 'General User', description: 'Default org member', scope: 'BUSINESS', roleType: 'GeneralUser', status: 'Active', immutable: false },
   ];
 
-  await prisma.role.createMany({ data: roles, skipDuplicates: true });
-  const dbRoles = await prisma.role.findMany();
-  console.log(`Roles seeded: ${dbRoles.length}`);
+  for (const role of roles) {
+    await prisma.role.upsert({
+      where: { roleType: role.roleType },
+      update: { name: role.name, description: role.description, scope: role.scope },
+      create: role,
+    });
+  }
 
-  // ---------- 2) MODULES ----------
+  const dbRoles = await prisma.role.findMany();
+
+  // ---------- 3) MODULES ----------
+  console.log('\n📦 Seeding Modules...');
   const modules = [
     { slug: 'houses', name: 'Houses', description: 'Housing & rentals' },
     { slug: 'jobs', name: 'Jobs', description: 'Job listings & hiring' },
-    { slug: 'social-support', name: 'Social Support', description: 'Community & social aid services' },
+    { slug: 'help-and-support', name: 'Help and Support', description: 'Community & social aid services' },
+    { slug: 'services', name: 'Contractor Services', description: 'Professional service offerings & SmartMatch' },
     { slug: 'dashboard', name: 'Dashboard', system: true },
+    { slug: 'registry', name: 'Registry', description: 'Shared Navigation & Aggregated Portfolio', system: true }, // Added registry
     { slug: 'user-management', name: 'User Management', system: true },
     { slug: 'analytics', name: 'Analytics', system: true },
     { slug: 'system-settings', name: 'System Settings', system: true },
     { slug: 'module-management', name: 'Module Management', system: true },
   ];
 
-  await prisma.module.createMany({ data: modules, skipDuplicates: true });
-  const dbModules = await prisma.module.findMany();
-  console.log(`Modules seeded: ${dbModules.length}`);
-
-  const getModule = (slug: string) => dbModules.find(m => m.slug === slug);
-
-  // ---------- 3) PERMISSIONS ----------
-  const systemPermissions = [
-    { action: 'role.create', name: 'Create Role', description: 'Create roles', moduleSlug: 'user-management' },
-    { action: 'role.update', name: 'Update Role', description: 'Update roles', moduleSlug: 'user-management' },
-    { action: 'role.assign', name: 'Assign Role', description: 'Assign roles', moduleSlug: 'user-management' },
-    { action: 'user.view', name: 'View User', description: 'View users', moduleSlug: 'user-management' },
-    { action: 'analytics.view', name: 'View Analytics', description: 'View analytics', moduleSlug: 'analytics' },
-    { action: 'module.rules.manage', name: 'Manage Rules', description: 'Manage module rules', moduleSlug: 'module-management' },
-    { action: 'system-settings.manage', name: 'Manage System Settings', description: 'Manage system-wide settings', moduleSlug: 'system-settings' },
-  ];
-
-  const businessModuleSlugs = ['houses', 'jobs', 'social-support'];
-  const businessModuleActions = ['create', 'read', 'update', 'delete', 'approve', 'moderate'];
-  const businessModulePermissions = [];
-
-  for (const slug of businessModuleSlugs) {
-    for (const act of businessModuleActions) {
-      businessModulePermissions.push({
-        action: `${slug}.${act}`,
-        name: `${act.charAt(0).toUpperCase() + act.slice(1)} ${slug}`,
-        description: `${act.toUpperCase()} ${slug}`,
-        moduleSlug: slug,
-      });
-    }
-  }
-
-  // Listing-specific permissions
-  const listingActions = ['view', 'create', 'update', 'delete'];
-  const listingPermissions = [];
-  for (const slug of businessModuleSlugs) {
-    for (const act of listingActions) {
-      listingPermissions.push({
-        action: `listings.${slug}.${act}`,
-        name: `${act.toUpperCase()} ${slug} Listing`,
-        description: `${act.toUpperCase()} listing for ${slug}`,
-        moduleSlug: slug,
-      });
-    }
-  }
-  // Global listing controls
-  for (const act of listingActions) {
-    listingPermissions.push({
-      action: `listings.${act}`,
-      name: `${act.toUpperCase()} Listings`,
-      description: `${act.toUpperCase()} all listings`,
-      moduleSlug: null,
+  for (const mod of modules) {
+    await prisma.module.upsert({
+      where: { slug: mod.slug },
+      update: { name: mod.name, description: mod.description, system: !!mod.system },
+      create: { ...mod, system: !!mod.system },
     });
   }
 
-  const permissionData = [...systemPermissions, ...businessModulePermissions, ...listingPermissions].map(p => {
-    const mod = p.moduleSlug ? getModule(p.moduleSlug) : null;
-    return {
-      name: p.name,
-      action: p.action,
-      description: p.description,
-      moduleId: mod?.id ?? null,
-      system: !!mod?.system,
-    };
-  });
+  const dbModules = await prisma.module.findMany();
+  const getModule = (slug: string) => dbModules.find(m => m.slug === slug);
 
-  await prisma.permission.createMany({ data: permissionData, skipDuplicates: true });
+  // ---------- 4) PERMISSIONS ----------
+  console.log('\n🔐 Generating Permissions Registry...');
+  const systemPermissions = [
+    { action: 'role.create', moduleSlug: 'user-management' },
+    { action: 'role.update', moduleSlug: 'user-management' },
+    { action: 'role.assign', moduleSlug: 'user-management' },
+    { action: 'user.view', moduleSlug: 'user-management' },
+    { action: 'analytics.view', moduleSlug: 'analytics' },
+    { action: 'module.rules.manage', moduleSlug: 'module-management' },
+    { action: 'system-settings.manage', moduleSlug: 'system-settings' },
+    { action: 'subscription.bypass', moduleSlug: 'dashboard' },
+    { action: 'organization.invite-member', moduleSlug: 'user-management' },
+    { action: 'listings.read', moduleSlug: 'registry' }, // Unified Registry Permission
+  ];
+
+  const businessModuleSlugs = ['houses', 'jobs', 'help-and-support', 'services'];
+  const permissionData = [...systemPermissions];
+
+  for (const slug of businessModuleSlugs) {
+    // Global/Specialized Actions
+    ['read', 'approve', 'moderate', 'verify'].forEach(act => {
+      permissionData.push({ action: `${slug}.${act}`, moduleSlug: slug });
+    });
+    // CRUD & Lifecycle Actions (Splitting Own vs. Any)
+    ['create', 'update', 'delete', 'close', 'archive'].forEach(act => {
+      permissionData.push({ action: `${slug}.${act}.own`, moduleSlug: slug });
+      permissionData.push({ action: `${slug}.${act}.any`, moduleSlug: slug });
+    });
+  }
+
+  for (const p of permissionData) {
+    const mod = getModule(p.moduleSlug);
+    await prisma.permission.upsert({
+      where: { action: p.action },
+      update: { moduleId: mod?.id, system: !!mod?.system },
+      create: { 
+        action: p.action, 
+        name: p.action.replace(/\./g, ' '), 
+        moduleId: mod?.id, 
+        system: !!mod?.system 
+      },
+    });
+  }
+
   const dbPermissions = await prisma.permission.findMany();
-  console.log(`Permissions seeded: ${dbPermissions.length}`);
 
-  // ---------- 4) SYSTEM ROLE PERMISSIONS ----------
-  const sysRolePermMapping = {
+  // ---------- 5) ROLE → PERMISSION MAPPING ----------
+  console.log('\n🔗 Mapping Role Permissions (Full CRUD & Org Lifecycle)...');
+  const roleMapping: Record<string, string[]> = {
     SuperAdmin: dbPermissions.map(p => p.action),
-    SystemAdmin: ['role.create','role.update','role.assign','user.view','system-settings.manage'],
-    ModuleManager: ['module.rules.manage'],
-    AnalyticsAdmin: ['analytics.view'],
-    ComplianceAdmin: ['user.view'],
+    SystemAdmin: dbPermissions.filter(p => p.action !== 'subscription.bypass').map(p => p.action),
+    ModuleManager: [
+      'module.rules.manage',
+      'listings.read',
+      ...businessModuleSlugs.map(slug => `${slug}.read`)
+    ],
+    AnalyticsAdmin: [
+      'analytics.view',
+      'listings.read',
+      ...businessModuleSlugs.map(slug => `${slug}.read`)
+    ],
+    ComplianceAdmin: [
+      'user.view',
+      'listings.read',
+      ...businessModuleSlugs.flatMap(slug => [`${slug}.read`, `${slug}.moderate`, `${slug}.approve`]),
+    ],
+
+    BusinessSystemAdmin: [
+      ...businessModuleSlugs.flatMap(slug => [
+        `${slug}.read`, `${slug}.create.any`, `${slug}.update.any`, `${slug}.delete.any`,
+        `${slug}.close.any`, `${slug}.archive.any`, `${slug}.approve`, `${slug}.moderate`, `${slug}.verify`
+      ]),
+      'role.assign', 'role.create', 'user.view', 'analytics.view', 'organization.invite-member', 'subscription.bypass', 'listings.read'
+    ],
+    BusinessContentManager: [
+      ...businessModuleSlugs.flatMap(slug => [
+        `${slug}.read`, `${slug}.create.own`, `${slug}.update.own`, `${slug}.delete.own`,
+        `${slug}.close.own`, `${slug}.archive.own`, `${slug}.approve`, `${slug}.moderate`
+      ]),
+      'services.read', 'services.update.own',
+      'analytics.view', 'organization.invite-member', 'listings.read'
+    ],
+    GeneralUser: [
+      ...businessModuleSlugs.flatMap(slug => [
+        `${slug}.read`, `${slug}.create.own`, `${slug}.update.own`, `${slug}.delete.own`,
+        `${slug}.close.own`, `${slug}.archive.own`
+      ]),
+      'analytics.view', 'listings.read'
+    ],
   };
 
-  for (const [roleType, actions] of Object.entries(sysRolePermMapping)) {
+  for (const [roleType, actions] of Object.entries(roleMapping)) {
     const role = dbRoles.find(r => r.roleType === roleType);
     if (!role) continue;
 
-    const assignPerms = dbPermissions.filter(p => actions.includes(p.action));
-    console.log(`Assigning permissions for role ${roleType}:`, assignPerms.map(p => p.action));
+    await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
 
-    for (const perm of assignPerms) {
-      await prisma.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } },
-        update: {},
-        create: { roleId: role.id, permissionId: perm.id },
-      });
-    }
+    const permsToAssign = dbPermissions.filter(p => actions.includes(p.action));
+    await prisma.rolePermission.createMany({
+      data: permsToAssign.map(p => ({ roleId: role.id, permissionId: p.id })),
+      skipDuplicates: true
+    });
+    console.log(`   - ${roleType.padEnd(22)}: ${permsToAssign.length} permissions mapped`);
   }
-  console.log('✅ System role permissions assigned');
 
-  // ---------- 5) ROLE → MODULES ----------
+  // ---------- 6) ROLE MODULE VISIBILITY ----------
+  console.log('\n🗺️ Mapping Role Module Visibility...');
   const roleModuleConfig = [
-    { roleType: 'SuperAdmin', moduleSlugs: dbModules.map(m => m.slug), assignable: false },
-    { roleType: 'SystemAdmin', moduleSlugs: ['user-management', 'system-settings', 'analytics', 'module-management'], assignable: false },
-    { roleType: 'ModuleManager', moduleSlugs: ['module-management'], assignable: true },
-    { roleType: 'AnalyticsAdmin', moduleSlugs: ['analytics'], assignable: false },
-    { roleType: 'ComplianceAdmin', moduleSlugs: ['user-management'], assignable: false },
-    { roleType: 'BusinessSystemAdmin', moduleSlugs: ['houses', 'jobs', 'social-support'], assignable: true },
-    { roleType: 'BusinessContentManager', moduleSlugs: ['houses', 'jobs', 'social-support'], assignable: true },
+    { roleType: 'SuperAdmin', slugs: dbModules.map(m => m.slug), assignable: false },
+    { roleType: 'SystemAdmin', slugs: dbModules.map(m => m.slug), assignable: false },
+    { roleType: 'BusinessSystemAdmin', slugs: ['houses','jobs','help-and-support','services','dashboard', 'registry'], assignable: true },
+    { roleType: 'BusinessContentManager', slugs: ['houses','jobs','help-and-support','services','dashboard', 'registry'], assignable: true },
+    { roleType: 'GeneralUser', slugs: ['houses','jobs','help-and-support','services','dashboard', 'registry'], assignable: false },
   ];
 
   for (const cfg of roleModuleConfig) {
     const role = dbRoles.find(r => r.roleType === cfg.roleType);
     if (!role) continue;
-
-    for (const slug of cfg.moduleSlugs) {
+    for (const slug of cfg.slugs) {
       const mod = getModule(slug);
       if (!mod) continue;
-
       await prisma.roleModule.upsert({
         where: { roleId_moduleId: { roleId: role.id, moduleId: mod.id } },
         update: { assignable: cfg.assignable },
@@ -162,191 +209,50 @@ async function main() {
       });
     }
   }
-// ---------- 6) PLANS & PLAN MODULES ----------
-console.log('🌱 Seeding Plans & PlanModules');
 
-const plans = [
-  {
-    name: 'Free',
-    slug: 'free',
-    isPremium: false,
-    totalListings: 5,
-    description: 'Basic access for new users',
-    features: {
-      prices: { monthly: 0 },
-      support: 'community',
-      boost: false,
-      analytics: false,
-    },
-    modules: [
-      {
-        slug: 'houses',
-        restrictions: {
-          isAllowed: true,
-          listingLimit: 3,
-          approvalRequired: true,
-          maxPostsPerMonth: 2,
-        },
-      },
-      {
-        slug: 'jobs',
-        restrictions: { isAllowed: false, listingLimit: 0 },
-      },
-    ],
-  },
-  {
-    name: 'Starter',
-    slug: 'starter',
-    isPremium: true,
-    totalListings: 20,
-    description: 'For individuals & small teams',
-    features: {
-      prices: { monthly: 500 },
-      support: 'email',
-      boost: false,
-      analytics: true,
-    },
-    modules: [
-      {
-        slug: 'houses',
-        restrictions: {
-          isAllowed: true,
-          listingLimit: 10,
-          approvalRequired: false,
-          maxPostsPerMonth: 10,
-        },
-      },
-      {
-        slug: 'jobs',
-        restrictions: {
-          isAllowed: true,
-          listingLimit: 5,
-          approvalRequired: true,
-        },
-      },
-    ],
-  },
-  {
-    name: 'Pro',
-    slug: 'pro',
-    isPremium: true,
-    totalListings: 80,
-    description: 'For growing businesses',
-    features: {
-      prices: { monthly: 2000, annually: 22000 },
-      support: 'priority',
-      boost: true,
-      analytics: true,
-    },
-    modules: [
-      {
-        slug: 'houses',
-        restrictions: {
-          isAllowed: true,
-          listingLimit: 40,
-          approvalRequired: false,
-          maxPostsPerMonth: 30,
-        },
-      },
-      {
-        slug: 'jobs',
-        restrictions: {
-          isAllowed: true,
-          listingLimit: 25,
-          approvalRequired: false,
-        },
-      },
-      {
-        slug: 'social-support',
-        restrictions: {
-          isAllowed: true,
-          listingLimit: 15,
-        },
-      },
-    ],
-  },
-  {
-    name: 'Enterprise',
-    slug: 'enterprise',
-    isPremium: true,
-    totalListings: 200,
-    description: 'Full access plan for large organizations',
-    features: {
-      prices: { monthly: 5000, quarterly: 14000, annually: 55000 },
-      support: 'dedicated',
-      boost: true,
-      analytics: true,
-    },
-    modules: [
-      {
-        slug: 'houses',
-        restrictions: {
-          isAllowed: true,
-          listingLimit: 100,
-          approvalRequired: false,
-          maxPostsPerMonth: 50,
-        },
-      },
-      {
-        slug: 'jobs',
-        restrictions: {
-          isAllowed: true,
-          listingLimit: 60,
-          approvalRequired: false,
-        },
-      },
-      {
-        slug: 'social-support',
-        restrictions: {
-          isAllowed: true,
-          listingLimit: 40,
-        },
-      },
-    ],
-  },
-];
+  // ---------- 7) PLANS & PLAN MODULES ----------
+  console.log('\n💳 Seeding Plans & Module Restrictions...');
+  for (const plan of plans) {
+    const { modules: planModulesData, ...dbPlanFields } = plan;
 
-// Loop through each plan
-for (const plan of plans) {
-  // Create or update plan
-  const createdPlan = await prisma.plan.upsert({
-    where: { slug: plan.slug },
-    update: {},
-    create: {
-      name: plan.name,
-      slug: plan.slug,
-      description: plan.description,
-      isPremium: plan.isPremium,
-      totalListings: plan.totalListings,
-      creatorId: 'system',
-      features: JSON.stringify(plan.features), // store JSON as string
-    },
-  });
-
-  // Seed PlanModules
-  for (const mod of plan.modules) {
-    const module = await prisma.module.findUnique({ where: { slug: mod.slug } });
-    if (!module) continue;
-
-    await prisma.planModule.upsert({
-      where: { planId_moduleId: { planId: createdPlan.id, moduleId: module.id } },
-      update: { restrictions: JSON.stringify(mod.restrictions) },
+    const createdPlan = await prisma.plan.upsert({
+      where: { slug: plan.slug },
+      update: {
+        name: plan.name,
+        isPremium: plan.isPremium,
+        totalListings: plan.totalListings,
+        features: JSON.stringify(plan.features),
+      },
       create: {
-        planId: createdPlan.id,
-        moduleId: module.id,
-        restrictions: JSON.stringify(mod.restrictions),
+        ...dbPlanFields,
+        creatorId: 'system',
+        features: JSON.stringify(plan.features),
       },
     });
+
+    console.log(`   ➔ Plan: ${plan.name.padEnd(15)} | Listings: ${plan.totalListings}`);
+
+    for (const mod of planModulesData) {
+      const dbMod = getModule(mod.slug);
+      if (!dbMod) continue;
+
+      await prisma.planModule.upsert({
+        where: { planId_moduleId: { planId: createdPlan.id, moduleId: dbMod.id } },
+        update: { restrictions: JSON.stringify(mod.restrictions) },
+        create: { planId: createdPlan.id, moduleId: dbMod.id, restrictions: JSON.stringify(mod.restrictions) },
+      });
+
+      const duration = mod.restrictions.listingDurationDays ?? '∞';
+      console.log(`      └─ ${mod.slug.padEnd(18)} | Duration: ${duration} days`);
+    }
   }
-}
 
-console.log('✅ Plans & PlanModules seeded with module IDs');
-
-
-  console.log('✅ RoleModule assignments seeded');
-  console.log('🌱 PivotaConnect RBAC seeding complete (no plans or module rules)');
+  const durationTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log(`✨ Production-grade RBAC Seed Completed in ${durationTime}s`);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 }
 
 main()
-  .catch(err => { console.error(err); process.exit(1); })
+  .catch(err => { console.error('\n❌ SEED ERROR:', err); process.exit(1); })
   .finally(() => prisma.$disconnect());

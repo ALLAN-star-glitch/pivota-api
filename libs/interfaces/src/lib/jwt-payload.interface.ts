@@ -7,6 +7,8 @@ export interface JwtPayload {
   
   accountType: "INDIVIDUAL" | "ORGANIZATION"; // Helps UI logic
 
+  tokenId: string;  // The ID of the specific session
+
   email: string;
   role: string;
   organizationUuid?: string;

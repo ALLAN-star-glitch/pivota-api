@@ -63,6 +63,7 @@ export class OrganizationBaseDto {
 
   @ApiPropertyOptional({ example: 'Waiyaki Way, Nairobi, Kenya' })
   physicalAddress?: string;
+  
 }
 
 /* ======================================================

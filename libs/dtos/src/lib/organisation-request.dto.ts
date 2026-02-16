@@ -7,8 +7,19 @@ import {
   IsOptional, 
   MinLength,
   IsUrl,
-  IsPhoneNumber
+  IsPhoneNumber,
+  Length,
+  IsIn
 } from 'class-validator';
+
+
+const ALLOWED_ORG_TYPES = [
+  'PRIVATE_LIMITED', 
+  'NGO', 
+  'SOLE_PROPRIETORSHIP', 
+  'GOVERNMENT', 
+  'PARTNERSHIP'
+];
 
 /* ======================================================
    1. ORGANISATION SIGNUP REQUEST (AUTH SERVICE)
@@ -21,11 +32,13 @@ export class OrganisationSignupRequestDto {
   @ApiProperty({
     description: 'The registered legal name of the business or organization',
     example: 'Pivota Tech Solutions',
+    minLength: 3,
   })
   @IsString()
   @IsNotEmpty()
   @MinLength(3)
   name!: string;
+  
 
   @ApiProperty({
     description: 'General contact email for the business entity',
@@ -41,7 +54,7 @@ export class OrganisationSignupRequestDto {
   })
   @IsNotEmpty()
   @IsPhoneNumber(undefined, { message: 'Invalid official company phone number' })
-  officialPhone!: string; // 👈 Added for business profile
+  officialPhone!: string;
 
   @ApiProperty({
     description: 'Physical location or headquarters of the organization',
@@ -53,7 +66,7 @@ export class OrganisationSignupRequestDto {
 
   // --- ADMIN ACCOUNT DETAILS ---
   @ApiProperty({
-    description: 'Login email for the organization admin',
+    description: 'Login email for the organization admin. This will be the primary identity.',
     example: 'admin@pivotatech.co.ke',
   })
   @IsEmail()
@@ -61,8 +74,9 @@ export class OrganisationSignupRequestDto {
   email!: string;
 
   @ApiProperty({
-    description: 'Password for the organization admin account',
+    description: 'Secure password for the admin account',
     example: 'StrongPass@123',
+    minLength: 8,
   })
   @IsString()
   @IsNotEmpty()
@@ -70,7 +84,7 @@ export class OrganisationSignupRequestDto {
   password!: string;
 
   @ApiProperty({
-    description: 'International phone number for the admin. Must include country code.',
+    description: 'International phone number for the admin.',
     example: '+254711222333',
   })
   @IsNotEmpty()
@@ -79,15 +93,47 @@ export class OrganisationSignupRequestDto {
   })
   phone!: string;
 
-  @ApiProperty({ description: 'Admin first name', example: 'John' })
+  @ApiProperty({ description: 'Admin legal first name', example: 'John' })
   @IsString()
   @IsNotEmpty()
   adminFirstName!: string;
 
-  @ApiProperty({ description: 'Admin last name', example: 'Doe' })
+  @ApiProperty({ description: 'Admin legal last name', example: 'Doe' })
   @IsString()
   @IsNotEmpty()
   adminLastName!: string;
+
+  @ApiProperty({
+    description: '6-digit OTP verification code sent to the admin email',
+    example: '123456',
+    minLength: 6,
+    maxLength: 6
+  })
+  @IsString()
+  @Length(6, 6, { message: 'Verification code must be exactly 6 digits' })
+  @IsNotEmpty()
+  code!: string;
+
+  @ApiProperty({
+    description: 'The legal structure of the organization',
+    enum: ALLOWED_ORG_TYPES,
+    example: 'PRIVATE_LIMITED',
+  })
+  @IsNotEmpty()
+  @IsString()
+  @IsIn(ALLOWED_ORG_TYPES, {
+    message: `organizationType must be one of: ${ALLOWED_ORG_TYPES.join(', ')}`
+  })
+  organizationType!: string;
+
+  @ApiPropertyOptional({
+    description: 'Target subscription plan. If not the free-plan, signup will return a payment redirect.',
+    example: 'org-premium-tier',
+    default: 'free-plan'
+  })
+  @IsOptional()
+  @IsString()
+  planSlug?: string; 
 }
 
 /* ======================================================
@@ -164,6 +210,22 @@ export class CreateOrganisationRequestDto {
   @IsString()
   @IsNotEmpty()
   adminLastName!: string;
+
+  @ApiProperty({
+    description: 'The type of organization',
+    example: 'PRIVATE_LIMITED',
+  })
+  @IsNotEmpty()
+  @IsString()
+  @IsIn(ALLOWED_ORG_TYPES)
+  organizationType!: string;
+
+  @ApiPropertyOptional({
+    description: 'The subscription plan for the organization',
+    example: 'free-plan',
+  })
+  @IsString()
+  planSlug!: string; // mandatory here
 }
 
 /* ======================================================
@@ -201,15 +263,24 @@ export class UpdateOrgProfileRequestDto {
   @IsOptional()
   @IsString()
   physicalAddress?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Update the legal structure',
+    enum: ALLOWED_ORG_TYPES 
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(ALLOWED_ORG_TYPES)
+  organizationType?: string;
 }
 
 /* ======================================================
-   4. ADD ORGANISATION MEMBER REQUEST
+   4. ADD ORGANISATION MEMBER REQUEST (Direct Link)
 ====================================================== */
 export class AddOrgMemberRequestDto {
   @ApiProperty({
     description: 'Global identifier of the organization',
-    example: 'org_550e8400',
+    example: 'd9b2b1c0-1234-4a5b-8c9d-0123456789ab',
   })
   @IsUUID()
   @IsNotEmpty()
@@ -217,7 +288,7 @@ export class AddOrgMemberRequestDto {
 
   @ApiProperty({
     description: 'UUID of the user being added to the organization',
-    example: 'user_a7164466',
+    example: 'a7164466-1234-4a5b-8c9d-0123456789ab',
   })
   @IsUUID()
   @IsNotEmpty()
@@ -225,9 +296,84 @@ export class AddOrgMemberRequestDto {
 
   @ApiProperty({
     description: 'Role name to be assigned to the new member',
-    example: 'FINANCE_MANAGER',
+    example: 'FinanceManager',
   })
   @IsString()
   @IsNotEmpty()
   role!: string;
+}
+
+/* ======================================================
+   5. INVITE MEMBER REQUEST (Email-Based Invitation)
+   - Used by the Gateway to trigger the invitation flow.
+====================================================== */
+export class InviteMemberRequestDto {
+  @ApiProperty({
+    description: 'The organization the user is being invited to',
+    example: 'd9b2b1c0-1234-4a5b-8c9d-0123456789ab',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  orgUuid!: string;
+
+  @ApiProperty({
+    description: 'The email address of the person being invited',
+    example: 'colleague@example.com',
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  email!: string;
+
+  @ApiProperty({
+    description: 'The role they will assume upon joining',
+    example: 'Member',
+  })
+  @IsString()
+  @IsNotEmpty()
+  roleName!: string;
+
+  // This is usually extracted from the JWT in the Controller, 
+  // but included here for gRPC internal transport.
+  @IsUUID()
+  @IsOptional()
+  invitedByUuid?: string;
+}
+
+/* ======================================================
+   6. MEMBER INVITED EVENT DTO (Notification Service)
+   - Used for the 'member.invited' event on the Event Bus.
+====================================================== */
+export class MemberInviteEventDto {
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  orgName!: string;
+
+  @IsString()
+  role!: string;
+
+  @IsString()
+  inviteToken!: string;
+
+  @IsString()
+  joinUrl!: string;
+
+  @IsUUID()
+  invitedByUuid!: string;
+}
+
+
+/* ======================================================
+   7. ACCEPT INVITATION REQUEST
+====================================================== */
+export class AcceptInvitationRequestDto {
+  @ApiProperty({
+    description: 'The unique secret token sent to the users email',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @IsString()
+  @IsNotEmpty()
+  // If you use UUIDs for tokens, you can use @IsUUID() here
+  token!: string;
 }

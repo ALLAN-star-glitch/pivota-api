@@ -10,30 +10,35 @@ import * as dotenv from 'dotenv';
 import { AppModule } from './app/app.module';
 import { PROFILE_PROTO_PATH } from '@pivota-api/protos';
 
-// Load environment explicitly
+// Load environment variables explicitly
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
 
 async function bootstrap() {
-  Logger.log(`NODE_ENV = ${process.env.NODE_ENV}`);
-  Logger.log(`KAFKA_BROKERS = ${process.env.KAFKA_BROKERS}`);
+  const logger = new Logger('ProfileServiceBootstrap');
 
+  logger.log(`NODE_ENV = ${process.env.NODE_ENV || 'dev'}`);
+
+  // ---------------- Create Nest App ----------------
   const app = await NestFactory.create(AppModule);
-
   const configService = app.get(ConfigService);
 
-  // Log values via ConfigService
-  Logger.log(`NODE_ENV (via ConfigService) = ${configService.get<string>('NODE_ENV')}`);
-  Logger.log(`KAFKA_BROKERS (via ConfigService) = ${configService.get<string>('KAFKA_BROKERS')}`);
-  Logger.log(`DATABASE_URL (via ConfigService) = ${configService.get<string>('PROFILE_SERVICE_DATABASE_URL')}`);
-  Logger.log(`JWT_SECRET (via ConfigService) = ${configService.get<string>('JWT_SECRET')}`);
-  Logger.log(`RABBITMQ_URL (via ConfigService) = ${configService.get<string>('RABBITMQ_URL')}`);
+  // ---------------- Log Config ----------------
+  const kafkaBrokers = configService.get<string>('KAFKA_BROKERS') || process.env.KAFKA_BROKERS || 'localhost:9092';
+  const grpcUrl = configService.get<string>('PROFILE_GRPC_URL') || process.env.PROFILE_GRPC_URL || '0.0.0.0:50052';
+  const rabbitmqUrl = configService.get<string>('RABBITMQ_URL') || process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672';
+
+  logger.log(`KAFKA_BROKERS = ${kafkaBrokers}`);
+  logger.log(`PROFILE_GRPC_URL = ${grpcUrl}`);
+  logger.log(`RABBITMQ_URL = ${rabbitmqUrl}`);
+  logger.log(`DATABASE_URL = ${configService.get<string>('PROFILE_SERVICE_DATABASE_URL')}`);
+  logger.log(`JWT_SECRET = ${configService.get<string>('JWT_SECRET')}`);
 
   // ---------------- Kafka Microservice ----------------
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.KAFKA,
     options: {
       client: {
-        brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+        brokers: kafkaBrokers.split(','),
       },
       consumer: {
         groupId: 'profile-service-consumer-v2',
@@ -41,6 +46,7 @@ async function bootstrap() {
       subscribe: { fromBeginning: false },
     },
   });
+  logger.log(`✅ Kafka microservice configured`);
 
   // ---------------- gRPC Microservice ----------------
   app.connectMicroservice<MicroserviceOptions>({
@@ -48,30 +54,38 @@ async function bootstrap() {
     options: {
       package: 'profile', // must match proto package
       protoPath: PROFILE_PROTO_PATH,
-      url: process.env.PROFILE_GRPC_URL || '0.0.0.0:50052',
+      url: grpcUrl,
     },
   });
+  logger.log(`✅ gRPC microservice configured at ${grpcUrl}`);
 
   // ---------------- RabbitMQ Microservice ----------------
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672'],
-      queue: 'profile_service_queue', // specific queue for profile service
+      urls: [rabbitmqUrl],
+      queue: 'profile_service_queue',
       queueOptions: {
         durable: true,
       },
-      noAck: false, // safer: requires explicit ack in handlers
+      noAck: false, // requires explicit acknowledgment
     },
   });
+  logger.log(`✅ RabbitMQ microservice configured at ${rabbitmqUrl}`);
 
-  await app.startAllMicroservices();
-  Logger.log(`🚀 Profile service is running (Kafka + gRPC + RabbitMQ)`);
-  Logger.log(`✅ Kafka connected to ${process.env.KAFKA_BROKERS} || 'localhost:9092'`);
-  Logger.log(`✅ gRPC listening on ${process.env.PROFILE_GRPC_URL || ' 0.0.0.0:50052'}`);
+  // ---------------- Start all microservices ----------------
+  try {
+    await app.startAllMicroservices();
+    logger.log(`🚀 All microservices (Kafka + gRPC + RabbitMQ) started successfully`);
+  } catch (err) {
+    logger.error(`❌ Failed to start microservices: ${err.message}`, err.stack);
+    process.exit(1);
+  }
 
-
-
+  // ---------------- Optional: Start HTTP (REST) server ----------------
+  const port = configService.get<number>('PROFILE_SERVICE_PORT') || 3000;
+  await app.listen(port);
+  logger.log(`🌐 REST API listening on http://localhost:${port}`);
 }
 
 bootstrap();

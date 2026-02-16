@@ -5,27 +5,28 @@ import { JwtModule } from '@nestjs/jwt';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { RBAC_PROTO_PATH, PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { PrismaModule } from '../../prisma/prisma.module';
+import { HttpModule } from '@nestjs/axios';
 
+const rabbitMqUrl = process.env.RABBITMQ_URL || 'amqp://localhost:5672';
 const notificationQueueName =
-  process.env.NOTIFICATION_EMAIL_QUEUE ||
-  process.env.RABBITMQ_NOTIFICATION_QUEUE ||
-  'notification_email_queue';
-
-const rabbitMqUrl =
-  process.env.RMQ_URL ||
-  process.env.RABBITMQ_URL ||
-  'amqp://localhost:5672';
+  process.env.NOTIFICATION_QUEUE || 'notification_queue';
 
 @Module({
   imports: [
+    HttpModule.register({
+      timeout: 10000,
+      maxRedirects: 5,
+    }),
+
     PrismaModule,
+
     JwtModule.register({
-      secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '3600s' }, // 1 hour
+      secret: process.env.JWT_SECRET || 'dev-secret',
+      signOptions: { expiresIn: '3600s' },
     }),
 
     ClientsModule.register([
-      // 1. gRPC: Profile Service (Identity Creation)
+      // gRPC: Profile Service
       {
         name: 'PROFILE_GRPC',
         transport: Transport.GRPC,
@@ -35,8 +36,8 @@ const rabbitMqUrl =
           url: process.env.PROFILE_GRPC_URL || 'localhost:50052',
         },
       },
-      
-      // 2. gRPC: RBAC Service (Role Authorization checks)
+
+      // gRPC: RBAC Service
       {
         name: 'RBAC_PACKAGE',
         transport: Transport.GRPC,
@@ -46,14 +47,14 @@ const rabbitMqUrl =
           url: process.env.RBAC_GRPC_URL || 'localhost:50055',
         },
       },
-      
-      //  RMQ: Notification Event Bus (Emails/Alerts)
+
+      // RabbitMQ: Notification Events
       {
-        name: 'NOTIFICATION_EVENT_BUS', 
+        name: 'NOTIFICATION_EVENT_BUS',
         transport: Transport.RMQ,
         options: {
           urls: [rabbitMqUrl],
-          queue: notificationQueueName, // Consumed by Notification Service
+          queue: notificationQueueName,
           queueOptions: { durable: true },
         },
       },
@@ -66,8 +67,9 @@ const rabbitMqUrl =
 export class AuthModule {
   constructor() {
     console.log(
-      '🚀 AuthModule: gRPC Clients & Dual RMQ Event Buses initialized.',
+      '🚀 AuthModule initialized',
       '| Profile GRPC:', process.env.PROFILE_GRPC_URL,
+      '| RBAC GRPC:', process.env.RBAC_GRPC_URL,
       '| RMQ URL:', rabbitMqUrl,
       '| Notification Queue:', notificationQueueName,
     );

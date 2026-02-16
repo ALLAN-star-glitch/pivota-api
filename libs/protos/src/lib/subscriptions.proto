@@ -8,6 +8,9 @@ package subscriptions;
 service SubscriptionService {
   rpc SubscribeToPlan (SubscribeToPlanRequest) returns (BaseSubscriptionResponse);
   rpc GetSubscriptionsByAccount (GetSubscriptionByAccountRequest) returns (BaseSubscriptionsResponse);
+  
+  // Updated Access Check
+  rpc CheckModuleAccess (CheckModuleAccessRequest) returns (CheckModuleAccessResponse);
 }
 
 // ===================================================
@@ -17,6 +20,28 @@ message ErrorPayload {
   string code = 1;
   string message = 2;
   string details = 3;
+}
+
+// ===================================================
+// ACCESS CHECK MESSAGES
+// ===================================================
+message CheckModuleAccessRequest {
+  string accountUuid = 1;
+  string moduleSlug = 2;
+}
+
+message AccessData {
+  bool isAllowed = 1;
+  string restrictions = 2; // JSON string
+  optional string reason = 3;
+}
+
+message CheckModuleAccessResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  AccessData data = 4; // This contains the actual permission results
+  ErrorPayload error = 5;
 }
 
 // ===================================================
@@ -39,7 +64,7 @@ message BaseSubscriptionsResponse {
 }
 
 // ===================================================
-// ENTITIES
+// ENTITIES & REQUESTS
 // ===================================================
 message Subscription {
   string id = 1;
@@ -58,26 +83,20 @@ message Subscription {
   string updatedAt = 14;
 }
 
-// ===================================================
-// REQUEST MESSAGES
-// ===================================================
 message SubscribeToPlanRequest {
   string subscriberUuid = 1;           
-  string planId = 2;                  // Free, Starter, Professional, Enterprise
-  repeated string entityIds = 3;      // array of listing 
-  string billingCycle = 4;            // monthly, quarterly, halfYearly, annually
-  string status = 5;                  // ACTIVE, PARTIALLY_PAID, CANCELLED, EXPIRED
+  string planId = 2;                  
+  repeated string entityIds = 3;      
+  string billingCycle = 4;            
+  string status = 5;                  
   float amountPaid = 6;
   string currency = 7;
   float totalAmount = 8;
-  string type = 9;                    // PLAN, LISTING_GROUP, MODULE, PAYGO
+  string type = 9;                    
 }
 
 message GetSubscriptionByAccountRequest {
-  string accountUuid = 1;             // <-- changed from accountUuid
+  string accountUuid = 1;             
 }
 
-// ===================================================
-// EMPTY REQUEST
-// ===================================================
 message EmptyRequest {}

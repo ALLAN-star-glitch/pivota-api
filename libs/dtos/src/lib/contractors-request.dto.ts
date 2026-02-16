@@ -11,7 +11,6 @@ import { PRICE_UNITS, VERTICALS } from '@pivota-api/constants';
    CREATE SERVICE OFFERING (Base DTO)
 ====================================================== */
 
-
 export class CreateServiceOfferingDto {
   @ApiProperty({ example: 'Professional House Painting' })
   @IsString()
@@ -93,21 +92,18 @@ export class CreateServiceOfferingDto {
 /* ======================================================
    INTERNAL/gRPC VERSION (Identity Pillars)
 ====================================================== */
+/**
+ * These fields are marked @IsOptional() so the Gateway Controller
+ * can auto-populate them from the JWT if they are missing.
+ */
 export class CreateServiceGrpcOfferingDto extends CreateServiceOfferingDto {
+  @ApiPropertyOptional({ description: 'UUID of the user profile' })
   @IsString()
-  @IsNotEmpty()
-  creatorId!: string;
+  @IsOptional() // Changed from @IsNotEmpty() to allow self-listing
+  creatorId?: string;
 
+  @ApiPropertyOptional({ description: 'UUID of the account organization/individual' })
   @IsString()
-  @IsOptional() // Optional as per Prisma model (creatorName String?)
-  creatorName?: string;
-
-  @IsString()
-  @IsNotEmpty()
-  accountId!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  accountName!: string;
-
+  @IsOptional() // Changed from @IsNotEmpty()
+  accountId?: string;
 }

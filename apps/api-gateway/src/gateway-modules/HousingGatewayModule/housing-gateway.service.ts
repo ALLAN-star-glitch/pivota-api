@@ -13,42 +13,26 @@ import {
   UpdateHouseListingGrpcRequestDto,
   CreateHouseListingGrpcRequestDto,
   ArchiveHouseListingsGrpcRequestDto,
+  HouseListingCreateResponseDto,
+  GetAdminHousingFilterDto, // Added missing import
 } from '@pivota-api/dtos';
 
-
-// This interface matches the 'service HousingService' definition in your housing.proto
+// Updated interface to include Admin-specific gRPC calls
 interface HousingServiceGrpc {
-  CreateHouseListing(
-    data: CreateHouseListingGrpcRequestDto,
-  ): Observable<BaseResponseDto<HouseListingResponseDto>>;
+  CreateHouseListing(data: CreateHouseListingGrpcRequestDto): Observable<BaseResponseDto<HouseListingCreateResponseDto>>;
+  CreateAdminHouseListing(data: CreateHouseListingGrpcRequestDto): Observable<BaseResponseDto<HouseListingCreateResponseDto>>;
 
-  GetHouseListingById(
-    data: GetHouseListingByIdDto,
-  ): Observable<BaseResponseDto<HouseListingResponseDto>>;
+  UpdateHouseListing(data: UpdateHouseListingGrpcRequestDto): Observable<BaseResponseDto<HouseListingResponseDto>>;
+  UpdateAdminHouseListing(data: UpdateHouseListingGrpcRequestDto): Observable<BaseResponseDto<HouseListingResponseDto>>;
 
-  GetListingsByOwner(
-    data: GetListingsByOwnerDto,
-  ): Observable<BaseResponseDto<HouseListingResponseDto[]>>;
+  GetHouseListingById(data: GetHouseListingByIdDto): Observable<BaseResponseDto<HouseListingResponseDto>>;
+  GetListingsByOwner(data: GetListingsByOwnerDto): Observable<BaseResponseDto<HouseListingResponseDto[]>>;
+  GetAdminListings(data: GetAdminHousingFilterDto): Observable<BaseResponseDto<HouseListingResponseDto[]>>;
 
-  SearchListings(
-    data: SearchHouseListingsDto,
-  ): Observable<BaseResponseDto<HouseListingResponseDto[]>>;
-
-  UpdateHouseListing(
-    data: UpdateHouseListingGrpcRequestDto,
-  ): Observable<BaseResponseDto<HouseListingResponseDto>>;
-
-  UpdateListingStatus(
-    data: UpdateHouseListingStatusDto,
-  ): Observable<BaseResponseDto<HouseListingResponseDto>>;
-
-  ArchiveHouseListing(
-    data: ArchiveHouseListingsGrpcRequestDto,
-  ): Observable<BaseResponseDto<null>>;
-
-  ScheduleViewing(
-    data: ScheduleViewingGrpcRequestDto,
-  ): Observable<BaseResponseDto<HouseViewingResponseDto>>;
+  SearchListings(data: SearchHouseListingsDto): Observable<BaseResponseDto<HouseListingResponseDto[]>>;
+  UpdateListingStatus(data: UpdateHouseListingStatusDto): Observable<BaseResponseDto<HouseListingResponseDto>>;
+  ArchiveHouseListing(data: ArchiveHouseListingsGrpcRequestDto): Observable<BaseResponseDto<null>>;
+  ScheduleViewing(data: ScheduleViewingGrpcRequestDto): Observable<BaseResponseDto<HouseViewingResponseDto>>;
 }
 
 @Injectable()
@@ -57,109 +41,94 @@ export class HousingGatewayService {
   private grpcService: HousingServiceGrpc;
 
   constructor(
-    @Inject('HOUSING_PACKAGE') // Ensure this matches your ClientModule registration name
+    @Inject('HOUSING_PACKAGE') 
     private readonly grpcClient: ClientGrpc,
   ) {
     this.grpcService = this.grpcClient.getService<HousingServiceGrpc>('HousingService');
   }
 
   // ===========================================================
-  // CREATE HOUSE LISTING
+  // CREATE METHODS
   // ===========================================================
-  async createHouseListing(dto: CreateHouseListingGrpcRequestDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
+  async createHouseListing(dto: CreateHouseListingGrpcRequestDto): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
     const res = await firstValueFrom(this.grpcService.CreateHouseListing(dto));
-    this.logger.debug(`CreateHouseListing gRPC: ${res?.success ? 'SUCCESS' : 'FAILED'}`);
+    return this.handleGrpcResponse(res, 'CreateHouseListing');
+  }
 
-    if (res?.success) {
-      return BaseResponseDto.ok(res.data, res.message, res.code);
-    }
-    return BaseResponseDto.fail(res?.message, res?.code);
+  async createAdminHouseListing(dto: CreateHouseListingGrpcRequestDto): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
+    const res = await firstValueFrom(this.grpcService.CreateAdminHouseListing(dto));
+    return this.handleGrpcResponse(res, 'CreateAdminHouseListing');
   }
 
   // ===========================================================
-  // SEARCH LISTINGS
+  // UPDATE METHODS
   // ===========================================================
+  async updateHouseListing(dto: UpdateHouseListingGrpcRequestDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
+    const res = await firstValueFrom(this.grpcService.UpdateHouseListing(dto));
+    return this.handleGrpcResponse(res, 'UpdateHouseListing');
+  }
+
+  async updateAdminHouseListing(dto: UpdateHouseListingGrpcRequestDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
+    const res = await firstValueFrom(this.grpcService.UpdateAdminHouseListing(dto));
+    return this.handleGrpcResponse(res, 'UpdateAdminHouseListing');
+  }
+
+  // ===========================================================
+  // READ METHODS
+  // ===========================================================
+  async getAdminListings(dto: GetAdminHousingFilterDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    const res = await firstValueFrom(this.grpcService.GetAdminListings(dto));
+    return this.handleGrpcResponse(res, 'GetAdminListings');
+  }
+
+  // FIXED: Changed parameter type from { ownerId: string } to GetListingsByOwnerDto
+  async getListingsByOwner(dto: GetListingsByOwnerDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    const res = await firstValueFrom(this.grpcService.GetListingsByOwner(dto));
+    return this.handleGrpcResponse(res, 'GetListingsByOwner');
+  }
+
+  // FIXED: Changed parameter type from { id: string } to GetHouseListingByIdDto
+  async getHouseListingById(dto: GetHouseListingByIdDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
+    const res = await firstValueFrom(this.grpcService.GetHouseListingById(dto));
+    return this.handleGrpcResponse(res, 'GetHouseListingById');
+  }
+
   async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
     const res = await firstValueFrom(this.grpcService.SearchListings(dto));
-    this.logger.debug(`SearchListings gRPC: found ${res?.data?.length || 0} results`);
-
-    if (res?.success) {
-      return BaseResponseDto.ok(res.data || [], res.message, res.code);
-    }
-    return BaseResponseDto.fail(res?.message, res?.code);
+    return this.handleGrpcResponse(res, 'SearchListings');
   }
 
   // ===========================================================
-  // GET LISTING BY ID
+  // UTILITY METHODS
   // ===========================================================
-  async getHouseListingById(dto: { id: string }): Promise<BaseResponseDto<HouseListingResponseDto>> {
-    const res = await firstValueFrom(this.grpcService.GetHouseListingById(dto));
-    
-    if (res?.success) {
-      return BaseResponseDto.ok(res.data, res.message, res.code);
-    }
-    return BaseResponseDto.fail(res?.message, res?.code);
+  async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseDto<HouseViewingResponseDto>> {
+    const res = await firstValueFrom(this.grpcService.ScheduleViewing(dto));
+    return this.handleGrpcResponse(res, 'ScheduleViewing');
   }
 
-  // ===========================================================
-  // GET LISTINGS BY OWNER
-  // ===========================================================
-  async getListingsByOwner(dto: { ownerId: string }): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
-    const res = await firstValueFrom(this.grpcService.GetListingsByOwner(dto));
-    
-    if (res?.success) {
-      return BaseResponseDto.ok(res.data || [], res.message, res.code);
-    }
-    return BaseResponseDto.fail(res?.message, res?.code);
-  }
-
-  // ===========================================================
-  // UPDATE LISTING
-  // ===========================================================
-  async updateHouseListing( dto: UpdateHouseListingGrpcRequestDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
-    
-    const res = await firstValueFrom(this.grpcService.UpdateHouseListing(dto));
-
-    if (res?.success) {
-      return BaseResponseDto.ok(res.data, res.message, res.code);
-    }
-    return BaseResponseDto.fail(res?.message, res?.code);
-  }
-
-  // ===========================================================
-  // UPDATE STATUS
-  // ===========================================================
-  async updateListingStatus(dto: UpdateHouseListingStatusDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
-    const res = await firstValueFrom(this.grpcService.UpdateListingStatus(dto));
-    
-    if (res?.success) {
-      return BaseResponseDto.ok(res.data, res.message, res.code);
-    }
-    return BaseResponseDto.fail(res?.message, res?.code);
-  }
-
-  // ===========================================================
-  // ARCHIVE LISTING
-  // ===========================================================
   async archiveHouseListing(dto: ArchiveHouseListingsGrpcRequestDto): Promise<BaseResponseDto<null>> {
     const res = await firstValueFrom(this.grpcService.ArchiveHouseListing(dto));
-    
-    if (res?.success) {
-      return BaseResponseDto.ok(null, res.message, res.code);
-    }
-    return BaseResponseDto.fail(res?.message, res?.code);
+    return this.handleGrpcResponse(res, 'ArchiveHouseListing');
   }
 
-  // ===========================================================
-  // SCHEDULE VIEWING
-  // ===========================================================
-  async scheduleViewing( dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseDto<HouseViewingResponseDto>> {
+  async updateListingStatus(dto: UpdateHouseListingStatusDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
+    const res = await firstValueFrom(this.grpcService.UpdateListingStatus(dto));
+    return this.handleGrpcResponse(res, 'UpdateListingStatus');
+  }
 
-    const res = await firstValueFrom(this.grpcService.ScheduleViewing(dto));
-
+  /**
+   * Universal handler to standardize gRPC response mapping
+   */
+  private handleGrpcResponse<T>(res: BaseResponseDto<T>, methodName: string): BaseResponseDto<T> {
+    this.logger.debug(`${methodName} gRPC: ${res?.success ? 'SUCCESS' : 'FAILED'}`);
+    
     if (res?.success) {
       return BaseResponseDto.ok(res.data, res.message, res.code);
     }
-    return BaseResponseDto.fail(res?.message, res?.code);
+    
+    return BaseResponseDto.fail(
+      res?.message || `Internal error in ${methodName}`, 
+      res?.code || 'INTERNAL_ERROR'
+    );
   }
 }

@@ -5,7 +5,7 @@ import {
   ForbiddenException,
   Logger,
   Version,
-} from '@nestjs/common';
+} from '@nestjs/common'; 
 import { Response } from 'express';
 import { AuthService } from './auth.service';
 import {
@@ -66,6 +66,7 @@ export class AuthDevController {
       'sys-admin-uuid-1111',
       'system.admin@pivota-dev.com',
       'SystemAdmin',
+      'sys-admin-account-id',
       res,
     );
   }
@@ -83,6 +84,7 @@ export class AuthDevController {
       'comp-admin-uuid-2222',
       'compliance.admin@pivota-dev.com',
       'ComplianceAdmin',
+      'comp-admin-account-id',
       res,
     );
   }
@@ -100,6 +102,7 @@ export class AuthDevController {
       'analyt-admin-uuid-3333',
       'analytics.admin@pivota-dev.com',
       'AnalyticsAdmin',
+      'analyt-admin-account-id',
       res,
     );
   }
@@ -117,6 +120,7 @@ export class AuthDevController {
       'mod-manager-uuid-4444',
       'module.manager@pivota-dev.com',
       'ModuleManager',
+      'mod-manager-account-id', 
       res,
     );
   }
@@ -134,6 +138,7 @@ export class AuthDevController {
       'biz-sys-uuid-5555',
       'biz.system@pivota-dev.com',
       'BusinessSystemAdmin',
+      'biz-sys-account-id', 
       res,
     );
   }
@@ -151,6 +156,7 @@ export class AuthDevController {
       'biz-cont-uuid-6666',
       'biz.content@pivota-dev.com',
       'BusinessContentManager',
+      'biz-cont-account-id',  
       res,
     );
   }
@@ -165,9 +171,10 @@ export class AuthDevController {
   async loginGeneralUser(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      '0892c11c-1fb2-4a5e-948e-075c9c11231a',
-      'janenyambura4272@gmail.com',
+      '8400a033-eb84-4bd6-b87f-f5e11cba1cd3',
+      'stephenjuguna9010@gmail.com',
       'GeneralUser',
+      'eb02ea40-4f17-4040-8885-0029105d9fb2',  
       res,
     );
   }
@@ -179,13 +186,15 @@ export class AuthDevController {
   @Get('token/super-admin')
   @ApiOperation({ summary: 'Login as SuperAdmin' })
   @ApiResponse(AuthDevController.TokenResponseSchema)
-  async loginSuperAdmin(@Res({ passthrough: true }) res: Response) {
+  async loginSuperAdmin(@Res({ passthrough: true }) res: Response): Promise<BaseResponseDto<TokenPairDto>> {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
       '69a601b6-fdb9-4333-9c01-8895a8b3af45',
       'allanmathenge67@gmail.com',
       'SuperAdmin',
+      '462908a2-0f23-472a-b2d7-54966d004256', 
       res,
     );
   }
 }
+

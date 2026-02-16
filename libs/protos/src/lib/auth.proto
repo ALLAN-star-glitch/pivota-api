@@ -4,18 +4,117 @@ package auth;
 
 // ------------------ Auth Service ------------------
 service AuthService {
+  // Signup & Onboarding
   rpc Signup(SignupRequest) returns (SignupResponse);
-  rpc Login(LoginRequest) returns (LoginResponse);
-  rpc Refresh(RefreshRequest) returns (BaseRefreshTokenResponse);
-  rpc GenerateDevToken(GenerateDevTokenRequest) returns (BaseDevTokenResponse);
   rpc OrganisationSignup(OrganisationSignupRequest) returns (OrganisationSignupResponse);
+  
+  // Login & Session (Updated for 2-Stage MFA)
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc VerifyMfaLogin(VerifyMfaLoginRequest) returns (LoginResponse);
+
+  // Forgot Password Flow
+  rpc RequestPasswordReset(RequestOtpRequest) returns (BaseOtpResponse);
+  rpc ResetPassword(ResetPasswordRequest) returns (BaseResponse);
+
   rpc GoogleLogin(GoogleLoginRequest) returns (LoginResponse);
+  rpc Refresh(RefreshRequest) returns (BaseRefreshTokenResponse);
+  
+  // OTP Management
+  rpc RequestOtp(RequestOtpRequest) returns (BaseOtpResponse);
+  rpc VerifyOtp(VerifyOtpRequest) returns (VerifyOtpResponse);
+
+  // Development
+  rpc GenerateDevToken(GenerateDevTokenRequest) returns (BaseDevTokenResponse);
+
+
+  rpc RevokeSessions(RevokeSessionRequest) returns (BaseResponse);
+  rpc GetActiveSessions(GetActiveSessionsRequest) returns (GetActiveSessionsResponse);
+
+
+}
+
+// ------------------ Forgot Password Messages ------------------
+
+message ResetPasswordRequest {
+  string email = 1;
+  string code = 2;         // The OTP verification code
+  string newPassword = 3;  // The new hashed/plain password to be set
+}
+
+// ------------------ MFA / Login Stage 2 Message ------------------
+
+message VerifyMfaLoginRequest {
+  string email = 1;
+  string code = 2;
+  ClientInfo clientInfo = 3; 
+}
+
+// ------------------ OTP Messages ------------------
+
+message RequestOtpRequest {
+  string email = 1;
+  string purpose = 2; // e.g., "SIGNUP", "2FA", "PASSWORD_RESET"
+}
+
+message VerifyOtpRequest {
+  string email = 1;
+  string code = 2;
+  string purpose = 3;
+}
+
+message BaseOtpResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+}
+
+message VerifyOtpResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  VerifyOtpData data = 4;
+}
+
+message VerifyOtpData {
+  bool verified = 1;
+}
+
+// ------------------ Signup Messages ------------------
+
+message SignupRequest {
+  string firstName = 1;
+  string lastName = 2;
+  string email = 3;
+  string password = 4;
+  string phone = 5;
+  string planSlug = 6;
+  string code = 7; 
+}
+
+message OrganisationSignupRequest {
+  // --- BUSINESS ENTITY DETAILS ---
+  // Mirrors NestJS OrganisationSignupRequestDto
+  string name = 1;                // Legal name
+  string officialEmail = 2;       // General business email
+  string officialPhone = 3;       // General business phone
+  string physicalAddress = 4;     // Headquarters location
+  string organizationType = 5;    // PRIVATE_LIMITED, NGO, etc.
+
+  // --- ADMIN ACCOUNT DETAILS ---
+  string email = 6;               // Admin Login email
+  string password = 7;            // Admin Password
+  string phone = 8;               // Admin personal phone (for MFA)
+  string adminFirstName = 9;
+  string adminLastName = 10;
+  
+  // --- VERIFICATION ---
+  string code = 11;               // 6-digit OTP code
+  string planSlug = 12;           // Subscription plan for the organization
 }
 
 // ------------------ Auth / Login Flow ------------------
 
 message AuthUserResponse {
-  // Core Identity
   string id = 1;
   string uuid = 2;                   
   string userCode = 3;               
@@ -26,25 +125,17 @@ message AuthUserResponse {
   string phone = 8;
   string status = 9;                 
   string role = 10;                  
-
-  // Profile metadata
   string profileImage = 11;
   string createdAt = 12;
   string updatedAt = 13;
-
-  // Subscription/Runtime Data
   string currentSubscription = 14;
   string subscriptionStatus = 15;
   string subscriptionExpiresAt = 16;
   string planId = 17;
   string categoryId = 18;
-
-  // Tokens
   string accessToken = 19;           
   string refreshToken = 20;
-
- 
-   OrgContext organization = 21;
+  OrgContext organization = 21;
 }
 
 message OrgContext {
@@ -58,19 +149,16 @@ message LoginResponse {
   bool success = 1;
   string message = 2;
   string code = 3;
-  // Note: Standardize field name to 'data' to match BaseResponseDto
   AuthUserResponse data = 4; 
   ErrorPayload error = 5;
 }
 
-// ------------------ Signup Messages ------------------
+// ------------------ Response Data Wrappers ------------------
 
-message SignupRequest {
-  string firstName = 1;
-  string lastName = 2;
-  string email = 3;
-  string password = 4;
-  string phone = 5;
+message BaseResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
 }
 
 message SignupResponse {
@@ -81,9 +169,13 @@ message SignupResponse {
   ErrorPayload error = 5;
 }
 
-message GoogleLoginRequest {
-  string token = 1;         // The id_token from Google
-  ClientInfo clientInfo = 2; // Reusing your existing helper
+message OrganisationSignupResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  OrganisationSignupData data = 4;
+  ErrorPayload error = 5;
+  string organizationType = 6;
 }
 
 message UserSignupData {
@@ -93,33 +185,13 @@ message UserSignupData {
   CompletionBase completion = 4;
 }
 
-message OrganisationSignupRequest {
-  string name = 1;
-  string officialEmail = 2;
-  string officialPhone = 3;
-  string physicalAddress = 4;
-  string email = 5;
-  string password = 6;
-  string phone = 7;
-  string adminFirstName = 8;
-  string adminLastName = 9;
-}
-
-message OrganisationSignupResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  OrganisationSignupData data = 4;
-  ErrorPayload error = 5;
-}
-
 message OrganisationSignupData {
   OrgBase organization = 1;
   AdminUserResponse admin = 2;
   AccountBase account = 3;
 }
 
-// ------------------ Shared Data Objects ------------------
+// ------------------ Shared Objects ------------------
 
 message AccountBase {
   string uuid = 1;
@@ -170,8 +242,6 @@ message OrgBase {
   string verificationStatus = 5;
 }
 
-// ------------------ Common Helpers ------------------
-
 message ClientInfo {
   string device = 1;
   string ipAddress = 2;
@@ -182,11 +252,16 @@ message ClientInfo {
 message LoginRequest {
   string email = 1;
   string password = 2;
-  ClientInfo clientInfo = 3; 
 }
 
-message RefreshRequest { string refreshToken = 1; }
+message GoogleLoginRequest {
+  string token = 1;
+  ClientInfo clientInfo = 2;
+}
 
+message RefreshRequest { 
+  string refreshToken = 1; 
+}
 
 message BaseRefreshTokenResponse {
   bool success = 1;
@@ -212,7 +287,7 @@ message BaseDevTokenResponse {
   bool success = 1;
   string message = 2;
   string code = 3;
-  RefreshTokenResponse tokens = 4; 
+  RefreshTokenResponse data = 4; 
   ErrorPayload error = 5;
 }
 
@@ -220,4 +295,38 @@ message ErrorPayload {
   string message = 1;
   string code = 2;
   string details = 3;  
+}
+
+// ------------------ Session Management Messages ------------------
+
+message GetActiveSessionsRequest {
+  string userUuid = 1;
+}
+
+message GetActiveSessionsResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  repeated SessionDto data = 4; // The list of active devices
+  ErrorPayload error = 5;
+}
+
+message SessionDto {
+  int32 id = 1;
+  string tokenId = 2;
+  string device = 3;
+  string ipAddress = 4;
+  string userAgent = 5;
+  string os = 6;
+  string lastActiveAt = 7;
+  string expiresAt = 8;
+  string createdAt = 9;
+  bool revoked = 10;
+}
+
+// Update your existing RevokeSessionRequest to make tokenId optional
+// This allows you to revoke one session OR all sessions for a user.
+message RevokeSessionRequest {
+  string userUuid = 1;
+  optional string tokenId = 2; 
 }

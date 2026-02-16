@@ -58,8 +58,8 @@ model JobPost {
   subCategoryId  String?
   subCategory    Category? @relation("SubcategoryPosts", fields: [subCategoryId], references: [id])
 
-  creatorName   String
-  accountName   String
+  creatorName   String?
+  accountName   String?
   creatorId   String   // The individual user who clicked "Post"
   accountId   String   // The Org or Individual Account owning the post
   jobType     String
@@ -374,9 +374,9 @@ model HouseListing {
   id           String   @id @default(cuid())
   externalId   String   @default(uuid())
   creatorId      String   // The individual User UUID
-  creatorName    String
+  creatorName    String?
   accountId    String   // The owning Account (Individual or Property Agency Org)
-  accountName   String
+  accountName   String?
   
   title        String
   description  String

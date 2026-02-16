@@ -5,6 +5,7 @@ import {
   BaseResponseDto,
   CreateUserRequestDto,
   GetUserByUserUuidDto,
+  UpdateFullUserProfileDto,
   UserProfileResponseDto,
   UserSignupDataDto,
 } from '@pivota-api/dtos';
@@ -15,15 +16,32 @@ export class UserController {
 
   constructor(private readonly userService: UserService) {}
 
+  /** ------------------ Get My Profile (Own Account) ------------------ */
+  @GrpcMethod('ProfileService', 'GetMyProfile')
+  async handleGetMyProfile(
+    @Payload() data: { userUuid: string },
+  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`[gRPC] GetMyProfile requested for authenticated user: ${data.userUuid}`);
+    return this.userService.getMyProfile(data.userUuid);
+  }
+
+  /** ------------------ Update Full User Profile ------------------ */
+  @GrpcMethod('ProfileService', 'UpdateUserProfile')
+  async handleUpdateUserProfile(
+    @Payload() dto: UpdateFullUserProfileDto,
+  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`[gRPC] UpdateUserProfile request for: ${dto.userUuid}`);
+    return this.userService.updateFullProfile(dto);
+  }
+  
   /** ------------------ Signup / Create User Profile ------------------ */
   @GrpcMethod('ProfileService', 'CreateUserProfile')
-async handleCreateUserProfile(
-  @Payload() dto: CreateUserRequestDto,
-): Promise<BaseResponseDto<UserSignupDataDto>> {
-  this.logger.log(`Creating user profile for email: ${dto.email}`);
-  return this.userService.createUserProfile(dto);
-}
-
+  async handleCreateUserProfile(
+    @Payload() dto: CreateUserRequestDto,
+  ): Promise<BaseResponseDto<UserSignupDataDto>> {
+    this.logger.log(`Creating user profile for email: ${dto.email}`);
+    return this.userService.createUserProfile(dto);
+  }
 
   /** ------------------ Get User Profile by Email ------------------ */
   @GrpcMethod('ProfileService', 'GetUserProfileByEmail')
@@ -51,6 +69,7 @@ async handleCreateUserProfile(
     this.logger.log(`Fetching user profile by UUID: ${data.userUuid}`);
     return this.userService.getUserProfileByUuid(data);
   }
+  
   
   /** ------------------ Get All Users ------------------ */
   @GrpcMethod('ProfileService', 'GetAllUsers')

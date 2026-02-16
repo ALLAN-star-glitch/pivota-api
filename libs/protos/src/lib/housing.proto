@@ -7,13 +7,17 @@ package housing;
 // ===================================================
 service HousingService {
   // Core Listings
-  rpc CreateHouseListing (CreateHouseListingRequest) returns (BaseHouseListingResponse);
+  rpc CreateHouseListing (CreateHouseListingRequest) returns (BaseHouseListingCreateResponse);
+  rpc CreateAdminHouseListing (CreateHouseListingRequest) returns (BaseHouseListingCreateResponse);
+  
   rpc GetHouseListingById (GetHouseListingByIdRequest) returns (BaseHouseListingResponse);
   rpc GetListingsByOwner (GetListingsByOwnerRequest) returns (ListHouseListingsResponse);
+  rpc GetAdminListings (GetAdminListingsRequest) returns (ListHouseListingsResponse);
   rpc SearchListings (SearchHouseListingsRequest) returns (ListHouseListingsResponse);
 
   // Lifecycle & Management
   rpc UpdateHouseListing (UpdateHouseListingRequest) returns (BaseHouseListingResponse);
+  rpc UpdateAdminHouseListing (UpdateHouseListingRequest) returns (BaseHouseListingResponse);
   rpc UpdateListingStatus (UpdateHouseListingStatusRequest) returns (BaseHouseListingResponse);
   rpc ArchiveHouseListing (ArchiveHouseListingRequest) returns (BaseEmptyResponse);
 
@@ -30,14 +34,12 @@ message ErrorPayload {
   string details = 3;
 }
 
-// Representing the Human individual
 message UserBasic {
   string id = 1;
   string fullName = 2;
   string phone = 3;
 }
 
-// Representing the Brand/Organization
 message AccountBasic {
   string id = 1;
   string name = 2;
@@ -62,36 +64,27 @@ message HouseImage {
 message HouseListing {
   string id = 1;
   string externalId = 2;
-
   string title = 3;
   string description = 4;
   string listingType = 5;
-
   double price = 6;
   string currency = 7;
-
   int32 bedrooms = 8;
   int32 bathrooms = 9;
   repeated string amenities = 10;
   bool isFurnished = 11;
-
   string locationCity = 12;
   string locationNeighborhood = 13;
   string address = 14;
-
   string status = 15;
   string createdAt = 16;
   string updatedAt = 17;
-
   string imageUrl = 18; 
-
   CategoryBasic category = 19;
-  
-  // Identity Pillar: Split from 'owner' to Creator & Account
   UserBasic creator = 20;
   AccountBasic account = 21;
-  
   repeated HouseImage images = 22;
+  string accountName = 23; // Added for the Lean Summary logic
 }
 
 message HouseViewing {
@@ -108,76 +101,61 @@ message HouseViewing {
 // REQUEST MESSAGES
 // ===================================================
 
-// ---------- CREATE ----------
 message CreateHouseListingRequest {
-  // Identity Anchor Fields
   string creatorId = 1;
-  string creatorName = 2;
-  string accountId = 3;
-  string accountName = 4;
-  string ownerId = 5; // Legacy support / Foreign Key
-
-  string title = 6;
-  string description = 7;
-  string categoryId = 8;
-  string listingType = 9;
-
-  double price = 10;
-  string currency = 11;
-
-  int32 bedrooms = 12;
-  int32 bathrooms = 13;
-  repeated string amenities = 14;
-  bool isFurnished = 15;
-
-  string locationCity = 16;
-  string locationNeighborhood = 17;
-  string address = 18;
-
-  repeated string imageUrls = 19;
+  string accountId = 2;
+  string creatorName = 3; // Re-added to match your Controller's sanitizedDto
+  string accountName = 4; // Re-added to match your Controller's sanitizedDto
+  string title = 5;
+  string description = 6;
+  string categoryId = 7;
+  string listingType = 8;
+  double price = 9;
+  string currency = 10;
+  int32 bedrooms = 11;
+  int32 bathrooms = 12;
+  repeated string amenities = 13;
+  bool isFurnished = 14;
+  string locationCity = 15;
+  string locationNeighborhood = 16;
+  string address = 17;
+  repeated string imageUrls = 18;
 }
 
-// ---------- SEARCH ----------
 message SearchHouseListingsRequest {
   optional string city = 1;
-  optional string categoryId = 2;
-  optional string listingType = 3;
-
-  optional double minPrice = 4;
-  optional double maxPrice = 5;
-
-  optional int32 bedrooms = 6;
-  optional int32 limit = 7;
-  optional int32 offset = 8;
+  optional string listingType = 2;
+  optional double minPrice = 3;
+  optional double maxPrice = 4;
+  optional int32 bedrooms = 5;
+  optional int32 limit = 6;
+  optional int32 offset = 7;
 }
 
-// ---------- UPDATE ----------
 message UpdateHouseListingRequest {
   string listingId = 1;
   string callerId = 2;
   string userRole = 3;
-
-  UpdateHouseListingData data = 4;
+  optional string accountId = 4; // To support the "own" update logic
+  UpdateHouseListingData data = 5;
 }
 
 message UpdateHouseListingData {
   optional string title = 1;
   optional string description = 2;
   optional double price = 3;
-
   optional int32 bedrooms = 4;
   optional int32 bathrooms = 5;
   optional bool isFurnished = 6;
-
   repeated string amenities = 7;
-
   optional string locationCity = 8;
   optional string locationNeighborhood = 9;
   optional string address = 10;
-  optional string status = 11; // Added status update capability
+  optional string status = 11;
+  optional string creatorId = 12; // For Admin updates
+  optional string accountId = 13; // For Admin updates
 }
 
-// ---------- STATUS & ARCHIVE ----------
 message UpdateHouseListingStatusRequest {
   string id = 1;
   string ownerId = 2;
@@ -189,35 +167,52 @@ message ArchiveHouseListingRequest {
   string ownerId = 2;
 }
 
-// ---------- VIEWINGS ----------
 message ScheduleViewingRequest {
   string houseId = 1;
   string callerId = 2;
   string userRole = 3;
-
   string viewingDate = 4;
-
   optional string targetViewerId = 5;
   optional string notes = 6;
 }
 
-// ---------- GETTERS ----------
-message GetHouseListingByIdRequest {
-  string id = 1;
+message GetHouseListingByIdRequest { string id = 1; }
+
+// UPDATED: Now includes status to fix the TS Object Literal error
+message GetListingsByOwnerRequest { 
+  string ownerId = 1; 
+  optional string status = 2;
 }
 
-message GetListingsByOwnerRequest {
-  string ownerId = 1;
+// NEW: Admin specific filter
+message GetAdminListingsRequest {
+  optional string status = 1;
+  optional string accountId = 2;
+  optional string creatorId = 3;
 }
 
 // ===================================================
 // RESPONSE MESSAGES
 // ===================================================
+
+message HouseListingCreateData {
+  string id = 1;
+  string status = 2;
+  string createdAt = 3;
+}
+
+message BaseHouseListingCreateResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  HouseListingCreateData data = 4;
+  ErrorPayload error = 5;
+}
+
 message BaseHouseListingResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-
   HouseListing data = 4;
   ErrorPayload error = 5;
 }
@@ -226,7 +221,6 @@ message ListHouseListingsResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-
   repeated HouseListing data = 4;
   ErrorPayload error = 5;
 }
@@ -235,7 +229,6 @@ message BaseHouseViewingResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-
   HouseViewing data = 4;
   ErrorPayload error = 5;
 }
@@ -244,6 +237,5 @@ message BaseEmptyResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-
   ErrorPayload error = 4;
 }

@@ -5,15 +5,33 @@ package jobs;
 // ===================================================
 // SERVICE DEFINITION
 // ===================================================
-service JobsService {
-  rpc CreateJobPost (CreateJobPostRequest) returns (BaseJobPostResponse);
+service JobsService {  
+  // --- Creation Flows ---
+  rpc CreateJobPost (CreateJobPostRequest) returns (BaseJobPostCreateResponse);
+  rpc CreateAdminJobPost (CreateJobPostRequest) returns (BaseJobPostCreateResponse);
+  
+  // --- Discovery Flows ---
   rpc GetJobPostById (GetJobPostByIdRequest) returns (BaseJobPostResponse);
   rpc GetJobsByCategory (GetJobsByCategoryRequest) returns (ListJobPostsResponse);
   rpc ValidateJobPostIds(ValidateJobPostIdsRequest) returns (BaseValidateJobPostIdsResponse);
   
+  // --- Update Flows ---
   rpc UpdateJobPost (UpdateJobPostRequest) returns (BaseJobPostResponse);
+  rpc UpdateAdminJobPost (UpdateJobPostRequest) returns (BaseJobPostResponse);
+  
+  // --- Closure Flows ---
   rpc CloseJobPost (CloseJobPostRequest) returns (BaseCloseJobPostResponse);
+  rpc CloseAdminJobPost (CloseJobPostRequest) returns (BaseCloseJobPostResponse);
+  
+  // --- Application Flows ---
   rpc ApplyToJobPost (CreateJobApplicationRequest) returns (BaseJobApplicationResponse);
+  rpc GetOwnApplications (GetOwnApplicationsRequest) returns (ListJobApplicationsResponse);
+  rpc GetAdminApplications (GetAdminApplicationsRequest) returns (ListJobApplicationsResponse);
+  rpc GetApplicationById (GetApplicationByIdRequest) returns (BaseJobApplicationResponse);
+
+  // --- Ownership & Management ---
+  rpc GetOwnJobs (GetOwnJobsRequest) returns (ListJobPostsResponse);
+  rpc GetAdminJobs (GetAdminJobsRequest) returns (ListJobPostsResponse);
 }
 
 // ===================================================
@@ -45,24 +63,26 @@ message CategoryBasic {
 // JOB APPLICATION ENTITIES
 // ===================================================
 message Attachment {
-  string type = 1;
-  string fileUrl = 2;
-  string fileName = 3;
-  string contentText = 4;
-  bool isPrimary = 5;
+  string id = 1;
+  string type = 2;
+  string fileUrl = 3;
+  string fileName = 4;
+  string contentText = 5;
+  bool isPrimary = 6;
 }
 
 message StatusHistory {
-  string oldStatus = 1;
-  string newStatus = 2;
-  string changedBy = 3;
-  string reason = 4;
-  string createdAt = 5;
+  string id = 1;
+  string oldStatus = 2;
+  string newStatus = 3;
+  string changedBy = 4;
+  string reason = 5;
+  string createdAt = 6;
 }
 
 message JobApplication {
   string id = 1;
-  string externalId = 2;
+  optional string externalId = 2;
   string jobPostId = 3;
   string applicantId = 4;
   string employerId = 5;
@@ -75,13 +95,15 @@ message JobApplication {
   string referrerEmail = 12; 
   string referrerRelationship = 13;
   string createdAt = 14;
-  string reviewedAt = 15;
-  repeated Attachment attachments = 16;
-  repeated StatusHistory statusHistory = 17;
+  string updatedAt = 15;
+  optional string reviewedAt = 16;
+  repeated Attachment attachments = 17;
+  repeated StatusHistory statusHistory = 18;
+  optional string lastStatusChangeReason = 19; // For lightweight UI support
 }
 
 // ===================================================
-// JOB POST ENTITY (Matches JobPostResponseDto)
+// JOB POST ENTITY
 // ===================================================
 message JobPost {
   string id = 1;
@@ -116,6 +138,23 @@ message JobPost {
 // REQUEST MESSAGES
 // ===================================================
 
+message GetOwnApplicationsRequest {
+  string applicantId = 1;
+  optional string status = 2;
+}
+
+message GetAdminApplicationsRequest {
+  optional string applicantId = 1;
+  optional string employerId = 2;
+  optional string status = 3;
+}
+
+message GetApplicationByIdRequest {
+  string id = 1;
+  string requesterId = 2; // Required for security/ownership check
+  optional string requesterRole = 3; // Optional for more nuanced access control (e.g., admin vs. employer) 
+}
+
 message CreateJobPostRequest {
   string title = 1;
   string description = 2;
@@ -138,26 +177,36 @@ message CreateJobPostRequest {
   string additionalNotes = 19;
   string status = 20;
 
-  // Identity Pillars (Injected via GrpcDto)
+  // Identity Pillars
   string accountId = 21;
-  string accountName = 22;
-  string creatorId = 23;
-  string creatorName = 24;
+  string creatorId = 22;
+  
+  // Optional for Denormalization (Shared Nav support)
+  optional string creatorName = 23;
+  optional string accountName = 24;
 }
 
 message UpdateJobPostRequest {
   string id = 1;
-  // Metadata for authorization
-  string creatorId = 2; 
+  string creatorId = 2;
 
-  // Partial update fields
-  optional string title = 3;
-  optional string description = 4;
-  optional string status = 5;
-  optional double payAmount = 6;
-  optional bool isNegotiable = 7;
-  optional string locationCity = 8;
-  optional string locationNeighborhood = 9;
+  optional string accountId = 3;
+  optional string title = 4;
+  optional string description = 5;
+  optional string status = 6;
+  optional double payAmount = 7;
+  optional bool isNegotiable = 8;
+  optional string locationCity = 9;
+  optional string locationNeighborhood = 10;
+  optional string creatorName = 11;
+  optional string accountName = 12;
+}
+
+message CloseJobPostRequest {
+  string id = 1;
+  string creatorId = 2;
+  optional string accountId = 3;
+  optional string reason = 4;
 }
 
 message CreateJobApplicationRequest {
@@ -174,12 +223,6 @@ message CreateJobApplicationRequest {
   repeated Attachment attachments = 11;
 }
 
-message CloseJobPostRequest {
-  string id = 1;
-  string creatorId = 2;
-  string reason = 3;
-}
-
 message GetJobPostByIdRequest { string id = 1; }
 message GetJobsByCategoryRequest { string categoryId = 1; }
 message ValidateJobPostIdsRequest { repeated string ids = 1; }
@@ -188,11 +231,33 @@ message ValidateJobPostIdsRequest { repeated string ids = 1; }
 // RESPONSE MESSAGES
 // ===================================================
 
+message ListJobApplicationsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated JobApplication data = 4;
+  ErrorPayload error = 5;
+}
+
+message JobPostCreateData {
+  string id = 1;
+  string status = 2;
+  string createdAt = 3;
+}
+
+message BaseJobPostCreateResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  JobPostCreateData data = 4;
+  ErrorPayload error = 5;
+}
+
 message BaseJobPostResponse {
   bool success = 1;
   string code = 2;
   string message = 3;
-  JobPost data = 4; // Standardized key to 'data'
+  JobPost data = 4; 
   ErrorPayload error = 5;
 }
 
@@ -238,4 +303,15 @@ message BaseValidateJobPostIdsResponse {
   string message = 3;
   ValidateJobIdsData data = 4;
   ErrorPayload error = 5;
+}
+
+message GetOwnJobsRequest {
+  string creatorId = 1;
+  optional string status = 2;
+}
+
+message GetAdminJobsRequest {
+  optional string creatorId = 1;
+  optional string accountId = 2;
+  optional string status = 3;
 }

@@ -7,13 +7,29 @@ import { Request } from 'express';
 import * as fs from 'fs';
 import * as dotenv from 'dotenv';
 
+interface AuthServiceUserResponse {
+  account: {
+    uuid: string;
+    accountCode: string;
+    type: string;
+    name?: string;
+  };
+  user: {
+    uuid: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    roleName: string;
+    status: string;
+  };
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   private readonly logger = new Logger(JwtStrategy.name);
 
   constructor(private readonly authService: AuthService) {
-    // Load .env.dev or .env first
-    let jwtSecret = '';
+    // Load environment variables (.env.dev first, fallback to .env)
     if (fs.existsSync('.env.dev')) {
       dotenv.config({ path: '.env.dev' });
       console.log('✅ Loaded environment variables from .env.dev');
@@ -24,9 +40,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       console.warn('⚠️  No .env file found. JWT_SECRET may be missing!');
     }
 
-    jwtSecret = process.env.JWT_SECRET || '';
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      throw new Error(
+        '❌ JWT_SECRET is missing. Define it in your .env or .env.dev file',
+      );
+    }
 
-    // Call super() first with the secret
+    // Initialize Passport JWT strategy
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (req: Request) => req?.cookies?.access_token,
@@ -37,45 +58,50 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       secretOrKey: jwtSecret,
     });
 
-    // Now you can use this.*
     this.logger.log('🔐 JWT Strategy initialized');
-    if (!jwtSecret) {
-      this.logger.error(
-        '❌ JWT_SECRET is not defined — tokens will fail to validate',
-      );
-    }
   }
 
   /**
    * Validates incoming JWT payload.
-   * Throws UnauthorizedException if user is not found.
+   * Enriches user info from AuthService and normalizes role.
    */
   async validate(payload: JwtPayload) {
     this.logger.debug(`Validating JWT payload for ${payload.email}`);
 
-    const user = await this.authService.getUserFromPayload(payload);
-    if (!user) {
+    // Fetch full user + account info from AuthService
+    const response = (await this.authService.getUserFromPayload(
+      payload,
+    )) as unknown as AuthServiceUserResponse;
+
+    if (!response || !response.user) {
       this.logger.warn(
         `❌ JWT validation failed: user not found for ${payload.email}`,
       );
       throw new UnauthorizedException('Invalid or expired token');
     }
 
+    const dbUser = response.user;
+    const dbAccount = response.account;
+
+    // Normalize role (remove spaces for RolePermissionsMap keys)
+    const rawRole = dbUser.roleName || payload.role || 'User';
+    const normalizedRole = rawRole.replace(/\s+/g, '');
+
     this.logger.debug(
-      `✅ Authenticated user ${user.email} (UUID: ${payload.userUuid}) with role: ${payload.role}`,
+      `✅ Authenticated user (${dbUser.firstName} ${dbUser.lastName}) ${dbUser.email} (UUID: ${payload.userUuid}) with role: ${normalizedRole}`,
     );
 
-    // Return full enriched user object
+    // Return fully enriched, flat object for Guards/Controllers
     return {
-      ...user,
+      ...dbUser,
       userUuid: payload.userUuid,
-      email: payload.email,
-      role: payload.role,
+      email: dbUser.email || payload.email,
+      role: normalizedRole,
+      accountId: dbAccount?.uuid || payload.accountId,
+      userName: `${dbUser.firstName} ${dbUser.lastName}`,
+      accountName: dbAccount?.name || payload.accountName,
+      accountType: dbAccount?.type || payload.accountType,
       planSlug: payload.planSlug,
-      accountId: payload.accountId,
-      userName: payload.userName,
-      accountName: payload.accountName,
-      accountType: payload.accountType,
     };
   }
 }

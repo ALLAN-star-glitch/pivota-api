@@ -37,6 +37,7 @@ describe('EmailController', () => {
     controller = module.get<EmailController>(EmailController);
   });
 
+  
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });

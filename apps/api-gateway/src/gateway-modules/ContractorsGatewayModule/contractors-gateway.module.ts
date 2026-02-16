@@ -5,9 +5,11 @@ import { CONTRACTORS_PRICING_PROTO_PATH, CONTRACTORS_PROTO_PATH } from '@pivota-
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ContractorsPricingGatewayService } from './services/contractors-pricing-gateway.service';
 import { ContractorsPricingGatewayController } from './contractors/contractors-pricing-gateway.controller';
+import { SubscriptionsGatewayModule } from '../SubscriptionsGatewayModule/subscriptions-gateway.module';
 
 @Module({
   imports: [
+    SubscriptionsGatewayModule,
     ClientsModule.register([
       {
         name: 'CONTRACTORS_PACKAGE',

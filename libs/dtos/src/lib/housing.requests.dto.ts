@@ -20,6 +20,7 @@ import { Type } from 'class-transformer';
 /* ======================================================
    CREATE HOUSE LISTING
 ====================================================== */
+
 export class CreateHouseListingDto {
   @ApiProperty({
     description: 'Public-facing title of the house listing',
@@ -29,8 +30,13 @@ export class CreateHouseListingDto {
   @IsNotEmpty()
   title!: string;
 
+  @ApiPropertyOptional({ example: '123 Riverside Drive, Nairobi' })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
   @ApiProperty({
-    description: 'Detailed description of the house, amenities, and rules',
+    description: 'Detailed description of the house',
     example: 'Spacious apartment with parking, backup power, and security.',
   })
   @IsString()
@@ -61,11 +67,7 @@ export class CreateHouseListingDto {
   @Min(0)
   price!: number;
 
-  @ApiPropertyOptional({
-    description: 'Currency used for pricing',
-    example: 'KES',
-    default: 'KES',
-  })
+  @ApiPropertyOptional({ example: 'KES', default: 'KES' })
   @IsOptional()
   @IsString()
   currency?: string;
@@ -83,7 +85,7 @@ export class CreateHouseListingDto {
   bathrooms?: number;
 
   @ApiPropertyOptional({
-    description: 'List of amenities included in the house',
+    description: 'List of amenities',
     example: ['Parking', 'WiFi'],
     type: [String],
   })
@@ -97,10 +99,7 @@ export class CreateHouseListingDto {
   @IsBoolean()
   isFurnished?: boolean;
 
-  @ApiProperty({
-    description: 'City or town where the house is located',
-    example: 'Nairobi',
-  })
+  @ApiProperty({ example: 'Nairobi' })
   @IsString()
   @IsNotEmpty()
   locationCity!: string;
@@ -109,11 +108,6 @@ export class CreateHouseListingDto {
   @IsOptional()
   @IsString()
   locationNeighborhood?: string;
-
-  @ApiPropertyOptional({ example: 'Near Yaya Centre' })
-  @IsOptional()
-  @IsString()
-  address?: string;
 
   @ApiPropertyOptional({
     description: 'Image URLs of the house',
@@ -126,32 +120,39 @@ export class CreateHouseListingDto {
 }
 
 /**
- * UPDATED: The Internal/gRPC version using Identity Pillars
+ * Admin: Create listing for an organization/account
+ */
+export class AdminCreateHouseListingDto extends CreateHouseListingDto {
+
+  @ApiPropertyOptional({ description: 'The specific user to attribute the post to' })
+  @IsOptional()
+  @IsString()
+  creatorId?: string;
+}
+
+/**
+ * Internal/gRPC: Full Identity Context
  */
 export class CreateHouseListingGrpcRequestDto extends CreateHouseListingDto {
-  @ApiProperty({ description: 'The unique UUID of the human creator' })
   @IsString()
   @IsNotEmpty()
-  creatorId!: string;
+  creatorId?: string;
 
-  @ApiProperty({ description: 'The full name of the human creator' })
   @IsString()
   @IsNotEmpty()
-  creatorName!: string;
+  accountId?: string;
 
-  @ApiProperty({ description: 'The unique UUID of the root account (Individual or Org)' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  accountId!: string;
+  creatorName?: string;
 
-  @ApiProperty({ description: 'The Brand or Organization name' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  accountName!: string;
+  accountName?: string;
 }
 
 /* ======================================================
-   SEARCH & UPDATES (Consolidated)
+   SEARCH & FILTER DTOs
 ====================================================== */
 
 export class SearchHouseListingsDto {
@@ -159,11 +160,6 @@ export class SearchHouseListingsDto {
   @IsOptional()
   @IsString()
   city?: string;
-
-  @ApiPropertyOptional({ example: 'cat_housing_001' })
-  @IsOptional()
-  @IsString()
-  categoryId?: string;
 
   @ApiPropertyOptional({ example: 'RENTAL' })
   @IsOptional()
@@ -182,31 +178,57 @@ export class SearchHouseListingsDto {
   @Type(() => Number)
   maxPrice?: number;
 
-  // --- ADD THIS SECTION ---
-  @ApiPropertyOptional({
-    description: 'Minimum number of bedrooms',
-    example: 2,
-  })
+  @ApiPropertyOptional({ example: 2 })
   @IsOptional()
   @IsInt()
-  @Type(() => Number) // Important for query params (strings) to be cast to numbers
+  @Type(() => Number)
   bedrooms?: number;
-  // -------------------------
 
-  @ApiPropertyOptional({ example: 10, default: 20 })
+  @ApiPropertyOptional({ example: 20 })
   @IsOptional()
   @IsInt()
   @Type(() => Number)
   limit?: number;
 
-  @ApiPropertyOptional({ example: 0, default: 0 })
+  @ApiPropertyOptional({ example: 0 })
   @IsOptional()
   @IsInt()
   @Type(() => Number)
   offset?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  categoryId?: string; // Add this line to fix the error
 }
 
-export class UpdateHouseListingDto {
+/**
+ * Dashboard Filtering
+ */
+export class GetOwnHousingFilterDto {
+  @ApiPropertyOptional({ example: 'AVAILABLE', enum: HOUSE_LISTING_STATUSES })
+  @IsOptional()
+  @IsIn(HOUSE_LISTING_STATUSES)
+  status?: string;
+}
+
+export class GetAdminHousingFilterDto extends GetOwnHousingFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  accountId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  creatorId?: string;
+}
+
+/* ======================================================
+   UPDATE DTOs
+====================================================== */
+
+export class UpdateOwnHouseListingRequestDto {
   @ApiPropertyOptional({ example: 'Updated Title' })
   @IsOptional()
   @IsString()
@@ -222,26 +244,33 @@ export class UpdateHouseListingDto {
   @IsNumber()
   price?: number;
 
-  @ApiPropertyOptional({ example: 'AVAILABLE', enum: HOUSE_LISTING_STATUSES })
+  @ApiPropertyOptional({ enum: HOUSE_LISTING_STATUSES })
   @IsOptional()
   @IsIn(HOUSE_LISTING_STATUSES)
   status?: string;
 }
 
-export class UpdateHouseListingRequestDto {
-  @ApiProperty({ type: UpdateHouseListingDto })
-  @IsNotEmpty()
-  data!: UpdateHouseListingDto;
+/**
+ * Admin: Can update account/creator association
+ */
+export class UpdateAdminHouseListingRequestDto extends UpdateOwnHouseListingRequestDto {
+  @IsOptional()
+  @IsString()
+  creatorId?: string;
+
+  @IsOptional()
+  @IsString()
+  accountId?: string;
 }
 
-export class UpdateHouseListingGrpcRequestDto extends UpdateHouseListingRequestDto {
-  @IsString()
-  @IsNotEmpty()
-  callerId!: string;
-
+export class UpdateHouseListingGrpcRequestDto extends UpdateAdminHouseListingRequestDto {
   @IsString()
   @IsNotEmpty()
   listingId!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  callerId!: string;
 
   @IsString()
   @IsNotEmpty()
@@ -249,7 +278,7 @@ export class UpdateHouseListingGrpcRequestDto extends UpdateHouseListingRequestD
 }
 
 /* ======================================================
-   VIEWINGS & ARCHIVE
+   VIEWINGS & UTILITY
 ====================================================== */
 
 export class ScheduleViewingDto {
@@ -258,10 +287,7 @@ export class ScheduleViewingDto {
   @IsNotEmpty()
   viewingDate!: string;
 
-  @IsOptional()
-  @IsString()
-  targetViewerId?: string;
-
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   notes?: string;
@@ -279,72 +305,62 @@ export class ScheduleViewingGrpcRequestDto extends ScheduleViewingDto {
   @IsString()
   @IsNotEmpty()
   userRole!: string;
+
+  @IsOptional()
+  @IsString()
+  targetViewerId?: string;
 }
 
-export class ArchiveHouseListingDto {
+export class ArchiveHouseListingsGrpcRequestDto {
   @IsString()
   @IsNotEmpty()
   id!: string;
-}
 
-export class ArchiveHouseListingsGrpcRequestDto extends ArchiveHouseListingDto {
   @IsString()
   @IsNotEmpty()
   ownerId!: string;
 }
 
+export class GetHouseListingByIdDto {
+  @IsString()
+  @IsNotEmpty()
+  id!: string;
+}
+
 /* ======================================================
-   UPDATE LISTING STATUS
-====================================================== */
-export class UpdateHouseListingStatusDto {
+   UPDATED: GET LISTINGS BY OWNER (DASHBOARD)
+====================================================== */ 
+
+export class GetListingsByOwnerDto {
   @ApiProperty({
-    description: 'The unique ID (CUID/UUID) of the house listing',
-    example: 'cl3k1n4fj0000xyz123abc',
+    description: 'The Account UUID used as the primary owner (Org ID or Individual Account ID)',
+    example: 'eb02ea40-4f17-4040-8885-0029105d9fb2',
   })
+  @IsString()
+  @IsNotEmpty()
+  ownerId!: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter listings by their current lifecycle status',
+    example: 'AVAILABLE',
+    enum: HOUSE_LISTING_STATUSES,
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(HOUSE_LISTING_STATUSES)
+  status?: string;
+}
+
+export class UpdateHouseListingStatusDto {
   @IsString()
   @IsNotEmpty()
   id!: string;
 
-  @ApiProperty({
-    description: 'The target status for the listing',
-    example: 'RENTED',
-    enum: HOUSE_LISTING_STATUSES,
-  })
   @IsString()
   @IsNotEmpty()
   @IsIn(HOUSE_LISTING_STATUSES)
   status!: string;
 
-  @ApiProperty({
-    description: 'The ID of the owner/creator authorized to perform this status change',
-    example: 'user-123-xyz',
-  })
-  @IsString()
-  @IsNotEmpty()
-  ownerId!: string;
-}
-
-/* ======================================================
-    GET HOUSE LISTING BY ID
-====================================================== */ 
-export class GetHouseListingByIdDto {
-  @ApiProperty({
-    description: 'The unique internal ID (CUID/UUID) of the house listing',
-    example: 'cl3k1n4fj0000xyz123abc',
-  })
-  @IsString()
-  @IsNotEmpty()
-  id!: string;
-}
-
-/* ======================================================
-   GET LISTINGS BY OWNER (DASHBOARD)
-====================================================== */ 
-export class GetListingsByOwnerDto {
-  @ApiProperty({
-    description: 'The unique UUID of the owner (matches creatorId or accountId)',
-    example: 'user-uuid-12345',
-  })
   @IsString()
   @IsNotEmpty()
   ownerId!: string;

@@ -1,28 +1,47 @@
+version: '3.9'
 
 services:
+  # ==================== ZOOKEEPER ====================
   zookeeper:
-    image: bitnami/zookeeper:3.9
+    image: zookeeper:3.8
     container_name: pivota-zookeeper
     ports:
       - "2181:2181"
     environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
+      ZOO_LOG4J_ENABLED: "true"
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
+  # ==================== KAFKA ====================
   kafka:
-    image: bitnami/kafka:3.7
+    image: apache/kafka:4.1.1
     container_name: pivota-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
     ports:
       - "9092:9092"
-    depends_on:
-      - zookeeper
     environment:
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092
-      - ALLOW_PLAINTEXT_LISTENER=yes
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
+  # ==================== RABBITMQ ====================
   rabbitmq:
-    image: rabbitmq:4-management
+    image: rabbitmq:3-management
     container_name: pivota-rabbitmq
     hostname: rabbitmq-local
     ports:
@@ -31,3 +50,16 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_VHOST: "/"
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+# ==================== NETWORK (optional, ensures isolation) ====================
+networks:
+  default:
+    name: pivota-network
+    driver: bridge

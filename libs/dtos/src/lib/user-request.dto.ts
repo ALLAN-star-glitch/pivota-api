@@ -6,11 +6,16 @@ import {
   IsUUID, 
   IsOptional, 
   MinLength,
-  IsPhoneNumber,
   IsDateString,
-  IsUrl
+  IsUrl,
+  Length,
+  Matches
 } from 'class-validator';
-
+/**
+ * Kenyan Phone Regex:
+ * Supports: +254..., 254..., 07..., 01..., 02...
+ */
+export const KENYAN_PHONE_REGEX = /^(?:254|\+254|0)?((?:7|1|2)\d{8})$/;
 /* ======================================================
    1. USER SIGNUP REQUEST (AUTH SERVICE)
    - Used for the public-facing individual signup API.
@@ -18,40 +23,66 @@ import {
 ====================================================== */
 
 export class UserSignupRequestDto {
-  @ApiProperty({ description: 'User first name', example: 'Jane' })
+  @ApiProperty({ 
+    description: 'Legal first name of the user', 
+    example: 'Jane' 
+  })
   @IsString()
   @IsNotEmpty()
   firstName!: string;
 
-  @ApiProperty({ description: 'User last name', example: 'Doe' })
+  @ApiProperty({ 
+    description: 'Legal last name of the user', 
+    example: 'Doe' 
+  })
   @IsString()
   @IsNotEmpty()
   lastName!: string;
 
   @ApiProperty({
-    description: 'Login email and primary contact for the user',
+    description: 'Unique login email address',
     example: 'jane.doe@pivota.com',
   })
   @IsEmail()
   @IsNotEmpty()
   email!: string;
 
-  @ApiProperty({
-    description: 'International phone number (e.g., +254...)',
-    example: '+254700111222',
+  @IsOptional()
+  @Matches(KENYAN_PHONE_REGEX, { 
+    message: 'Please provide a valid Kenyan phone number (e.g., 0712345678 or +254712345678)' 
   })
-  @IsNotEmpty()
-  @IsPhoneNumber(undefined, { message: 'Invalid phone number format' })
-  phone!: string;
+  phone?: string;
 
   @ApiProperty({
-    description: 'Secure password for the individual account',
+    description: 'Secure password (minimum 8 characters)',
     example: 'StrongPass@2026',
+    minLength: 8,
   })
   @IsString()
   @IsNotEmpty()
   @MinLength(8)
   password!: string;
+
+  @ApiPropertyOptional({
+    description: 'Target subscription tier. Defaults to free-forever if not provided.',
+    example: 'business-pro',
+    enum: ['free-forever', 'business-pro', 'contractor-premium'],
+    default: 'free-forever'
+  })
+  @IsString()
+  @IsOptional()
+  planSlug?: string;
+
+  @ApiProperty({
+    description: '6-digit OTP received via email/SMS',
+    example: '123456',
+    minLength: 6,
+    maxLength: 6
+  })
+  @IsString()
+  @Length(6, 6, { message: 'Verification code must be exactly 6 digits' })
+  @IsNotEmpty()
+  code!: string;
 }
 
 /* ======================================================
@@ -84,10 +115,15 @@ export class CreateUserRequestDto {
   @IsNotEmpty()
   email!: string;
 
-  @ApiProperty({ example: '+254700111222' })
-  @IsPhoneNumber(undefined)
+  @IsOptional()
+  @Matches(KENYAN_PHONE_REGEX, { 
+    message: 'Please provide a valid Kenyan phone number (e.g., 0712345678 or +254712345678)' 
+  })
+  phone?: string;
+
+  @IsString()
   @IsNotEmpty()
-  phone!: string;
+  planSlug!: string; // Mandatory here
 }
 
 /* ======================================================
@@ -135,4 +171,37 @@ export class UpdateUserProfileRequestDto {
   @IsOptional()
   @IsUrl()
   profileImage?: string;
+}
+
+/* ======================================================
+   4. FULL USER PROFILE UPDATE (UNIFIED)
+   - Used for the Gateway to update both User and Profile tables.
+====================================================== */
+
+export class UpdateFullUserProfileDto extends UpdateUserProfileRequestDto {
+  @ApiProperty({ description: 'The UUID of the user to update' })
+  @IsUUID()
+  @IsNotEmpty()
+  userUuid!: string;
+
+  @ApiPropertyOptional({ example: 'Jane' })
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @ApiPropertyOptional({ example: 'Doe' })
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @ApiPropertyOptional({ example: 'jane.doe@pivota.com' })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+   @IsOptional()
+  @Matches(KENYAN_PHONE_REGEX, { 
+    message: 'Please provide a valid Kenyan phone number (e.g., 0712345678 or +254712345678)' 
+  })
+  phone?: string;
 }

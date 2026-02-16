@@ -1,7 +1,7 @@
 import { ApiProperty, ApiExtraModels } from '@nestjs/swagger';
 import { ErrorPayload } from '@pivota-api/interfaces';
 
-@ApiExtraModels() // Tell Swagger to inspect nested generic types
+@ApiExtraModels()
 export class BaseResponseDto<T = unknown> {
   status(status: any) {
     throw new Error('Method not implemented.');
@@ -12,13 +12,17 @@ export class BaseResponseDto<T = unknown> {
   @ApiProperty({ example: 'Success', description: 'Human-readable message' })
   readonly message: string;
 
-  @ApiProperty({ example: 'OK', description: 'Machine-readable status code' })
-  readonly code: string;
+  @ApiProperty({ 
+    example: 'OK', 
+    description: 'Machine-readable status code (String internally, Number at Gateway)',
+    oneOf: [{ type: 'string' }, { type: 'number' }] 
+  })
+  readonly code: string | number;
 
   @ApiProperty({
     description: 'Response data (populated on success)',
     required: false,
-    type: Object, // Default to Object; for controllers we can override with T
+    type: Object,
   })
   readonly data?: T;
 
@@ -33,7 +37,7 @@ export class BaseResponseDto<T = unknown> {
   private constructor(
     success: boolean,
     message: string,
-    code: string,
+    code: string | number,
     data?: T,
     error?: ErrorPayload
   ) {
@@ -45,22 +49,23 @@ export class BaseResponseDto<T = unknown> {
   }
 
   // Success factory
-  static ok<T>(data: T, message = 'Success', code = 'OK'): BaseResponseDto<T> {
+  static ok<T>(data: T, message = 'Success', code: string | number = 'OK'): BaseResponseDto<T> {
     return new BaseResponseDto<T>(true, message, code, data);
   }
 
   // Failure factory
   static fail(
     message: string,
-    code = 'INTERNAL_ERROR',
+    code: string | number = 'INTERNAL_ERROR',
     details?: unknown
   ): BaseResponseDto<null> {
     return new BaseResponseDto<null>(
       false,
       message,
       code,
-      undefined,
-      { message, code, details: details ?? null }
+      null, // Use null instead of undefined for consistent JSON output
+      // Only create the error object if there are actual extra details
+      details ? { message, code, details } : undefined
     );
   }
 }

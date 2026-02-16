@@ -13,12 +13,14 @@ import {
   SubscribeToPlanDto,
   UserProfileResponseDto,
   CreateUserRequestDto,
+  UpdateFullUserProfileDto,
 } from '@pivota-api/dtos';
-import { Account, Organization, ProfileCompletion, User, UserProfile, OrganizationProfile } from '../../../../generated/prisma/client';
+import { Account, Organization, ProfileCompletion, User, UserProfile, OrganizationProfile, Prisma } from '../../../../generated/prisma/client';
 import {  RpcException, ClientGrpc } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
 import { catchError, lastValueFrom, Observable, throwError, timeout } from 'rxjs';
 import { BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
+
 
 // 1. Define Organization with its Profile relation
 type OrganizationWithProfile = Organization & { 
@@ -81,20 +83,31 @@ export class UserService {
     this.plansGrpc = this.plansClient.getService<PlansServiceGrpc>('PlanService');
   }
 
-  
+
 /* ======================================================
-     CREATE INDIVIDUAL PROFILE (Refactored)
+     CREATE INDIVIDUAL PROFILE (UPDATED FOR PREMIUM)
   ====================================================== */
- /* ======================================================
-     CREATE INDIVIDUAL PROFILE (FULL UPDATE)
-  ====================================================== */
- async createUserProfile(
-  data: CreateUserRequestDto,
+async createUserProfile(
+  data: CreateUserRequestDto & { planSlug?: string },
 ): Promise<BaseResponseDto<UserProfileResponseDto>> {
-  this.logger.log(`Initiating individual profile creation: ${data.email}`);
+  /**
+   * PIVOTACONNECT KENYA - DATA NORMALIZATION
+   * Normalizes Kenyan formats (07..., 01..., 254...) to E.164 (+254...)
+   * Ensures email is lowercase to prevent duplicate identity bypass.
+   */
+  const KENYAN_REGEX = /^(?:254|\+254|0)?((?:7|1|2)\d{8})$/;
+  const rawPhone = data.phone?.trim();
+  const normalizedPhone = rawPhone?.match(KENYAN_REGEX) 
+    ? `+254${rawPhone.match(KENYAN_REGEX)[1]}` 
+    : rawPhone || null;
+    
+  const normalizedEmail = data.email.toLowerCase().trim();
+
+  this.logger.log(`Initiating individual profile creation: ${normalizedEmail} [Plan: ${data.planSlug || 'free-forever'}]`);
 
   const accountUuid = randomUUID();
   const userCode = `USR-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+  const targetPlanSlug = data.planSlug || 'free-forever';
 
   try {
     /* ---------- 1. PRE-CHECKS: RBAC ROLE & PLAN ---------- */
@@ -104,70 +117,100 @@ export class UserService {
           timeout(5000),
           catchError(() => throwError(() => new Error('RBAC service unavailable')))
         ),
-      ),
+      ).catch(() => null),
       lastValueFrom(
-        this.plansGrpc.GetPlanIdBySlug({ slug: 'free' }).pipe(
+        this.plansGrpc.GetPlanIdBySlug({ slug: targetPlanSlug }).pipe(
           timeout(5000),
           catchError(() => throwError(() => new Error('Plans service unavailable')))
         ),
-      ),
+      ).catch(() => null),
     ]);
 
-    if (!roleRes?.data?.roleId) throw new Error('System Role: GeneralUser not found');
-    if (!planRes?.data?.planId) throw new Error('Default Plan: free not found');
+    if (!roleRes?.data?.roleId) {
+      return BaseResponseDto.fail('System Role: GeneralUser not found or RBAC service down', 'NOT_FOUND');
+    }
+    if (!planRes?.data?.planId) {
+      return BaseResponseDto.fail(`Plan slug: ${targetPlanSlug} not found or Plans service down`, 'NOT_FOUND');
+    }
+
+    const isPremium = targetPlanSlug !== 'free-forever';
 
     /* ---------- 2. ATOMIC DATABASE TRANSACTION ---------- */
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Construct the display name for the account
-      const accountDisplayName = `${data.firstName} ${data.lastName}`.trim();
-      // A. Create Root Individual Account
-      const account = await tx.account.create({
-        data: {
-          uuid: accountUuid,
-          accountCode: `ACC-${userCode}`,
-          type: 'INDIVIDUAL',
-          name: accountDisplayName, 
-        },
-      });
+    let result: UserProfileAggregate | PrismaUserAggregate;
+    try {
+      result = await this.prisma.$transaction(async (tx) => {
+        const accountDisplayName = `${data.firstName} ${data.lastName}`.trim();
+        
+        const account = await tx.account.create({
+          data: {
+            uuid: accountUuid,
+            accountCode: `ACC-${userCode}`,
+            type: 'INDIVIDUAL',
+            name: accountDisplayName,
+            status: isPremium ? 'PENDING' : 'ACTIVE', 
+          },
+        });
 
-      // B. Create User Identity
-      const user = await tx.user.create({
-        data: {
-          uuid: data.userUuid,
-          userCode,
-          email: data.email,
-          // THE FIX: If phone is an empty string, save it as null
-          phone: data.phone === "" ? null : data.phone,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          roleName: 'General User',
-          accountId: account.uuid,
-        },
-      });
+        const user = await tx.user.create({
+          data: {
+            uuid: data.userUuid,
+            userCode,
+            email: normalizedEmail,
+            phone: normalizedPhone,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            roleName: 'General User',
+            accountId: account.uuid,
+            status: isPremium ? 'INACTIVE' : 'ACTIVE',
+          },
+        });
 
-      // C. Initialize Empty User Profile (Metadata)
-      const profile = await tx.userProfile.create({
-        data: {
-          userUuid: user.uuid,
-        },
-      });
+        const profile = await tx.userProfile.create({
+          data: { userUuid: user.uuid },
+        });
 
-      // D. Initialize Tracker (25% completion for basic identity)
-      const completion = await tx.profileCompletion.create({
-        data: {
-          userUuid: user.uuid,
-          percentage: 25,
-          missingFields: { set: ['BIO', 'NATIONAL_ID', 'GENDER', 'DATE_OF_BIRTH', 'PROFILE_IMAGE'] },
-          isComplete: false,
-        },
-      });
+        const completion = await tx.profileCompletion.create({
+          data: {
+            userUuid: user.uuid,
+            percentage: 25,
+            missingFields: { set: ['BIO', 'NATIONAL_ID', 'GENDER', 'DATE_OF_BIRTH', 'PROFILE_IMAGE'] },
+            isComplete: false,
+          },
+        });
 
-      return { user, account, profile, completion };
-    });
+        return { user, account, profile, completion };
+      });
+    } catch (dbError) {
+      if (dbError instanceof Prisma.PrismaClientKnownRequestError) {
+        if (dbError.code === 'P2002') {
+          const targets = (dbError.meta?.target as string | string[]) || '';
+          const targetString = Array.isArray(targets) ? targets.join(',').toLowerCase() : targets.toLowerCase();
+          const errorMessage = dbError.message.toLowerCase();
+          
+          this.logger.warn(`Unique constraint violation. Targets: [${targetString}] | Message: ${errorMessage}`);
+
+          if (targetString.includes('email') || errorMessage.includes('email')) {
+            return BaseResponseDto.fail('A user with this email address already exists', 'ALREADY_EXISTS');
+          }
+          
+          if (targetString.includes('phone') || errorMessage.includes('phone')) {
+            return BaseResponseDto.fail('This phone number is already registered to another account', 'ALREADY_EXISTS');
+          }
+
+          if (targetString.includes('uuid') || errorMessage.includes('uuid')) {
+            return BaseResponseDto.fail('Identity conflict: User UUID already exists', 'ALREADY_EXISTS');
+          }
+
+          return BaseResponseDto.fail('A profile with these unique details already exists', 'ALREADY_EXISTS', dbError.meta);
+        }
+      }
+
+      const errorMessage = dbError instanceof Error ? dbError.message : 'Database transaction failed';
+      return BaseResponseDto.fail(errorMessage, 'INTERNAL_ERROR');
+    }
 
     /* ---------- 3. POST-DB: EXTERNAL SYNCING (WITH ROLLBACK) ---------- */
     try {
-      // Assign the role in the RBAC service
       await lastValueFrom(
         this.rbacGrpc.AssignRoleToUser({
           userUuid: data.userUuid,
@@ -175,26 +218,25 @@ export class UserService {
         }),
       );
 
-      // Initialize the subscription
-      const subRes = await lastValueFrom(
-        this.subscriptionGrpc.SubscribeToPlan({
-          subscriberUuid: accountUuid,
-          planId: planRes.data.planId,
-          billingCycle: null, // The service explicitly sets this to null for free plans anyway
-          amountPaid: 0,
-          currency: 'KES'
-        }),
-      );
+      if (!isPremium) {
+        const subRes = await lastValueFrom(
+          this.subscriptionGrpc.SubscribeToPlan({
+            subscriberUuid: accountUuid,
+            planId: planRes.data.planId,
+            billingCycle: null,
+            amountPaid: 0,
+            currency: 'KES'
+          }),
+        );
 
-      if (!subRes.success) {
-        throw new Error(`Subscription Service Error: ${subRes.message}`);
+        if (!subRes.success) {
+          throw new Error(`Subscription Service Error: ${subRes.message}`);
+        }
       }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (syncError: any) {
-      this.logger.error(`Post-DB Sync failed. Rolling back local records for ${data.email}`);
+    } catch (syncError) {
+      this.logger.error(`Post-DB Sync failed. Rolling back local records for ${normalizedEmail}`);
       
-      // COMPENSATING ACTION: Manual Rollback
       await this.prisma.$transaction([
         this.prisma.profileCompletion.deleteMany({ where: { userUuid: data.userUuid } }),
         this.prisma.userProfile.deleteMany({ where: { userUuid: data.userUuid } }),
@@ -202,26 +244,22 @@ export class UserService {
         this.prisma.account.delete({ where: { uuid: accountUuid } }),
       ]);
 
-      throw new Error(`Onboarding failed during external provisioning: ${syncError.message}`);
+      return BaseResponseDto.fail(
+        `Onboarding failed during external provisioning: ${syncError.message}`, 
+        'INTERNAL_ERROR'
+      );
     }
 
-    /* ---------- 4. MAPPED RESPONSE ---------- */
-    return {
-      success: true,
-      code: 'CREATED',
-      message: 'Individual profile created successfully',
-      data: this.mapToUserProfileResponseDto(result),
-      error: null,
-    };
+    /* ---------- 4. SUCCESS RESPONSE ---------- */
+    return BaseResponseDto.ok(
+      this.mapToUserProfileResponseDto(result),
+      isPremium ? 'Profile created. Payment required.' : 'Individual profile created successfully',
+      isPremium ? 'PAYMENT_REQUIRED' : 'CREATED'
+    );
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
-    this.logger.error(`Individual profile creation failed: ${err.message}`);
-    
-    throw new RpcException({
-      code: err.code === 'P2002' ? 6 : 13, // 6 = ALREADY_EXISTS, 13 = INTERNAL
-      message: err.message || 'Internal failure during profile creation',
-    });
+  } catch (err) {
+    this.logger.error(`Unexpected failure in createUserProfile: ${err.message}`);
+    return BaseResponseDto.fail(err.message || 'Internal failure during profile creation', 'INTERNAL_ERROR', err.stack);
   }
 }
 
@@ -232,70 +270,49 @@ export class UserService {
   this.logger.log(`[gRPC] GetUserProfileByUuid triggered for: ${data.userUuid}`);
 
   try {
-    // 1. Fetch from DB
-        const userAggregate = await this.prisma.user.findUnique({
-        where: { uuid: data.userUuid },
-        include: {
-          account: {
-            include: {
-              organization: {
-                include: {
-                  profile: true
-                }
-              },
-            },
+    const userAggregate = await this.prisma.user.findUnique({
+      where: { uuid: data.userUuid },
+      include: {
+        account: {
+          include: {
+            organization: { include: { profile: true } },
           },
-          profile: true,
-          completion: true,
         },
-      });
-    // 2. Log Raw Prisma Output
-    if (userAggregate) {
-      this.logger.debug(`[DB RESULT] User found. Keys returned: ${Object.keys(userAggregate).join(', ')}`);
-      this.logger.debug(`[DB DETAIL] Account Object present: ${!!userAggregate.account}`);
-      this.logger.debug(`[DB DETAIL] Profile Object present: ${!!userAggregate.profile}`);
-      
-      // Specifically check for the field causing the crash
-      if (!userAggregate.account) {
-        this.logger.error(`[CRITICAL] Account relation is missing in DB for user: ${data.userUuid}`);
-      }
-    }
+        profile: true,
+        completion: true,
+      },
+    });
 
+    // 1. Return a clean failure object instead of throwing an RpcException
     if (!userAggregate) {
       this.logger.warn(`[NOT FOUND] No user record for UUID: ${data.userUuid}`);
-      throw new RpcException({ code: 5, message: 'User not found' });
+      return {
+        success: false,
+        message: `User with UUID ${data.userUuid} was not found in the system.`,
+        code: 'USER_NOT_FOUND',
+        data: null,
+      };
     }
 
-    // 3. Log Mapping Attempt
-    this.logger.log(`[MAPPER] Attempting to map userAggregate to UserProfileResponseDto...`);
-    
-    // We cast to any first to log exactly what is being sent to the mapper
     const mappedData = this.mapToUserProfileResponseDto(userAggregate as PrismaUserAggregate);
 
-    this.logger.log(`[SUCCESS] Mapping complete for: ${data.userUuid}`);
-
-    this.logger.log(`Organisation Email For the User: ${mappedData.organization?.officialEmail ?? 'N/A'}`);
     return {
       success: true,
       message: "User retrieved successfully",
       code: 'OK', 
       data: mappedData,
-      error: null,
     };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
-    this.logger.error(`[ERROR] getUserProfileByUuid failed: ${err.message}`);
+  } catch (error) {
+    this.logger.error(`[ERROR] getUserProfileByUuid failed: ${error.message}`);
     
-    // If it's a TypeError, it's likely the mapper crashing
-    if (err instanceof TypeError) {
-      this.logger.error(`[MAPPER CRASH] Detailed stack: ${err.stack}`);
-    }
-
-    throw new RpcException({
-      code: err.code || 13, // Internal
-      message: err.message || 'Internal server error',
-    });
+    // 2. Even on a code crash (like a mapper error), return a valid response
+    return {
+      success: false,
+      message: error.message || 'An internal error occurred during profile retrieval',
+      code: 'INTERNAL_ERROR',
+      data: null,
+    };
   }
 }
 
@@ -320,7 +337,7 @@ export class UserService {
       code: 'OK',
       data: this.mapToUserProfileResponseDto(userAggregate as PrismaUserAggregate),
       error: null,
-    };
+    } as BaseResponseDto<UserProfileResponseDto>;
   }
 
   /** ------------------ Fetch user by userCode ------------------ */
@@ -356,7 +373,7 @@ export class UserService {
       // Map the aggregate and place it in the 'data' key as per proto
       data: this.mapToUserProfileResponseDto(userAggregate as PrismaUserAggregate),
       error: null,
-    };
+    }   as BaseResponseDto<UserProfileResponseDto>;
   }
 
   /** ------------------ Get all users ------------------ */
@@ -375,7 +392,7 @@ export class UserService {
       code: 'OK',
       data: users.map((u) => this.mapToUserProfileResponseDto(u  as PrismaUserAggregate)),
       error: null,  
-    };
+    } as BaseResponseDto<UserProfileResponseDto[]>;
   }
 
 /* ======================================================
@@ -448,6 +465,152 @@ export class UserService {
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
     };
+  }
+
+  async updateFullProfile(dto: UpdateFullUserProfileDto): Promise<BaseResponseDto<UserProfileResponseDto>> {
+  this.logger.log(`[gRPC] Full profile update initiated for: ${dto.userUuid}`);
+
+  try {
+    const updatedAggregate = await this.prisma.$transaction(async (tx) => {
+      // 1. Update Core Identity (User Table)
+      const user = await tx.user.update({
+        where: { uuid: dto.userUuid },
+        data: {
+          firstName: dto.firstName ?? undefined,
+          lastName: dto.lastName ?? undefined,
+          email: dto.email ?? undefined,
+          phone: dto.phone === "" ? null : (dto.phone ?? undefined),
+        },
+      });
+
+      // 2. Update/Create Metadata (UserProfile Table)
+      await tx.userProfile.upsert({
+        where: { userUuid: dto.userUuid },
+        create: {
+          userUuid: dto.userUuid,
+          bio: dto.bio,
+          gender: dto.gender,
+          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+          nationalId: dto.nationalId,
+          profileImage: dto.profileImage,
+        },
+        update: {
+          bio: dto.bio ?? undefined,
+          gender: dto.gender ?? undefined,
+          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+          nationalId: dto.nationalId ?? undefined,
+          profileImage: dto.profileImage ?? undefined,
+        },
+      });
+
+      // 3. Root Account Name Sync
+      // If the human name changes, the account display name must reflect it.
+      if (dto.firstName || dto.lastName) {
+        await tx.account.update({
+          where: { uuid: user.accountId },
+          data: { name: `${user.firstName} ${user.lastName}`.trim() }
+        });
+      }
+
+      // 4. Fetch the final state with all relations included for the mapper
+      return tx.user.findUnique({
+        where: { uuid: dto.userUuid },
+        include: {
+          account: {
+            include: {
+              organization: {
+                include: { profile: true }
+              },
+            },
+          },
+          profile: true,
+          completion: true,
+        },
+      });
+    });
+
+    if (!updatedAggregate) {
+      throw new RpcException({ code: 5, message: 'User not found after update' });
+    }
+
+    return {
+      success: true,
+      message: 'Profile updated successfully',
+      code: 'OK',
+      data: this.mapToUserProfileResponseDto(updatedAggregate as PrismaUserAggregate),
+      error: null,
+    } as BaseResponseDto<UserProfileResponseDto>;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    this.logger.error(`Update failed: ${err.message}`);
+
+    // Handle Unique Constraint (Email/Phone/NationalID)
+    if (err.code === 'P2002') {
+      const target = err.meta?.target || [];
+      const field = target.includes('email') ? 'Email' : target.includes('phone') ? 'Phone' : 'National ID';
+      throw new RpcException({
+        code: 6, // ALREADY_EXISTS
+        message: `${field} is already in use by another user.`,
+      });
+    }
+
+    throw new RpcException({
+      code: err.code || 13, // Internal
+      message: err.message || 'Internal server error during profile update',
+    });
+  }
+}
+
+/** ------------------------------------------------------
+   * FETCH MY PROFILE
+   * Retrieves the full aggregate for the authenticated user
+   * ------------------------------------------------------- */
+  async getMyProfile(userUuid: string): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`Fetching own profile for User: ${userUuid}`);
+
+    try {
+      // Fetch the full aggregate including Account, Org, Profile, and Completion
+      const userAggregate = await this.prisma.user.findUnique({
+        where: { uuid: userUuid },
+        include: {
+          account: {
+            include: {
+              organization: {
+                include: { profile: true },
+              },
+            },
+          },
+          profile: true,
+          completion: true,
+        },
+      });
+
+      if (!userAggregate) {
+        this.logger.warn(`Profile not found for authenticated UUID: ${userUuid}`);
+        return BaseResponseDto.fail(
+          'Your profile record could not be found.',
+          'NOT_FOUND'
+        );
+      }
+
+      // Use your existing mapper to format the output for the UI
+      const mappedData = this.mapToUserProfileResponseDto(userAggregate as PrismaUserAggregate);
+
+      return BaseResponseDto.ok(
+        mappedData,
+        'Profile retrieved successfully',
+        'OK'
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Error in getMyProfile: ${msg}`);
+      
+      return BaseResponseDto.fail(
+        'An internal error occurred while fetching your profile.',
+        'INTERNAL_ERROR'
+      );
+    }
   }
 
 }

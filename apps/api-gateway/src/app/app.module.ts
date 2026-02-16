@@ -11,11 +11,15 @@ import { JobsModule } from '../gateway-modules/JobsGatewayModule/jobs.module';
 import { SubscriptionsGatewayModule } from '../gateway-modules/SubscriptionsGatewayModule/subscriptions-gateway.module';
 import { ProvidersGatewayModule } from '../gateway-modules/ContractorsGatewayModule/contractors-gateway.module';
 import { HousingGatewayModule } from '../gateway-modules/HousingGatewayModule/housing-gateway.module';
-import { NotificationsGatewayModule } from '../gateway-modules/NotificationsGatewayModule/notifications-gateway.module';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([{
+      ttl: 60000, // Time to live in milliseconds (1 minute)
+      limit: 10,  // Global limit for all routes unless overridden
+    }]),
     ConfigModule.forRoot({
       isGlobal: true, // Make config available across all modules
       envFilePath: [`.env.${process.env.NODE || 'dev'}`], // Loads .env.dev or .env.prod depending on NODE_ENV
@@ -28,8 +32,7 @@ import { NotificationsGatewayModule } from '../gateway-modules/NotificationsGate
     PlansGatewayModule,
     SubscriptionsGatewayModule,
     ProvidersGatewayModule,
-    HousingGatewayModule,
-    NotificationsGatewayModule
+    HousingGatewayModule
   
   ],
   controllers: [AppController],

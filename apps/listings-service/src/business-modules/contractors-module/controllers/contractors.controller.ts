@@ -38,3 +38,4 @@ export class ContractorsController {
     return this.contractorsService.getOfferingsByVertical(data);
   }
 }
+

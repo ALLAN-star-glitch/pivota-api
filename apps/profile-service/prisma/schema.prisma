@@ -16,6 +16,7 @@ model Account {
   // Individual: "John Doe" | Organization: "Pivota NGO"
   name        String?
   type        String   @default("INDIVIDUAL") // INDIVIDUAL | ORGANIZATION
+  status      String   @default("ACTIVE") // ACTIVE, PENDING_PAYMENT, SUSPENDED, DEACTIVATED
 
   // --- THE TRUST ANCHOR ---
   // The master flag used for gRPC/JWT and UI badges
@@ -57,6 +58,8 @@ model AccountVerification {
 
   @@unique([accountId, type])
 }
+
+
 
 // --- ENTITY LAYER (Independent Business Profile) ---
 model Organization {
@@ -147,12 +150,31 @@ model UserProfile {
   nationalId   String?   @unique
 }
 
+// --- LOOKUP TABLE FOR ORGANIZATION TYPES ---
+// Seed this table in your Profile Microservice
+model OrganizationType {
+  id    String @id @default(cuid())
+  slug  String @unique // e.g., "NGO", "PRIVATE_LIMITED", "SOLE_PROPRIETORSHIP"
+  label String // e.g., "Non-Governmental Organization"
+
+  // Relation back to profiles
+  profiles OrganizationProfile[]
+
+  createdAt DateTime @default(now())
+}
+
+
 // --- BUSINESS PROFILE LAYER (Entity Metadata) ---
 model OrganizationProfile {
   id               String       @id @default(cuid())
   organizationUuid String       @unique
   organization     Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
 
+  // --- UPDATED RELATION ---
+  // We link via the slug for better readability in gRPC/Logs
+  typeSlug         String?      
+  type             OrganizationType? @relation(fields: [typeSlug], references: [slug], onUpdate: Cascade) 
+  
   about          String?
   website        String?
   officialEmail  String?
@@ -162,6 +184,7 @@ model OrganizationProfile {
   logo           String?
   physicalAddress String?
 }
+
 
 // --- CONTRACTOR PROFILE ---
 model ContractorProfile {
@@ -185,3 +208,4 @@ model ContractorProfile {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 }
+
