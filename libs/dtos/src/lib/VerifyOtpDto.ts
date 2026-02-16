@@ -21,19 +21,6 @@ export class VerifyOtpDto {
   @Length(6, 6, { message: 'The verification code must be exactly 6 digits' })
   @IsNotEmpty()
   code!: string;
-
-  @ApiProperty({
-    description: 'The reason for which the OTP was issued',
-    enum: ['SIGNUP', 'PASSWORD_RESET', '2FA', 'CHANGE_EMAIL', 'CHANGE_PHONE'],
-    example: 'SIGNUP',
-  })
-  @IsString()
-  @IsOptional()
-  @IsIn(['SIGNUP', 'PASSWORD_RESET', '2FA', 'CHANGE_EMAIL', 'CHANGE_PHONE'], 
-    {
-    message: 'Purpose must be either SIGNUP, PASSWORD_RESET, CHANGE_EMAIL, CHANGE_PHONE, or 2FA'
-  })
-  purpose!: string;
 }
 export class VerifyOtpResponseDataDto {
   @ApiProperty({

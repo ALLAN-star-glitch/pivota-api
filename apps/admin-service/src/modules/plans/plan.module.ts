@@ -13,6 +13,7 @@ import { PrismaModule } from '../../prisma/prisma.module';
     PrismaModule,
     ClientsModule.register([
       {
+        
         name: 'PROFILE_PACKAGE',
         transport: Transport.GRPC,
         options: {

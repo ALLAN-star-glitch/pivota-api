@@ -25,9 +25,12 @@ service JobsService {
   
   // --- Application Flows ---
   rpc ApplyToJobPost (CreateJobApplicationRequest) returns (BaseJobApplicationResponse);
+  rpc GetOwnApplications (GetOwnApplicationsRequest) returns (ListJobApplicationsResponse);
+  rpc GetAdminApplications (GetAdminApplicationsRequest) returns (ListJobApplicationsResponse);
+  rpc GetApplicationById (GetApplicationByIdRequest) returns (BaseJobApplicationResponse);
 
+  // --- Ownership & Management ---
   rpc GetOwnJobs (GetOwnJobsRequest) returns (ListJobPostsResponse);
-
   rpc GetAdminJobs (GetAdminJobsRequest) returns (ListJobPostsResponse);
 }
 
@@ -60,24 +63,26 @@ message CategoryBasic {
 // JOB APPLICATION ENTITIES
 // ===================================================
 message Attachment {
-  string type = 1;
-  string fileUrl = 2;
-  string fileName = 3;
-  string contentText = 4;
-  bool isPrimary = 5;
+  string id = 1;
+  string type = 2;
+  string fileUrl = 3;
+  string fileName = 4;
+  string contentText = 5;
+  bool isPrimary = 6;
 }
 
 message StatusHistory {
-  string oldStatus = 1;
-  string newStatus = 2;
-  string changedBy = 3;
-  string reason = 4;
-  string createdAt = 5;
+  string id = 1;
+  string oldStatus = 2;
+  string newStatus = 3;
+  string changedBy = 4;
+  string reason = 5;
+  string createdAt = 6;
 }
 
 message JobApplication {
   string id = 1;
-  string externalId = 2;
+  optional string externalId = 2;
   string jobPostId = 3;
   string applicantId = 4;
   string employerId = 5;
@@ -90,9 +95,11 @@ message JobApplication {
   string referrerEmail = 12; 
   string referrerRelationship = 13;
   string createdAt = 14;
-  string reviewedAt = 15;
-  repeated Attachment attachments = 16;
-  repeated StatusHistory statusHistory = 17;
+  string updatedAt = 15;
+  optional string reviewedAt = 16;
+  repeated Attachment attachments = 17;
+  repeated StatusHistory statusHistory = 18;
+  optional string lastStatusChangeReason = 19; // For lightweight UI support
 }
 
 // ===================================================
@@ -131,6 +138,23 @@ message JobPost {
 // REQUEST MESSAGES
 // ===================================================
 
+message GetOwnApplicationsRequest {
+  string applicantId = 1;
+  optional string status = 2;
+}
+
+message GetAdminApplicationsRequest {
+  optional string applicantId = 1;
+  optional string employerId = 2;
+  optional string status = 3;
+}
+
+message GetApplicationByIdRequest {
+  string id = 1;
+  string requesterId = 2; // Required for security/ownership check
+  optional string requesterRole = 3; // Optional for more nuanced access control (e.g., admin vs. employer) 
+}
+
 message CreateJobPostRequest {
   string title = 1;
   string description = 2;
@@ -164,9 +188,9 @@ message CreateJobPostRequest {
 
 message UpdateJobPostRequest {
   string id = 1;
-  string creatorId = 2; // Required for ownership check or target user identification
+  string creatorId = 2;
 
-  optional string accountId = 3; // Required for Admin Flow validation
+  optional string accountId = 3;
   optional string title = 4;
   optional string description = 5;
   optional string status = 6;
@@ -181,7 +205,7 @@ message UpdateJobPostRequest {
 message CloseJobPostRequest {
   string id = 1;
   string creatorId = 2;
-  optional string accountId = 3; // Included to satisfy Admin DTO requirements
+  optional string accountId = 3;
   optional string reason = 4;
 }
 
@@ -206,6 +230,14 @@ message ValidateJobPostIdsRequest { repeated string ids = 1; }
 // ===================================================
 // RESPONSE MESSAGES
 // ===================================================
+
+message ListJobApplicationsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated JobApplication data = 4;
+  ErrorPayload error = 5;
+}
 
 message JobPostCreateData {
   string id = 1;
@@ -275,7 +307,7 @@ message BaseValidateJobPostIdsResponse {
 
 message GetOwnJobsRequest {
   string creatorId = 1;
-  optional string status = 2; // Added to allow the user to filter their own view
+  optional string status = 2;
 }
 
 message GetAdminJobsRequest {

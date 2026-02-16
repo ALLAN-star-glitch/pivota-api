@@ -90,7 +90,20 @@ export class UserService {
 async createUserProfile(
   data: CreateUserRequestDto & { planSlug?: string },
 ): Promise<BaseResponseDto<UserProfileResponseDto>> {
-  this.logger.log(`Initiating individual profile creation: ${data.email} [Plan: ${data.planSlug || 'free-forever'}]`);
+  /**
+   * PIVOTACONNECT KENYA - DATA NORMALIZATION
+   * Normalizes Kenyan formats (07..., 01..., 254...) to E.164 (+254...)
+   * Ensures email is lowercase to prevent duplicate identity bypass.
+   */
+  const KENYAN_REGEX = /^(?:254|\+254|0)?((?:7|1|2)\d{8})$/;
+  const rawPhone = data.phone?.trim();
+  const normalizedPhone = rawPhone?.match(KENYAN_REGEX) 
+    ? `+254${rawPhone.match(KENYAN_REGEX)[1]}` 
+    : rawPhone || null;
+    
+  const normalizedEmail = data.email.toLowerCase().trim();
+
+  this.logger.log(`Initiating individual profile creation: ${normalizedEmail} [Plan: ${data.planSlug || 'free-forever'}]`);
 
   const accountUuid = randomUUID();
   const userCode = `USR-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
@@ -123,7 +136,6 @@ async createUserProfile(
     const isPremium = targetPlanSlug !== 'free-forever';
 
     /* ---------- 2. ATOMIC DATABASE TRANSACTION ---------- */
-    // Wrap the transaction in a try-catch to handle DB-specific errors like P2002 (Unique Constraint)
     let result: UserProfileAggregate | PrismaUserAggregate;
     try {
       result = await this.prisma.$transaction(async (tx) => {
@@ -143,8 +155,8 @@ async createUserProfile(
           data: {
             uuid: data.userUuid,
             userCode,
-            email: data.email,
-            phone: data.phone === "" ? null : data.phone,
+            email: normalizedEmail,
+            phone: normalizedPhone,
             firstName: data.firstName,
             lastName: data.lastName,
             roleName: 'General User',
@@ -170,32 +182,28 @@ async createUserProfile(
       });
     } catch (dbError) {
       if (dbError instanceof Prisma.PrismaClientKnownRequestError) {
-    if (dbError.code === 'P2002') {
-      // 1. Check the target array
-      const targets = (dbError.meta?.target as string | string[]) || '';
-      const targetString = Array.isArray(targets) ? targets.join(',').toLowerCase() : targets.toLowerCase();
-      
-      // 2. Also check the error message (contains index names like 'users_email_key')
-      const errorMessage = dbError.message.toLowerCase();
-      
-      this.logger.warn(`Unique constraint violation. Targets: [${targetString}] | Message: ${errorMessage}`);
+        if (dbError.code === 'P2002') {
+          const targets = (dbError.meta?.target as string | string[]) || '';
+          const targetString = Array.isArray(targets) ? targets.join(',').toLowerCase() : targets.toLowerCase();
+          const errorMessage = dbError.message.toLowerCase();
+          
+          this.logger.warn(`Unique constraint violation. Targets: [${targetString}] | Message: ${errorMessage}`);
 
-      // Check BOTH target array and the full error message for keywords
-      if (targetString.includes('email') || errorMessage.includes('email')) {
-        return BaseResponseDto.fail('A user with this email address already exists', 'ALREADY_EXISTS');
-      }
-      
-      if (targetString.includes('phone') || errorMessage.includes('phone')) {
-        return BaseResponseDto.fail('This phone number is already registered to another account', 'ALREADY_EXISTS');
-      }
+          if (targetString.includes('email') || errorMessage.includes('email')) {
+            return BaseResponseDto.fail('A user with this email address already exists', 'ALREADY_EXISTS');
+          }
+          
+          if (targetString.includes('phone') || errorMessage.includes('phone')) {
+            return BaseResponseDto.fail('This phone number is already registered to another account', 'ALREADY_EXISTS');
+          }
 
-      if (targetString.includes('uuid') || errorMessage.includes('uuid')) {
-        return BaseResponseDto.fail('Identity conflict: User UUID already exists', 'ALREADY_EXISTS');
-      }
+          if (targetString.includes('uuid') || errorMessage.includes('uuid')) {
+            return BaseResponseDto.fail('Identity conflict: User UUID already exists', 'ALREADY_EXISTS');
+          }
 
-      return BaseResponseDto.fail('A profile with these unique details already exists', 'ALREADY_EXISTS', dbError.meta);
-    }
-  }
+          return BaseResponseDto.fail('A profile with these unique details already exists', 'ALREADY_EXISTS', dbError.meta);
+        }
+      }
 
       const errorMessage = dbError instanceof Error ? dbError.message : 'Database transaction failed';
       return BaseResponseDto.fail(errorMessage, 'INTERNAL_ERROR');
@@ -227,7 +235,7 @@ async createUserProfile(
       }
 
     } catch (syncError) {
-      this.logger.error(`Post-DB Sync failed. Rolling back local records for ${data.email}`);
+      this.logger.error(`Post-DB Sync failed. Rolling back local records for ${normalizedEmail}`);
       
       await this.prisma.$transaction([
         this.prisma.profileCompletion.deleteMany({ where: { userUuid: data.userUuid } }),
@@ -553,5 +561,56 @@ async createUserProfile(
     });
   }
 }
+
+/** ------------------------------------------------------
+   * FETCH MY PROFILE
+   * Retrieves the full aggregate for the authenticated user
+   * ------------------------------------------------------- */
+  async getMyProfile(userUuid: string): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`Fetching own profile for User: ${userUuid}`);
+
+    try {
+      // Fetch the full aggregate including Account, Org, Profile, and Completion
+      const userAggregate = await this.prisma.user.findUnique({
+        where: { uuid: userUuid },
+        include: {
+          account: {
+            include: {
+              organization: {
+                include: { profile: true },
+              },
+            },
+          },
+          profile: true,
+          completion: true,
+        },
+      });
+
+      if (!userAggregate) {
+        this.logger.warn(`Profile not found for authenticated UUID: ${userUuid}`);
+        return BaseResponseDto.fail(
+          'Your profile record could not be found.',
+          'NOT_FOUND'
+        );
+      }
+
+      // Use your existing mapper to format the output for the UI
+      const mappedData = this.mapToUserProfileResponseDto(userAggregate as PrismaUserAggregate);
+
+      return BaseResponseDto.ok(
+        mappedData,
+        'Profile retrieved successfully',
+        'OK'
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Error in getMyProfile: ${msg}`);
+      
+      return BaseResponseDto.fail(
+        'An internal error occurred while fetching your profile.',
+        'INTERNAL_ERROR'
+      );
+    }
+  }
 
 }

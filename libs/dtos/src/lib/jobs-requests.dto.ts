@@ -8,7 +8,6 @@ import {
   ArrayNotEmpty,
   Matches,
   IsNotEmpty,
-  MaxLength,
   IsDateString,
   IsEmail,
   ValidateNested,
@@ -217,7 +216,26 @@ export class ValidateJobPostIdsRequestDto {
 
    BASE CLOSE JOB POST DTO
 --------------------------------- */
-export class CloseJobPostRequestDto {
+
+export class CloseAdminJobPostRequestHttpDto {
+  @ApiProperty({
+    description: 'UUID of the user who originally created the job post',
+    example: 'user-123-xyz',
+  })
+  @IsString()
+  @IsNotEmpty()
+  creatorId!: string;
+
+  @ApiProperty({
+    description: 'UUID of the account that owns the job post',
+    example: 'acc-789-uvw',
+  })
+  @IsString()
+  @IsNotEmpty()
+  accountId!: string;
+} 
+
+export class CloseJobGrpcRequestDto {
   @ApiProperty({
     description: 'The unique CUID/ID of the job post to be closed',
     example: 'clv1234567890',
@@ -227,58 +245,12 @@ export class CloseJobPostRequestDto {
   id!: string;
 
   @ApiProperty({
-    description: 'UUID of the employer/creator authorized to close this post',
-    example: 'user-uuid-999',
-  })
-  @IsString()
-  @IsNotEmpty()
-  creatorId!: string;
-
-  @ApiPropertyOptional({
-    description: 'Optional reason for closing the job post (max 255 characters)',
-    example: 'Position filled internally',
-    maxLength: 255,
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  reason?: string;
-}
-
-/* -------------------------------
-   CLOSE OWN JOB POST DTO
---------------------------------- */
-export class CloseOwnJobPostRequestDto extends PartialType(CloseJobPostRequestDto) {
-  @ApiProperty({
-    description: 'The unique CUID/ID of the job post to be closed (user can only close their own jobs)',
-    example: 'clv1234567890',
-  })
-  @IsString()
-  @IsNotEmpty()
-  override id!: string;
-
-  // Note: creatorId is automatically assigned from the authenticated user context
-}
-
-/* -------------------------------
-   CLOSE JOB POST FOR ADMIN DTO
---------------------------------- */
-export class CloseAdminJobPostRequestDto extends PartialType(CloseJobPostRequestDto) {
-  @ApiProperty({
-    description: 'The unique CUID/ID of the job post to be closed',
-    example: 'clv1234567890',
-  })
-  @IsString()
-  @IsNotEmpty()
-  override id!: string;
-
-  @ApiProperty({
     description: 'UUID of the user who originally created the job post',
     example: 'user-123-xyz',
   })
   @IsString()
   @IsNotEmpty()
-  override creatorId!: string;
+  creatorId!: string;
 
   @ApiProperty({
     description: 'UUID of the account that owns the job post',
@@ -346,13 +318,62 @@ export class CreateJobApplicationDto {
 /* -------------------------------
    UPDATE JOB POST FOR OWN USER
 --------------------------------- */
-export class UpdateOwnJobPostRequestDto extends PartialType(CreateJobPostDto) {
-  @ApiProperty({ description: 'The internal DB ID of the job post to update', example: 'cl3k1n4fj0000xyz123abc' })
+/* -------------------------------
+   UPDATE OWN JOB POST HTTP DTO
+--------------------------------- */
+export class UpdateOwnJobPostRequestHttpDto extends PartialType(CreateJobPostDto) {
+  // Body contains ONLY the partial fields the user wants to change.
+  // All fields inherited from CreateJobPostDto are now @IsOptional().
+}
+
+/* -------------------------------
+   UPDATE ADMIN JOB POST HTTP DTO
+--------------------------------- */
+export class UpdateAdminJobPostRequestHttpDto extends PartialType(CreateJobPostDto) {
+  @ApiProperty({
+    description: 'UUID of the user who originally created the job post',
+    example: 'user-123-xyz',
+  })
+  @IsString()
+  @IsNotEmpty()
+  creatorId!: string;
+
+  @ApiProperty({
+    description: 'UUID of the account that owns the job post',
+    example: 'acc-789-uvw',
+  })
+  @IsString()
+  @IsNotEmpty()
+  accountId!: string;
+}
+
+/* -------------------------------
+   UPDATE JOB GRPC REQUEST DTO
+--------------------------------- */
+export class UpdateJobGrpcRequestDto extends PartialType(CreateJobPostDto) {
+  @ApiProperty({ 
+    description: 'The unique CUID/ID of the job post to update', 
+    example: 'clv1234567890' 
+  })
   @IsString()
   @IsNotEmpty()
   id!: string;
 
-  // Optional override fields — users cannot set creatorId or accountId
+  @ApiProperty({ 
+    description: 'UUID of the user associated with the record', 
+    example: 'user-123-xyz' 
+  })
+  @IsString()
+  @IsNotEmpty()
+  creatorId!: string;
+
+  @ApiProperty({ 
+    description: 'UUID of the account associated with the record', 
+    example: 'acc-789-uvw' 
+  })
+  @IsString()
+  @IsNotEmpty()
+  accountId!: string;
 }
 
 /* -------------------------------

@@ -225,55 +225,39 @@ class StatusHistoryResponseDto {
 }
 
 // --- Main Application Response ---
+// Base DTO for Dashboard Lists (Lightweight)
 export class JobApplicationResponseDto {
-  @ApiProperty({ example: 'clv1234567890' })
-  id!: string;
+  @ApiProperty() id!: string;
+  @ApiProperty() jobPostId!: string;
+  @ApiProperty() applicantId!: string;
+  @ApiProperty() status!: string;
+  
+  // Minimal Timestamps
+  @ApiProperty() createdAt!: Date;
+  @ApiProperty() updatedAt!: string;
 
-  @ApiProperty({ example: 'uuid-abc-123' })
-  externalId!: string;
+  // Add a lightweight reference for the UI instead of full history
+  @ApiPropertyOptional() lastStatusChangeReason?: string;
+}
 
-  @ApiProperty({ example: 'clv_job_post_001' })
-  jobPostId!: string;
+// Extended DTO for the "View Details" Page (Heavyweight)
+export class JobApplicationDetailResponseDto extends JobApplicationResponseDto {
+  @ApiProperty() externalId!: string;
+  @ApiProperty() employerId!: string;
+  
+  @ApiPropertyOptional() expectedPay?: number;
+  @ApiPropertyOptional() availabilityDate?: Date;
+  @ApiPropertyOptional() availabilityNotes?: string;
 
-  @ApiProperty({ example: 'applicant_uuid_999' })
-  applicantId!: string;
+  // Referrer Info
+  @ApiPropertyOptional() referrerName?: string;
+  @ApiPropertyOptional() referrerPhone?: string;
+  @ApiPropertyOptional() referrerEmail?: string;
+  @ApiPropertyOptional() referrerRelationship?: string;
 
-  @ApiProperty( {example: 'employer_uuid_555' })
-  employerId!: string;
+  @ApiPropertyOptional() reviewedAt?: Date;
 
-  @ApiProperty({ example: 'PENDING' })
-  status!: string;
-
-  // Financials & Time
-  @ApiPropertyOptional({ example: 1500.00 })
-  expectedPay?: number;
-
-  @ApiPropertyOptional({ example: '2025-01-05T08:00:00Z' })
-  availabilityDate?: Date;
-
-  @ApiPropertyOptional({ example: 'Available after 5 PM' })
-  availabilityNotes?: string;
-
-  @ApiPropertyOptional({ example: 'John Kamau' })
-  referrerName?: string;
-
-  @ApiPropertyOptional({ example: '+254711223344' })
-  referrerPhone?: string;
-
-  @ApiPropertyOptional({ example: 'john.kamau@example.com' })
-  referrerEmail?: string; 
-
-  @ApiPropertyOptional({ example: 'Former Site Manager' })
-  referrerRelationship?: string;
-
-  // Timestamps
-  @ApiProperty({ example: '2025-12-30T09:00:00Z' })
-  createdAt!: Date;
-
-  @ApiPropertyOptional({ example: '2025-12-30T14:00:00Z' })
-  reviewedAt?: Date;
-
-  // Relations
+  // Relations (Only included in Detail View)
   @ApiProperty({ type: [AttachmentResponseDto] })
   attachments!: AttachmentResponseDto[];
 

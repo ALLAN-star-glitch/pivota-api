@@ -5,19 +5,17 @@ import {
   JobPostResponseDto,
   ValidateJobPostIdsRequestDto,
   ValidateJobPostIdsReponseDto,
-  CloseJobPostRequestDto,
   CreateJobApplicationDto,
   JobApplicationResponseDto,
   CloseJobPostResponseDto,
   JobPostCreateResponseDto,
   CreateJobPostDto,
-  UpdateAdminJobPostRequestDto,
-  UpdateOwnJobPostRequestDto,
-  CloseAdminJobPostRequestDto,
   CreateJobGrpcRequestDto,
+  JobApplicationDetailResponseDto,
+  CloseJobGrpcRequestDto,
+  UpdateJobGrpcRequestDto,
 } from '@pivota-api/dtos';
 import { JobsService } from './jobs.service';
-
 @Controller('jobs')
 export class JobsController {
   private readonly logger = new Logger(JobsController.name);
@@ -91,17 +89,25 @@ export class JobsController {
 
   @GrpcMethod('JobsService', 'UpdateJobPost')
   async updateJobPost(
-    data: UpdateOwnJobPostRequestDto & { creatorId: string },
+    data: UpdateJobGrpcRequestDto,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
-    this.logger.debug(`[gRPC] UpdateJobPost for Job: ${data.id}`);
+    this.logger.debug(
+      `[gRPC] UpdateJobPost | Job: ${data.id} | Actor: ${data.creatorId} | Acc: ${data.accountId}`
+    );
+    
+    // Pass the unified DTO to the service
     return this.jobsService.updateJobPost(data);
   }
 
   @GrpcMethod('JobsService', 'UpdateAdminJobPost')
   async updateAdminJobPost(
-    data: UpdateAdminJobPostRequestDto,
+    data: UpdateJobGrpcRequestDto,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
-    this.logger.debug(`[gRPC] UpdateAdminJobPost for Job: ${data.id}`);
+    this.logger.debug(
+      `[gRPC] UpdateAdminJobPost | Job: ${data.id} | Target: ${data.creatorId}`
+    );
+    
+    // Admin flow uses the same DTO but different service logic for identity validation
     return this.jobsService.updateAdminJobPost(data);
   }
 
@@ -111,7 +117,7 @@ export class JobsController {
 
   @GrpcMethod('JobsService', 'CloseJobPost')
   async closeJobPost(
-    data: CloseJobPostRequestDto & { creatorId: string },
+    data: CloseJobGrpcRequestDto,
   ): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
     this.logger.debug(`[gRPC] CloseJobPost: ${data.id} by User: ${data.creatorId}`);
     return this.jobsService.closeJobPost(data);
@@ -119,7 +125,7 @@ export class JobsController {
 
   @GrpcMethod('JobsService', 'CloseAdminJobPost')
   async closeAdminJobPost(
-    data: CloseAdminJobPostRequestDto,
+    data: CloseJobGrpcRequestDto,
   ): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
     this.logger.debug(`[gRPC] CloseAdminJobPost: ${data.id}`);
     return this.jobsService.closeAdminJobPost(data);
@@ -146,4 +152,29 @@ export class JobsController {
     const { jobPostId, applicantId, ...dto } = data;
     return this.jobsService.applyToJobPost(jobPostId, applicantId, dto);
   }
+
+  @GrpcMethod('JobsService', 'GetOwnApplications')
+  async getOwnApplications(
+    data: { applicantId: string; status?: string },
+  ): Promise<BaseResponseDto<JobApplicationResponseDto[]>> {
+    this.logger.debug(`[gRPC] GetOwnApplications for Applicant: ${data.applicantId}`);
+    return this.jobsService.getOwnApplications(data.applicantId, data.status);
+  }
+
+  @GrpcMethod('JobsService', 'GetAdminApplications')
+  async getAdminApplications(
+    data: { applicantId?: string; employerId?: string; status?: string },
+  ): Promise<BaseResponseDto<JobApplicationResponseDto[]>> {
+    this.logger.debug(`[gRPC] GetAdminApplications filters: ${JSON.stringify(data)}`);
+    return this.jobsService.getAdminApplications(data);
+  }
+
+  @GrpcMethod('JobsService', 'GetApplicationById')
+  async getApplicationById(
+    data: { id: string; requesterId: string; requesterRole?: string },
+  ): Promise<BaseResponseDto<JobApplicationDetailResponseDto>> {
+    this.logger.debug(`[gRPC] GetApplicationById: ${data.id} requested by ${data.requesterId}`);
+    return this.jobsService.getApplicationById(data.id, data.requesterId, data.requesterRole);
+  }
+
 }

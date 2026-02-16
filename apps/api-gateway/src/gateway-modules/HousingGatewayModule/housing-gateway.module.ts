@@ -3,9 +3,11 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { HousingGatewayService } from './housing-gateway.service';
 import { HousingGatewayController } from './housing-gateway.controller';
 import { LISTINGS_HOUSING_PROTO_PATH } from '@pivota-api/protos';
+import { SubscriptionsGatewayModule } from '../SubscriptionsGatewayModule/subscriptions-gateway.module';
 
 @Module({
   imports: [
+    SubscriptionsGatewayModule,
     ClientsModule.register([
       {
         name: 'HOUSING_PACKAGE',

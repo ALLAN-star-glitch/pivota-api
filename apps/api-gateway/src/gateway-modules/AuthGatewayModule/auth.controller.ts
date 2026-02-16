@@ -31,6 +31,7 @@ import {
   VerifyOtpResponseDataDto,
   ResetPasswordDto,
   RevokeSessionDto,
+  OtpPurposeQueryDto,
 } from '@pivota-api/dtos';
 import { ClientInfo } from '../../decorators/client-info.decorator';
 import {
@@ -71,6 +72,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
  // ===================== OTP: REQUEST =====================
+ // ===================== OTP: REQUEST =====================
   @Version('1')
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } }) 
@@ -82,34 +84,22 @@ export class AuthController {
     description: 'OTP sent successfully',
     type: BaseResponseDto,
   })
-  @ApiResponse({
-    status: 409, 
-    description: 'Conflict: Email or Phone already registered',
-  })
-  @ApiResponse({
-    status: 429,
-    description: 'Too Many Requests: IP or Email rate limit exceeded',
-  })
   async requestOtp(
-    @Body() dto: RequestOtpDto
+    @Body() dto: RequestOtpDto,
+    @Query() query: OtpPurposeQueryDto // Validated via @IsIn in your DTO
   ): Promise<BaseResponseDto<null>> {
-    this.logger.log(`📩 OTP Request for: ${dto.email}`);
+    this.logger.log(`📩 OTP Request [${query.purpose}] for: ${dto.email}`);
     
-    // 1. Resolve the promise immediately
-    const result = await this.authService.requestOtp(dto);
+    // Pass the validated purpose string to the service
+    const result = await this.authService.requestOtp(dto, query.purpose);
 
-    // 2. Check the resolved result
     if (!result.success) {
       this.logger.warn(`⚠️ OTP Request failed for ${dto.email}: ${result.message}`);
-      
-      // 3. Throw the DATA, not the PROMISE
       throw result; 
     }
 
     return result;
   }
- 
-
 
   // ===================== OTP: VERIFY =====================
   @Version('1')
@@ -131,12 +121,20 @@ export class AuthController {
     },
   })
   async verifyOtp(
-    @Body() dto: VerifyOtpDto
+    @Body() dto: VerifyOtpDto,
+    @Query() query: OtpPurposeQueryDto // Validated via @IsIn
   ): Promise<BaseResponseDto<VerifyOtpResponseDataDto>> {
-    this.logger.log(`🔍 OTP Verification attempt for: ${dto.email}`);
-    return this.authService.verifyOtp(dto);
+    this.logger.log(`🔍 OTP Verification [${query.purpose}] attempt for: ${dto.email}`);
+    const response = await this.authService.verifyOtp(dto, query.purpose);
+    if (!response.success) {
+      this.logger.error(`OTP verification failed for ${dto.email} with purpose ${query.purpose}: ${response.message}`);
+      throw response;
+    }
+    this.logger.log(`OTP verified successfully for ${dto.email} with purpose ${query.purpose}`);
+    return response;
   }
 
+  
   // ===================== SIGNUP =====================
   @Version('1')
   @Post('signup')

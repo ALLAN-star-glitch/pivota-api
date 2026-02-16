@@ -76,3 +76,7 @@ export * from './lib/RevokeSessionDto.dto';
 export * from './lib/check-module-access.dto';
 export * from './lib/GetOwnJobFiltersDto.dto';
 export * from './lib/GetJobsAdminFilterDto.dto';
+export * from './lib/GetAdminApplicationsDto.dto';
+export * from './lib/GetOwnApplicationsFilterDto.dto';
+export * from './lib/listing-registry.dto';
+export * from './lib/PurposeDto.dto';

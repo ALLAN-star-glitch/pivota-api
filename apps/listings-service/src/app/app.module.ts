@@ -6,6 +6,7 @@ import { JobsModule } from '../business-modules/jobs-module/jobs/jobs.module';
 import { ContractorsModule } from '../business-modules/contractors-module/contractors.module';
 import { CategoriesModule } from '../business-modules/categories/categories.module';
 import { HousingModule } from '../business-modules/housing-module/housing.module';
+import { SharedListingsModule } from '../business-modules/shared-listings/shared-listings.module';
 
 @Module({
   imports: [
@@ -16,9 +17,9 @@ import { HousingModule } from '../business-modules/housing-module/housing.module
     CategoriesModule,
     JobsModule,
     ContractorsModule,
-    HousingModule
+    HousingModule,
+    SharedListingsModule
   ],
-
   controllers: [AppController],
   providers: [AppService],
 })

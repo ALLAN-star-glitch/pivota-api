@@ -6,6 +6,10 @@ package profile;
 
 service ProfileService {
   rpc CreateUserProfile(CreateUserProfileRequest) returns (UserProfileResponse);
+  
+  // ADDED: Endpoint for the authenticated user to fetch their own profile
+  rpc GetMyProfile(GetMyProfileRequest) returns (UserProfileResponse);
+
   rpc GetUserProfileByUuid(GetUserByUuidRequest) returns (UserProfileResponse);
   rpc GetUserProfileByUserCode(GetUserByUserCodeRequest) returns (UserProfileResponse);
   rpc GetUserProfileByEmail(GetUserByEmailRequest) returns (UserProfileResponse);
@@ -19,7 +23,7 @@ service ProfileService {
   rpc GetOrganisationsByType(GetOrganisationsByTypeRequest) returns (OrgListResponse);
 }
 
-// ================== User Profile Messages (The Trio + Organization) ==================
+// ================== User Profile Messages ==================
 
 message UserProfileResponse {
   bool success = 1;
@@ -29,14 +33,13 @@ message UserProfileResponse {
   ErrorPayload error = 5;  
 }
 
-message UserProf{
+message UserProf {
   AccountBase account = 1;
   UserBase user = 2;
   UserProfileMetadata profile = 3;
   string createdAt = 4;
   string updatedAt = 5;
   CompletionResponse completion = 6;
-  // ADDED: Optional organization context for the user
   OrganizationBase organization = 7; 
 }
 
@@ -61,7 +64,6 @@ message UserProfileMetadata {
 
 // ================== Organization Messages ==================
 
-
 message OrganizationBase {
   string id = 1;
   string uuid = 2;
@@ -82,7 +84,7 @@ message CreateOrgProfileRequest {
   string adminFirstName = 8;    
   string adminLastName = 9;  
   string organizationType = 10; 
-  string planSlug = 11; // Optional field to specify the subscription plan during organization creation 
+  string planSlug = 11; 
 }
 
 message OrgProfileResponse {
@@ -142,7 +144,12 @@ message CreateUserProfileRequest {
   string lastName = 3;
   string email = 4;
   string phone = 5;
-  string planSlug = 6; // Optional, can be used for profile badges or default settings
+  string planSlug = 6; 
+}
+
+// ADDED: Request message for GetMyProfile
+message GetMyProfileRequest {
+  string userUuid = 1;
 }
 
 message GetUserByUuidRequest { string userUuid = 1; }
@@ -164,10 +171,9 @@ message ErrorPayload {
 
 message Empty {}
 
-
 message UpdateFullUserProfileRequest {
-  string userUuid = 1;              // Required to identify the user
-  optional string firstName = 2;    // Optional fields start here
+  string userUuid = 1;              
+  optional string firstName = 2;    
   optional string lastName = 3;
   optional string email = 4;
   optional string phone = 5;
@@ -178,16 +184,14 @@ message UpdateFullUserProfileRequest {
   optional string profileImage = 10;
 }
 
-// New Request for filtering
 message GetOrganisationsByTypeRequest {
   string typeSlug = 1;
 }
 
-// New List Response for organizations
 message OrgListResponse {
   bool success = 1;
   string message = 2;
   string code = 3;
-  repeated OrgProfileData data = 4; // Returns a list of organizations
+  repeated OrgProfileData data = 4; 
   ErrorPayload error = 5;
 }

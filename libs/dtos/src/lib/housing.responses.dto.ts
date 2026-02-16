@@ -4,7 +4,17 @@ import {
   HOUSE_LISTING_STATUSES, 
   HOUSE_VIEWING_STATUSES 
 } from '@pivota-api/constants';
-import { IsIn, IsString, IsNumber, IsBoolean, IsOptional, IsArray, IsObject, IsDate, IsNotEmpty } from 'class-validator';
+import { 
+  IsIn, 
+  IsString, 
+  IsNumber, 
+  IsBoolean, 
+  IsOptional, 
+  IsArray, 
+  IsObject, 
+  IsDate, 
+  IsNotEmpty 
+} from 'class-validator';
 
 /* ======================================================
    SHARED BASIC DTOS (Identity Pillar)
@@ -71,46 +81,16 @@ export class HouseImageResponseDto {
 }
 
 /* ======================================================
-   HOUSE LISTING RESPONSE (Rich DTO)
+   LEAN: HOUSE LISTING SUMMARY (For Search & Dashboard Lists)
 ====================================================== */
-export class HouseListingResponseDto {
+export class HouseListingSummaryDto {
   @ApiProperty({ example: 'house_123abc' })
   @IsString()
   id!: string;
 
-  @ApiProperty({ example: 'ext_456def' })
-  @IsString()
-  externalId!: string;
-
   @ApiProperty({ example: 'Spacious 3 Bedroom Apartment' })
   @IsString()
   title!: string;
-
-  @ApiProperty({ example: 'A modern apartment in the city center...' })
-  @IsString()
-  description!: string;
-
-  @ApiProperty({ description: 'Detailed category information' })
-  @IsObject()
-  category!: NestedCategoryResponseDto;
-
-  /* --- Identity Pillar --- */
-  @ApiProperty({ description: 'The Human (Agent/Landlord) who created the listing' })
-  @IsObject()
-  creator!: UserBasicDto;
-
-  @ApiProperty({ description: 'The Brand or Agency account owning this listing' })
-  @IsObject()
-  account!: AccountBasicDto;
-  /* ---------------------- */
-
-  @ApiProperty({
-    description: 'Listing type (for sale or rent)',
-    enum: HOUSE_LISTING_TYPES,
-    example: 'RENTAL',
-  })
-  @IsString()
-  listingType!: string;
 
   @ApiProperty({ example: 150000 })
   @IsNumber()
@@ -125,13 +105,74 @@ export class HouseListingResponseDto {
   @IsNumber()
   bedrooms?: number;
 
+  @ApiProperty({ example: 'Nairobi' })
+  @IsString()
+  locationCity!: string;
+
+  @ApiPropertyOptional({ example: 'Westlands' })
+  @IsOptional()
+  @IsString()
+  locationNeighborhood?: string;
+
+  @ApiProperty({ enum: HOUSE_LISTING_STATUSES, example: 'ACTIVE' })
+  @IsString()
+  status!: string;
+
+  @ApiPropertyOptional({ example: 'https://example.com/images/house1_main.jpg' })
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @ApiProperty({ example: '2025-12-01T12:00:00Z' })
+  @IsDate()
+  createdAt!: Date;
+
+  @ApiProperty({ description: 'The Brand or Agency account name for the dashboard' })
+  @IsString()
+  accountName!: string;
+}
+
+/* ======================================================
+   RICH: HOUSE LISTING RESPONSE (For Details Page)
+====================================================== */
+export class HouseListingResponseDto extends HouseListingSummaryDto {
+  @ApiProperty({ example: 'ext_456def' })
+  @IsString()
+  externalId!: string;
+
+  @ApiProperty({ example: 'A modern apartment in the city center...' })
+  @IsString()
+  description!: string;
+
+  @ApiProperty({ description: 'Detailed category information' })
+  @IsObject()
+  category!: NestedCategoryResponseDto;
+
+  /* --- Identity Pillar --- */
+  @ApiProperty({ description: 'The Human (Agent/Landlord) who created the listing' })
+  @IsObject()
+  creator!: UserBasicDto;
+
+  @ApiProperty({ description: 'The root account object' })
+  @IsObject()
+  account!: AccountBasicDto;
+  /* ---------------------- */
+
+  @ApiProperty({
+    description: 'Listing type (for sale or rent)',
+    enum: HOUSE_LISTING_TYPES,
+    example: 'RENTAL',
+  })
+  @IsString()
+  listingType!: string;
+
   @ApiPropertyOptional({ example: 2 })
   @IsOptional()
   @IsNumber()
   bathrooms?: number;
 
   @ApiProperty({
-    description: 'List of amenities',
+    description: 'Full list of amenities',
     type: [String],
     example: ['Parking', 'Balcony', 'Gym'],
   })
@@ -143,39 +184,14 @@ export class HouseListingResponseDto {
   @IsBoolean()
   isFurnished!: boolean;
 
-  @ApiProperty({ example: 'Nairobi' })
-  @IsString()
-  locationCity!: string;
-
-  @ApiPropertyOptional({ example: 'Westlands' })
-  @IsOptional()
-  @IsString()
-  locationNeighborhood?: string;
-
   @ApiPropertyOptional({ example: '123 Riverside Drive, Nairobi' })
   @IsOptional()
   @IsString()
   address?: string;
 
-  @ApiProperty({
-    enum: HOUSE_LISTING_STATUSES,
-    example: 'ACTIVE',
-  })
-  @IsString()
-  status!: string;
-
-  @ApiProperty({ example: '2025-12-01T12:00:00Z' })
-  @IsDate()
-  createdAt!: Date;
-
   @ApiProperty({ example: '2025-12-05T15:30:00Z' })
   @IsDate()
   updatedAt!: Date;
-
-  @ApiPropertyOptional({ example: 'https://example.com/images/house1_main.jpg' })
-  @IsOptional()
-  @IsString()
-  imageUrl?: string;
 
   @ApiProperty({ type: [HouseImageResponseDto] })
   @IsArray()
@@ -183,29 +199,20 @@ export class HouseListingResponseDto {
 }
 
 /* ======================================================
-   NEW: HOUSE LISTING CREATE RESPONSE (Lean DTO)
+   HOUSE LISTING CREATE RESPONSE
 ====================================================== */
 export class HouseListingCreateResponseDto {
-  @ApiProperty({ 
-    example: 'house_123abc', 
-    description: 'The server-generated ID for the new listing' 
-  })
+  @ApiProperty({ example: 'house_123abc' })
   @IsString()
   @IsNotEmpty()
   id!: string;
 
-  @ApiProperty({ 
-    example: 'ACTIVE', 
-    description: 'The initial status of the listing' 
-  })
+  @ApiProperty({ example: 'ACTIVE' })
   @IsString()
   @IsNotEmpty()
   status!: string;
 
-  @ApiProperty({ 
-    example: '2026-02-07T18:00:00.000Z', 
-    description: 'ISO timestamp of creation' 
-  })
+  @ApiProperty({ example: '2026-02-07T18:00:00.000Z' })
   @IsString()
   @IsNotEmpty()
   createdAt!: string;

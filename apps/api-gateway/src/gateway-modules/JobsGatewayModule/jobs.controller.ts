@@ -22,12 +22,16 @@ import {
   JobPostCreateResponseDto,
   AdminCreateJobPostDto,
   CreateJobPostDto,
-  UpdateAdminJobPostRequestDto,
-  UpdateOwnJobPostRequestDto,
-  CloseAdminJobPostRequestDto,
-  CloseOwnJobPostRequestDto,
   GetOwnJobsFilterDto,
-  GetAdminJobsFilterDto
+  GetAdminJobsFilterDto,
+  JobApplicationDetailResponseDto,
+  GetAdminApplicationsFilterDto,
+  GetOwnApplicationsFilterDto,
+  CloseJobGrpcRequestDto,
+  CloseAdminJobPostRequestHttpDto,
+  UpdateAdminJobPostRequestHttpDto,
+  UpdateJobGrpcRequestDto,
+  UpdateOwnJobPostRequestHttpDto,
 } from '@pivota-api/dtos';
 
 import { ParseCuidPipe } from '@pivota-api/pipes';
@@ -42,6 +46,7 @@ import { Public } from '../../decorators/public.decorator';
 import { RolesGuard } from '../../guards/role.guard';
 import { SubscriptionGuard } from '../../guards/subscription.guard';
 import { SetModule } from '../../decorators/set-module.decorator';
+
 
 /**
  * Helper decorator for SubscriptionGuard
@@ -167,30 +172,28 @@ async createAny(
 }
 
 
-
- // -----------------------------
+// -----------------------------
 // Core Job Update Logic
 // -----------------------------
 private async executeJobUpdate(
-  dto: (UpdateOwnJobPostRequestDto & { creatorId: string }) | UpdateAdminJobPostRequestDto,
-  actorUuid: string
+  dto: UpdateJobGrpcRequestDto,
+  actorUuid: string,
+  isAdminFlow: boolean
 ): Promise<BaseResponseDto<JobPostResponseDto>> {
   try {
-    // Determine flow based on the presence of accountId (Admin DTO has it, Own DTO doesn't)
-    if ('accountId' in dto && dto.accountId) {
+    if (isAdminFlow) {
       this.logger.debug(`Processing ADMIN Job Update for Job ${dto.id} initiated by admin ${actorUuid}`);
-      return await this.jobsService.updateAdminJobPost(dto as UpdateAdminJobPostRequestDto);
+      return await this.jobsService.updateAdminJobPost(dto);
     }
 
-    // Standard "Own" flow
-    const ownDto = dto as UpdateOwnJobPostRequestDto & { creatorId: string };
-    this.logger.debug(`Processing OWN Job Update for Job ${ownDto.id} initiated by user ${actorUuid}`);
-    return await this.jobsService.updateJobPost(ownDto);
+    this.logger.debug(`Processing OWN Job Update for Job ${dto.id} initiated by user ${actorUuid}`);
+    return await this.jobsService.updateJobPost(dto);
     
   } catch (error) {
+    const err = error as Error;
     this.logger.error(
       `🔥 Job update execution failed for Job ${dto.id} by actor ${actorUuid}`,
-      error.stack
+      err.stack
     );
     return BaseResponseDto.fail('Unexpected error while routing job update', 'INTERNAL_ERROR');
   }
@@ -207,21 +210,27 @@ private async executeJobUpdate(
 @ApiParam({ name: 'id', type: String })
 async updateOwn(
   @Param('id') id: string,
-  @Body() dto: UpdateOwnJobPostRequestDto,
+  @Body() dto: UpdateOwnJobPostRequestHttpDto,
   @Req() req: JwtRequest,
 ): Promise<BaseResponseDto<JobPostResponseDto>> {
   const userId = req.user.userUuid;
+  const accId = req.user.accountId;
 
-  // We inject the creatorId from the JWT to ensure the Microservice 
-  // can verify ownership before applying the update.
-  const sanitizedDto: UpdateOwnJobPostRequestDto & { creatorId: string } = {
+  // Transform HTTP DTO + Metadata into the strict gRPC Contract
+  const sanitizedDto: UpdateJobGrpcRequestDto = {
     ...dto,
     id,
     creatorId: userId,
+    accountId: accId,
   };
 
   this.logger.log(`👤 User ${userId} updating their own job ${id}`);
-  return this.executeJobUpdate(sanitizedDto, userId);
+  const resp = await this.executeJobUpdate(sanitizedDto, userId, false);
+  if (!resp.success) {
+    this.logger.error(`Job update failed for User ${userId} on Job ${id}: ${resp.message}`);
+    throw resp; // Let the Global Exception Filter handle the error response  
+  }
+  return resp;
 }
 
 // -----------------------------
@@ -235,19 +244,24 @@ async updateOwn(
 @ApiParam({ name: 'id', type: String })
 async updateAny(
   @Param('id') id: string,
-  @Body() dto: UpdateAdminJobPostRequestDto,
+  @Body() dto: UpdateAdminJobPostRequestHttpDto,
   @Req() req: JwtRequest,
 ): Promise<BaseResponseDto<JobPostResponseDto>> {
   const requesterUuid = req.user.userUuid;
 
-  // Admin DTO already includes target creatorId & accountId from the body
-  const sanitizedDto: UpdateAdminJobPostRequestDto = {
+  // Admin DTO includes target creatorId & accountId in the body
+  const sanitizedDto: UpdateJobGrpcRequestDto = {
     ...dto,
     id,
-  };
+  } as UpdateJobGrpcRequestDto;
 
   this.logger.log(`👮 Admin ${requesterUuid} updating job ${id} for User ${dto.creatorId}`);
-  return this.executeJobUpdate(sanitizedDto, requesterUuid);
+  const resp = await this.executeJobUpdate(sanitizedDto, requesterUuid, true);
+  if (!resp.success) {
+    this.logger.error(`Job update failed for Admin ${requesterUuid} on Job ${id}: ${resp.message}`);
+    throw resp;
+  }
+  return resp;
 }
 
 
@@ -255,27 +269,23 @@ async updateAny(
 // Core Job Close Logic
 // -----------------------------
 private async executeJobClose(
-  dto: (CloseOwnJobPostRequestDto & { creatorId: string; accountId: string }) | CloseAdminJobPostRequestDto,
-  actorUuid: string
+  dto: CloseJobGrpcRequestDto,
+  actorUuid: string,
+  isAdminFlow: boolean 
 ): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
-  // Extract ID immediately so it's available for the entire scope, including the catch block
-  const jobId = dto.id; 
-
   try {
-    // Check if it's the Admin flow
-    // We check for accountId and the absence of the 'creatorId' property added in sanitizedDto
-    if ('accountId' in dto && dto.accountId && !('creatorId' in dto)) {
-      this.logger.debug(`Processing ADMIN Job Close for Job ${jobId} initiated by admin ${actorUuid}`);
-      return await this.jobsService.closeAdminJobPost(dto as CloseAdminJobPostRequestDto);
+    if (isAdminFlow) {
+      this.logger.debug(`Processing ADMIN Job Close for job ${dto.id} initiated by admin ${actorUuid}`);
+      // Admin bypasses the ownership check in the microservice
+      return await this.jobsService.closeAdminJobPost(dto);
     }
 
-    // Standard flow
-    const ownDto = dto as CloseOwnJobPostRequestDto & { creatorId: string };
-    this.logger.debug(`Processing OWN Job Close for Job ${jobId} initiated by user ${actorUuid}`);
-    return await this.jobsService.closeJobPost(ownDto);
+    this.logger.debug(`Processing OWN Job Close for job ${dto.id} initiated by user ${actorUuid}`);
+    // Microservice will check if dto.creatorId === record.creatorId
+    return await this.jobsService.closeJobPost(dto);
     
   } catch (error) {
-    this.logger.error(`🔥 Job close execution failed for Job ${jobId}`, error.stack);
+    this.logger.error(`🔥 Job close execution failed for Job ${dto.id}`, error.stack);
     return BaseResponseDto.fail('Unexpected error while routing job closure', 'INTERNAL_ERROR');
   }
 }
@@ -284,71 +294,64 @@ private async executeJobClose(
 // CLOSE OWN JOB
 // -----------------------------
 @Permissions('jobs.close.own')
-@SetModule('jobs')
-@Version('1')
+@ApiOperation({ summary: 'Close own job post' })
 @Patch('jobs/:id/close')
-@ApiOperation({ summary: 'Close own job post (Status Change)' })
-@ApiParam({ name: 'id', type: String, description: 'CUID of the job post to close' })
-@ApiResponse({ status: 200, description: 'Job post closed successfully', type: CloseJobPostResponseDto })
-@ApiResponse({ status: 403, description: 'Forbidden: User cannot close this job post' })
-@ApiBody({ type: CloseOwnJobPostRequestDto, description: 'Payload for closing own job post' })
 async closeOwn(
-  @Param('id') id: string,
-  @Body() dto: CloseOwnJobPostRequestDto,
+  @Param('id', ParseCuidPipe) id: string,
   @Req() req: JwtRequest,
 ): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
   const userId = req.user.userUuid;
   const accountId = req.user.accountId;
 
-  const sanitizedDto: CloseOwnJobPostRequestDto & { creatorId: string; accountId: string } = {
-    ...dto,
+  const sanitizedDto: CloseJobGrpcRequestDto = {
     id,
     creatorId: userId,
     accountId,
   };
 
   this.logger.log(`👤 User ${userId} closing their own job ${id}`);
-  return this.executeJobClose(sanitizedDto, userId);
+  // Pass 'false' because this is the ownership-check flow
+  const response = await this.executeJobClose(sanitizedDto, userId, false);
+  if(!response.success){
+    throw response;
+  }
+  return response;
 }
-
+ 
 // -----------------------------
 // CLOSE JOB FOR ANY USER (ADMIN)
 // -----------------------------
 @Permissions('jobs.close.any')
-@SetModule('jobs')
-@Version('1')
+@ApiOperation({summary: "Close Others jobs - by admin"})
 @Patch('admin/jobs/:id/close')
-@ApiOperation({ summary: 'Close any job post (Admin only)' })
-@ApiParam({ name: 'id', type: String, description: 'CUID of the job post to close' })
-@ApiResponse({ status: 200, description: 'Job post closed successfully', type: CloseJobPostResponseDto })
-@ApiResponse({ status: 403, description: 'Forbidden: Admin cannot close this job post' })
-@ApiBody({ type: CloseAdminJobPostRequestDto, description: 'Payload for closing any job post (Admin only)' })
+@ApiBody({ type: CloseAdminJobPostRequestHttpDto })
 async closeAny(
-  @Param('id') id: string,
-  @Body() dto: CloseAdminJobPostRequestDto,
+  @Param('id', ParseCuidPipe) id: string,
+  @Body() dto: CloseAdminJobPostRequestHttpDto,
   @Req() req: JwtRequest,
 ): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
   const requesterUuid = req.user.userUuid;
-  const requesterRole = req.user.role;
 
-  // Ensure route ID is used; Admin DTO already contains creatorId & accountId
-  const sanitizedDto: CloseAdminJobPostRequestDto = {
-    ...dto,
-    id,
-
+  const sanitizedDto: CloseJobGrpcRequestDto = {
+    ...dto, // Contains creatorId and accountId from HttpDto
+    id,    // Forced from URL param
   };
 
-  this.logger.log(
-    `👮 ${requesterRole} (${requesterUuid}) closing job ${id} for User ${dto.creatorId}, Account ${dto.accountId}`
-  );
-  return this.executeJobClose(sanitizedDto, requesterUuid);
+  this.logger.log(`👮 Admin ${requesterUuid} closing job ${id} for User ${dto.creatorId}`);
+  // Pass 'true' to trigger the admin bypass flow
+  const response = await this.executeJobClose(sanitizedDto, requesterUuid, true);
+  if(!response.success){
+    throw response;
+  }
+  return response;
 }
 
+// ===========================================================
+  //  APPLICATION FLOWS
+  // ===========================================================
 
-// ===========================================================
-// APPLY TO JOB POST
-// ===========================================================
-  @Permissions('jobs.read') // Using 'read' permission for application access
+
+  @Permissions('jobs.read')
   @Version('1')
   @Post('jobs/:id/apply')
   @ApiOperation({ summary: 'Apply for a job post' })
@@ -359,8 +362,67 @@ async closeAny(
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<JobApplicationResponseDto>> {
     const userId = req.user.userUuid;
-    this.logger.debug(`REST applyToJobPost validated for job=${id} by user=${userId}`);
     return this.jobsService.applyToJobPost(id, userId, dto);
+  }
+
+  @Permissions('jobs.read')
+  @Version('1')
+  @Get('my-applications')
+  @ApiOperation({ summary: 'Get all applications submitted by the authenticated user' })
+  @ApiResponse({ status: 200, type: [JobApplicationResponseDto] })
+  async getOwnApplications(
+    @Req() req: JwtRequest,
+    @Query() query: GetOwnApplicationsFilterDto,
+  ): Promise<BaseResponseDto<JobApplicationResponseDto[]>> {
+    const userId = req.user.userUuid;
+    this.logger.log(`👤 User ${userId} fetching their applications. Filter: ${query.status ?? 'ALL'}`);
+    return this.jobsService.getOwnApplications(userId, query.status);
+  }
+
+  @Permissions('jobs.read') 
+  @Version('1')
+  @Get('admin/applications')
+  @ApiOperation({ summary: 'Get applications across the system with filters (Admin only)' })
+  @ApiResponse({ status: 200, type: [JobApplicationResponseDto] })
+  async getAdminApplications(
+    @Req() req: JwtRequest,
+    @Query() query: GetAdminApplicationsFilterDto,
+  ): Promise<BaseResponseDto<JobApplicationResponseDto[]>> {
+    const adminId = req.user.userUuid;
+    if (req.user.role === 'GeneralUser') {
+      return BaseResponseDto.fail('Unauthorized access to administrative applications.', 'FORBIDDEN');
+    }
+    this.logger.log(`👮 Admin ${adminId} searching system-wide applications`);
+    return this.jobsService.getAdminApplications(query);
+  }
+
+  // ===========================================================
+  // GET APPLICATION BY ID (Full Detail View)
+  // ===========================================================
+  @Permissions('jobs.read')
+  @Version('1')
+  @Get('applications/:id')
+  @ApiOperation({ summary: 'Get full details of a specific application' })
+  async getApplicationById(
+    @Param('id', ParseCuidPipe) id: string,
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<JobApplicationDetailResponseDto>> {
+    const userId = req.user.userUuid;
+    const userRole = req.user.role; // This is critical for the microservice bypass
+    
+    this.logger.log(`🔍 User ${userId} (${userRole}) requesting full details for application ${id}`);
+    
+    // Pass both the ID and the Role
+    const response = await this.jobsService.getApplicationById(id, userId, userRole);
+    
+    if (!response.success) {
+      this.logger.warn(`Access denied for user ${userId} on application ${id}`);
+      throw response; 
+    }
+
+    this.logger.debug(`Gateway forwarding: User ${userId}, Role ${userRole}`);
+    return response;
+
   }
 
   // ===========================================================

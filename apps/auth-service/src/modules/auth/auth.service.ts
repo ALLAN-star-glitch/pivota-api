@@ -201,7 +201,6 @@ async validateUser(email: string, password: string): Promise<UserProfileResponse
   }
 }
 
-  // ------------------ Generate Tokens ------------------
   /** ------------------ Generate Tokens ------------------ */
  async generateTokens(
   profile: UserProfileResponseDto,
@@ -209,7 +208,11 @@ async validateUser(email: string, password: string): Promise<UserProfileResponse
 ): Promise<{ accessToken: string; refreshToken: string }> {
   const userData = profile.user;
   const accountData = profile.account;
+
+  this.logger.debug(`[AUTH] Generating tokens for User: ${userData.uuid} in Account: ${accountData.uuid}`);
+
   const fullName = `${userData.firstName} ${userData.lastName}`.trim();
+
 
   // 1. Fetch the User Role via gRPC
   const rbacService = this.getRbacGrpcService();
@@ -437,10 +440,11 @@ async organisationSignup(
       where: {
         email: dto.email,
         code: dto.code,
-        purpose: 'SIGNUP',
+        purpose: 'ORGANIZATION_SIGNUP',
         expiresAt: { gt: new Date() },
       },
     });
+
 
     if (!validOtp) {
       this.logger.warn(`[AUTH] Org Signup blocked: Invalid OTP for ${dto.email}`);
@@ -618,7 +622,7 @@ async organisationSignup(
     /* ======================================================
        2. TRIGGER MFA CHALLENGE (Always-On Default)
     ====================================================== */
-    const otpPayload: RequestOtpDto = {
+    const otpPayload = {
       email: loginDto.email,
       purpose: '2FA', 
     };
@@ -1056,7 +1060,7 @@ async generateDevToken(
 }
 
 /** ------------------ Request OTP ------------------ */
-async requestOtp(data: RequestOtpDto): Promise<BaseResponseDto<null>> {
+async requestOtp(data: RequestOtpDto & { purpose: string }): Promise<BaseResponseDto<null>> {
   const { email, purpose } = data;
 
   try {
@@ -1067,28 +1071,44 @@ async requestOtp(data: RequestOtpDto): Promise<BaseResponseDto<null>> {
     });
 
     // 2. Business Logic based on Purpose
+    // 2. Business Logic based on Purpose
     switch (purpose) {
       case 'SIGNUP':
+      case 'ORGANIZATION_SIGNUP': // Added to support your organization onboarding
         if (existingUser) {
+          this.logger.warn(`[OTP] ${purpose} blocked: ${email} already exists.`);
           return BaseResponseDto.fail('This email is already registered.', 'CONFLICT');
         }
         break;
+
       case 'PASSWORD_RESET':
         if (!existingUser) {
+          // Masking response to prevent account enumeration
           this.logger.log(`[OTP] Password reset requested for non-existent: ${email}`);
           return BaseResponseDto.ok(null, 'If an account exists, a code has been sent.');
         }
         break;
+
       case '2FA':
-        if (!existingUser) return BaseResponseDto.fail('Account not found.', 'NOT_FOUND');
+        if (!existingUser) {
+          return BaseResponseDto.fail('Account not found.', 'NOT_FOUND');
+        }
         break;
+
       case 'CHANGE_EMAIL':
-        if (existingUser) return BaseResponseDto.fail('This email is already in use.', 'CONFLICT');
+        if (existingUser) {
+          return BaseResponseDto.fail('This email is already in use.', 'CONFLICT');
+        }
         break;
+ 
       case 'CHANGE_PHONE':
-        if (!existingUser) return BaseResponseDto.fail('User account not found.', 'NOT_FOUND');
+        if (!existingUser) {
+          return BaseResponseDto.fail('User account not found.', 'NOT_FOUND');
+        }
         break;
+
       default:
+        this.logger.error(`[OTP] Unsupported purpose received: ${purpose}`);
         return BaseResponseDto.fail('Invalid request purpose.', 'BAD_REQUEST');
     }
 
@@ -1120,16 +1140,20 @@ async requestOtp(data: RequestOtpDto): Promise<BaseResponseDto<null>> {
     // 3. Generate 6-digit code
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const EXPIRES_IN_MINUTES = 10;
-    const expiresAt = new Date(Date.now() + EXPIRES_IN_MINUTES * 60000);
+    
+    // FIX: Explicitly create a UTC timestamp
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + EXPIRES_IN_MINUTES * 60000);
 
     // 4. Save to DB 
-    // CRITICAL: We only delete OTPs older than 10 minutes (expired).
-    // Deleting all records here would reset our 'otpCount' to 0 every time.
-    const expiryThreshold = new Date(Date.now() - 10 * 60000);
+    // We clean up records that are physically older than 10 minutes from 'now'
+    const expiryThreshold = new Date(now.getTime() - 10 * 60000);
+
     await this.prisma.otp.deleteMany({ 
       where: { 
         email, 
         purpose,
+        // Only delete strictly expired ones, keeping recent attempts for rate limiting
         createdAt: { lt: expiryThreshold }
       } 
     });
@@ -1139,7 +1163,7 @@ async requestOtp(data: RequestOtpDto): Promise<BaseResponseDto<null>> {
         email,
         code: otpCode,
         purpose,
-        expiresAt,
+        expiresAt, // Prisma will handle the conversion to UTC ISO string
       },
     });
 
@@ -1165,46 +1189,61 @@ async requestOtp(data: RequestOtpDto): Promise<BaseResponseDto<null>> {
 
 
 /** ------------------ Verify OTP ------------------ */
-async verifyOtp(data: VerifyOtpDto): Promise<BaseResponseDto<{ verified: boolean }>> {
+async verifyOtp(data: VerifyOtpDto & { purpose: string }): Promise<BaseResponseDto<{ verified: boolean }>> {
   const { email, code, purpose } = data;
 
   try {
-    // 1. Find the latest valid OTP for this email and purpose
+    /**
+     * 1. Find the latest valid OTP.
+     * We strictly use the provided 'purpose' (SIGNUP, ORGANIZATION_SIGNUP, PASSWORD_RESET, etc.)
+     * to ensure the security context remains isolated.
+     */
     const latestOtp = await this.prisma.otp.findFirst({
       where: {
         email,
         code,
-        purpose: purpose || 'SIGNUP',
-        expiresAt: { gt: new Date() }, // Must not be expired
+        purpose, // Strict match against the validated purpose
+        expiresAt: { gt: new Date() }, // Check if the current time is before expiry
       },
       orderBy: { createdAt: 'desc' },
     });
 
     if (!latestOtp) {
-      this.logger.warn(`[AUTH] Invalid or expired OTP attempt for: ${email}`);
+      this.logger.warn(`[AUTH] Failed verification for: ${email} | Purpose: ${purpose} | Code: ${code}`);
       return {
         success: false,
-        message: 'Invalid or expired code',
+        message: 'Invalid or expired verification code.',
         code: 'UNAUTHORIZED',
         data: { verified: false },
       } as BaseResponseDto<{ verified: boolean }>;
     }
 
-    // 2. OTP is valid! Clean up: Delete all OTPs for this email/purpose to prevent replay
+    /**
+     * 2. OTP is valid! 
+     * Cleanup: Delete all OTPs for this email and purpose to prevent replay attacks.
+     * We keep OTPs for other purposes intact to avoid disrupting concurrent flows.
+     */
     await this.prisma.otp.deleteMany({
-      where: { email, purpose: purpose || 'SIGNUP' },
+      where: { 
+        email, 
+        purpose 
+      },
     });
 
-    this.logger.log(`[AUTH] OTP verified successfully for: ${email}`);
+    this.logger.log(`[AUTH] OTP verified successfully: ${email} [${purpose}]`);
 
     return {
       success: true,
-      message: 'Code verified',
+      message: 'Verification successful',
       code: 'OK',
       data: { verified: true },
     } as BaseResponseDto<{ verified: boolean }>;
-  } catch (error) {
-    this.logger.error(`Error verifying OTP for ${email}`, error);
+
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : 'Unknown validation error';
+    this.logger.error(`Error verifying OTP for ${email}: ${errorMsg}`);
+    
+    // Throwing RpcException for gRPC protocol mapping
     throw new RpcException({ code: 13, message: 'Internal validation failure' });
   }
 }

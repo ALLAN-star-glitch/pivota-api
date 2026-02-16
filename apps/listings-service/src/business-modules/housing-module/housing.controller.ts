@@ -8,6 +8,7 @@ import {
   HouseViewingResponseDto,
   GetHouseListingByIdDto,
   GetListingsByOwnerDto,
+  GetAdminHousingFilterDto,
   UpdateHouseListingGrpcRequestDto,
   ScheduleViewingGrpcRequestDto,
   CreateHouseListingGrpcRequestDto,
@@ -22,20 +23,30 @@ export class HousingController {
 
   constructor(private readonly housingService: HousingService) {}
 
-  // -----------------------------
-  // CREATE HOUSE LISTING
-  // -----------------------------
+  // ===========================================================
+  // CREATE METHODS
+  // ===========================================================
+
   @GrpcMethod('HousingService', 'CreateHouseListing')
   async createHouseListing(
     data: CreateHouseListingGrpcRequestDto,
   ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
-    this.logger.debug(`CreateHouseListing Request: ${JSON.stringify(data)}`);
+    this.logger.debug(`CreateHouseListing Request for creator: ${data.creatorId}`);
     return this.housingService.createHouseListing(data);
   }
 
-  // -----------------------------
-  // GET HOUSE LISTING BY ID
-  // -----------------------------
+  @GrpcMethod('HousingService', 'CreateAdminHouseListing')
+  async createAdminHouseListing(
+    data: CreateHouseListingGrpcRequestDto,
+  ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
+    this.logger.debug(`CreateAdminHouseListing Request by admin`);
+    return this.housingService.createAdminHouseListing(data);
+  }
+
+  // ===========================================================
+  // READ METHODS
+  // ===========================================================
+
   @GrpcMethod('HousingService', 'GetHouseListingById')
   async getHouseListingById(
     data: GetHouseListingByIdDto,
@@ -44,9 +55,6 @@ export class HousingController {
     return this.housingService.getHouseListingById(data);
   }
 
-  // -----------------------------
-  // SEARCH LISTINGS (Discovery)
-  // -----------------------------
   @GrpcMethod('HousingService', 'SearchListings')
   async searchListings(
     data: SearchHouseListingsDto,
@@ -55,42 +63,56 @@ export class HousingController {
     return this.housingService.searchListings(data);
   }
 
-  // -----------------------------
-  // GET LISTINGS BY OWNER (Dashboard)
-  // -----------------------------
   @GrpcMethod('HousingService', 'GetListingsByOwner')
   async getListingsByOwner(
     data: GetListingsByOwnerDto,
   ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
-    this.logger.debug(`GetListingsByOwner Request: ${data.ownerId}`);
+    this.logger.debug(`GetListingsByOwner Request for Account: ${data.ownerId}`);
     return this.housingService.getListingsByOwner(data);
   }
+  
+  @GrpcMethod('HousingService', 'GetAdminListings')
+  async getAdminListings(
+    data: GetAdminHousingFilterDto,
+  ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    this.logger.debug(`GetAdminListings Request with filters: ${JSON.stringify(data)}`);
+    return this.housingService.getAdminListings(data);
+  }
 
-  // -----------------------------
-  // UPDATE LISTING DETAILS
-  // -----------------------------
+
+  // ===========================================================
+  // UPDATE METHODS
+  // ===========================================================
+
   @GrpcMethod('HousingService', 'UpdateHouseListing')
   async updateHouseListing(
     data: UpdateHouseListingGrpcRequestDto,
   ): Promise<BaseResponseDto<HouseListingResponseDto>> {
-    this.logger.debug(`UpdateHouseListing Request: ${JSON.stringify(data)}`);
-    return this.housingService.updateHouseListing( data);
+    this.logger.debug(`UpdateHouseListing Request: ${data.listingId}`);
+    return this.housingService.updateHouseListing(data);
   }
 
-  // -----------------------------
-  // UPDATE LISTING STATUS (Archive/Rented/Available)
-  // -----------------------------
+
+  @GrpcMethod('HousingService', 'UpdateAdminHouseListing')
+  async updateAdminHouseListing(
+    data: UpdateHouseListingGrpcRequestDto,
+  ): Promise<BaseResponseDto<HouseListingResponseDto>> {
+    this.logger.debug(`UpdateAdminHouseListing Request for listing: ${data.listingId}`);
+    return this.housingService.updateAdminHouseListing(data);
+  }
+
   @GrpcMethod('HousingService', 'UpdateListingStatus')
   async updateListingStatus(
     data: UpdateHouseListingStatusDto,
   ): Promise<BaseResponseDto<HouseListingResponseDto>> {
-    this.logger.debug(`UpdateListingStatus Request: ${JSON.stringify(data)}`);
+    this.logger.debug(`UpdateListingStatus Request to ${data.status} for listing: ${data.id}`);
     return this.housingService.updateListingStatus(data);
   }
 
-  // -----------------------------
-  // ARCHIVE LISTING (Soft Delete)
-  // -----------------------------
+  // ===========================================================
+  // UTILITY METHODS
+  // ===========================================================
+
   @GrpcMethod('HousingService', 'ArchiveHouseListing')
   async archiveHouseListing(
     data: ArchiveHouseListingsGrpcRequestDto,
@@ -99,9 +121,6 @@ export class HousingController {
     return this.housingService.archiveHouseListing(data);
   }
 
-  // -----------------------------
-  // SCHEDULE A VIEWING
-  // -----------------------------
   @GrpcMethod('HousingService', 'ScheduleViewing')
   async scheduleViewing(
     data: ScheduleViewingGrpcRequestDto,

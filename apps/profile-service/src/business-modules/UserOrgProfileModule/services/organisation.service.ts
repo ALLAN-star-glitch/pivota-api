@@ -124,7 +124,30 @@ export class OrganisationService  {
 async createOrganizationProfile(
   data: CreateOrganisationRequestDto & { planSlug?: string },
 ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
-  this.logger.log(`Initiating organization creation: ${data.name} (Admin: ${data.email}) [Plan: ${data.planSlug || 'free'}]`);
+  /**
+   * PIVOTACONNECT KENYA - DATA NORMALIZATION
+   * Normalizes Kenyan formats (07..., 01..., 254...) to E.164 (+254...)
+   * Applied to both Official Org Phone and Admin Phone.
+   */
+  const KENYAN_REGEX = /^(?:254|\+254|0)?((?:7|1|2)\d{8})$/;
+
+  // Normalize Official Org Phone
+  const rawOrgPhone = data.officialPhone?.trim();
+  const normalizedOrgPhone = rawOrgPhone?.match(KENYAN_REGEX) 
+    ? `+254${rawOrgPhone.match(KENYAN_REGEX)[1]}` 
+    : rawOrgPhone || null;
+
+  // Normalize Admin Phone
+  const rawAdminPhone = data.phone?.trim();
+  const normalizedAdminPhone = rawAdminPhone?.match(KENYAN_REGEX) 
+    ? `+254${rawAdminPhone.match(KENYAN_REGEX)[1]}` 
+    : rawAdminPhone || null;
+
+  // Normalize Emails
+  const normalizedAdminEmail = data.email.toLowerCase().trim();
+  const normalizedOfficialEmail = data.officialEmail.toLowerCase().trim();
+
+  this.logger.log(`Initiating organization creation: ${data.name} (Admin: ${normalizedAdminEmail}) [Plan: ${data.planSlug || 'free'}]`);
 
   const orgUuid = randomUUID();
   const accountUuid = randomUUID();
@@ -180,8 +203,8 @@ async createOrganizationProfile(
             verificationStatus: isPremium ? 'PENDING_PAYMENT' : 'PENDING',
             profile: {
               create: {
-                officialEmail: data.officialEmail,
-                officialPhone: data.officialPhone,
+                officialEmail: normalizedOfficialEmail,
+                officialPhone: normalizedOrgPhone,
                 physicalAddress: data.physicalAddress,
                 typeSlug: data.organizationType || 'PRIVATE_LIMITED',
               },
@@ -193,8 +216,8 @@ async createOrganizationProfile(
           data: {
             uuid: data.adminUserUuid,
             userCode: `USR-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-            email: data.email,
-            phone: data.phone,
+            email: normalizedAdminEmail,
+            phone: normalizedAdminPhone,
             firstName: data.adminFirstName,
             lastName: data.adminLastName,
             roleName: 'Business System Admin',
@@ -304,6 +327,7 @@ async createOrganizationProfile(
     return BaseResponseDto.fail(finalMsg, 'INTERNAL_ERROR');
   }
 }
+
 
   /* ======================================================
      GET ORGANIZATION
@@ -473,6 +497,5 @@ async getOrganisationsByType(
   phone: user.phone,
 };
   }
-
   
 }

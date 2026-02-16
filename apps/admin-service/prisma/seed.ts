@@ -19,7 +19,7 @@ async function main() {
   const activeModuleSlugs = [
     'houses', 'jobs', 'help-and-support', 'services',
     'dashboard', 'user-management', 'analytics',
-    'system-settings', 'module-management'
+    'system-settings', 'module-management', 'registry' // Added registry
   ];
 
   const deletedModules = await prisma.module.deleteMany({
@@ -63,6 +63,7 @@ async function main() {
     { slug: 'help-and-support', name: 'Help and Support', description: 'Community & social aid services' },
     { slug: 'services', name: 'Contractor Services', description: 'Professional service offerings & SmartMatch' },
     { slug: 'dashboard', name: 'Dashboard', system: true },
+    { slug: 'registry', name: 'Registry', description: 'Shared Navigation & Aggregated Portfolio', system: true }, // Added registry
     { slug: 'user-management', name: 'User Management', system: true },
     { slug: 'analytics', name: 'Analytics', system: true },
     { slug: 'system-settings', name: 'System Settings', system: true },
@@ -91,17 +92,20 @@ async function main() {
     { action: 'module.rules.manage', moduleSlug: 'module-management' },
     { action: 'system-settings.manage', moduleSlug: 'system-settings' },
     { action: 'subscription.bypass', moduleSlug: 'dashboard' },
-    { action: 'organization.invite-member', moduleSlug: 'user-management' }, // Distinguish between system vs content managers
+    { action: 'organization.invite-member', moduleSlug: 'user-management' },
+    { action: 'listings.read', moduleSlug: 'registry' }, // Unified Registry Permission
   ];
 
   const businessModuleSlugs = ['houses', 'jobs', 'help-and-support', 'services'];
   const permissionData = [...systemPermissions];
 
   for (const slug of businessModuleSlugs) {
-    ['read', 'approve', 'moderate'].forEach(act => {
+    // Global/Specialized Actions
+    ['read', 'approve', 'moderate', 'verify'].forEach(act => {
       permissionData.push({ action: `${slug}.${act}`, moduleSlug: slug });
     });
-    ['create', 'update', 'delete'].forEach(act => {
+    // CRUD & Lifecycle Actions (Splitting Own vs. Any)
+    ['create', 'update', 'delete', 'close', 'archive'].forEach(act => {
       permissionData.push({ action: `${slug}.${act}.own`, moduleSlug: slug });
       permissionData.push({ action: `${slug}.${act}.any`, moduleSlug: slug });
     });
@@ -124,34 +128,47 @@ async function main() {
   const dbPermissions = await prisma.permission.findMany();
 
   // ---------- 5) ROLE → PERMISSION MAPPING ----------
-  console.log('\n🔗 Mapping Role Permissions (System Supersets & Org Logic)...');
+  console.log('\n🔗 Mapping Role Permissions (Full CRUD & Org Lifecycle)...');
   const roleMapping: Record<string, string[]> = {
     SuperAdmin: dbPermissions.map(p => p.action),
     SystemAdmin: dbPermissions.filter(p => p.action !== 'subscription.bypass').map(p => p.action),
-    ModuleManager: ['module.rules.manage','houses.read','jobs.read','help-and-support.read','services.read'],
-    AnalyticsAdmin: ['analytics.view','houses.read','jobs.read','help-and-support.read','services.read'],
-    ComplianceAdmin: ['user.view','houses.read','jobs.read','help-and-support.read','services.read'],
+    ModuleManager: [
+      'module.rules.manage',
+      'listings.read',
+      ...businessModuleSlugs.map(slug => `${slug}.read`)
+    ],
+    AnalyticsAdmin: [
+      'analytics.view',
+      'listings.read',
+      ...businessModuleSlugs.map(slug => `${slug}.read`)
+    ],
+    ComplianceAdmin: [
+      'user.view',
+      'listings.read',
+      ...businessModuleSlugs.flatMap(slug => [`${slug}.read`, `${slug}.moderate`, `${slug}.approve`]),
+    ],
 
     BusinessSystemAdmin: [
-      ...['houses','jobs','help-and-support','services'].flatMap(slug => [
+      ...businessModuleSlugs.flatMap(slug => [
         `${slug}.read`, `${slug}.create.any`, `${slug}.update.any`, `${slug}.delete.any`,
-        `${slug}.approve`, `${slug}.moderate`
+        `${slug}.close.any`, `${slug}.archive.any`, `${slug}.approve`, `${slug}.moderate`, `${slug}.verify`
       ]),
-      'role.assign','role.create','user.view','analytics.view','organization.invite-member'
+      'role.assign', 'role.create', 'user.view', 'analytics.view', 'organization.invite-member', 'subscription.bypass', 'listings.read'
     ],
     BusinessContentManager: [
-      ...['houses','jobs','help-and-support'].flatMap(slug => [
+      ...businessModuleSlugs.flatMap(slug => [
         `${slug}.read`, `${slug}.create.own`, `${slug}.update.own`, `${slug}.delete.own`,
-        `${slug}.approve`, `${slug}.moderate`
+        `${slug}.close.own`, `${slug}.archive.own`, `${slug}.approve`, `${slug}.moderate`
       ]),
-      'services.read','services.update.own','services.moderate',
-      'analytics.view','organization.invite-member'
+      'services.read', 'services.update.own',
+      'analytics.view', 'organization.invite-member', 'listings.read'
     ],
     GeneralUser: [
-      ...['houses','jobs','help-and-support','services'].flatMap(slug => [
-        `${slug}.read`, `${slug}.create.own`
+      ...businessModuleSlugs.flatMap(slug => [
+        `${slug}.read`, `${slug}.create.own`, `${slug}.update.own`, `${slug}.delete.own`,
+        `${slug}.close.own`, `${slug}.archive.own`
       ]),
-      'analytics.view'
+      'analytics.view', 'listings.read'
     ],
   };
 
@@ -174,9 +191,9 @@ async function main() {
   const roleModuleConfig = [
     { roleType: 'SuperAdmin', slugs: dbModules.map(m => m.slug), assignable: false },
     { roleType: 'SystemAdmin', slugs: dbModules.map(m => m.slug), assignable: false },
-    { roleType: 'BusinessSystemAdmin', slugs: ['houses','jobs','help-and-support','services','dashboard'], assignable: true },
-    { roleType: 'BusinessContentManager', slugs: ['houses','jobs','help-and-support','services','dashboard'], assignable: true },
-    { roleType: 'GeneralUser', slugs: ['houses','jobs','help-and-support','services','dashboard'], assignable: false },
+    { roleType: 'BusinessSystemAdmin', slugs: ['houses','jobs','help-and-support','services','dashboard', 'registry'], assignable: true },
+    { roleType: 'BusinessContentManager', slugs: ['houses','jobs','help-and-support','services','dashboard', 'registry'], assignable: true },
+    { roleType: 'GeneralUser', slugs: ['houses','jobs','help-and-support','services','dashboard', 'registry'], assignable: false },
   ];
 
   for (const cfg of roleModuleConfig) {

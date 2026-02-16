@@ -8,12 +8,11 @@ import {
   CreateJobApplicationDto,
   JobApplicationResponseDto,
   JobPostCreateResponseDto,
-  CloseAdminJobPostRequestDto,
-  CloseOwnJobPostRequestDto,
   AdminCreateJobPostDto,
   CreateJobPostDto,
-  UpdateAdminJobPostRequestDto,
-  UpdateOwnJobPostRequestDto,
+  JobApplicationDetailResponseDto,
+  CloseJobGrpcRequestDto,
+  UpdateJobGrpcRequestDto,
 } from '@pivota-api/dtos';
 
 import { ClientGrpc } from '@nestjs/microservices';
@@ -35,11 +34,11 @@ interface JobsServiceGrpc {
   ): Observable<BaseResponseDto<JobPostCreateResponseDto>>;
 
   UpdateJobPost(
-    data: UpdateOwnJobPostRequestDto & { creatorId: string },
+    data: UpdateJobGrpcRequestDto,
   ): Observable<BaseResponseDto<JobPostResponseDto>>;
 
   UpdateAdminJobPost(
-    data: UpdateAdminJobPostRequestDto,
+    data: UpdateJobGrpcRequestDto,
   ): Observable<BaseResponseDto<JobPostResponseDto>>;
   GetJobPostById(
     data: { id: string },
@@ -55,16 +54,18 @@ interface JobsServiceGrpc {
 
 
   CloseJobPost(
-    data: CloseOwnJobPostRequestDto & { creatorId: string },
+    data: CloseJobGrpcRequestDto,
   ): Observable<BaseResponseDto<CloseJobPostResponseDto>>;
 
   CloseAdminJobPost(
-    data: CloseAdminJobPostRequestDto,
+    data: CloseJobGrpcRequestDto,
   ): Observable<BaseResponseDto<CloseJobPostResponseDto>>;
 
-  ApplyToJobPost(
-    data: ApplyToJobPostGrpcRequest,
-  ): Observable<BaseResponseDto<JobApplicationResponseDto>>;
+  ApplyToJobPost(data: ApplyToJobPostGrpcRequest): Observable<BaseResponseDto<JobApplicationResponseDto>>;
+  GetOwnApplications(data: { applicantId: string; status?: string }): Observable<BaseResponseDto<JobApplicationResponseDto[]>>;
+  GetAdminApplications(data: { applicantId?: string; employerId?: string; status?: string }): Observable<BaseResponseDto<JobApplicationResponseDto[]>>;
+  GetApplicationById(data: { id: string; requesterId: string; requesterRole?: string }): Observable<BaseResponseDto<JobApplicationDetailResponseDto>>;
+
 
   GetOwnJobs(
     data: { creatorId: string; status?: string },
@@ -120,9 +121,11 @@ export class JobsService {
   // 1. UPDATE OWN JOB POST (Standard)
   // ===========================================================
   async updateJobPost(
-    dto: UpdateOwnJobPostRequestDto & { creatorId: string },
+    dto: UpdateJobGrpcRequestDto, // Unified gRPC DTO
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
-    this.logger.debug(`UpdateJobPost (Own) for Job ${dto.id} by User ${dto.creatorId}`);
+    this.logger.debug(`UpdateJobPost (Own) | Job: ${dto.id} | User: ${dto.creatorId} | Acc: ${dto.accountId}`);
+    
+    // The dto already contains id, creatorId, accountId, and partial fields
     const res = await firstValueFrom(this.grpcService.UpdateJobPost(dto));
 
     if (res?.success) {
@@ -135,9 +138,10 @@ export class JobsService {
   // 2. UPDATE ADMIN JOB POST (Admin Flow)
   // ===========================================================
   async updateAdminJobPost(
-    dto: UpdateAdminJobPostRequestDto,
+    dto: UpdateJobGrpcRequestDto, // Unified gRPC DTO
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
-    this.logger.debug(`UpdateAdminJobPost (Admin) for Job ${dto.id}`);
+    this.logger.debug(`UpdateAdminJobPost (Admin) | Job: ${dto.id} | Target: ${dto.creatorId}`);
+    
     const res = await firstValueFrom(this.grpcService.UpdateAdminJobPost(dto));
 
     if (res?.success) {
@@ -234,7 +238,7 @@ export class JobsService {
   // 1. CLOSE OWN JOB POST (Standard)
   // ===========================================================
   async closeJobPost(
-    dto: CloseOwnJobPostRequestDto & { creatorId: string },
+    dto: CloseJobGrpcRequestDto,
   ): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
     this.logger.debug(`CloseJobPost (Own) for Job ${dto.id} by User ${dto.creatorId}`);
     const res = await firstValueFrom(this.grpcService.CloseJobPost(dto));
@@ -249,7 +253,7 @@ export class JobsService {
   // 2. CLOSE ADMIN JOB POST (Admin Flow)
   // ===========================================================
   async closeAdminJobPost(
-    dto: CloseAdminJobPostRequestDto,
+    dto: CloseJobGrpcRequestDto,
   ): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
     this.logger.debug(`CloseAdminJobPost (Admin) for Job ${dto.id}`);
     const res = await firstValueFrom(this.grpcService.CloseAdminJobPost(dto));
@@ -259,6 +263,57 @@ export class JobsService {
     }
     return BaseResponseDto.fail(res?.message, res?.code);
   }
+
+  // ===========================================================
+  // GET OWN APPLICATIONS (Slim List)
+  // ===========================================================
+  async getOwnApplications(
+    applicantId: string, 
+    status?: string
+  ): Promise<BaseResponseDto<JobApplicationResponseDto[]>> {
+    const res = await firstValueFrom(this.grpcService.GetOwnApplications({ applicantId, status }));
+
+    if (res?.success) {
+      return BaseResponseDto.ok(res.data || [], res.message, res.code);
+    }
+    return BaseResponseDto.fail(res?.message, res?.code);
+  }
+
+  // ===========================================================
+  // GET ADMIN APPLICATIONS (Management)
+  // ===========================================================
+  async getAdminApplications(query: {
+    applicantId?: string;
+    employerId?: string;
+    status?: string;
+  }): Promise<BaseResponseDto<JobApplicationResponseDto[]>> {
+    const res = await firstValueFrom(this.grpcService.GetAdminApplications(query));
+
+    if (res?.success) {
+      return BaseResponseDto.ok(res.data || [], res.message, res.code);
+    }
+    return BaseResponseDto.fail(res?.message, res?.code);
+  }
+
+  // ===========================================================
+  // GET APPLICATION BY ID (Full Details)
+  // ===========================================================
+  async getApplicationById(
+  id: string, 
+  requesterId: string,
+  requesterRole?: string // Ensure this matches the updated .proto
+): Promise<BaseResponseDto<JobApplicationDetailResponseDto>> {
+  
+  // Forward the role to the microservice via gRPC
+  const res = await firstValueFrom(
+    this.grpcService.GetApplicationById({ id, requesterId, requesterRole })
+  );
+
+  if (res?.success) {
+    return BaseResponseDto.ok(res.data, res.message, res.code);
+  }
+  return BaseResponseDto.fail(res?.message, res?.code);
+}
 
   // ===========================================================
   // APPLY TO JOB POST
@@ -275,8 +330,6 @@ export class JobsService {
     };
 
     const res = await firstValueFrom(this.grpcService.ApplyToJobPost(grpcRequest));
-    this.logger.debug(`ApplyToJobPost gRPC result: ${res?.success}`);
-
     if (res?.success) {
       return BaseResponseDto.ok(res.data, res.message, res.code);
     }

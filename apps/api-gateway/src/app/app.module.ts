@@ -13,6 +13,7 @@ import { ProvidersGatewayModule } from '../gateway-modules/ContractorsGatewayMod
 import { HousingGatewayModule } from '../gateway-modules/HousingGatewayModule/housing-gateway.module';
 import { OrganisationGatewayModule } from '../gateway-modules/OrganisationProfileGatewayModule/organisation-gateway.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { SharedListingsGatewayModule } from '../gateway-modules/SharedListingsGatewayModule/shared-listings-gateway.module';
 
 
 @Module({
@@ -34,7 +35,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
     SubscriptionsGatewayModule,
     ProvidersGatewayModule,
     HousingGatewayModule,
-    OrganisationGatewayModule
+    OrganisationGatewayModule,
+    SharedListingsGatewayModule
   ],
   controllers: [AppController],
   providers: [AppService],

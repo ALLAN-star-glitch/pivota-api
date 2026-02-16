@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package listings_registry;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+service ListingRegistryService {
+  // Fetches listings for the logged-in account (Dashboard view)
+  rpc GetOwnListings (GetOwnListingsRequest) returns (ListingRegistryResponse);
+
+  // Fetches listings for admins with flexible filtering
+  rpc GetAdminListings (AdminListingFilterRequest) returns (ListingRegistryResponse);
+}
+
+// ==========================================
+// REQUEST MESSAGES
+// ==========================================
+
+message GetOwnListingsRequest {
+  string accountId = 1;
+}
+
+message AdminListingFilterRequest {
+  optional string accountId = 1;
+  optional string creatorId = 2;
+  optional string status = 3;
+  optional string vertical = 4; // JOBS, HOUSING, SOCIAL_SUPPORT, SERVICES
+}
+
+// ==========================================
+// RESPONSE MESSAGES
+// ==========================================
+
+message ListingRegistryResponse {
+  bool success = 1;
+  string message = 2;
+  int32 code = 3;
+  string status = 4;
+  ListingRegistryData data = 5;
+}
+
+message ListingRegistryData {
+  repeated JobPostProto jobs = 1;
+  repeated HouseListingProto houses = 2;
+  repeated ServiceOfferingProto services = 3;
+  repeated SupportProgramProto support = 4;
+  RegistryMetadata metadata = 5;
+}
+
+message RegistryMetadata {
+  int32 totalCount = 1;
+  optional int32 activeCount = 2;
+  optional google.protobuf.Struct appliedFilters = 3;
+}
+
+// ==========================================
+// DOMAIN MODELS (Abridged for Registry)
+// ==========================================
+
+message JobPostProto {
+  string id = 1;
+  string title = 2;
+  string status = 3;
+  float payAmount = 4;
+  string locationCity = 5;
+  google.protobuf.Timestamp createdAt = 6;
+}
+
+message HouseListingProto {
+  string id = 1;
+  string title = 2;
+  string status = 3;
+  float price = 4;
+  string locationCity = 5;
+  google.protobuf.Timestamp createdAt = 6;
+}
+
+message ServiceOfferingProto {
+  string id = 1;
+  string title = 2;
+  float basePrice = 3;
+  string locationCity = 4;
+  google.protobuf.Timestamp createdAt = 5;
+}
+
+message SupportProgramProto {
+  string id = 1;
+  string title = 2;
+  string status = 3;
+  bool isFree = 4;
+  string locationCity = 5;
+  google.protobuf.Timestamp createdAt = 6;
+}

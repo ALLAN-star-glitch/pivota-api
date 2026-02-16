@@ -32,11 +32,11 @@ interface AuthServiceGrpc {
   ): Observable<BaseResponseDto<OrganizationSignupDataDto>>;
 
   requestOtp(
-    data: RequestOtpDto
+    data: RequestOtpDto & { purpose: string }
   ): Observable<BaseResponseDto<null>>;
 
   verifyOtp(
-    data: VerifyOtpDto
+    data: VerifyOtpDto & { purpose: string }
   ): Observable<BaseResponseDto<VerifyOtpResponseDataDto>>;
 
   login(
@@ -57,7 +57,7 @@ interface AuthServiceGrpc {
   logout(data: { userId: string }): Observable<{ message: string }>;
 
   generateDevToken(
-    data: { userUuid: string; email: string; role: string }
+    data: { userUuid: string; email: string; role: string; accountId: string }
   ): Observable<BaseResponseDto<TokenPairDto>>;
 
   googleLogin(
@@ -121,9 +121,19 @@ export class AuthService {
 
   /** ------------------ OTP Management ------------------ */
 
-  async requestOtp(dto: RequestOtpDto): Promise<BaseResponseDto<null>> {
-    this.logger.log(`📩 Requesting OTP for: ${dto.email}`);
-    const response = await firstValueFrom(this.authGrpc.requestOtp(dto));
+ async requestOtp(
+    dto: RequestOtpDto, 
+    purpose: string
+  ): Promise<BaseResponseDto<null>> {
+    this.logger.log(`📩 Requesting OTP [${purpose}] for: ${dto.email}`);
+
+    // We spread the dto and add the purpose so the gRPC microservice receives both
+    const response = await firstValueFrom(
+      this.authGrpc.requestOtp({ 
+        ...dto, 
+        purpose 
+      })
+    );
     
     if (response.success) {
       return BaseResponseDto.ok(null, response.message, response.code);
@@ -131,16 +141,25 @@ export class AuthService {
     return BaseResponseDto.fail(response.message, response.code);
   }
 
-  async verifyOtp(dto: VerifyOtpDto): Promise<BaseResponseDto<VerifyOtpResponseDataDto>> {
-    this.logger.log(`📩 Verifying OTP for: ${dto.email}`);
-    const response = await firstValueFrom(this.authGrpc.verifyOtp(dto));
+  async verifyOtp(
+    dto: VerifyOtpDto, 
+    purpose: string
+  ): Promise<BaseResponseDto<VerifyOtpResponseDataDto>> {
+    this.logger.log(`🔍 Verifying OTP [${purpose}] for: ${dto.email}`);
+
+    // Pass the purpose to verifyOtp to ensure the code is valid for this specific action
+    const response = await firstValueFrom(
+      this.authGrpc.verifyOtp({ 
+        ...dto, 
+        purpose 
+      })
+    );
 
     if (response.success) {
       return BaseResponseDto.ok(response.data, response.message, response.code);
     }
     return BaseResponseDto.fail(response.message, response.code);
   }
-
   /** ------------------ Signup ------------------ */
   async signup(signupDto: UserSignupRequestDto): Promise<BaseResponseDto<UserSignupDataDto>> {
     this.logger.log('📩 Calling Auth microservice for signup');
@@ -282,27 +301,31 @@ export class AuthService {
   }
   
   /** ------------------ Generate Dev Token (Testing Only) ------------------ */
+  /** * ------------------ Generate Dev Token (Testing Only) ------------------ 
+   * FIXED: Now correctly accepts and passes accountId to the auth microservice.
+   */
   async generateDevTokenOnly(
     userUuid: string,
     email: string,
     role: string,
+    accountId: string, 
     res: Response
   ): Promise<BaseResponseDto<TokenPairDto>> {
     try {
+      this.logger.debug(`🛠 Generating Dev Token for Account: ${accountId}`);
+      
       const grpcResponse = await firstValueFrom(
-        this.authGrpc.generateDevToken({ userUuid, email, role })
+        this.authGrpc.generateDevToken({ userUuid, email, role, accountId })
       );
 
       if (!grpcResponse.success || !grpcResponse.data) {
         return BaseResponseDto.fail(grpcResponse.message, grpcResponse.code);
       }
 
-
       const { accessToken, refreshToken } = grpcResponse.data;
       this.setAuthCookies(res, accessToken, refreshToken);
 
-      const tokenData: TokenPairDto = { accessToken, refreshToken };
-      return BaseResponseDto.ok(tokenData, 'Dev tokens generated', 'OK');
+      return BaseResponseDto.ok({ accessToken, refreshToken }, 'Dev tokens generated', 'OK');
     } catch (error) {
       this.logger.error('gRPC Dev Token Failure:', error);
       return BaseResponseDto.fail('Failed to generate dev token', 'INTERNAL');

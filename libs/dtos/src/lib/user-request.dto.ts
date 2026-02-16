@@ -6,12 +6,16 @@ import {
   IsUUID, 
   IsOptional, 
   MinLength,
-  IsPhoneNumber,
   IsDateString,
   IsUrl,
-  Length
+  Length,
+  Matches
 } from 'class-validator';
-
+/**
+ * Kenyan Phone Regex:
+ * Supports: +254..., 254..., 07..., 01..., 02...
+ */
+export const KENYAN_PHONE_REGEX = /^(?:254|\+254|0)?((?:7|1|2)\d{8})$/;
 /* ======================================================
    1. USER SIGNUP REQUEST (AUTH SERVICE)
    - Used for the public-facing individual signup API.
@@ -43,13 +47,11 @@ export class UserSignupRequestDto {
   @IsNotEmpty()
   email!: string;
 
-  @ApiProperty({
-    description: 'International format phone number',
-    example: '+254700111222',
+  @IsOptional()
+  @Matches(KENYAN_PHONE_REGEX, { 
+    message: 'Please provide a valid Kenyan phone number (e.g., 0712345678 or +254712345678)' 
   })
-  @IsNotEmpty()
-  @IsPhoneNumber(undefined, { message: 'Invalid phone number format' })
-  phone!: string;
+  phone?: string;
 
   @ApiProperty({
     description: 'Secure password (minimum 8 characters)',
@@ -113,10 +115,11 @@ export class CreateUserRequestDto {
   @IsNotEmpty()
   email!: string;
 
-  @ApiProperty({ example: '+254700111222' })
-  @IsPhoneNumber(undefined)
-  @IsNotEmpty()
-  phone!: string;
+  @IsOptional()
+  @Matches(KENYAN_PHONE_REGEX, { 
+    message: 'Please provide a valid Kenyan phone number (e.g., 0712345678 or +254712345678)' 
+  })
+  phone?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -196,8 +199,9 @@ export class UpdateFullUserProfileDto extends UpdateUserProfileRequestDto {
   @IsEmail()
   email?: string;
 
-  @ApiPropertyOptional({ example: '+254700111222' })
-  @IsOptional()
-  @IsPhoneNumber(undefined)
+   @IsOptional()
+  @Matches(KENYAN_PHONE_REGEX, { 
+    message: 'Please provide a valid Kenyan phone number (e.g., 0712345678 or +254712345678)' 
+  })
   phone?: string;
 }

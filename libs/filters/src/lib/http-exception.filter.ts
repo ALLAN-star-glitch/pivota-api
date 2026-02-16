@@ -47,6 +47,7 @@ function isBaseResponse(obj: unknown): obj is BaseResponseShape {
 // Map internal codes → HTTP status
 const httpStatusMap: Record<string, number> = {
   OK: HttpStatus.OK,
+  SUCCESS_EMPTY: HttpStatus.OK, // Map this to 200 so the frontend gets an empty array gracefully
   CREATED: HttpStatus.CREATED,
   ACCEPTED: HttpStatus.ACCEPTED,
   BAD_REQUEST: HttpStatus.BAD_REQUEST,
@@ -56,6 +57,7 @@ const httpStatusMap: Record<string, number> = {
   NOT_FOUND: HttpStatus.NOT_FOUND,
   ALREADY_EXISTS: HttpStatus.CONFLICT,
   CONFLICT: HttpStatus.CONFLICT,
+  
   
   // --- Rate Limiting ---
   TOO_MANY_REQUESTS: HttpStatus.TOO_MANY_REQUESTS, // 429

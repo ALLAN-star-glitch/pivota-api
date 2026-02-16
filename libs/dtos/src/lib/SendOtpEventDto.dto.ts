@@ -1,3 +1,4 @@
+import { ALLOWED_OTP_PURPOSES } from '@pivota-api/constants';
 import { IsEmail, IsString, IsNotEmpty, Length, IsIn } from 'class-validator';
 
 /**
@@ -16,6 +17,6 @@ export class SendOtpEventDto {
 
   @IsString()
     @IsNotEmpty()
-    @IsIn(['SIGNUP', 'PASSWORD_RESET', '2FA'])
+    @IsIn(ALLOWED_OTP_PURPOSES)
     purpose!: string;
 }

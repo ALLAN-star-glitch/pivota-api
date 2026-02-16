@@ -136,14 +136,14 @@ export class AuthController {
 
   @GrpcMethod('AuthService', 'RequestOtp')
   async handleRequestOtpGrpc(
-    data: RequestOtpDto
+    data: RequestOtpDto & { purpose: string } 
   ): Promise<BaseResponseDto<null>> {
     return await this.authService.requestOtp(data);
   }
 
   @GrpcMethod('AuthService', 'VerifyOtp')
   async handleVerifyOtpGrpc(
-    data: VerifyOtpDto
+    data: VerifyOtpDto & { purpose: string }
   ): Promise<BaseResponseDto<VerifyOtpResponseDataDto>> {
     return await this.authService.verifyOtp(data);
   }

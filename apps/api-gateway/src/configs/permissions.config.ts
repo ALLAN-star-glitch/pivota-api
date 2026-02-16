@@ -13,95 +13,89 @@ export const RolePermissionsMap: Record<string, string[]> = {
     'role.assign',
     'user.view',
     'system-settings.manage',
-    'subscription.bypass'
+    'listings.read', // Added unified read for registry access
   ],
 
   ModuleManager: [
     'module.rules.manage',
-    'houses.read', 'jobs.read', 'help-and-support.read', 'services.read'
+    'houses.read', 'jobs.read', 'help-and-support.read', 'services.read',
+    'listings.read' // Added unified read
   ],
 
   AnalyticsAdmin: [
     'analytics.view',
-    'houses.read', 'jobs.read', 'help-and-support.read', 'services.read'
+    'houses.read', 'jobs.read', 'help-and-support.read', 'services.read',
+    'listings.read' // Added unified read
   ],
 
   ComplianceAdmin: [
     'user.view',
-    'houses.read', 'jobs.read', 'help-and-support.read', 'services.read'
+    'houses.read', 'houses.moderate', 'houses.approve',
+    'jobs.read', 'jobs.moderate', 'jobs.approve',
+    'help-and-support.read', 'help-and-support.moderate', 'help-and-support.approve',
+    'services.read', 'services.moderate', 'services.approve',
+    'listings.read' // Added unified read
   ],
+  
 
   /**
    * BUSINESS/ORGANIZATION ROLES
    */
   BusinessSystemAdmin: [
-    // Houses
-    'houses.read',
-    'houses.create.any', 'houses.update.any', 'houses.delete.any',
-    'houses.approve', 'houses.moderate',
-
-    // Jobs
-    'jobs.read',
-    'jobs.create.any', 'jobs.update.any', 'jobs.delete.any',
-    'jobs.approve', 'jobs.moderate',
-
-    // Help & Support
-    'help-and-support.read',
-    'help-and-support.create.any', 'help-and-support.update.any', 'help-and-support.delete.any',
-    'help-and-support.approve', 'help-and-support.moderate',
-
-    // Services (Contractors)
-    'services.read',
-    'services.create.any', 'services.update.any', 'services.delete.any',
-    'services.approve', 'services.moderate',
+    // Full CRUD + Lifecycle for all modules (Admin Override)
+    ...['houses', 'jobs', 'help-and-support', 'services'].flatMap(slug => [
+      `${slug}.read`,
+      `${slug}.create.any`,
+      `${slug}.update.any`,
+      `${slug}.delete.any`,
+      `${slug}.close.any`,
+      `${slug}.archive.any`,
+      `${slug}.approve`,
+      `${slug}.moderate`,
+      `${slug}.verify`
+    ]),
 
     // Management & Organization
     'role.assign', 'role.create', 'user.view', 'analytics.view',
     'subscription.bypass',
-    'organization.invite-member'
+    'organization.invite-member',
+    'listings.read' // Added unified read
   ],
 
   BusinessContentManager: [
-    // Houses
-    'houses.read',
-    'houses.create.own', 'houses.update.own', 'houses.delete.own',
-    'houses.approve', 'houses.moderate',
-
-    // Jobs
-    'jobs.read',
-    'jobs.create.own', 'jobs.update.own', 'jobs.delete.own',
-    'jobs.approve', 'jobs.moderate',
-
-    // Help & Support
-    'help-and-support.read',
-    'help-and-support.create.own', 'help-and-support.update.own', 'help-and-support.delete.own',
-    'help-and-support.approve', 'help-and-support.moderate',
-
-    // Services (Contractors)
-    'services.read', 'services.update.own', 'services.moderate',
+    // Ownership-based CRUD + Moderation
+    ...['houses', 'jobs', 'help-and-support', 'services'].flatMap(slug => [
+      `${slug}.read`,
+      `${slug}.create.own`,
+      `${slug}.update.own`,
+      `${slug}.delete.own`,
+      `${slug}.close.own`,
+      `${slug}.archive.own`,
+      `${slug}.moderate`
+    ]),
 
     // Analytics & Org Invite
     'analytics.view',
-    'organization.invite-member'
+    'organization.invite-member',
+    'listings.read' // Added unified read
   ],
 
   /**
    * INDIVIDUAL/CLIENT ROLES
    */
   GeneralUser: [
-    // Houses
-    'houses.read', 'houses.create.own',
-
-    // Jobs
-    'jobs.read', 'jobs.create.own',
-
-    // Help & Support
-    'help-and-support.read', 'help-and-support.create.own',
-
-    // Services (Contractors)
-    'services.read', 'services.create.own',
+    // Full Self-Service Lifecycle for own content
+    ...['houses', 'jobs', 'help-and-support', 'services'].flatMap(slug => [
+      `${slug}.read`,
+      `${slug}.create.own`,
+      `${slug}.update.own`,
+      `${slug}.delete.own`,
+      `${slug}.close.own`,
+      `${slug}.archive.own`
+    ]),
 
     // Analytics
-    'analytics.view'
+    'analytics.view',
+    'listings.read' // Added unified read
   ],
 };

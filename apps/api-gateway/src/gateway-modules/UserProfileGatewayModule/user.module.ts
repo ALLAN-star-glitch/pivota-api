@@ -3,9 +3,11 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { UserController } from './user.controller';
 import { AUTH_PROTO_PATH, PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { UserService } from './user.service';
+import { SubscriptionsGatewayModule } from '../SubscriptionsGatewayModule/subscriptions-gateway.module';
 
 @Module({
   imports: [
+    SubscriptionsGatewayModule, // Import the SubscriptionsGatewayModule to use its services  
     ClientsModule.register([
       {
         name: 'PROFILE_PACKAGE', // Provider name for injection
@@ -15,7 +17,7 @@ import { UserService } from './user.service';
           package: 'profile', 
           protoPath: PROFILE_PROTO_PATH,
           },
-      },
+      }, 
       {
         name: 'AUTH_PACKAGE',
         transport: Transport.GRPC,
