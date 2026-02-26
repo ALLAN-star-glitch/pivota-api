@@ -71,6 +71,7 @@ export class HousingController {
     return this.housingService.getListingsByOwner(data);
   }
   
+  
   @GrpcMethod('HousingService', 'GetAdminListings')
   async getAdminListings(
     data: GetAdminHousingFilterDto,

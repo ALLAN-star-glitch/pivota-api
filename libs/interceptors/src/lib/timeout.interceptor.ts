@@ -7,7 +7,7 @@ export class TimeoutInterceptor implements NestInterceptor {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     return next.handle().pipe(
-      timeout(5000), // 5 seconds
+      timeout(30000), // 30 seconds
       catchError(err => {
         if (err instanceof TimeoutError) {
           return throwError(() => new RequestTimeoutException('The server is taking too long to respond. Please try again later.'));

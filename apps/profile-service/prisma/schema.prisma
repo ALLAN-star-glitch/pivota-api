@@ -75,6 +75,8 @@ model Organization {
   completion ProfileCompletion?
   members    OrganizationMember[]
 
+  invitations OrganizationInvitation[]
+
   // Inherited/Synced from Account.isVerified
   verificationStatus String   @default("PENDING") 
   
@@ -98,6 +100,8 @@ model User {
 
   roleName     String  @default("GeneralUser")
   profileImage String?
+
+  sentInvitations OrganizationInvitation[] @relation("inviter")
 
   profile     UserProfile?
   completion  ProfileCompletion?
@@ -209,3 +213,44 @@ model ContractorProfile {
   updatedAt        DateTime     @updatedAt
 }
 
+
+// --- ORGANIZATION INVITATIONS ---
+model OrganizationInvitation {
+  id               String       @id @default(cuid())
+  
+  // Who is being invited
+  email            String
+  phone            String?      // Optional, can be collected later
+  
+  // Where they're being invited to
+  organizationUuid String
+  organization     Organization @relation(fields: [organizationUuid], references: [uuid], onDelete: Cascade)
+  
+  // Invitation details
+  token            String       @unique
+  status           String       @default("PENDING") // PENDING, ACCEPTED, EXPIRED, CANCELLED
+  roleName         String       @default("GeneralUser") // Always GeneralUser for invitations
+  
+  // Who sent it - THIS SIDE OF THE RELATION
+  invitedByUserUuid String
+  invitedByUser     User         @relation("inviter", fields: [invitedByUserUuid], references: [uuid])
+  
+  // Optional message from inviter
+  message          String?
+  
+  // Expiry and acceptance tracking
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  
+  // Timestamps
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  // Ensure one pending invitation per email per organization
+  @@unique([email, organizationUuid])
+  @@index([token])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([organizationUuid])
+  @@index([invitedByUserUuid])
+}

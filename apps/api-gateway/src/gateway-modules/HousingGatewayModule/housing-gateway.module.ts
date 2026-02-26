@@ -4,9 +4,11 @@ import { HousingGatewayService } from './housing-gateway.service';
 import { HousingGatewayController } from './housing-gateway.controller';
 import { LISTINGS_HOUSING_PROTO_PATH } from '@pivota-api/protos';
 import { SubscriptionsGatewayModule } from '../SubscriptionsGatewayModule/subscriptions-gateway.module';
+import { SharedStorageModule } from '@pivota-api/shared-storage';
 
 @Module({
   imports: [
+    SharedStorageModule,
     SubscriptionsGatewayModule,
     ClientsModule.register([
       {

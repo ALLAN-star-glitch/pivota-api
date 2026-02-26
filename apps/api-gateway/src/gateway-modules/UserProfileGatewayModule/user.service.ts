@@ -3,14 +3,16 @@ import { ClientGrpc } from '@nestjs/microservices';
 import { 
   AuthUserDto, 
   BaseResponseDto, 
+  ContractorProfileResponseDto, 
   GetUserByEmailDto, 
   GetUserByUserCodeDto, 
+  OnboardProviderGrpcRequestDto, 
   UpdateFullUserProfileDto, 
   UserProfileResponseDto, 
   UserResponseDto, 
 } from '@pivota-api/dtos';
 import { firstValueFrom, Observable } from 'rxjs';
-
+import { StorageService } from '@pivota-api/shared-storage';
 
 // ---------------- gRPC Interface ----------------
 // Updated to match the latest .proto service definition
@@ -32,6 +34,10 @@ interface UserServiceGrpc {
   UpdateUserProfile(
     data: UpdateFullUserProfileDto
   ): Observable<BaseResponseDto<UserProfileResponseDto>>;
+
+  OnboardIndividualProvider(
+    data: OnboardProviderGrpcRequestDto
+  ): Observable<BaseResponseDto<ContractorProfileResponseDto>>;
 }
 
 @Injectable()
@@ -42,6 +48,7 @@ export class UserService {
   constructor(
     @Inject('PROFILE_PACKAGE') private readonly grpcClient: ClientGrpc,
     @Inject('AUTH_PACKAGE') private readonly authClient: ClientGrpc,
+    private readonly storage: StorageService,
   ) {
     this.grpcService = this.grpcClient.getService<UserServiceGrpc>('ProfileService');
   }
@@ -115,8 +122,6 @@ export class UserService {
     return BaseResponseDto.fail(res.message, res.code);
   }
 
- 
-
   // ---------------- Update User Profile ----------------
   async updateProfile(dto: UpdateFullUserProfileDto): Promise<BaseResponseDto<UserProfileResponseDto>> {
     this.logger.log(`Forwarding profile update for user: ${dto.userUuid}`);
@@ -131,6 +136,71 @@ export class UserService {
       return BaseResponseDto.fail(res.message || 'Update failed', res.code || 'INTERNAL');
     } catch (err) {
       this.logger.error(`gRPC Error updating profile for ${dto.userUuid}`, err);
+      return BaseResponseDto.fail('Profile service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  // -----------------------------------------------------------
+  // STORAGE UTILITY METHODS
+  // -----------------------------------------------------------
+  
+  /**
+   * Single file upload helper for Profile Avatars
+   */
+  async uploadToStorage(
+    file: Express.Multer.File, 
+    folder: string, 
+    bucketName = 'pivota-public'
+  ): Promise<string> {
+    return this.storage.uploadFile(file, folder, bucketName);
+  }
+
+  /**
+   * Cleans up files from storage.
+   * Use this when a profile update fails after the image has already been uploaded.
+   * @param urls Array of full public URLs or internal paths to delete.
+   * @param bucketName Defaults to 'pivota-public'.
+   */
+  async deleteFromStorage(
+    urls: string[], 
+    bucketName = 'pivota-public'
+  ): Promise<void> {
+    if (!urls || urls.length === 0) return;
+
+    try {
+      this.logger.warn(`Initiating storage cleanup for ${urls.length} files in ${bucketName}`);
+      await this.storage.deleteFiles(urls, bucketName);
+    } catch (error) {
+      this.logger.error(
+        `Failed to clean up orphaned profile files: ${error instanceof Error ? error.message : 'Unknown Error'}`
+      );
+    }
+  }
+
+  // ---------------- Onboard Individual Provider ----------------
+  /**
+   * Forwards the contractor onboarding request to the Profile Microservice.
+   */
+  async onboardIndividualProvider(
+    dto: OnboardProviderGrpcRequestDto
+  ): Promise<BaseResponseDto<ContractorProfileResponseDto>> {
+    this.logger.log(`Forwarding provider onboarding for user: ${dto.userUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.OnboardIndividualProvider(dto)
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(
+        res.message || 'Onboarding failed', 
+        res.code || 'INTERNAL_ERROR'
+      );
+    } catch (err) {
+      this.logger.error(`gRPC Error during provider onboarding for ${dto.userUuid}`, err);
       return BaseResponseDto.fail('Profile service communication error', 'SERVICE_UNAVAILABLE');
     }
   }

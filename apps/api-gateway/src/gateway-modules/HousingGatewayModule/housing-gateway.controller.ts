@@ -10,9 +10,13 @@ import {
   Req,
   Patch,
   Query,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiExtraModels,
   ApiOperation,
   ApiParam,
@@ -48,6 +52,8 @@ import { ParseCuidPipe } from '@pivota-api/pipes';
 import { Permissions } from '../../decorators/permissions.decorator';
 import { Public } from '../../decorators/public.decorator';
 import { SetModule } from '../../decorators/set-module.decorator';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { imageFileFilter } from '@pivota-api/filters';
 
 @ApiTags('Housing Module - ((Listings-Service) - MICROSERVICE)')
 @ApiBearerAuth()
@@ -56,6 +62,8 @@ import { SetModule } from '../../decorators/set-module.decorator';
   HouseListingCreateResponseDto,
   HouseListingResponseDto,
   HouseViewingResponseDto,
+  CreateHouseListingDto, 
+  AdminCreateHouseListingDto
 )
 @SetModule('housing')
 @Controller('housing-module')
@@ -92,36 +100,110 @@ export class HousingGatewayController {
   // ===========================================================
   @Post('listings')
   @Permissions('houses.create.own')
-  @ApiOperation({ summary: 'Create a house listing for the authenticated user' })
-  @ApiResponse({ status: 201, type: HouseListingCreateResponseDto })
+  @UseInterceptors(FilesInterceptor('images', 10, {
+    fileFilter: imageFileFilter,
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB limit per file
+    }
+  }))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(CreateHouseListingDto) }, 
+        {
+          type: 'object',
+          properties: {
+            images: {
+              type: 'array',
+              items: { type: 'string', format: 'binary' },
+              description: 'Select up to 10 images for the property',
+            },
+          },
+        },
+      ],
+    },
+  })
+  @ApiOperation({ summary: 'Create a house listing with images' })
   async createOwn(
     @Body() dto: CreateHouseListingDto,
     @Req() req: JwtRequest,
+    @UploadedFiles() files: Array<Express.Multer.File>, 
   ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
     const requesterUuid = req.user.userUuid;
-    const accountId = req.user.accountId;
-    const creatorName = req.user.userName;
-    const accountName = req.user.accountName;
+     const storagePath = `houses/${req.user.accountId}`;
+    const imageUrls = await this.housingService.uploadMultipleToStorage(
+      files, 
+      storagePath, 
+      'pivota-public'
+    );
 
-    const sanitizedDto: CreateHouseListingGrpcRequestDto = {
-      ...dto,
-      creatorId: requesterUuid,
-      accountId,
-      creatorName,
-      accountName,
-    };
-    
+    try {
+      // 2. Prepare gRPC DTO
+      const sanitizedDto: CreateHouseListingGrpcRequestDto = {
+        ...dto,
+        subCategoryId: dto.subCategoryId,
+        creatorId: requesterUuid,
+        accountId: req.user.accountId,
+        creatorName: req.user.userName,
+        accountName: req.user.accountName,
+        imageUrls: imageUrls,
+      };
 
-    const response = await this.executeHousingCreation(sanitizedDto, requesterUuid, false);
-    if (!response.success) throw response;
-    return response;
+      // 3. Attempt to create the listing in the housing microservice
+      const response = await this.executeHousingCreation(sanitizedDto, requesterUuid, false);
+
+      // 4. Handle logical failure (e.g., validation error in microservice)
+      if (!response.success) {
+        this.logger.warn(`Housing creation failed: ${response.message}. Cleaning up storage...`);
+        
+        // Use the deletion method to remove orphaned files
+        await this.housingService.deleteFromStorage(imageUrls, 'pivota-public');
+        
+        // Return the failure response directly
+        return response;
+      }
+
+      return response;
+    } catch (error) {
+      // 5. Handle unexpected crashes (e.g., gRPC timeout or network error)
+      this.logger.error(`Critical error during housing creation. Rolling back storage uploads.`);
+      
+      await this.housingService.deleteFromStorage(imageUrls, 'pivota-public');
+      
+      throw error;
+    }
   }
 
-  // ===========================================================
+ // ===========================================================
   // CREATE LISTING FOR ANY USER (ADMIN)
   // ===========================================================
   @Post('admin/accounts/:accountId/listings')
   @Permissions('houses.create.any')
+  @UseInterceptors(FilesInterceptor('images', 10, {
+    fileFilter: imageFileFilter,
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB limit per file
+    }
+  }))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(AdminCreateHouseListingDto) },
+        {
+          type: 'object',
+          properties: {
+            images: {
+              type: 'array',
+              items: { type: 'string', format: 'binary' },
+              description: 'Upload property images (Admin context)',
+            },
+          },
+        },
+      ],
+    },
+  })
   @ApiOperation({ summary: 'Admin: Create house listing for an account' })
   @ApiParam({ name: 'accountId', description: 'The UUID of the organization account' })
   @ApiResponse({ status: 201, type: HouseListingCreateResponseDto })
@@ -129,16 +211,47 @@ export class HousingGatewayController {
     @Param('accountId') accountId: string,
     @Body() dto: AdminCreateHouseListingDto,
     @Req() req: JwtRequest,
+    @UploadedFiles() files: Array<Express.Multer.File>,
   ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
-    const finalData = {
-      ...dto,
-      accountId,
-      creatorId: dto.creatorId || null,
-    };
+    const requesterUuid = req.user.userUuid;
+    const storagePath = `houses/${req.user.accountId}`;
 
-    const response = await this.executeHousingCreation(finalData, req.user.userUuid, true);
-    if (!response.success) throw response;
-    return response;
+    // 1. Upload property images to the public bucket
+    const imageUrls = await this.housingService.uploadMultipleToStorage(
+      files, 
+      storagePath, 
+      'pivota-public'
+    );
+
+    try {
+      // 2. Build the full gRPC DTO with the generated URLs
+      const sanitizedDto: CreateHouseListingGrpcRequestDto = {
+        ...dto,
+        subCategoryId: dto.subCategoryId,
+        imageUrls, 
+        accountId,
+        creatorId: dto.creatorId || requesterUuid,
+        creatorName: req.user.userName,
+        accountName: 'Admin Created', 
+      };
+
+      // 3. Request the housing microservice to create the record
+      const response = await this.executeHousingCreation(sanitizedDto, requesterUuid, true);
+
+      // 4. Cleanup if the microservice rejected the request (e.g., business logic failure)
+      if (!response.success) {
+        this.logger.warn(`Admin listing creation failed: ${response.message}. Rolling back storage.`);
+        await this.housingService.deleteFromStorage(imageUrls, 'pivota-public');
+        return response; 
+      }
+
+      return response;
+    } catch (error) {
+      // 5. Cleanup if there is a network or gRPC communication failure
+      this.logger.error(`Critical error in Admin Create: Rolling back ${imageUrls.length} images.`);
+      await this.housingService.deleteFromStorage(imageUrls, 'pivota-public');
+      throw error;
+    }
   }
 
   // -----------------------------------------------------------

@@ -26,6 +26,9 @@ model Credential {
   // Global record of the last time this user successfully authenticated
   lastLoginAt    DateTime? 
 
+  // Relation to password setup tokens
+  passwordSetupTokens PasswordSetupToken[]
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -55,7 +58,6 @@ model Session {
   @@index([expiresAt])
 }
 
-
 model Otp {
   id        String   @id @default(cuid())
   email     String
@@ -65,4 +67,40 @@ model Otp {
   createdAt DateTime @default(now())
 
   @@index([email, code])
+}
+
+// ======================================================
+// NEW: Password Setup Tokens for Invitation Flow
+// ======================================================
+model PasswordSetupToken {
+  id        String   @id @default(cuid())
+  userUuid  String
+  credential Credential @relation(fields: [userUuid], references: [userUuid], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([token])
+  @@index([expiresAt])
+  @@index([userUuid])
+}
+
+// ======================================================
+// OPTIONAL: Track invitation events for audit
+// ======================================================
+model InvitationAudit {
+  id            String   @id @default(cuid())
+  email         String
+  userUuid      String?  // Will be null until user accepts
+  organizationUuid String
+  invitedByUserUuid String
+  status        String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED
+  acceptedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([email])
+  @@index([organizationUuid])
+  @@index([status])
 }

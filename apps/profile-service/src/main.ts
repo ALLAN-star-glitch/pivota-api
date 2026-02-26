@@ -65,6 +65,20 @@ async function bootstrap() {
     },
   });
 
+  // This is needed to ensure the Kafka producer is connected before we start processing requests. It makes the shared service act as a connection manager for Kafka, which is important for emitting events from the UserService.  
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.KAFKA,
+    options: {
+      client: {
+        brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+      },
+      consumer: {
+        // Use the same group ID you put in the ProfileModule
+        groupId: 'profile-service-storage-consumer', 
+      },
+    },
+  });
+
   await app.startAllMicroservices();
   Logger.log(`🚀 Profile service is running (Kafka + gRPC + RabbitMQ)`);
   Logger.log(`✅ Kafka connected to ${process.env.KAFKA_BROKERS} || 'localhost:9092'`);

@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
   BaseResponseDto,
@@ -14,9 +14,11 @@ import {
   UserProfileResponseDto,
   CreateUserRequestDto,
   UpdateFullUserProfileDto,
+  ContractorProfileResponseDto,
+  OnboardProviderGrpcRequestDto,
 } from '@pivota-api/dtos';
 import { Account, Organization, ProfileCompletion, User, UserProfile, OrganizationProfile, Prisma } from '../../../../generated/prisma/client';
-import {  RpcException, ClientGrpc } from '@nestjs/microservices';
+import {  RpcException, ClientGrpc, ClientKafka } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
 import { catchError, lastValueFrom, Observable, throwError, timeout } from 'rxjs';
 import { BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
@@ -65,7 +67,7 @@ interface PlansServiceGrpc {
 
 
 @Injectable()
-export class UserService {
+export class UserService implements OnModuleInit {
   private readonly logger = new Logger(UserService.name);
   private rbacGrpc: RbacServiceGrpc;
   private subscriptionGrpc: SubscriptionServiceGrpc;
@@ -77,11 +79,18 @@ export class UserService {
     @Inject('RBAC_PACKAGE') private readonly rbacClient: ClientGrpc,
     @Inject('SUBSCRIPTIONS_PACKAGE') private readonly subscriptionsClient: ClientGrpc,
     @Inject('PLANS_PACKAGE') private readonly plansClient: ClientGrpc,
+    @Inject('KAFKA_SERVICE') private readonly kafkaClient: ClientKafka,
   ) {
     this.rbacGrpc = this.rbacClient.getService<RbacServiceGrpc>('RbacService');
     this.subscriptionGrpc = this.subscriptionsClient.getService<SubscriptionServiceGrpc>('SubscriptionService');
     this.plansGrpc = this.plansClient.getService<PlansServiceGrpc>('PlanService');
   }
+
+  async onModuleInit() {
+// Required to connect the producer side of Kafka
+    this.kafkaClient.subscribeToResponseOf('file.delete_obsolete');
+    await this.kafkaClient.connect();
+  } 
 
 
 /* ======================================================
@@ -467,101 +476,130 @@ async createUserProfile(
     };
   }
 
-  async updateFullProfile(dto: UpdateFullUserProfileDto): Promise<BaseResponseDto<UserProfileResponseDto>> {
-  this.logger.log(`[gRPC] Full profile update initiated for: ${dto.userUuid}`);
+  // ======================================================
+  // UPDATE METHODS (Separated for User vs Admin)
+  // ======================================================
 
-  try {
-    const updatedAggregate = await this.prisma.$transaction(async (tx) => {
-      // 1. Update Core Identity (User Table)
-      const user = await tx.user.update({
-        where: { uuid: dto.userUuid },
-        data: {
-          firstName: dto.firstName ?? undefined,
-          lastName: dto.lastName ?? undefined,
-          email: dto.email ?? undefined,
-          phone: dto.phone === "" ? null : (dto.phone ?? undefined),
-        },
-      });
+  /**
+   * Public: A standard user updating their own profile
+   */
+  async updateProfile(dto: UpdateFullUserProfileDto): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`[USER] Self-update initiated for: ${dto.userUuid}`);
+    return this.executeFullUpdate(dto);
+  }
 
-      // 2. Update/Create Metadata (UserProfile Table)
-      await tx.userProfile.upsert({
+  /**
+   * Public: An admin updating any profile
+   */
+  async updateAdminProfile(dto: UpdateFullUserProfileDto): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`[ADMIN] Elevated update initiated for target: ${dto.userUuid}`);
+    
+    // Admin check: Ensure the user exists before running transaction
+    const exists = await this.prisma.user.count({ where: { uuid: dto.userUuid } });
+    if (exists === 0) {
+      return BaseResponseDto.fail('Target user does not exist', 'NOT_FOUND');
+    }
+
+    return this.executeFullUpdate(dto);
+  }
+
+  /**
+   * Core Logic Handler (Private)
+   */
+  private async executeFullUpdate(dto: UpdateFullUserProfileDto): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    try {
+      // 1. PRE-CHECK: Fetch current profile to identify old image
+      const existingProfile = await this.prisma.userProfile.findUnique({
         where: { userUuid: dto.userUuid },
-        create: {
-          userUuid: dto.userUuid,
-          bio: dto.bio,
-          gender: dto.gender,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
-          nationalId: dto.nationalId,
-          profileImage: dto.profileImage,
-        },
-        update: {
-          bio: dto.bio ?? undefined,
-          gender: dto.gender ?? undefined,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
-          nationalId: dto.nationalId ?? undefined,
-          profileImage: dto.profileImage ?? undefined,
-        },
+        select: { profileImage: true }
       });
 
-      // 3. Root Account Name Sync
-      // If the human name changes, the account display name must reflect it.
-      if (dto.firstName || dto.lastName) {
-        await tx.account.update({
-          where: { uuid: user.accountId },
-          data: { name: `${user.firstName} ${user.lastName}`.trim() }
+      const oldImageUrl = existingProfile?.profileImage;
+
+      const updatedAggregate = await this.prisma.$transaction(async (tx) => {
+        // 2. Update Core Identity (User Table)
+        const user = await tx.user.update({
+          where: { uuid: dto.userUuid },
+          data: {
+            firstName: dto.firstName ?? undefined,
+            lastName: dto.lastName ?? undefined,
+            email: dto.email ?? undefined,
+            phone: dto.phone === "" ? null : (dto.phone ?? undefined),
+          },
         });
+
+        // 3. Update/Create Metadata (UserProfile Table)
+        await tx.userProfile.upsert({
+          where: { userUuid: dto.userUuid },
+          create: {
+            userUuid: dto.userUuid,
+            bio: dto.bio,
+            gender: dto.gender,
+            dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+            nationalId: dto.nationalId,
+            profileImage: dto.profileImage,
+          },
+          update: {
+            bio: dto.bio ?? undefined,
+            gender: dto.gender ?? undefined,
+            dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+            nationalId: dto.nationalId ?? undefined,
+            profileImage: dto.profileImage ?? undefined,
+          },
+        });
+
+        // 4. Root Account Name Sync
+        if (dto.firstName || dto.lastName) {
+          await tx.account.update({
+            where: { uuid: user.accountId },
+            data: { name: `${user.firstName} ${user.lastName}`.trim() }
+          });
+        }
+
+        return tx.user.findUnique({
+          where: { uuid: dto.userUuid },
+          include: {
+            account: { include: { organization: { include: { profile: true } } } },
+            profile: true,
+            completion: true,
+          },
+        });
+      });
+
+      // 5. ASYNC CLEANUP: Delete old image if a new one was successfully saved
+      // Logic: If we have a new image in DTO, and there was an old one, and they aren't the same.
+      if (dto.profileImage && oldImageUrl && oldImageUrl !== dto.profileImage) {
+        this.handleOldImageDeletion(oldImageUrl);
       }
 
-      // 4. Fetch the final state with all relations included for the mapper
-      return tx.user.findUnique({
-        where: { uuid: dto.userUuid },
-        include: {
-          account: {
-            include: {
-              organization: {
-                include: { profile: true }
-              },
-            },
-          },
-          profile: true,
-          completion: true,
-        },
-      });
-    });
+      return BaseResponseDto.ok(
+        this.mapToUserProfileResponseDto(updatedAggregate as PrismaUserAggregate),
+        'Profile updated successfully',
+        'OK'
+      );
 
-    if (!updatedAggregate) {
-      throw new RpcException({ code: 5, message: 'User not found after update' });
+    } catch (err) {
+      this.logger.error(`Update failed: ${err.message}`);
+      if (err.code === 'P2002') {
+        return BaseResponseDto.fail('Email or Phone is already in use by another account', 'CONFLICT');
+      }
+      return BaseResponseDto.fail('An error occurred during profile update', 'INTERNAL_ERROR');
     }
+  }
 
-    return {
-      success: true,
-      message: 'Profile updated successfully',
-      code: 'OK',
-      data: this.mapToUserProfileResponseDto(updatedAggregate as PrismaUserAggregate),
-      error: null,
-    } as BaseResponseDto<UserProfileResponseDto>;
+  /**
+   * Dispatches the deletion task to your storage handler
+   */
+  private handleOldImageDeletion(imageUrl: string): void {
+    if (imageUrl.includes('default-avatar')) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
-    this.logger.error(`Update failed: ${err.message}`);
-
-    // Handle Unique Constraint (Email/Phone/NationalID)
-    if (err.code === 'P2002') {
-      const target = err.meta?.target || [];
-      const field = target.includes('email') ? 'Email' : target.includes('phone') ? 'Phone' : 'National ID';
-      throw new RpcException({
-        code: 6, // ALREADY_EXISTS
-        message: `${field} is already in use by another user.`,
-      });
-    }
-
-    throw new RpcException({
-      code: err.code || 13, // Internal
-      message: err.message || 'Internal server error during profile update',
+    this.logger.log(`Emitting Kafka event to delete: ${imageUrl}`);
+    
+    // This sends the message to Kafka
+    this.kafkaClient.emit('file.delete_obsolete', {
+      url: imageUrl,
     });
   }
-}
-
 /** ------------------------------------------------------
    * FETCH MY PROFILE
    * Retrieves the full aggregate for the authenticated user
@@ -612,5 +650,98 @@ async createUserProfile(
       );
     }
   }
+
+ /**
+ * ONBOARD INDIVIDUAL SERVICE PROVIDER
+ * Upgrades a human user to a Service Provider (Contractor).
+ */
+async onboardIndividualProvider(
+  dto: OnboardProviderGrpcRequestDto,
+): Promise<BaseResponseDto<ContractorProfileResponseDto>> {
+  this.logger.log(`Onboarding individual provider: ${dto.userUuid}`);
+
+  try {
+    /* ---------- 1. PRE-CHECK ---------- */
+    const user = await this.prisma.user.findUnique({
+      where: { uuid: dto.userUuid },
+      select: { 
+        accountId: true, 
+        account: { select: { type: true } } 
+      }
+    });
+
+    if (!user) {
+      return BaseResponseDto.fail('User not found', 'NOT_FOUND');
+    }
+
+    // Safety check: Ensure this is an individual account
+    if (user.account.type !== 'INDIVIDUAL') {
+      return BaseResponseDto.fail(
+        'Only individual accounts can use this onboarding flow', 
+        'PRECONDITION_FAILED'
+      );
+    }
+
+    /* ---------- 2. DATABASE TRANSACTION ---------- */
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Prevent duplicate profiles
+      const existing = await tx.contractorProfile.findUnique({
+        where: { accountId: user.accountId }
+      });
+
+      if (existing) {
+        throw new Error('This individual is already registered as a service provider');
+      }
+
+      // Create the Contractor (Service Provider) Profile
+      const contractor = await tx.contractorProfile.create({
+        data: {
+          accountId: user.accountId,
+          specialties: dto.specialties,
+          serviceAreas: dto.serviceAreas,
+          yearsExperience: dto.yearsExperience,
+          isVerified: false, 
+        },
+      });
+
+      // Update Profile Completion for the human user (Individual)
+      await tx.profileCompletion.update({
+        where: { userUuid: dto.userUuid },
+        data: { 
+          percentage: { increment: 20 },
+        }
+      });
+
+      return contractor;
+    });
+
+    /* ---------- 3. SUCCESS RESPONSE & MAPPING ---------- */
+    // Explicitly mapping to ContractorProfileResponseDto to fix Date vs String issues
+    const responseData: ContractorProfileResponseDto = {
+      uuid: result.uuid,
+      accountId: result.accountId,
+      specialties: result.specialties,
+      serviceAreas: result.serviceAreas,
+      yearsExperience: result.yearsExperience ?? 0,
+      isVerified: result.isVerified,
+      averageRating: result.averageRating,
+      totalReviews: result.totalReviews,
+      createdAt: result.createdAt.toISOString(), // Converts Date to string
+    };
+
+    return BaseResponseDto.ok(
+      responseData, 
+      'Individual service provider profile created successfully', 
+      'CREATED'
+    );
+
+  } catch (err) {
+    this.logger.error(`Unexpected failure in onboardIndividualProvider: ${err.message}`);
+    return BaseResponseDto.fail(
+      err.message || 'Internal failure during provider onboarding', 
+      'INTERNAL_ERROR'
+    );
+  }
+}
 
 }

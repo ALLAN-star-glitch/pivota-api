@@ -13,6 +13,7 @@ describe('ProvidersPricingController', () => {
       ContractorsPricingController
     );
   });
+  
 
   it('should be defined', () => {
     expect(controller).toBeDefined();

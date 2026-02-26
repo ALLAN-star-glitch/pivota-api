@@ -10,15 +10,40 @@ import {
 } from '@pivota-api/protos';
 import { OrganisationService } from './organisation.service';
 import { OrganisationController } from '../controllers/organisation.controller';
+import { SharedStorageModule } from '@pivota-api/shared-storage';
 
 @Module({
   imports: [
     PrismaModule,
+    SharedStorageModule,
+    
     ClientsModule.register([
-      
+      // 1. RMQ: Notification Event Bus (for emails - matches AuthModule)
+      {
+        name: 'NOTIFICATION_EVENT_BUS',
+        transport: Transport.RMQ,
+        options: {
+          urls: [process.env.RMQ_URL || 'amqp://localhost:5672'],
+          queue: 'notification_email_queue',
+          queueOptions: { durable: true },
+        },
+      },
 
-      /* ---------- 3. gRPC CLIENTS (READ-ONLY) ---------- */
-      // Retained for fetching data (e.g., getting profiles or plan details)
+      // 2. KAFKA CLIENT (for storage events)
+      {
+        name: 'KAFKA_SERVICE',
+        transport: Transport.KAFKA,
+        options: {
+          client: {
+            brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+          },
+          consumer: {
+            groupId: 'profile-service-storage-consumer',
+          },
+        },
+      },
+
+      /* ---------- gRPC CLIENTS ---------- */
       {
         name: 'RBAC_PACKAGE',
         transport: Transport.GRPC,
@@ -53,13 +78,15 @@ import { OrganisationController } from '../controllers/organisation.controller';
     UserService,
     OrganisationService
   ],
+  exports: [OrganisationService], // Export if needed by other modules
 })
 export class ProfileModule {
   constructor() {
     console.log(
-      '🚀 ProfileModule (with Event Bus) initialized:',
-      '\n- RabbitMQ (PROFILE_EVENT_BUS) listening on queue: profile_events_queue',
-      '\n- gRPC Clients active for RBAC, Subscriptions, and Plans',
+      '🚀 ProfileModule initialized:',
+      '\n- RabbitMQ Client (NOTIFICATION_EVENT_BUS) active for email notifications',
+      '\n- Kafka Client (KAFKA_SERVICE) active for storage events',
+      '\n- StorageModule active for Supabase operations',
     );
   }
 }

@@ -228,8 +228,16 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response
   ): Promise<BaseResponseDto<LoginResponseDto>> {
     this.logger.log(`🛡️ MFA Login Verification for: ${dto.email}`);
-    return this.authService.verifyMfaLogin(dto, clientInfo, res);
+    const resp = await this.authService.verifyMfaLogin(dto, clientInfo, res);
+    if (!resp.success) {
+      this.logger.warn(`⚠️ MFA Login failed for ${dto.email}: ${resp.message}`);
+      throw resp; // Let the global exception filter handle the error response  
+    } else {
+      this.logger.log(`✅ MFA Login successful for: ${dto.email}`);
+    }
+    return resp;  
   }
+
 
   // ===================== GOOGLE LOGIN =====================
   @Version('1')

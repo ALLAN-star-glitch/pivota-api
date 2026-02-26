@@ -286,6 +286,7 @@ export class AuthService {
     this.logger.log('🍪 Auth cookies cleared');
   }
 
+
   /** ------------------ Get User From Payload ------------------ */
   async getUserFromPayload(payload: JwtPayload): Promise<UserResponseDto> {
     const userResponse = await firstValueFrom(
@@ -300,6 +301,8 @@ export class AuthService {
     return userResponse.data;
   }
   
+  
+
   /** ------------------ Generate Dev Token (Testing Only) ------------------ */
   /** * ------------------ Generate Dev Token (Testing Only) ------------------ 
    * FIXED: Now correctly accepts and passes accountId to the auth microservice.

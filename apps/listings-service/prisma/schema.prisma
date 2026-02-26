@@ -20,6 +20,10 @@ model Category {
   name          String   
   slug          String   // e.g., "plumbing"
   description   String?
+
+  // UI & Branding (Shared by Website and Dashboard)
+  icon          String?  // e.g., "home", "briefcase", "heart" (Lucide/Heroicons names)
+  color         String?  // e.g., "#3B82F6" for branding specific sub-pillars
   
   // Hierarchy Logic
   parentId      String?
@@ -29,10 +33,14 @@ model Category {
   // Relationships
   jobPosts         JobPost[]          @relation("MainCategory")
   subCategoryPosts JobPost[]          @relation("SubcategoryPosts")
-  serviceOfferings ServiceOffering[]
-  supportPrograms  SupportProgram[]
+  serviceOfferings    ServiceOffering[] @relation("ServiceMainCategory")
+  subServiceOfferings ServiceOffering[] @relation("ServiceSubcategory")
+  supportPrograms    SupportProgram[] @relation("SupportMainCategory")
+  supportSubPrograms SupportProgram[] @relation("SupportSubcategory")
   contractorPricingRules ContractorPricingRule[]
-  houseListings    HouseListing[]
+
+  houseListings    HouseListing[]     @relation("HouseMainCategory")
+  houseSubListings HouseListing[]     @relation("HouseSubcategory")
 
   hasSubcategories Boolean @default(false)
   hasParent        Boolean @default(false)
@@ -266,7 +274,10 @@ model ServiceOffering {
   verticals    String[] @default(["JOBS"]) 
 
   categoryId   String
-  category     Category @relation(fields: [categoryId], references: [id])
+  category     Category @relation("ServiceMainCategory", fields: [categoryId], references: [id])
+  
+  subCategoryId String?
+  subCategory   Category? @relation("ServiceSubcategory", fields: [subCategoryId], references: [id])
   
   // --- PRICING & LOGISTICS ---
   basePrice    Float
@@ -373,20 +384,22 @@ model Rating {
 model HouseListing {
   id           String   @id @default(cuid())
   externalId   String   @default(uuid())
-  creatorId      String   // The individual User UUID
-  creatorName    String?
+  creatorId    String   // The individual User UUID
+  creatorName  String?
   accountId    String   // The owning Account (Individual or Property Agency Org)
-  accountName   String?
+  accountName  String?
   
   title        String
   description  String
 
-  // UPDATED: Use Category relation instead of a raw String type
+  // Primary Categorization
   categoryId   String
-  category     Category @relation(fields: [categoryId], references: [id])
+  category     Category @relation("HouseMainCategory", fields: [categoryId], references: [id])
   
-  // Optional: Keep 'type' if you want a secondary label, 
-  // but Category is now the source of truth for the pillar
+  // NEW: Sub-Categorization (Matches JobPost logic)
+  subCategoryId String?
+  subCategory   Category? @relation("HouseSubcategory", fields: [subCategoryId], references: [id])
+  
   listingType  String   // e.g., "RENTAL", "SALE"
   
   price        Float
@@ -411,7 +424,9 @@ model HouseListing {
   images       HouseImage[]
   viewings     HouseViewing[]
 
+  // Indexes optimized for filtering and the shared Dashboard/Website Nav
   @@index([locationCity, listingType, categoryId])
+  @@index([subCategoryId]) 
   @@index([creatorId])
   @@index([accountId])
   @@index([status])
@@ -466,7 +481,11 @@ model SupportProgram {
 
   // --- CATEGORIZATION ---
   categoryId    String
-  category      Category @relation(fields: [categoryId], references: [id])
+  category      Category @relation("SupportMainCategory", fields: [categoryId], references: [id])
+
+  // NEW: Specific sub-pillar for targeted discovery
+  subCategoryId String?
+  subCategory   Category? @relation("SupportSubcategory", fields: [subCategoryId], references: [id])
 
   // Marketplace Discovery: e.g., "GRANT", "TRAINING", "FOOD_STAMP", "MENTORSHIP"
   supportType   String   @default("GENERAL")
@@ -693,3 +712,16 @@ model ContractorPricingRule {
   @@unique([vertical, unit, currency, categoryId])
 }
 
+model SavedListing {
+  id          String   @id @default(cuid())
+  userUuid    String   // The Individual User
+  
+  // The listing being saved
+  targetId    String   // externalId of Job, House, or SupportProgram
+  vertical    String   // "JOBS" | "HOUSING" | "SOCIAL_SUPPORT" | "SERVICES"
+  
+  createdAt   DateTime @default(now())
+
+  @@unique([userUuid, targetId])
+  @@index([userUuid])
+}

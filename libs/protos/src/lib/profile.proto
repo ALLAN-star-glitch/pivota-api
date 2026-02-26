@@ -2,28 +2,103 @@ syntax = "proto3";
 
 package profile;
 
-// ================== Service Definitions ==================
+// ======================================================
+// SERVICE DEFINITIONS
+// ======================================================
 
 service ProfileService {
+  // CREATE
   rpc CreateUserProfile(CreateUserProfileRequest) returns (UserProfileResponse);
-  
-  // ADDED: Endpoint for the authenticated user to fetch their own profile
-  rpc GetMyProfile(GetMyProfileRequest) returns (UserProfileResponse);
+  rpc CreateOrganizationProfile(CreateOrgProfileRequest) returns (OrgProfileResponse);
 
+  // ONBOARDING (SERVICE PROVIDERS)
+  rpc OnboardIndividualProvider(OnboardIndividualProviderRequest) returns (ContractorProfileResponse);
+  rpc OnboardOrganizationProvider(OnboardOrgProviderRequest) returns (ContractorProfileResponse);
+
+  // READ (Identity & Profile)
+  rpc GetMyProfile(GetMyProfileRequest) returns (UserProfileResponse);
   rpc GetUserProfileByUuid(GetUserByUuidRequest) returns (UserProfileResponse);
   rpc GetUserProfileByUserCode(GetUserByUserCodeRequest) returns (UserProfileResponse);
   rpc GetUserProfileByEmail(GetUserByEmailRequest) returns (UserProfileResponse);
-
-  rpc UpdateUserProfile (UpdateFullUserProfileRequest) returns (UserProfileResponse);
-
   rpc GetAllUsers(Empty) returns (UserListResponse);
-
-  rpc CreateOrganizationProfile(CreateOrgProfileRequest) returns (OrgProfileResponse);
-
+  
+  // READ (Organizations)
   rpc GetOrganisationsByType(GetOrganisationsByTypeRequest) returns (OrgListResponse);
+  rpc GetOrganisationByUuid(GetOrgByUuidRequest) returns (OrgProfileResponse);
+
+  // UPDATE
+  rpc UpdateUserProfile (UpdateFullUserProfileRequest) returns (UserProfileResponse);
+  rpc UpdateAdminUserProfile (UpdateFullUserProfileRequest) returns (UserProfileResponse);
+
+  // MEMBERSHIP
+  rpc AddOrganisationMember(AddOrgMemberRequest) returns (BaseResponse);
+  
+  // ======================================================
+  // INVITATION MANAGEMENT
+  // ======================================================
+  
+  // INVITE MEMBER - Send email invitation
+  rpc InviteMember(InviteMemberRequest) returns (InviteMemberResponse);
+  
+  // VERIFY INVITATION - Check if token is valid
+  rpc VerifyInvitation(VerifyInvitationRequest) returns (InvitationVerificationResponse);
+  
+  // ACCEPT INVITATION - Complete the invitation flow
+  rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse);
+  
+  // GET ORGANIZATION INVITATIONS - List pending invites
+  rpc GetOrganizationInvitations(GetOrganizationInvitationsRequest) returns (InvitationListResponse);
+  
+  // RESEND INVITATION - Generate new token
+  rpc ResendInvitation(ResendInvitationRequest) returns (BaseResponse);
+  
+  // CANCEL INVITATION - Remove pending invitation
+  rpc CancelInvitation(CancelInvitationRequest) returns (BaseResponse);
+  
+  // CHECK INVITATION STATUS - Quick check for UI
+  rpc CheckInvitationStatus(CheckInvitationStatusRequest) returns (CheckInvitationStatusResponse);
 }
 
-// ================== User Profile Messages ==================
+// ======================================================
+// CONTRACTOR / PROVIDER MESSAGES
+// ======================================================
+
+message OnboardIndividualProviderRequest {
+  string userUuid = 1;
+  repeated string specialties = 2;
+  repeated string serviceAreas = 3;
+  int32 yearsExperience = 4;
+}
+
+message OnboardOrgProviderRequest {
+  string orgUuid = 1;
+  repeated string specialties = 2;
+  repeated string serviceAreas = 3;
+}
+
+message ContractorProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  ContractorData data = 4;
+  ErrorPayload error = 5;
+}
+
+message ContractorData {
+  string uuid = 1;
+  string accountId = 2;
+  repeated string specialties = 3;
+  repeated string serviceAreas = 4;
+  int32 yearsExperience = 5;
+  bool isVerified = 6;
+  float averageRating = 7;
+  int32 totalReviews = 8;
+  string createdAt = 9;
+}
+
+// ======================================================
+// USER PROFILE MESSAGES
+// ======================================================
 
 message UserProfileResponse {
   bool success = 1;
@@ -41,6 +116,7 @@ message UserProf {
   string updatedAt = 5;
   CompletionResponse completion = 6;
   OrganizationBase organization = 7; 
+  optional ContractorData contractor = 8; // Detection for Shared Nav
 }
 
 message UserBase {
@@ -62,7 +138,9 @@ message UserProfileMetadata {
   string profileImage = 5;
 }
 
-// ================== Organization Messages ==================
+// ======================================================
+// ORGANIZATION MESSAGES
+// ======================================================
 
 message OrganizationBase {
   string id = 1;
@@ -110,9 +188,12 @@ message OrgProfileData {
   CompletionResponse completion = 12; 
   string createdAt = 13;        
   string updatedAt = 14;
+  optional ContractorData contractor = 15; // Detection for Shared Nav
 }
 
-// ================== Shared Components ==================
+// ======================================================
+// SHARED COMPONENTS & METADATA
+// ======================================================
 
 message AccountBase {
   string uuid = 1;
@@ -136,7 +217,153 @@ message CompletionResponse {
   bool isComplete = 3;
 }
 
-// ================== Common Messages ==================
+// ======================================================
+// INVITATION MESSAGES
+// ======================================================
+
+message InviteMemberRequest {
+  string email = 1;
+  optional string message = 2;
+  string organizationUuid = 3;
+  string invitedByUserUuid = 4;
+}
+
+message InviteMemberResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  InviteMemberData data = 4;
+  ErrorPayload error = 5;
+}
+
+message InviteMemberData {
+  string invitationId = 1;
+}
+
+message VerifyInvitationRequest {
+  string token = 1;
+}
+
+// ✅ FIXED: Added standard wrapper
+message InvitationVerificationResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  InvitationVerificationData data = 4;
+  ErrorPayload error = 5;
+}
+
+message InvitationVerificationData {
+  bool isValid = 1;
+  string email = 2;
+  optional string phone = 3;
+  string organizationUuid = 4;
+  string organizationName = 5;
+  string roleName = 6;
+  bool isExistingUser = 7;
+}
+
+message AcceptInvitationRequest {
+  string token = 1;
+  optional string firstName = 2;
+  optional string lastName = 3;
+  optional string phone = 4;
+}
+
+// ✅ FIXED: Added standard wrapper
+message AcceptInvitationResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  AcceptInvitationData data = 4;
+  ErrorPayload error = 5;
+}
+
+message AcceptInvitationData {
+  bool success = 1;
+  string userUuid = 2;
+  bool isNewUser = 3;
+  string organizationUuid = 4;
+  string roleName = 5;
+}
+
+message GetOrganizationInvitationsRequest {
+  string organizationUuid = 1;
+  string requestingUserUuid = 2;
+}
+
+message InvitationDetails {
+  string id = 1;
+  string email = 2;
+  string roleName = 3;
+  string status = 4;
+  string expiresAt = 5;
+  string createdAt = 6;
+  string invitedByUserUuid = 7;
+  optional string invitedByUserName = 8;
+  optional string message = 9;
+}
+
+// ✅ This one was already correct
+message InvitationListResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  repeated InvitationDetails data = 4;
+  ErrorPayload error = 5;
+}
+
+message ResendInvitationRequest {
+  string invitationId = 1;
+  string requestedByUserUuid = 2;
+  string organizationUuid = 3;
+}
+
+// ✅ Uses BaseResponse pattern (success/message/code)
+message ResendInvitationResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  ErrorPayload error = 4;
+}
+
+message CancelInvitationRequest {
+  string invitationId = 1;
+  string requestedByUserUuid = 2;
+  string organizationUuid = 3;
+}
+
+// ✅ Uses BaseResponse pattern (success/message/code)
+message CancelInvitationResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  ErrorPayload error = 4;
+}
+
+message CheckInvitationStatusRequest {
+  string email = 1;
+  string organizationUuid = 2;
+}
+
+// ✅ FIXED: Added standard wrapper
+message CheckInvitationStatusResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  CheckInvitationStatusData data = 4;
+  ErrorPayload error = 5;
+}
+
+message CheckInvitationStatusData {
+  bool hasPendingInvitation = 1;
+  optional string invitationId = 2;
+  optional string expiresAt = 3;
+}
+
+// ======================================================
+// REQUEST / RESPONSE PAYLOADS
+// ======================================================
 
 message CreateUserProfileRequest {
   string userUuid = 1;
@@ -147,7 +374,6 @@ message CreateUserProfileRequest {
   string planSlug = 6; 
 }
 
-// ADDED: Request message for GetMyProfile
 message GetMyProfileRequest {
   string userUuid = 1;
 }
@@ -155,21 +381,7 @@ message GetMyProfileRequest {
 message GetUserByUuidRequest { string userUuid = 1; }
 message GetUserByUserCodeRequest { string userCode = 1; }
 message GetUserByEmailRequest { string email = 1; }
-
-message UserListResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  repeated UserProf data = 4; 
-  ErrorPayload error = 5;          
-}
-
-message ErrorPayload {
-  string message = 1;
-  int32 code = 2;
-}
-
-message Empty {}
+message GetOrgByUuidRequest { string orgUuid = 1; }
 
 message UpdateFullUserProfileRequest {
   string userUuid = 1;              
@@ -188,6 +400,26 @@ message GetOrganisationsByTypeRequest {
   string typeSlug = 1;
 }
 
+message AddOrgMemberRequest {
+  string orgUuid = 1;
+  string userUuid = 2;
+  string role = 3;
+}
+
+message BaseResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+}
+
+message UserListResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  repeated UserProf data = 4; 
+  ErrorPayload error = 5;          
+}
+
 message OrgListResponse {
   bool success = 1;
   string message = 2;
@@ -195,3 +427,10 @@ message OrgListResponse {
   repeated OrgProfileData data = 4; 
   ErrorPayload error = 5;
 }
+
+message ErrorPayload {
+  string message = 1;
+  int32 code = 2;
+}
+
+message Empty {}

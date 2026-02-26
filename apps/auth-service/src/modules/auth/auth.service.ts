@@ -31,8 +31,9 @@ import {
   RequestOtpDto,
   SendOtpEventDto,
   ResetPasswordDto,
+  SetupPasswordRequestDto,
 } from '@pivota-api/dtos';
-import { firstValueFrom, lastValueFrom, Observable } from 'rxjs';
+import { firstValueFrom, lastValueFrom, map, Observable } from 'rxjs';
 import { BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
 import { randomUUID } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
@@ -75,8 +76,11 @@ export class AuthService implements OnModuleInit {
   private readonly httpService: HttpService,
   
   // gRPC Clients
-  @Inject('PROFILE_GRPC') private readonly grpcClient: ClientGrpc,
-  @Inject('RBAC_PACKAGE') private readonly rbacClient: ClientGrpc,
+  @Inject('PROFILE_GRPC')
+   private readonly grpcClient: ClientGrpc,
+   
+  @Inject('RBAC_PACKAGE') 
+  private readonly rbacClient: ClientGrpc,
 
   @Inject('NOTIFICATION_EVENT_BUS') private readonly notificationBus: ClientProxy,
 ) {}
@@ -202,17 +206,17 @@ async validateUser(email: string, password: string): Promise<UserProfileResponse
 }
 
   /** ------------------ Generate Tokens ------------------ */
- async generateTokens(
+async generateTokens(
   profile: UserProfileResponseDto,
   clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
 ): Promise<{ accessToken: string; refreshToken: string }> {
   const userData = profile.user;
   const accountData = profile.account;
+  const orgData = profile.organization; // This might be undefined
 
   this.logger.debug(`[AUTH] Generating tokens for User: ${userData.uuid} in Account: ${accountData.uuid}`);
 
   const fullName = `${userData.firstName} ${userData.lastName}`.trim();
-
 
   // 1. Fetch the User Role via gRPC
   const rbacService = this.getRbacGrpcService();
@@ -221,19 +225,22 @@ async validateUser(email: string, password: string): Promise<UserProfileResponse
   );
   const roleType = userRoleResponse?.role?.roleType ?? 'GeneralUser';
 
-  // --- NEW STEP: PRE-GENERATE THE TOKEN ID ---
-  // We create this ID now so we can include it in the JWT payload
   const tokenId = `${userData.uuid}-${Date.now()}`;
 
-  // 2. Prepare JWT Payload (Include the tokenId!)
+  // 2. Prepare JWT Payload - SAFELY handle undefined organization
   const payload: JwtPayload = {
     userUuid: userData.uuid,
     email: userData.email,
     role: roleType,
-    tokenId: tokenId, // <--- CRUCIAL: Linked to the DB session
+    tokenId: tokenId,
     accountId: accountData.uuid,
     userName: fullName,
-    accountName: accountData.type === 'ORGANIZATION' ? profile.organization.name : fullName,
+    // ✅ SAFE: Use optional chaining
+    organizationUuid: orgData?.uuid,
+    // ✅ SAFE: Check if orgData exists before accessing name
+    accountName: accountData.type === 'ORGANIZATION' && orgData?.name 
+      ? orgData.name 
+      : fullName,
     accountType: accountData.type as 'INDIVIDUAL' | 'ORGANIZATION',
   };
 
@@ -249,7 +256,7 @@ async validateUser(email: string, password: string): Promise<UserProfileResponse
   await this.prisma.session.create({
     data: {
       userUuid: userData.uuid,
-      tokenId: tokenId, // <--- Use the SAME tokenId used in the payload
+      tokenId: tokenId,
       hashedToken,
       device: clientInfo?.device,
       ipAddress: clientInfo?.ipAddress,
@@ -339,44 +346,65 @@ async signup(
 
     /* ======================================================
        6. PREMIUM BRANCH: PAYMENT HAND-OFF
-    ====================================================== */
+    ====================================================== */ 
     if (profileResponse.code === 'PAYMENT_REQUIRED') {
       try {
         const paymentPayload = {
           accountUuid: profileResponse.data.account.uuid,
-          userUuid: profileResponse.data.user.uuid,
-          email: signupDto.email,
-          firstName: signupDto.firstName,
-          lastName: signupDto.lastName,
+          merchantReference: userUuid, 
+          email: signupDto.email,     
+          firstName: signupDto.firstName, 
+          lastName: signupDto.lastName,  
           phone: signupDto.phone, 
-          planSlug: signupDto.planSlug,
-          amount: 2500, 
+          amount: 10, 
           currency: 'KES',
-          callbackUrl: 'https://app.pivota.com/onboarding/payment-status'
-        };
+          planSlug: signupDto.planSlug, 
+          description: `PivotaConnect ${signupDto.planSlug} Subscription`,
+          callbackurl: 'https://app.pivota.com/onboarding/payment-status'
+        }; 
+
+        this.logger.log(`[PAYMENT] Attempting to hit Spring Boot at: ${process.env.PAYMENT_SERVICE_URL}/api/v1/payments/initiate`);
+        this.logger.debug(`[PAYMENT] Outgoing Payload: ${JSON.stringify(paymentPayload)}`);
 
         const paymentInitResponse = await lastValueFrom(
           this.httpService.post(
             `${process.env.PAYMENT_SERVICE_URL}/api/v1/payments/initiate`,
             paymentPayload,
-            { headers: { 'x-internal-api-key': process.env.INTERNAL_API_KEY } }
+            { 
+              headers: { 
+                'Content-Type': 'application/json' 
+              } 
+            }
+          ).pipe(
+            map(res => {
+              this.logger.log(`[PAYMENT] Spring Boot Status: ${res.status}`);
+              this.logger.debug(`[PAYMENT] Spring Boot Response: ${JSON.stringify(res.data)}`);
+              return res.data; 
+            })
           )
         );
+
 
         return BaseResponseDto.ok(
           {
             account: profileResponse.data.account,
             user: profileResponse.data.user,
-            redirectUrl: paymentInitResponse.data.redirectUrl,
-            merchantReference: paymentInitResponse.data.merchantReference,
+            redirectUrl: paymentInitResponse.redirectUrl,
+            merchantReference: paymentInitResponse.merchantReference,
           } as UserSignupDataDto,
           'Payment required to activate account',
           'PAYMENT_REQUIRED'
         );
 
       } catch (paymentErr: unknown) {
-        const message = paymentErr instanceof Error ? paymentErr.message : 'Payment service unreachable';
-        this.logger.error(`[PAYMENT BRIDGE DOWN] ${signupDto.email}: ${message}`);
+        // Detailed error logging to troubleshoot ngrok/Spring Boot connection
+        const errorMessage = paymentErr instanceof Error ? paymentErr.message : 'Unknown error';
+        const errorData = paymentErr['response']?.data;
+        
+        this.logger.error(`[PAYMENT BRIDGE DOWN] ${signupDto.email}: ${errorMessage}`);
+        if (errorData) {
+          this.logger.error(`[PAYMENT ERROR DETAILS] ${JSON.stringify(errorData)}`);
+        }
 
         return BaseResponseDto.ok(
           {
@@ -1002,6 +1030,7 @@ async generateDevToken(
   
   const userData = profileResponse.data.user;
   const accountData = profileResponse.data.account;
+  const organizationUuid = profileResponse.data.organization.uuid
   const fullName = `${userData.firstName} ${userData.lastName}`.trim();
 
   try {
@@ -1014,6 +1043,7 @@ async generateDevToken(
       email,
       role,
       accountId,
+      organizationUuid,
       tokenId: devTokenId, // Linked to the DB entry below
       userName: fullName,
       accountName: accountData.type === 'ORGANIZATION' ? profileResponse.data.organization.name : fullName,
@@ -1266,27 +1296,65 @@ async verifyMfaLogin(
     });
 
     if (!validOtp) {
-      throw new UnauthorizedException('Invalid or expired 2FA code');
+      return BaseResponseDto.fail(
+        'Invalid or expired 2FA code',
+        'INVALID_OTP',
+        { email: verifyDto.email }
+      );
     }
 
     // 2. Fetch User Profile to generate tokens
-    // We need the credential to get the userUuid for the gRPC call
     const credential = await this.prisma.credential.findUnique({
       where: { email: verifyDto.email },
     });
 
-    const profileResponse = await firstValueFrom(
-      this.getProfileGrpcService().getUserProfileByUuid({ userUuid: credential.userUuid })
-    );
+    if (!credential) {
+      return BaseResponseDto.fail(
+        'User account not found',
+        'USER_NOT_FOUND',
+        { email: verifyDto.email }
+      );
+    }
+
+    let profileResponse;
+    try {
+      profileResponse = await firstValueFrom(
+        this.getProfileGrpcService().getUserProfileByUuid({ userUuid: credential.userUuid })
+      );
+    } catch (grpcError) {
+      this.logger.error(`gRPC error fetching profile: ${grpcError.message}`);
+      return BaseResponseDto.fail(
+        'Profile service unavailable',
+        'SERVICE_UNAVAILABLE',
+        { userUuid: credential.userUuid }
+      );
+    }
+
+    if (!profileResponse?.success || !profileResponse.data) {
+      return BaseResponseDto.fail(
+        'User profile not found',
+        'USER_NOT_FOUND',
+        { userUuid: credential.userUuid }
+      );
+    }
 
     const profile = profileResponse.data;
     const userData = profile.user;
+
+    // Check user status
+    if (userData.status !== 'ACTIVE') {
+      return BaseResponseDto.fail(
+        `Your account is ${userData.status.toLowerCase()}`,
+        'ACCOUNT_INACTIVE',
+        { status: userData.status }
+      );
+    }
 
     // 3. Generate JWT Tokens & Create Session
     const { accessToken, refreshToken } = await this.generateTokens(profile, clientInfo);
 
     /* ======================================================
-       4. NOTIFICATION LOGIC (Moved here from login)
+       4. NOTIFICATION LOGIC
     ====================================================== */
     const adminRoles = ['Business System Admin'];
     const isOrgAccount = profile.account.type === 'ORGANIZATION';
@@ -1312,22 +1380,42 @@ async verifyMfaLogin(
     await this.prisma.otp.delete({ where: { id: validOtp.id } });
 
     // 6. Final Login Response
-    return {
-      success: true,
-      message: 'Login successful',
-      code: 'OK',
-      data: {
-        ...userData,
+    return BaseResponseDto.ok(
+      {
+        id: userData.uuid,
+        uuid: userData.uuid,
+        userCode: userData.userCode,
+        accountId: profile.account.uuid,
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        phone: userData.phone,
+        status: userData.status,
+        role: userData.roleName,
+        createdAt: profile.createdAt,
+        updatedAt: profile.updatedAt,
         accessToken,
         refreshToken,
-        organization: profile.organization,
+        organization: profile.organization ? {
+          uuid: profile.organization.uuid,
+          name: profile.organization.name,
+          orgCode: profile.organization.orgCode,
+          verificationStatus: profile.organization.verificationStatus,
+        } : undefined,
       } as unknown as LoginResponseDto,
-      error: null,
-    } as BaseResponseDto<LoginResponseDto>;
+      'Login successful',
+      'OK'
+    );
 
   } catch (err: unknown) {
-    this.logger.error(`MFA Verification failed for ${verifyDto.email}`, err);
-    throw new UnauthorizedException(err instanceof Error ? err.message : 'MFA Failed');
+    this.logger.error(`MFA Verification failed for ${verifyDto.email}:`, err);
+    
+    // Fallback error for unexpected errors
+    return BaseResponseDto.fail(
+      'An unexpected error occurred during login',
+      'INTERNAL_ERROR',
+      { error: err instanceof Error ? err.message : 'Unknown error' }
+    );
   }
 }
 
@@ -1473,6 +1561,293 @@ async getActiveSessions(userUuid: string): Promise<BaseResponseDto<SessionDto[]>
       'An error occurred while retrieving active sessions.',
       'INTERNAL_ERROR',
     );
+  }
+}
+
+/* ======================================================
+   HANDLE INVITATION ACCEPTED (NEW USER)
+   - Called when a new user accepts an invitation
+   - Creates credentials and password setup token
+====================================================== */
+async handleInvitationAcceptedNewUser(data: {
+  email: string;
+  userUuid: string;
+  organizationUuid: string;
+  organizationName: string;
+  roleName: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+}): Promise<void> {
+  this.logger.log(`[INVITE] Creating credentials for new user: ${data.email}`);
+
+  try {
+    // 1. Check if credentials already exist
+    const existingCredential = await this.prisma.credential.findUnique({
+      where: { email: data.email }
+    });
+
+    if (existingCredential) {
+      this.logger.warn(`[INVITE] Credentials already exist for ${data.email}`);
+      return;
+    }
+
+    // 2. Generate a password setup token (48 hour expiry)
+    const setupToken = randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 48);
+
+    // 3. Create credential record with NO password hash
+    // Password will be set via setup flow - we don't need to store the result in a variable
+    await this.prisma.credential.create({
+      data: {
+        userUuid: data.userUuid,
+        email: data.email,
+        passwordHash: null, // No password yet
+        mfaEnabled: true,
+        failedAttempts: 0,
+        lastLoginAt: null,
+      },
+    });
+
+    // 4. Create password setup token
+    await this.prisma.passwordSetupToken.create({
+      data: {
+        userUuid: data.userUuid,
+        token: setupToken,
+        expiresAt,
+        used: false,
+      },
+    });
+
+    // 5. Create audit record (optional)
+    await this.prisma.invitationAudit.create({
+      data: {
+        email: data.email,
+        userUuid: data.userUuid,
+        organizationUuid: data.organizationUuid,
+        invitedByUserUuid: 'system', // You might want to pass this
+        status: 'ACCEPTED',
+        acceptedAt: new Date(),
+      },
+    });
+
+    // 6. Emit event to send password setup email
+    this.notificationBus.emit('user.password.setup.required', {
+      email: data.email,
+      userUuid: data.userUuid,
+      firstName: data.firstName,
+      setupToken,
+      expiresAt: expiresAt.toISOString(),
+      organizationName: data.organizationName,
+    });
+
+    this.logger.log(`[INVITE] Password setup token created for ${data.email}`);
+
+  } catch (error) {
+    this.logger.error(`[INVITE] Failed to create credentials for ${data.email}: ${error.message}`);
+  }
+}
+
+/* ======================================================
+   SETUP PASSWORD - For users who accepted invitation
+====================================================== */
+async setupPassword(dto: SetupPasswordRequestDto): Promise<BaseResponseDto<null>> {
+  this.logger.log(`[INVITE] Setting up password for token: ${dto.token}`);
+
+  try {
+    // 1. Validate password confirmation
+    if (dto.password !== dto.confirmPassword) {
+      return BaseResponseDto.fail('Passwords do not match', 'BAD_REQUEST');
+    }
+
+    // 2. Find valid token
+    const tokenRecord = await this.prisma.passwordSetupToken.findFirst({
+      where: {
+        token: dto.token,
+        used: false,
+        expiresAt: { gt: new Date() }
+      },
+      include: {
+        credential: true
+      }
+    });
+
+    if (!tokenRecord) {
+      return BaseResponseDto.fail('Invalid or expired password setup token', 'NOT_FOUND');
+    }
+
+    // 3. Hash the new password
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    // 4. Update in transaction
+    await this.prisma.$transaction(async (tx) => {
+      // Update credential with password
+      await tx.credential.update({
+        where: { userUuid: tokenRecord.userUuid },
+        data: { 
+          passwordHash: hashedPassword,
+          updatedAt: new Date()
+        }
+      });
+
+      // Mark token as used
+      await tx.passwordSetupToken.update({
+        where: { id: tokenRecord.id },
+        data: { used: true }
+      });
+    });
+
+    // 5. Notify that password is set
+    this.notificationBus.emit('user.password.setup.completed', {
+      email: tokenRecord.credential.email,
+      userUuid: tokenRecord.userUuid
+    });
+
+    this.logger.log(`[INVITE] Password setup completed for user: ${tokenRecord.credential.email}`);
+
+    return BaseResponseDto.ok(null, 'Password set successfully. You can now login.', 'OK');
+
+  } catch (error) {
+    this.logger.error(`[INVITE] Password setup failed: ${error.message}`);
+    return BaseResponseDto.fail('Failed to set password', 'INTERNAL_ERROR');
+  }
+}
+
+/* ======================================================
+   CHECK PASSWORD SETUP STATUS - For UI
+====================================================== */
+async checkPasswordSetupStatus(token: string): Promise<BaseResponseDto<{
+  isValid: boolean;
+  email?: string;
+  expiresAt?: string;
+}>> {
+  this.logger.log(`[INVITE] Checking password setup token: ${token}`);
+
+  try {
+    const tokenRecord = await this.prisma.passwordSetupToken.findFirst({
+      where: {
+        token,
+        used: false,
+        expiresAt: { gt: new Date() }
+      },
+      include: {
+        credential: {
+          select: { email: true }
+        }
+      }
+    });
+
+    if (!tokenRecord) {
+      return BaseResponseDto.ok(
+        { isValid: false },
+        'Token is invalid or expired',
+        'OK'
+      );
+    }
+
+    return BaseResponseDto.ok(
+      {
+        isValid: true,
+        email: tokenRecord.credential.email,
+        expiresAt: tokenRecord.expiresAt.toISOString()
+      },
+      'Token is valid',
+      'OK'
+    );
+
+  } catch (error) {
+    this.logger.error(`[INVITE] Status check failed: ${error.message}`);
+    return BaseResponseDto.fail('Failed to check token status', 'INTERNAL_ERROR');
+  }
+}
+
+/* ======================================================
+   RESEND PASSWORD SETUP EMAIL
+====================================================== */
+async resendPasswordSetupEmail(email: string): Promise<BaseResponseDto<null>> {
+  this.logger.log(`[INVITE] Resending password setup email to: ${email}`);
+
+  try {
+    // Find user with PENDING_PASSWORD status
+    // You'll need to get this info from profile service or have a status in credentials
+    const credential = await this.prisma.credential.findUnique({
+      where: { email },
+      include: {
+        passwordSetupTokens: {
+          where: { used: false, expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
+      }
+    });
+
+    if (!credential) {
+      return BaseResponseDto.fail('User not found', 'NOT_FOUND');
+    }
+
+    // Check if there's an existing valid token
+    let setupToken = credential.passwordSetupTokens[0]?.token;
+
+    if (!setupToken) {
+      // Create new token
+      setupToken = randomUUID();
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 48);
+
+      await this.prisma.passwordSetupToken.create({
+        data: {
+          userUuid: credential.userUuid,
+          token: setupToken,
+          expiresAt,
+          used: false,
+        }
+      });
+    }
+
+    // Get user details from profile service (you'll need to add this gRPC call)
+    const profileGrpc = this.getProfileGrpcService();
+    const profileResponse = await firstValueFrom(
+      profileGrpc.getUserProfileByUuid({ userUuid: credential.userUuid })
+    );
+
+    // Emit email event
+    this.notificationBus.emit('user.password.setup.required', {
+      email: credential.email,
+      userUuid: credential.userUuid,
+      firstName: profileResponse.data?.user?.firstName || 'User',
+      setupToken,
+      organizationName: 'Your Organization' // You might want to fetch this
+    });
+
+    return BaseResponseDto.ok(null, 'Password setup email sent', 'OK');
+
+  } catch (error) {
+    this.logger.error(`[INVITE] Resend failed: ${error.message}`);
+    return BaseResponseDto.fail('Failed to resend email', 'INTERNAL_ERROR');
+  }
+}
+
+async createInvitedUserCredentials(data: {
+  email: string;
+  userUuid: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  organizationName: string;
+}): Promise<BaseResponseDto<null>> {
+  this.logger.log(`[gRPC] Creating credentials for invited user: ${data.email}`);
+  
+  try {
+    await this.handleInvitationAcceptedNewUser({
+      ...data,
+      organizationUuid: '', // You might need this
+      roleName: 'GeneralUser',
+    });
+    
+    return BaseResponseDto.ok(null, 'Credentials created successfully', 'OK');
+  } catch (error) {
+    return BaseResponseDto.fail(error.message, 'INTERNAL_ERROR');
   }
 }
 }

@@ -8,6 +8,9 @@ import {
   UpdateFullUserProfileDto,
   UserProfileResponseDto,
   UserSignupDataDto,
+  // Add your new DTOs here
+  OnboardProviderGrpcRequestDto,
+  ContractorProfileResponseDto,
 } from '@pivota-api/dtos';
 
 @Controller()
@@ -15,6 +18,15 @@ export class UserController {
   private readonly logger = new Logger(UserController.name);
 
   constructor(private readonly userService: UserService) {}
+
+  /** ------------------ Onboard Individual Service Provider ------------------ */
+  @GrpcMethod('ProfileService', 'OnboardIndividualProvider')
+  async handleOnboardIndividualProvider(
+    @Payload() dto: OnboardProviderGrpcRequestDto,
+  ): Promise<BaseResponseDto<ContractorProfileResponseDto>> {
+    this.logger.log(`[gRPC] Onboarding individual service provider: ${dto.userUuid}`);
+    return this.userService.onboardIndividualProvider(dto);
+  }
 
   /** ------------------ Get My Profile (Own Account) ------------------ */
   @GrpcMethod('ProfileService', 'GetMyProfile')
@@ -25,13 +37,26 @@ export class UserController {
     return this.userService.getMyProfile(data.userUuid);
   }
 
-  /** ------------------ Update Full User Profile ------------------ */
+  /** * ------------------ Update Full User Profile ------------------ 
+   * Used by standard users to update their own account information.
+   */
   @GrpcMethod('ProfileService', 'UpdateUserProfile')
   async handleUpdateUserProfile(
     @Payload() dto: UpdateFullUserProfileDto,
   ): Promise<BaseResponseDto<UserProfileResponseDto>> {
     this.logger.log(`[gRPC] UpdateUserProfile request for: ${dto.userUuid}`);
-    return this.userService.updateFullProfile(dto);
+    return this.userService.updateProfile(dto);
+  }
+
+  /** * ------------------ Update Admin User Profile ------------------ 
+   * Used by admins to update any user profile with elevated permissions.
+   */
+  @GrpcMethod('ProfileService', 'UpdateAdminUserProfile')
+  async handleUpdateAdminUserProfile(
+    @Payload() dto: UpdateFullUserProfileDto,
+  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`[gRPC] Admin override update for: ${dto.userUuid}`);
+    return this.userService.updateAdminProfile(dto);
   }
   
   /** ------------------ Signup / Create User Profile ------------------ */
@@ -69,7 +94,6 @@ export class UserController {
     this.logger.log(`Fetching user profile by UUID: ${data.userUuid}`);
     return this.userService.getUserProfileByUuid(data);
   }
-  
   
   /** ------------------ Get All Users ------------------ */
   @GrpcMethod('ProfileService', 'GetAllUsers')

@@ -135,13 +135,14 @@ export class AuthDevController {
   async loginBusinessSystemAdmin(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      'biz-sys-uuid-5555',
-      'biz.system@pivota-dev.com',
+      '75249f7d-d2ce-4ad5-b6d1-0b9cf3230f33',
+      'allanmathenge22@gmail.com',
       'BusinessSystemAdmin',
-      'biz-sys-account-id', 
+      'ec46d97e-1fe0-4893-a554-96be8beef377', 
       res,
     );
   }
+
 
   // =========================================================
   // 6. BUSINESS CONTENT MANAGER

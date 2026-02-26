@@ -44,9 +44,10 @@ function isBaseResponse(obj: unknown): obj is BaseResponseShape {
   );
 }
 
+
 // Map internal codes → HTTP status
 const httpStatusMap: Record<string, number> = {
-  OK: HttpStatus.OK,
+  OK: HttpStatus.OK, //200
   SUCCESS_EMPTY: HttpStatus.OK, // Map this to 200 so the frontend gets an empty array gracefully
   CREATED: HttpStatus.CREATED,
   ACCEPTED: HttpStatus.ACCEPTED,
@@ -58,11 +59,12 @@ const httpStatusMap: Record<string, number> = {
   ALREADY_EXISTS: HttpStatus.CONFLICT,
   CONFLICT: HttpStatus.CONFLICT,
   
+  // --- Invitation Status ---
+  INVITATION_SENT: HttpStatus.CREATED, // 201 - Add this!
   
   // --- Rate Limiting ---
   TOO_MANY_REQUESTS: HttpStatus.TOO_MANY_REQUESTS, // 429
   
-
   // --- Payment / Premium Branch ---
   PAYMENT_REQUIRED: HttpStatus.PAYMENT_REQUIRED, // 402
   PAYMENT_SERVICE_OFFLINE: HttpStatus.OK, 

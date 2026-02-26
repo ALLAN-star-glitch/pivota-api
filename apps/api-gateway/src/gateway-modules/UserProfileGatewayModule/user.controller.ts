@@ -8,18 +8,25 @@ import {
   UseGuards,
   Req,
   Patch,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import {
   AuthUserDto,
   BaseResponseDto,
+  ContractorProfileResponseDto,
+  OnboardIndividualProviderRequestDto,
+  OnboardProviderGrpcRequestDto,
+  UpdateAdminProfileRequestDto,
   UpdateFullUserProfileDto,
+  UpdateOwnProfileRequestDto,
   UserProfileResponseDto,
-  UserResponseDto,
+  UserResponseDto, 
   VerifyOtpResponseDataDto,
 } from '@pivota-api/dtos';
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
-import {
+import { 
   ApiTags,
   ApiOperation,
   ApiResponse,
@@ -27,6 +34,8 @@ import {
   ApiExtraModels,
   ApiParam,
   getSchemaPath,
+  ApiBody,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { JwtRequest } from '@pivota-api/interfaces';
 
@@ -35,16 +44,24 @@ import { Permissions } from '../../decorators/permissions.decorator';
 import { RolesGuard } from '../../guards/role.guard';
 import { SubscriptionGuard } from '../../guards/subscription.guard';
 import { SetModule } from '../../decorators/set-module.decorator';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { StorageService } from '@pivota-api/shared-storage';
+import { imageFileFilter } from '@pivota-api/filters';
 
 @ApiTags('UserProfile Module - ((Profile-Service) - MICROSERVICE)')
-@ApiBearerAuth()
+@ApiBearerAuth() 
 // Register all DTOs so Swagger can reference them via getSchemaPath
 @ApiExtraModels(
   BaseResponseDto, 
   UserResponseDto, 
   AuthUserDto, 
   UserProfileResponseDto, 
-  VerifyOtpResponseDataDto
+  VerifyOtpResponseDataDto,
+  UpdateOwnProfileRequestDto,
+  UpdateAdminProfileRequestDto,
+  UpdateFullUserProfileDto,
+  OnboardIndividualProviderRequestDto,
+  ContractorProfileResponseDto
 )
 @SetModule('profile')
 @Controller('users-profile-module')
@@ -52,7 +69,7 @@ import { SetModule } from '../../decorators/set-module.decorator';
 export class UserController {
   private readonly logger = new Logger(UserController.name);
 
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService, private readonly storageService: StorageService) {}
 
   /**
    *  Get Current Authenticated User Profile
@@ -151,46 +168,184 @@ export class UserController {
 
  
 
-  /**
-   * Profile Update
-   */
-  @Permissions('profile.update.own', 'profile.update.any')
-  @Version('1')
-  @Patch('users/profile/update')
-  @ApiOperation({ 
-    summary: 'Update profile metadata',
-    description: 'Updates names, bio, gender, and profile images. Admins can update any user by providing a userUuid.' 
-  })
-  @ApiResponse({
-    status: 200,
+ // ===========================================================
+  // Core Profile Update Logic (Helper)
+  // ===========================================================
+  private async executeProfileUpdate(
+    dto: UpdateFullUserProfileDto,
+    file?: Express.Multer.File,
+  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    let profileImageUrl = dto.profileImage;
+    let newlyUploadedUrl: string | null = null;
+
+    // 1. Handle File Upload if provided
+    if (file) {
+      const storagePath = `profiles/${dto.userUuid}`;
+      newlyUploadedUrl = await this.userService.uploadToStorage(
+        file,
+        storagePath,
+        'pivota-public'
+      );
+      profileImageUrl = newlyUploadedUrl;
+    }
+
+    try {
+      // 2. Prepare and send DTO to Microservice (Using the internal gRPC DTO)
+      const sanitizedDto: UpdateFullUserProfileDto = { 
+        ...dto, 
+        profileImage: profileImageUrl 
+      };
+      
+      const response = await this.userService.updateProfile(sanitizedDto);
+
+      // 3. Rollback storage if microservice returns failure
+      if (!response.success && newlyUploadedUrl) {
+        this.logger.warn(`Profile update failed: ${response.message}. Cleaning up storage...`);
+        await this.userService.deleteFromStorage([newlyUploadedUrl], 'pivota-public');
+        return response;
+      }
+
+      return response;
+    } catch (error) {
+      // 4. Rollback storage on critical crash (gRPC timeout, etc.)
+      if (newlyUploadedUrl) {
+        this.logger.error(`Critical error during profile update. Rolling back storage.`);
+        await this.userService.deleteFromStorage([newlyUploadedUrl], 'pivota-public');
+      }
+      throw error;
+    }
+  }
+
+
+  // ===========================================================
+  // UPDATE OWN PROFILE
+  // ===========================================================
+  @Patch('users/profile/update/me')
+  @Permissions('houses.create.own')
+  @UseInterceptors(FileInterceptor('profileImageFile', {
+    fileFilter: imageFileFilter,
+    limits: { fileSize: 2 * 1024 * 1024 }
+  }))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Update your own profile details and upload an optional avatar image.',
     schema: {
       allOf: [
-        { $ref: getSchemaPath(BaseResponseDto) },
-        { properties: { data: { $ref: getSchemaPath(UserProfileResponseDto) } } },
+        { $ref: getSchemaPath(UpdateOwnProfileRequestDto) },
+        {
+          type: 'object',
+          properties: {
+            profileImageFile: { 
+              type: 'string', 
+              format: 'binary',
+              description: 'Profile picture (JPEG/PNG, max 2MB)'
+            },
+          },
+        },
       ],
     },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden - Attempted to update another user without administrative privileges.' })
-  async updateProfile(
-    @Body() dto: UpdateFullUserProfileDto,
+  @ApiOperation({ summary: 'Update own profile metadata and image' })
+  async updateOwn(
+    @Body() dto: UpdateOwnProfileRequestDto,
     @Req() req: JwtRequest,
+    @UploadedFile() file?: Express.Multer.File,
   ): Promise<BaseResponseDto<UserProfileResponseDto>> {
     const requesterUuid = req.user.userUuid;
-    const requesterRole = req.user.role;
-    const targetUserUuid = dto.userUuid || requesterUuid;
+    
+    // Convert to the internal gRPC DTO type
+    const internalDto: UpdateFullUserProfileDto = { 
+      ...dto, 
+      userUuid: requesterUuid 
+    };
+    
+    return await this.executeProfileUpdate(internalDto, file);
+  }
 
-    if (targetUserUuid !== requesterUuid) {
-      const isAdmin = ['SuperAdmin', 'SystemAdmin'].includes(requesterRole);
-      if (!isAdmin) {
-        this.logger.warn(`🚫 Unauthorized update attempt by ${requesterUuid}`);
-        throw BaseResponseDto.fail('Forbidden - Insufficient permissions.', 'FORBIDDEN');
-      }
-    }
-  
+  // ===========================================================
+  // UPDATE ANY PROFILE (ADMIN)
+  // ===========================================================
+  @Patch('admin/users/profile/:userUuid/update')
+  @Permissions('houses.create.any')
+  @UseInterceptors(FileInterceptor('profileImageFile', {
+    fileFilter: imageFileFilter,
+    limits: { fileSize: 2 * 1024 * 1024 }
+  }))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Admin: Update a specific user profile and image.',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(UpdateAdminProfileRequestDto) },
+        {
+          type: 'object',
+          properties: {
+            profileImageFile: { 
+              type: 'string', 
+              format: 'binary',
+              description: 'Profile picture (JPEG/PNG, max 2MB)'
+            },
+          },
+        },
+      ],
+    },
+  })
+  @ApiOperation({ summary: 'Admin: Update any user profile' })
+  @ApiParam({ name: 'userUuid', description: 'The UUID of the user to update' })
+  async updateAny(
+    @Param('userUuid') userUuid: string,
+    @Body() dto: UpdateAdminProfileRequestDto,
+    @Req() req: JwtRequest,
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`👮 Admin ${req.user.userUuid} updating profile for ${userUuid}`);
+    
+    // Ensure the ID from the URL param takes precedence
+    const internalDto: UpdateFullUserProfileDto = { 
+      ...dto, 
+      userUuid 
+    };
+    
+    return await this.executeProfileUpdate(internalDto, file);
+  }
 
-    const sanitizedDto = { ...dto, userUuid: targetUserUuid };
-    const response = await this.userService.updateProfile(sanitizedDto);
+  /**
+   * ONBOARD INDIVIDUAL AS SERVICE PROVIDER
+   * This is the endpoint called by your "Become a Provider" Wizard.
+   */
+  @Version('1')
+  @Patch('onboard-individual-provider')
+  @ApiOperation({ 
+    summary: 'Activate Individual Service Provider profile', 
+    description: 'Converts the authenticated individual account into a searchable Service Provider/Contractor.' 
+  })
+  @ApiBody({ type: OnboardIndividualProviderRequestDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Contractor profile activated successfully.',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BaseResponseDto) },
+        { properties: { data: { $ref: getSchemaPath(ContractorProfileResponseDto) } } },
+      ],
+    }, 
+  })
+  async onboardIndividualProvider(
+    @Body() dto: OnboardIndividualProviderRequestDto,
+    @Req() req: JwtRequest
+  ): Promise<BaseResponseDto<ContractorProfileResponseDto>> {
+    const userUuid = req.user.userUuid;
+    
+    // Map the HTTP Body + the JWT User ID to the gRPC DTO
+    const grpcDto: OnboardProviderGrpcRequestDto = {
+      ...dto,
+      userUuid
+    };
+    
+
+    const response = await this.userService.onboardIndividualProvider(grpcDto);
     if (!response.success) throw response;
     return response;
   }
+
 }

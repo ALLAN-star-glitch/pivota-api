@@ -17,6 +17,8 @@ import {
   GetAdminHousingFilterDto, // Added missing import
 } from '@pivota-api/dtos';
 
+import { StorageService } from '@pivota-api/shared-storage';
+
 // Updated interface to include Admin-specific gRPC calls
 interface HousingServiceGrpc {
   CreateHouseListing(data: CreateHouseListingGrpcRequestDto): Observable<BaseResponseDto<HouseListingCreateResponseDto>>;
@@ -43,8 +45,10 @@ export class HousingGatewayService {
   constructor(
     @Inject('HOUSING_PACKAGE') 
     private readonly grpcClient: ClientGrpc,
+    private readonly storage: StorageService,
   ) {
     this.grpcService = this.grpcClient.getService<HousingServiceGrpc>('HousingService');
+
   }
 
   // ===========================================================
@@ -130,5 +134,54 @@ export class HousingGatewayService {
       res?.message || `Internal error in ${methodName}`, 
       res?.code || 'INTERNAL_ERROR'
     );
+  }
+
+  /**
+   * Uploads multiple files. 
+   * Defaults to 'pivota-public' for general housing images.
+   */
+  async uploadMultipleToStorage(
+    files: Express.Multer.File[], 
+    folder: string, 
+    bucketName = 'pivota-public'
+  ): Promise<string[]> {
+    if (!files || files.length === 0) return [];
+
+    return Promise.all(
+      files.map(file => this.storage.uploadFile(file, folder, bucketName))
+    );
+  }
+
+  /**
+   * Single file upload helper
+   */
+  async uploadToStorage(
+    file: Express.Multer.File, 
+    folder: string, 
+    bucketName = 'pivota-public'
+  ): Promise<string> {
+    return this.storage.uploadFile(file, folder, bucketName);
+  }
+
+  /**
+   * Cleans up files from storage.
+   * Use this when a listing creation fails after images have already been uploaded.
+   * @param urls Array of full public URLs or internal paths to delete.
+   * @param bucketName Defaults to 'pivota-public'.
+   */
+  async deleteFromStorage(
+    urls: string[], 
+    bucketName = 'pivota-public'
+  ): Promise<void> {
+    if (!urls || urls.length === 0) return;
+
+    try {
+      this.logger.warn(`Initiating storage cleanup for ${urls.length} files in ${bucketName}`);
+      await this.storage.deleteFiles(urls, bucketName);
+    } catch (error) {
+      this.logger.error(
+        `Failed to clean up orphaned files: ${error instanceof Error ? error.message : 'Unknown Error'}`
+      );
+    }
   }
 }

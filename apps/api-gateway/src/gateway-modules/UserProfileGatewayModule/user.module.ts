@@ -4,6 +4,7 @@ import { UserController } from './user.controller';
 import { AUTH_PROTO_PATH, PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { UserService } from './user.service';
 import { SubscriptionsGatewayModule } from '../SubscriptionsGatewayModule/subscriptions-gateway.module';
+import { StorageService } from '@pivota-api/shared-storage';
 
 @Module({
   imports: [
@@ -30,7 +31,7 @@ import { SubscriptionsGatewayModule } from '../SubscriptionsGatewayModule/subscr
     ]),
   ],
   controllers: [UserController],
-  providers: [UserService],
+  providers: [UserService, StorageService],
   exports: [UserService],
 })
 export class UserModule {

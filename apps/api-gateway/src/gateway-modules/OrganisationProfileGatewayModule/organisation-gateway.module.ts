@@ -3,9 +3,11 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { OrganisationGatewayService } from './organisation-gateway.service';
 import { OrganisationGatewayController } from './organisation-gateway.controller';
 import { PROFILE_PROTO_PATH } from '@pivota-api/protos';
+import { SubscriptionsGatewayModule } from '../SubscriptionsGatewayModule/subscriptions-gateway.module';
 
 @Module({
   imports: [
+    SubscriptionsGatewayModule,
     ClientsModule.register([
       {
         name: 'PROFILE_PACKAGE', // Must match the @Inject('PROFILE_PACKAGE') in your service

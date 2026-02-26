@@ -6,6 +6,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { RBAC_PROTO_PATH, PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { HttpModule } from '@nestjs/axios';
+import { InvitationEventController } from './invitation-event.controller';
 @Module({
   imports: [
     HttpModule.register({
@@ -54,7 +55,7 @@ import { HttpModule } from '@nestjs/axios';
     ]),
   ],
   providers: [AuthService],
-  controllers: [AuthController],
+  controllers: [AuthController, InvitationEventController],
   exports: [AuthService],
 })
 export class AuthModule {

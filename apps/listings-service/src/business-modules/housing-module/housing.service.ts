@@ -95,6 +95,7 @@ export class HousingService {
           title: dto.title,
           description: dto.description,
           categoryId: dto.categoryId,
+          subCategoryId: dto.subCategoryId,
           listingType: dto.listingType,
           price: dto.price,
           currency: dto.currency ?? 'KES',
@@ -124,7 +125,7 @@ export class HousingService {
           status: created.status,
           createdAt: created.createdAt.toISOString(),
         },
-        'Created successfully',
+        'House Posted successfully',
         'CREATED',
       );
     } catch (error) {
@@ -132,6 +133,7 @@ export class HousingService {
       return BaseResponseDto.fail('Creation failed', 'ERROR');
     }
   }
+
 
   // ======================================================
   // READ METHODS
@@ -273,15 +275,32 @@ export class HousingService {
 
   async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
   try {
-    // Define the 'where' object using the formal Prisma type instead of 'any'
     const where: Prisma.HouseListingWhereInput = {
       status: 'AVAILABLE',
     };
 
+    // 1. Basic Filters
     if (dto.city) {
       where.locationCity = dto.city;
     }
 
+    if (dto.listingType) {
+      where.listingType = dto.listingType;
+    }
+    
+
+    // 2. Hierarchical Category Filtering
+    // If a user clicks a main category in the nav, filter by categoryId
+    if (dto.categoryId) {
+      where.categoryId = dto.categoryId;
+    }
+
+    // If a user drills down into a subcategory, filter by subCategoryId
+    if (dto.subCategoryId) {
+      where.subCategoryId = dto.subCategoryId;
+    }
+
+    // 3. Price Range
     if (dto.minPrice !== undefined || dto.maxPrice !== undefined) {
       where.price = {
         ...(dto.minPrice !== undefined && { gte: dto.minPrice }),
@@ -289,20 +308,22 @@ export class HousingService {
       };
     }
 
-    if (dto.categoryId) {
-      where.categoryId = dto.categoryId;
+    // 4. Property Specifics
+    if (dto.bedrooms !== undefined) {
+      where.bedrooms = { gte: dto.bedrooms };
     }
 
-    const listings = (await this.prisma.houseListing.findMany({
+    const listings = await this.prisma.houseListing.findMany({
       where,
       include: { 
         images: true, 
-        category: true 
+        category: true,
+        subCategory: true // Included to support the shared nav/breadhousing logic
       },
       orderBy: { createdAt: 'desc' },
       take: dto.limit ?? 20,
       skip: dto.offset ?? 0,
-    })) as unknown as HouseListingWithRelations[];
+    });
 
     return BaseResponseDto.ok(listings.map((l) => this.mapToDto(l)));
   } catch (error) {

@@ -85,7 +85,7 @@ export class RbacGatewayController {
   ): Promise<BaseResponseDto<RoleResponseDto>> {
     return this.rbacGatewayService.updateRole({ ...body, id });
   }
-
+word
   // =========================================
   // CREATE PERMISSION
   // =========================================

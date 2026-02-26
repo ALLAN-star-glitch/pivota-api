@@ -100,3 +100,32 @@ export class UserProfileResponseDto extends UserSignupDataDto {
   @ApiProperty({ example: '2026-01-06T12:00:00Z' })
   updatedAt!: string;
 }
+
+// export class ContractorProfileResponseDto {
+//   @ApiProperty()
+//   uuid!: string;
+
+//   @ApiProperty()
+//   accountId!: string;
+
+//   @ApiProperty()
+//   specialties!: string[];
+
+//   @ApiProperty()
+//   serviceAreas!: string[];
+
+//   @ApiProperty()
+//   yearsExperience!: number;
+
+//   @ApiProperty()
+//   isVerified!: boolean;
+
+//   @ApiProperty()
+//   averageRating!: number;
+
+//   @ApiProperty()
+//   totalReviews!: number;
+
+//   @ApiProperty()
+//   createdAt!: string;
+// }

@@ -9,7 +9,8 @@ import {
   IsUrl,
   IsPhoneNumber,
   Length,
-  IsIn
+  IsIn,
+  IsArray,
 } from 'class-validator';
 
 
@@ -158,7 +159,7 @@ export class CreateOrganisationRequestDto {
   })
   @IsEmail()
   @IsNotEmpty()
-  officialEmail!: string; // 👈 Added
+  officialEmail!: string;
 
   @ApiProperty({
     description: 'General company contact number',
@@ -166,7 +167,7 @@ export class CreateOrganisationRequestDto {
   })
   @IsNotEmpty()
   @IsPhoneNumber(undefined)
-  officialPhone!: string; // 👈 Added
+  officialPhone!: string;
 
   @ApiProperty({
     description: 'Physical location of the primary business office',
@@ -174,7 +175,7 @@ export class CreateOrganisationRequestDto {
   })
   @IsString()
   @IsNotEmpty()
-  physicalAddress!: string; // 👈 Added
+  physicalAddress!: string;
 
   // --- Admin Mapping ---
   @ApiProperty({
@@ -199,7 +200,7 @@ export class CreateOrganisationRequestDto {
   })
   @IsPhoneNumber(undefined)
   @IsNotEmpty()
-  phone!: string; // 👈 Added to populate User.phone
+  phone!: string;
 
   @ApiProperty({ description: 'Admin first name', example: 'John' })
   @IsString()
@@ -225,7 +226,7 @@ export class CreateOrganisationRequestDto {
     example: 'free-plan',
   })
   @IsString()
-  planSlug!: string; // mandatory here
+  planSlug!: string;
 }
 
 /* ======================================================
@@ -276,6 +277,7 @@ export class UpdateOrgProfileRequestDto {
 
 /* ======================================================
    4. ADD ORGANISATION MEMBER REQUEST (Direct Link)
+   - Used for directly adding an existing user to an organization
 ====================================================== */
 export class AddOrgMemberRequestDto {
   @ApiProperty({
@@ -293,29 +295,14 @@ export class AddOrgMemberRequestDto {
   @IsUUID()
   @IsNotEmpty()
   userUuid!: string;
-
-  @ApiProperty({
-    description: 'Role name to be assigned to the new member',
-    example: 'FinanceManager',
-  })
-  @IsString()
-  @IsNotEmpty()
-  role!: string;
 }
 
 /* ======================================================
    5. INVITE MEMBER REQUEST (Email-Based Invitation)
-   - Used by the Gateway to trigger the invitation flow.
+   - Public DTO used by the Gateway API
+   - Admin does NOT specify role - system assigns 'GeneralUser' internally
 ====================================================== */
 export class InviteMemberRequestDto {
-  @ApiProperty({
-    description: 'The organization the user is being invited to',
-    example: 'd9b2b1c0-1234-4a5b-8c9d-0123456789ab',
-  })
-  @IsUUID()
-  @IsNotEmpty()
-  orgUuid!: string;
-
   @ApiProperty({
     description: 'The email address of the person being invited',
     example: 'colleague@example.com',
@@ -324,48 +311,41 @@ export class InviteMemberRequestDto {
   @IsNotEmpty()
   email!: string;
 
-  @ApiProperty({
-    description: 'The role they will assume upon joining',
-    example: 'Member',
+  @ApiPropertyOptional({
+    description: 'Optional personal message to include in the invitation email',
+    example: 'Please join our team as we expand!',
   })
-  @IsString()
-  @IsNotEmpty()
-  roleName!: string;
-
-  // This is usually extracted from the JWT in the Controller, 
-  // but included here for gRPC internal transport.
-  @IsUUID()
   @IsOptional()
-  invitedByUuid?: string;
+  @IsString()
+  message?: string;
 }
 
 /* ======================================================
-   6. MEMBER INVITED EVENT DTO (Notification Service)
-   - Used for the 'member.invited' event on the Event Bus.
+   6. INVITE MEMBER GRPC REQUEST (Profile Service)
+   - Internal gRPC DTO used between Gateway and Profile Service
+   - Extends the public DTO and adds fields extracted from JWT
 ====================================================== */
-export class MemberInviteEventDto {
-  @IsEmail()
-  email!: string;
-
-  @IsString()
-  orgName!: string;
-
-  @IsString()
-  role!: string;
-
-  @IsString()
-  inviteToken!: string;
-
-  @IsString()
-  joinUrl!: string;
-
+export class InviteMemberGrpcRequestDto extends InviteMemberRequestDto {
+  @ApiProperty({
+    description: 'UUID of the organization (extracted from JWT context)',
+    example: 'd9b2b1c0-1234-4a5b-8c9d-0123456789ab',
+  })
   @IsUUID()
-  invitedByUuid!: string;
-}
+  @IsNotEmpty()
+  organizationUuid!: string;
 
+  @ApiProperty({
+    description: 'UUID of the admin sending the invitation (extracted from JWT)',
+    example: 'a7164466-1234-4a5b-8c9d-0123456789ab',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  invitedByUserUuid!: string;
+}
 
 /* ======================================================
    7. ACCEPT INVITATION REQUEST
+   - Public DTO used when a user clicks the invitation link
 ====================================================== */
 export class AcceptInvitationRequestDto {
   @ApiProperty({
@@ -374,6 +354,264 @@ export class AcceptInvitationRequestDto {
   })
   @IsString()
   @IsNotEmpty()
-  // If you use UUIDs for tokens, you can use @IsUUID() here
   token!: string;
+
+  @ApiPropertyOptional({
+    description: 'First name (required for new users)',
+    example: 'Jane',
+  })
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Last name (required for new users)',
+    example: 'Smith',
+  })
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Phone number (required for new users)',
+    example: '+254712345678',
+  })
+  @IsOptional()
+  @IsPhoneNumber(undefined)
+  phone?: string;
+}
+
+/* ======================================================
+   8. ACCEPT INVITATION GRPC REQUEST (Profile Service)
+   - Internal gRPC DTO for accepting invitations
+====================================================== */
+export class AcceptInvitationGrpcRequestDto extends AcceptInvitationRequestDto {
+  // No additional fields needed - token and user details are sufficient
+}
+
+/* ======================================================
+   9. VERIFY INVITATION REQUEST
+   - Used to check if an invitation token is valid
+====================================================== */
+export class VerifyInvitationRequestDto {
+  @ApiProperty({
+    description: 'The invitation token to verify',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @IsString()
+  @IsNotEmpty()
+  token!: string;
+}
+
+/* ======================================================
+   10. RESEND INVITATION REQUEST
+    - Public DTO for resending an invitation
+====================================================== */
+export class ResendInvitationRequestDto {
+  @ApiProperty({
+    description: 'The ID of the invitation to resend',
+    example: 'inv_123456',
+  })
+  @IsString()
+  @IsNotEmpty()
+  invitationId!: string;
+}
+
+/* ======================================================
+   11. RESEND INVITATION GRPC REQUEST (Profile Service)
+    - Internal gRPC DTO for resending invitations
+    - Extends public DTO and adds admin context from JWT
+====================================================== */
+export class ResendInvitationGrpcRequestDto extends ResendInvitationRequestDto {
+  @ApiProperty({
+    description: 'UUID of the admin requesting the resend (extracted from JWT)',
+    example: 'a7164466-1234-4a5b-8c9d-0123456789ab',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  requestedByUserUuid!: string;
+
+  @ApiProperty({
+    description: 'UUID of the organization (extracted from JWT context)',
+    example: 'd9b2b1c0-1234-4a5b-8c9d-0123456789ab',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  organizationUuid!: string;
+}
+
+/* ======================================================
+   12. CANCEL INVITATION REQUEST
+    - Public DTO for cancelling an invitation
+====================================================== */
+export class CancelInvitationRequestDto {
+  @ApiProperty({
+    description: 'The ID of the invitation to cancel',
+    example: 'inv_123456',
+  })
+  @IsString()
+  @IsNotEmpty()
+  invitationId!: string;
+}
+
+/* ======================================================
+   13. CANCEL INVITATION GRPC REQUEST (Profile Service)
+    - Internal gRPC DTO for cancelling invitations
+====================================================== */
+export class CancelInvitationGrpcRequestDto extends CancelInvitationRequestDto {
+  @ApiProperty({
+    description: 'UUID of the admin requesting the cancellation (extracted from JWT)',
+    example: 'a7164466-1234-4a5b-8c9d-0123456789ab',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  requestedByUserUuid!: string;
+
+  @ApiProperty({
+    description: 'UUID of the organization (extracted from JWT context)',
+    example: 'd9b2b1c0-1234-4a5b-8c9d-0123456789ab',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  organizationUuid!: string;
+}
+
+/* ======================================================
+   14. GET ORGANIZATION INVITATIONS REQUEST
+    - Used to fetch pending invitations for an organization
+====================================================== */
+export class GetOrganizationInvitationsRequestDto {
+  @ApiProperty({
+    description: 'UUID of the organization',
+    example: 'd9b2b1c0-1234-4a5b-8c9d-0123456789ab',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  organizationUuid!: string;
+
+  @ApiProperty({
+    description: 'UUID of the admin requesting (for permission check)',
+    example: 'a7164466-1234-4a5b-8c9d-0123456789ab',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  requestingUserUuid!: string;
+}
+
+/* ======================================================
+   15. CHECK INVITATION STATUS REQUEST
+    - Used to quickly check if an email has a pending invitation
+====================================================== */
+export class CheckInvitationStatusRequestDto {
+  @ApiProperty({
+    description: 'Email to check',
+    example: 'user@example.com',
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  email!: string;
+
+  @ApiProperty({
+    description: 'UUID of the organization',
+    example: 'd9b2b1c0-1234-4a5b-8c9d-0123456789ab',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  organizationUuid!: string;
+}
+
+/* ======================================================
+   16. ORGANIZATION SERVICE PROVIDER ONBOARDING
+====================================================== */
+
+/**
+ * Public Gateway DTO: Used by the Organization Admin.
+ * orgUuid is usually pulled from the context or parameters.
+ */
+export class OnboardOrganizationProviderRequestDto {
+  @ApiProperty({ 
+    description: 'List of professional services the organization offers',
+    example: ['Commercial Cleaning', 'Industrial Security', 'Waste Management'] 
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  specialties!: string[];
+
+  @ApiProperty({ 
+    description: 'Regions or cities where the organization operates',
+    example: ['Nairobi', 'Mombasa', 'Kisumu'] 
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  serviceAreas!: string[];
+}
+
+/**
+ * Internal / gRPC DTO: The command sent to OrganisationService.
+ */
+export class OnboardOrgProviderGrpcRequestDto extends OnboardOrganizationProviderRequestDto {
+  @ApiProperty({ 
+    description: 'The unique identifier of the organization becoming a provider' 
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  orgUuid!: string;
+}
+
+/* ======================================================
+   SETUP PASSWORD REQUEST DTO
+   - For users who accepted an invitation to set their password
+====================================================== */
+export class SetupPasswordRequestDto {
+  @ApiProperty({
+    description: 'The password setup token sent via email',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @IsString()
+  @IsNotEmpty()
+  token!: string;
+
+  @ApiProperty({
+    description: 'New password for the account',
+    example: 'StrongPass@123',
+    minLength: 8,
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  password!: string;
+
+  @ApiProperty({
+    description: 'Confirm password',
+    example: 'StrongPass@123',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  confirmPassword!: string;
+}
+
+/* ======================================================
+   CHECK PASSWORD SETUP STATUS RESPONSE DTO
+====================================================== */
+export class CheckPasswordSetupStatusResponseDto {
+  @ApiProperty({
+    description: 'Whether the token is valid',
+    example: true,
+  })
+  isValid!: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Email associated with the token',
+    example: 'user@example.com',
+  })
+  email?: string;
+
+  @ApiPropertyOptional({
+    description: 'When the token expires',
+    example: '2026-03-01T12:00:00Z',
+  })
+  expiresAt?: string;
 }
