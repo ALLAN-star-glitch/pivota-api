@@ -17,10 +17,9 @@ import {
   ArchiveHouseListingsGrpcRequestDto,
   HouseListingCreateResponseDto,
 } from '@pivota-api/dtos';
-import { Prisma } from '../../../generated/prisma/client';
 
 /**
- * Internal interface to ensure type safety when mapping Prisma results 
+ * Internal interface to ensure type safety when mapping Prisma results
  * with relations to our DTOs.
  */
 interface HouseListingWithRelations {
@@ -84,7 +83,7 @@ export class HousingService {
       });
 
       if (categoryExists === 0)
-        return BaseResponseDto.fail('Invalid category for Housing pillar', 'CATEGORY_NOT_FOUND'); 
+        return BaseResponseDto.fail('Invalid category for Housing pillar', 'CATEGORY_NOT_FOUND');
 
       const created = await this.prisma.houseListing.create({
         data: {
@@ -140,7 +139,7 @@ export class HousingService {
   async getAdminListings(dto: GetAdminHousingFilterDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
   try {
     // 1. Build the query object with explicit types
-    const where: Prisma.HouseListingWhereInput = {};
+    const where: any = {};
 
     if (dto.status) {
       where.status = dto.status;
@@ -156,9 +155,9 @@ export class HousingService {
     // 2. Execute query
     const listings = (await this.prisma.houseListing.findMany({
       where,
-      include: { 
-        images: true, 
-        category: true 
+      include: {
+        images: true,
+        category: true
       },
       orderBy: { createdAt: 'desc' },
     })) as unknown as HouseListingWithRelations[];
@@ -167,34 +166,32 @@ export class HousingService {
     if (!listings || listings.length === 0) {
       const filterDesc = dto.accountId ? `for account ${dto.accountId}` : 'globally';
       this.logger.log(`ℹ️ Admin search returned zero results ${filterDesc}`);
-      
+
       return BaseResponseDto.ok([], 'No listings match the provided filters', 'SUCCESS_EMPTY');
     }
 
     // 4. Successful mapping
     this.logger.log(`✅ Admin retrieved ${listings.length} listings`);
     return BaseResponseDto.ok(
-      listings.map((l) => this.mapToDto(l)), 
-      'Admin listings fetched successfully', 
+      listings.map((l) => this.mapToDto(l)),
+      'Admin listings fetched successfully',
       'OK'
     );
 
-  } catch (error: unknown) {
+  } catch (error: any) {
     // 5. Advanced Error Logging
-    const errorMessage = error instanceof Error ? error.message : 'Unknown database error';
-    
+    const errorMessage = error.message || 'Unknown database error';
+
     // Check for specific Prisma errors (e.g., invalid UUID format in accountId)
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2023') { // Inconsistent column data (often bad UUID)
-        this.logger.warn(`⚠️ Admin provided invalid UUID format: ${dto.accountId}`);
-        return BaseResponseDto.fail('Invalid Account ID format provided', 'BAD_REQUEST');
-      }
+    if (error.code === 'P2023') { // Inconsistent column data (often bad UUID)
+      this.logger.warn(`⚠️ Admin provided invalid UUID format: ${dto.accountId}`);
+      return BaseResponseDto.fail('Invalid Account ID format provided', 'BAD_REQUEST');
     }
 
-    this.logger.error(`❌ Admin Fetch Failure: ${errorMessage}`, error instanceof Error ? error.stack : undefined);
-    
+    this.logger.error(`❌ Admin Fetch Failure: ${errorMessage}`, error.stack);
+
     return BaseResponseDto.fail(
-      'System error occurred while fetching admin records', 
+      'System error occurred while fetching admin records',
       'INTERNAL_ERROR'
     );
   }
@@ -210,16 +207,16 @@ export class HousingService {
       return BaseResponseDto.fail('Owner ID is required to fetch listings', 'BAD_REQUEST');
     }
 
-    
+
     // 2. Execute Query
     const listings = await this.prisma.houseListing.findMany({
       where: {
         accountId: ownerId,
         ...(status && { status }),
       },
-      include: { 
-        images: true, 
-        category: true 
+      include: {
+        images: true,
+        category: true
       },
       orderBy: { createdAt: 'desc' },
     }) as unknown as HouseListingWithRelations[];
@@ -232,14 +229,14 @@ export class HousingService {
     }
 
     this.logger.debug(`✅ Successfully fetched ${listings.length} listings for owner ${ownerId}`);
-    
+
     return BaseResponseDto.ok(
-      listings.map((l) => this.mapToDto(l)), 
-      'Listings retrieved successfully', 
+      listings.map((l) => this.mapToDto(l)),
+      'Listings retrieved successfully',
       'OK'
     );
 
-  } catch (error) {
+  } catch (error: any) {
     // 4. Categorize Errors
     this.logger.error(`❌ Database Error while fetching listings for ${ownerId}: ${error.message}`, error.stack);
 
@@ -249,7 +246,7 @@ export class HousingService {
     }
 
     return BaseResponseDto.fail(
-      'An unexpected error occurred while retrieving your listings', 
+      'An unexpected error occurred while retrieving your listings',
       'INTERNAL_SERVER_ERROR'
     );
   }
@@ -274,7 +271,7 @@ export class HousingService {
   async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
   try {
     // Define the 'where' object using the formal Prisma type instead of 'any'
-    const where: Prisma.HouseListingWhereInput = {
+    const where: any = {
       status: 'AVAILABLE',
     };
 
@@ -295,9 +292,9 @@ export class HousingService {
 
     const listings = (await this.prisma.houseListing.findMany({
       where,
-      include: { 
-        images: true, 
-        category: true 
+      include: {
+        images: true,
+        category: true
       },
       orderBy: { createdAt: 'desc' },
       take: dto.limit ?? 20,
@@ -324,51 +321,71 @@ export class HousingService {
   }
 
   private async executeUpdate(dto: UpdateHouseListingGrpcRequestDto, isAdmin: boolean): Promise<BaseResponseDto<HouseListingResponseDto>> {
-  try {
-    const listing = await this.prisma.houseListing.findUnique({
-      where: { id: dto.listingId },
-    });
+    try {
+      // IMPORTANT: Explicitly pull out all identifiers to prevent them from being in `updateFields`
+      const { listingId, callerId, userRole, accountId, ...updateFields } = dto;
 
-    if (!listing) return BaseResponseDto.fail('Listing not found', 'NOT_FOUND');
+      if (isAdmin) {
+          // Admin Flow: First, verify the listing exists.
+          const listing = await this.prisma.houseListing.findUnique({
+              where: { id: listingId },
+              select: { id: true } // Select only what's needed
+          });
 
-    if (!isAdmin && listing.creatorId !== dto.callerId)
-      return BaseResponseDto.fail('Unauthorized', 'UNAUTHORIZED');
+          if (!listing) {
+              return BaseResponseDto.fail('Listing not found', 'NOT_FOUND');
+          }
 
-    // Destructure to separate metadata from the actual update fields
-    const { listingId, callerId, userRole, ...updateFields } = dto;
+          // Admins can change any field, so we pass the DTO fields directly.
+          const updated = await this.prisma.houseListing.update({
+              where: { id: listingId },
+              data: updateFields,
+              include: { images: true, category: true },
+          }) as unknown as HouseListingWithRelations;
 
-    const updated = await this.prisma.houseListing.update({
-      where: { id: listingId },
-      data: updateFields, // Pass the remaining fields directly
-      include: { images: true, category: true },
-    }) as unknown as HouseListingWithRelations;
+          return BaseResponseDto.ok(this.mapToDto(updated), 'Admin update successful');
+      } else {
+          // User Flow: Perform an atomic update with ownership check.
+          const updated = await this.prisma.houseListing.update({
+              where: {
+                  id: listingId,
+                  creatorId: callerId // The caller must be the creator of the listing.
+              },
+              data: updateFields, // `updateFields` for a user does not contain sensitive fields.
+              include: { images: true, category: true },
+          }) as unknown as HouseListingWithRelations;
 
-    return BaseResponseDto.ok(this.mapToDto(updated));
-  } catch (error) {
-    return BaseResponseDto.fail('Update failed', 'ERROR');
+          return BaseResponseDto.ok(this.mapToDto(updated), 'Update successful');
+      }
+    } catch (error: any) {
+      if (error.code === 'P2025') {
+          this.logger.warn(`Update failed for listing ${dto.listingId}: Not found or unauthorized access by ${dto.callerId}.`);
+          return BaseResponseDto.fail('Listing not found or you are not authorized to perform this action', 'NOT_FOUND');
+      }
+
+      this.logger.error(`Update failed for listing ${dto.listingId}: ${error.message}`, error.stack);
+      return BaseResponseDto.fail('Update failed due to an internal error', 'ERROR');
+    }
   }
-}
 
   async updateListingStatus(dto: UpdateHouseListingStatusDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
     try {
-      const listing = await this.prisma.houseListing.findUnique({
-        where: { id: dto.id }, // Corrected property name from listingId to id
-      });
-
-      if (!listing) return BaseResponseDto.fail('Listing not found', 'NOT_FOUND');
-
-      // Ensure the owner (Account) is the one updating the status
-      if (listing.accountId !== dto.ownerId)
-        return BaseResponseDto.fail('Unauthorized to change status', 'UNAUTHORIZED');
-
       const updated = await this.prisma.houseListing.update({
-        where: { id: dto.id },
+        where: {
+          id: dto.id,
+          accountId: dto.ownerId, // Ensure the owner (Account) is the one updating the status
+        },
         data: { status: dto.status },
         include: { images: true, category: true },
       }) as unknown as HouseListingWithRelations;
 
       return BaseResponseDto.ok(this.mapToDto(updated));
-    } catch (error) {
+    } catch (error: any) {
+      if (error.code === 'P2025') {
+        this.logger.warn(`Status update failed for listing ${dto.id}: Not found or unauthorized by account ${dto.ownerId}.`);
+        return BaseResponseDto.fail('Listing not found or you are not authorized to change its status', 'NOT_FOUND');
+      }
+      this.logger.error(`Status update failed for listing ${dto.id}: ${error.message}`, error.stack);
       return BaseResponseDto.fail('Status update failed', 'ERROR');
     }
   }
@@ -398,21 +415,56 @@ export class HousingService {
 
   async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseDto<HouseViewingResponseDto>> {
     try {
-      const viewing = await this.prisma.houseViewing.create({
-        data: {
-          houseId: dto.houseId, // Corrected from listingId
-          viewerId: dto.targetViewerId || dto.callerId, // Corrected from requesterId
-          viewingDate: new Date(dto.viewingDate), // Corrected from scheduledDate
-          status: 'SCHEDULED',
-          notes: dto.notes || '',
-          bookedById: dto.callerId,
-        },
-      });
+      return await this.prisma.$transaction(async (tx) => {
+        // 1. Validate the House Listing
+        const listing = await tx.houseListing.findUnique({
+          where: { id: dto.houseId },
+          select: { status: true },
+        });
 
-      return BaseResponseDto.ok(viewing as unknown as HouseViewingResponseDto);
-    } catch (error) {
-      this.logger.error(`ScheduleViewing Error: ${error.message}`);
-      return BaseResponseDto.fail('Viewing scheduling failed', 'ERROR');
+        if (!listing) {
+          return BaseResponseDto.fail('The specified house listing does not exist.', 'NOT_FOUND');
+        }
+
+        if (listing.status !== 'AVAILABLE') {
+          return BaseResponseDto.fail(`This listing is currently ${listing.status} and not available for viewings.`, 'LISTING_NOT_AVAILABLE');
+        }
+
+        // Optional: Check for duplicate viewings for the same user and house
+        const viewerId = dto.targetViewerId || dto.callerId;
+        const existingViewing = await tx.houseViewing.findFirst({
+            where: {
+                houseId: dto.houseId,
+                viewerId: viewerId,
+            }
+        });
+
+        if (existingViewing) {
+            return BaseResponseDto.fail('You have already scheduled a viewing for this property.', 'ALREADY_SCHEDULED');
+        }
+
+        // 2. Create the Viewing record
+        const viewing = await tx.houseViewing.create({
+          data: {
+            houseId: dto.houseId,
+            viewerId: viewerId,
+            viewingDate: new Date(dto.viewingDate),
+            status: 'SCHEDULED',
+            notes: dto.notes || '',
+            bookedById: dto.callerId,
+          },
+        });
+
+        return BaseResponseDto.ok(viewing as unknown as HouseViewingResponseDto, 'Viewing scheduled successfully.');
+      });
+    } catch (error: any) {
+      // e.g., Foreign key constraint failed on houseId
+      if (error.code === 'P2003') {
+        this.logger.error(`ScheduleViewing FK Error: ${error.message}`);
+        return BaseResponseDto.fail('Invalid data provided for scheduling.', 'BAD_REQUEST');
+      }
+      this.logger.error(`ScheduleViewing Transaction Error: ${error.message}`, error.stack);
+      return BaseResponseDto.fail('An unexpected error occurred while scheduling the viewing.', 'ERROR');
     }
   }
 

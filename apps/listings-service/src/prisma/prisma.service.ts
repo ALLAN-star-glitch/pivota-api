@@ -8,7 +8,11 @@ import { withAccelerate } from '@prisma/extension-accelerate';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  [x: string]: any;
   private readonly logger = new Logger(PrismaService.name);
+  category: any;
+  houseListing: any;
+  houseViewing: any;
 
   constructor(private readonly configService: ConfigService) {
     super({
