@@ -101,31 +101,58 @@ export class UserProfileResponseDto extends UserSignupDataDto {
   updatedAt!: string;
 }
 
-// export class ContractorProfileResponseDto {
-//   @ApiProperty()
-//   uuid!: string;
+/* ======================================================
+   RESPONSE DTOs (Job Seeker)
+====================================================== */
 
-//   @ApiProperty()
-//   accountId!: string;
+/**
+ * Lean & Professional response for Job Seeker profiles.
+ * Optimized for UI rendering and recommender system verification.
+ */
+export class JobSeekerProfileResponseDto {
+  @ApiProperty({ example: 'cv_clv123abc' })
+  id!: string;
 
-//   @ApiProperty()
-//   specialties!: string[];
+  @ApiProperty({ 
+    example: 'Senior Full Stack Developer | NestJS & React',
+    description: 'The user’s professional branding statement'
+  })
+  headline?: string;
 
-//   @ApiProperty()
-//   serviceAreas!: string[];
+  @ApiProperty({ 
+    example: true, 
+    description: 'Visibility status for recruiters and recommender engines' 
+  })
+  isActivelySeeking!: boolean;
 
-//   @ApiProperty()
-//   yearsExperience!: number;
+  @ApiProperty({ 
+    example: ['NestJS', 'TypeScript', 'GraphQL'],
+    description: 'Verified skills used for matching'
+  })
+  skills!: string[];
 
-//   @ApiProperty()
-//   isVerified!: boolean;
+  @ApiProperty({ 
+    example: 'SENIOR',
+    description: 'The classified seniority level'
+  })
+  seniorityLevel?: string;
 
-//   @ApiProperty()
-//   averageRating!: number;
+  @ApiPropertyOptional({ 
+    example: 'https://storage.pivota.com/cvs/u123/my-resume.pdf',
+    description: 'Secure, time-limited access URL to the CV'
+  })
+  cvUrl?: string;
 
-//   @ApiProperty()
-//   totalReviews!: number;
+  @ApiPropertyOptional({ 
+    example: '2026-02-26T14:30:00.000Z',
+    description: 'Timestamp of the last CV document update'
+  })
+  cvLastUpdated?: Date;
 
-//   @ApiProperty()
-//   createdAt!: string;
-// }
+  @ApiProperty({ 
+    example: 85, 
+    description: 'Calculated profile strength for recommendations (0-100)' 
+  })
+  matchScoreWeight?: number;
+}
+

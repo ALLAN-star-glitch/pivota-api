@@ -57,6 +57,9 @@ service ProfileService {
   
   // CHECK INVITATION STATUS - Quick check for UI
   rpc CheckInvitationStatus(CheckInvitationStatusRequest) returns (CheckInvitationStatusResponse);
+
+  // JOB SEEKER PROFILE MANAGEMENT  
+  rpc UpdateJobSeekerProfile (UpdateJobSeekerRequest) returns (JobSeekerProfileResponse);
 }
 
 // ======================================================
@@ -244,7 +247,7 @@ message VerifyInvitationRequest {
   string token = 1;
 }
 
-// ✅ FIXED: Added standard wrapper
+// FIXED: Added standard wrapper
 message InvitationVerificationResponse {
   bool success = 1;
   string message = 2;
@@ -270,7 +273,7 @@ message AcceptInvitationRequest {
   optional string phone = 4;
 }
 
-// ✅ FIXED: Added standard wrapper
+//  FIXED: Added standard wrapper
 message AcceptInvitationResponse {
   bool success = 1;
   string message = 2;
@@ -304,7 +307,7 @@ message InvitationDetails {
   optional string message = 9;
 }
 
-// ✅ This one was already correct
+//  This one was already correct
 message InvitationListResponse {
   bool success = 1;
   string message = 2;
@@ -319,7 +322,7 @@ message ResendInvitationRequest {
   string organizationUuid = 3;
 }
 
-// ✅ Uses BaseResponse pattern (success/message/code)
+// Uses BaseResponse pattern (success/message/code)
 message ResendInvitationResponse {
   bool success = 1;
   string message = 2;
@@ -333,7 +336,7 @@ message CancelInvitationRequest {
   string organizationUuid = 3;
 }
 
-// ✅ Uses BaseResponse pattern (success/message/code)
+// Uses BaseResponse pattern (success/message/code)
 message CancelInvitationResponse {
   bool success = 1;
   string message = 2;
@@ -346,7 +349,7 @@ message CheckInvitationStatusRequest {
   string organizationUuid = 2;
 }
 
-// ✅ FIXED: Added standard wrapper
+// FIXED: Added standard wrapper
 message CheckInvitationStatusResponse {
   bool success = 1;
   string message = 2;
@@ -434,3 +437,37 @@ message ErrorPayload {
 }
 
 message Empty {}
+
+// ======================================================
+// JOB SEEKER MESSAGES
+// ======================================================
+
+message UpdateJobSeekerRequest {
+  string userUuid = 1;
+  optional string headline = 2;
+  bool isActivelySeeking = 3;
+  repeated string skills = 4;
+  repeated string industries = 5;
+  optional string seniorityLevel = 6;
+  repeated string jobTypes = 7;
+  optional string cvUrl = 8;
+}
+
+message JobSeekerProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  JobSeekerData data = 4;
+  ErrorPayload error = 5;
+}
+
+message JobSeekerData {
+  string id = 1;
+  optional string headline = 2;
+  bool isActivelySeeking = 3;
+  repeated string skills = 4;
+  optional string seniorityLevel = 5;
+  optional string cvUrl = 6;
+  optional string cvLastUpdated = 7;
+  int32 matchScoreWeight = 8;
+}

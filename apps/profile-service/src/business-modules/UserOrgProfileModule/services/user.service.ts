@@ -16,8 +16,10 @@ import {
   UpdateFullUserProfileDto,
   ContractorProfileResponseDto,
   OnboardProviderGrpcRequestDto,
+  UpdateJobSeekerGrpcRequestDto,
+  JobSeekerProfileResponseDto,
 } from '@pivota-api/dtos';
-import { Account, Organization, ProfileCompletion, User, UserProfile, OrganizationProfile, Prisma } from '../../../../generated/prisma/client';
+import { Account, Organization, ProfileCompletion, User, UserProfile, OrganizationProfile, Prisma, JobSeekerProfile } from '../../../../generated/prisma/client';
 import {  RpcException, ClientGrpc, ClientKafka } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
 import { catchError, lastValueFrom, Observable, throwError, timeout } from 'rxjs';
@@ -44,6 +46,7 @@ interface UserProfileAggregate {
 type PrismaUserAggregate = User & {
   account: AccountWithOrg; 
   profile: UserProfile | null;
+  jobProfile: JobSeekerProfile | null; 
   completion: ProfileCompletion | null;
 };
 
@@ -744,4 +747,69 @@ async onboardIndividualProvider(
   }
 }
 
+  /* ======================================================
+     UPDATE JOB SEEKER PROFILE (RECOMMENDER READY)
+  ====================================================== */
+async updateJobSeekerProfile(
+  dto: UpdateJobSeekerGrpcRequestDto,
+): Promise<BaseResponseDto<JobSeekerProfileResponseDto>> {
+  this.logger.log(`Updating professional job seeker profile: ${dto.userUuid}`);
+
+  try {
+    // Single upsert logic: Handles creation or update without transactional overhead
+    const result = await this.prisma.jobSeekerProfile.upsert({
+      where: { userUuid: dto.userUuid },
+      create: {
+        userUuid: dto.userUuid,
+        headline: dto.headline,
+        isActivelySeeking: dto.isActivelySeeking,
+        skills: dto.skills ?? [],
+        industries: dto.industries ?? [],
+        seniorityLevel: dto.seniorityLevel,
+        jobTypes: dto.jobTypes ?? [],
+        cvUrl: dto.cvUrl,
+        cvLastUpdated: dto.cvUrl ? new Date() : undefined,
+      },
+      update: {
+        headline: dto.headline ?? undefined,
+        isActivelySeeking: dto.isActivelySeeking,
+        skills: dto.skills ?? undefined,
+        industries: dto.industries ?? undefined,
+        seniorityLevel: dto.seniorityLevel ?? undefined,
+        jobTypes: dto.jobTypes ?? undefined,
+        cvUrl: dto.cvUrl ?? undefined,
+        cvLastUpdated: dto.cvUrl ? new Date() : undefined,
+      },
+    });
+
+    return BaseResponseDto.ok(
+      this.mapToJobSeekerResponse(result),
+      'Professional profile updated successfully',
+      'OK'
+    );
+  } catch (err: unknown) {
+    const error = err as Error;
+    this.logger.error(`Job seeker update failed: ${error.message}`);
+    return BaseResponseDto.fail('Failed to update professional profile', 'INTERNAL_ERROR');
+  }
+}
+
+/* ======================================================
+     LEAN MAPPER FOR JOB SEEKER (STRICT TYPE)
+  ====================================================== */
+private mapToJobSeekerResponse(
+  data: JobSeekerProfile 
+): JobSeekerProfileResponseDto {
+  return {
+    id: data.id,
+    headline: data.headline ?? undefined,
+    isActivelySeeking: data.isActivelySeeking,
+    skills: data.skills,
+    seniorityLevel: data.seniorityLevel ?? undefined,
+    cvUrl: data.cvUrl ?? undefined,
+    cvLastUpdated: data.cvLastUpdated ?? undefined,
+    // Strength logic for recommender engine readiness
+    matchScoreWeight: data.cvUrl ? 100 : 50, 
+  };
+}
 }

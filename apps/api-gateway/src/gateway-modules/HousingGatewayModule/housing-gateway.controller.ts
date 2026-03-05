@@ -12,6 +12,7 @@ import {
   Query,
   UploadedFiles,
   UseInterceptors,
+  Headers
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -41,12 +42,18 @@ import {
   UpdateAdminHouseListingRequestDto,
   CreateHouseListingDto,
   AdminCreateHouseListingDto,
+  GetHouseListingByIdDto,
+  ListingViewContextDto,
+  ClientInfoDto,
+  SearchContextDto,
+  GetListingHeadersDto,
+  GetListingQueryDto,
 } from '@pivota-api/dtos';
 
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
 import { RolesGuard } from '../../guards/role.guard';
 import { SubscriptionGuard } from '../../guards/subscription.guard';
-import { JwtRequest } from '@pivota-api/interfaces';
+import {JwtRequest} from '@pivota-api/interfaces';
 import { HousingGatewayService } from './housing-gateway.service';
 import { ParseCuidPipe } from '@pivota-api/pipes';
 import { Permissions } from '../../decorators/permissions.decorator';
@@ -54,6 +61,8 @@ import { Public } from '../../decorators/public.decorator';
 import { SetModule } from '../../decorators/set-module.decorator';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { imageFileFilter } from '@pivota-api/filters';
+import { ClientInfo } from '../../decorators/client-info.decorator';
+
 
 @ApiTags('Housing Module - ((Listings-Service) - MICROSERVICE)')
 @ApiBearerAuth()
@@ -414,23 +423,111 @@ export class HousingGatewayController {
     return resp;
   }
 
-  // ===========================================================
-  // GET LISTING BY ID (Public)
-  // ===========================================================
-  @Public()
-  @Version('1')
-  @Get('details/:id')
-  @ApiOperation({ summary: 'Get a single house listing by ID' })
-  @ApiParam({ name: 'id', type: String })
-  @ApiResponse({ status: 200, type: HouseListingResponseDto })
-  async getListingById(
-    @Param('id', ParseCuidPipe) id: string,
-  ): Promise<BaseResponseDto<HouseListingResponseDto>> {
-    const resp = await this.housingService.getHouseListingById({ id });
-    if (!resp.success) throw resp;
-    return resp;
+ // ===========================================================
+// GET LISTING BY ID (Public)
+// ===========================================================
+@Version('1')
+@Get('details/:id')
+@ApiOperation({ summary: 'Get a single house listing by ID' })
+@ApiParam({ name: 'id', type: String })
+@ApiResponse({ status: 200, type: HouseListingResponseDto })
+async getListingById(
+  @Param('id', ParseCuidPipe) id: string,
+  @Req() req: JwtRequest,
+  @ClientInfo() clientInfo: ClientInfoDto,
+  @Headers() headers: GetListingHeadersDto,  // Use DTO - no decorator needed
+  @Query() query: GetListingQueryDto,        // Use DTO - no decorator needed
+): Promise<BaseResponseDto<HouseListingResponseDto>> {
+  
+  const sessionId = req.user?.tokenId;
+  
+  this.logger.debug(`📱 Listing view - User: ${req.user?.userUuid || 'anonymous'}, Listing: ${id}`);
+
+  // Build context
+  const context = new ListingViewContextDto();
+  
+  context.userId = req.user?.userUuid;
+  context.sessionId = sessionId || this.generateAnonymousId(clientInfo);
+  
+  const clientInfoDto = new ClientInfoDto();
+  clientInfoDto.ipAddress = clientInfo.ipAddress;
+  clientInfoDto.userAgent = clientInfo.userAgent;
+  clientInfoDto.device = clientInfo.device;
+  clientInfoDto.os = clientInfo.os;
+  context.client = clientInfoDto;
+  
+  context.platform = headers['x-platform'] || this.determinePlatform(clientInfo);
+  context.referrer = headers.referer || 'DIRECT';
+  
+  if (query.searchId || query.q || query.pos) {
+    const searchContext = new SearchContextDto();
+    searchContext.searchId = query.searchId;
+    searchContext.query = query.q;
+    searchContext.position = query.pos ? parseInt(query.pos) : undefined;
+    context.search = searchContext;
   }
 
+  const dto = new GetHouseListingByIdDto();
+  dto.id = id;
+  dto.context = context;
+
+  const resp = await this.housingService.getHouseListingById(dto);
+  if (!resp.success) throw resp;
+  return resp;
+}
+
+/**
+ * Generate a consistent session ID for anonymous users
+ * Note: For logged-in users, we use the tokenId from JWT instead
+ */
+private generateAnonymousId(clientInfo: ClientInfoDto): string {
+  const deviceFingerprint = `${clientInfo.device}_${clientInfo.os}_${clientInfo.ipAddress}`
+    .replace(/\s+/g, '')
+    .substring(0, 100);
+  
+  // Create a hash of the device fingerprint for anonymous tracking
+  // This is a simple example - in production you might want proper hashing
+  const buffer = Buffer.from(deviceFingerprint);
+  const hash = buffer.toString('base64').substring(0, 20).replace(/[^a-zA-Z0-9]/g, '');
+  
+  return `anon_${hash}`;
+}
+
+/**
+ * Determine platform from user agent and device info
+ */
+private determinePlatform(clientInfo: ClientInfoDto): string {
+  const device = clientInfo.device.toLowerCase();
+  const ua = clientInfo.userAgent.toLowerCase();
+  
+  // Check for mobile devices
+  if (device.includes('mobile') || 
+      device.includes('phone') || 
+      device.includes('tablet') ||
+      ua.includes('mobile') ||
+      ua.includes('android') ||
+      ua.includes('iphone') ||
+      ua.includes('ipad')) {
+    return 'MOBILE';
+  }
+  
+  // Check for API clients
+  if (ua.includes('postman') || 
+      ua.includes('insomnia') || 
+      ua.includes('thunder client')) {
+    return 'API';
+  }
+  
+  // Check for CLI tools
+  if (ua.includes('curl') || 
+      ua.includes('wget') || 
+      ua.includes('httpie')) {
+    return 'CLI';
+  }
+  
+  // Default to web
+  return 'WEB';
+}
   // ===========================================================
   // SCHEDULE VIEWING
   // ===========================================================

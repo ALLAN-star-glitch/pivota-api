@@ -395,6 +395,9 @@ model HouseListing {
   // Primary Categorization
   categoryId   String
   category     Category @relation("HouseMainCategory", fields: [categoryId], references: [id])
+
+  latitude    Float?  // Added for feature store
+  longitude   Float? // Added for feature store
   
   // NEW: Sub-Categorization (Matches JobPost logic)
   subCategoryId String?

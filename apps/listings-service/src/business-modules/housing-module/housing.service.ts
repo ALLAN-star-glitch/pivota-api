@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+
 
 import {
   HouseListingResponseDto,
@@ -18,6 +19,7 @@ import {
   HouseListingCreateResponseDto,
 } from '@pivota-api/dtos';
 import { Prisma } from '../../../generated/prisma/client';
+import { ClientKafka } from '@nestjs/microservices';
 
 /**
  * Internal interface to ensure type safety when mapping Prisma results 
@@ -45,6 +47,8 @@ interface HouseListingWithRelations {
   status: string;
   createdAt: Date;
   updatedAt: Date;
+  latitude: number | null;
+  longitude: number | null;
   categoryId: string | null;
   category: {
     id: string;
@@ -63,7 +67,11 @@ interface HouseListingWithRelations {
 export class HousingService {
   private readonly logger = new Logger(HousingService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject('KAFKA_SERVICE')
+    private readonly kafkaClient: ClientKafka,
+  ) {}
 
   // ======================================================
   // CREATE METHODS
@@ -258,20 +266,80 @@ export class HousingService {
 }
 
 
-  async getHouseListingById(dto: GetHouseListingByIdDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
-    try {
-      const listing = await this.prisma.houseListing.findUnique({
-        where: { id: dto.id },
-        include: { images: true, category: true },
-      }) as unknown as HouseListingWithRelations | null;
+async getHouseListingById(dto: GetHouseListingByIdDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
+  try {
+    const listing = await this.prisma.houseListing.findUnique({
+      where: { id: dto.id },
+      include: { images: true, category: true },
+    }) as unknown as HouseListingWithRelations | null;
 
-      if (!listing) return BaseResponseDto.fail('Listing not found', 'NOT_FOUND');
+    if (!listing) return BaseResponseDto.fail('Listing not found', 'NOT_FOUND');
 
-      return BaseResponseDto.ok(this.mapToDto(listing));
-    } catch (error) {
-      return BaseResponseDto.fail('Fetch failed', 'ERROR');
+    // Emit Kafka event for feature store using the context object
+    if (dto.context?.userId) {
+      const eventPayload = {
+        key: dto.context.userId, // Partition by userId for ordering
+        value: {
+          // Core identifiers
+          userUuid: dto.context.userId,
+          listingId: listing.id,
+          externalId: listing.externalId,
+          
+          // Session context from context object
+          sessionId: dto.context.sessionId,
+          platform: dto.context.platform || 'WEB',
+          referrer: dto.context.referrer || 'DIRECT',
+          
+          // Client info from context
+          clientInfo: dto.context.client ? {
+            ipAddress: dto.context.client.ipAddress,
+            device: dto.context.client.device,
+            os: dto.context.client.os,
+            userAgent: dto.context.client.userAgent
+          } : undefined,
+          
+          // Search context from context object
+          searchId: dto.context.search?.searchId,
+          searchPosition: dto.context.search?.position,
+          searchQuery: dto.context.search?.query,
+          
+          // Listing data needed for feature calculation
+          listingData: {
+            price: listing.price,
+            bedrooms: listing.bedrooms,
+            bathrooms: listing.bathrooms,
+            locationCity: listing.locationCity,
+            locationNeighborhood: listing.locationNeighborhood,
+            latitude: listing.latitude,
+            longitude: listing.longitude,
+            categoryId: listing.categoryId,
+            categorySlug: listing.category?.slug,
+            listingType: listing.listingType,
+            isFurnished: listing.isFurnished,
+            amenities: listing.amenities,
+            createdAt: listing.createdAt.toISOString(),
+            imagesCount: listing.images?.length || 0,
+            accountId: listing.accountId,
+            creatorId: listing.creatorId
+          },
+          
+          // Timestamp
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      // Emit to Kafka topic
+      this.kafkaClient.emit('listing.viewed', eventPayload);
+      
+      this.logger.debug(`📤 Emitted listing.viewed event for user ${dto.context.userId}, listing ${listing.id}`);
     }
+
+    return BaseResponseDto.ok(this.mapToDto(listing));
+  } catch (error) {
+    this.logger.error(`❌ getHouseListingById failed: ${error.message}`);
+    return BaseResponseDto.fail('Fetch failed', 'ERROR');
   }
+}
 
   async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
   try {

@@ -13,7 +13,7 @@ const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log('🌱 Seeding Organization Types (Lookup Table)...');
-
+ 
   const types = [
     { slug: 'PRIVATE_LIMITED', label: 'Private Limited Company' },
     { slug: 'NGO', label: 'Non-Governmental Organization' },

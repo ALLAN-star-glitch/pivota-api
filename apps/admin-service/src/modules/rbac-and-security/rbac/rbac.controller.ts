@@ -17,7 +17,6 @@ import {
   RoleIdRequestDto, RoleIdResponse,
 } from '@pivota-api/dtos';
 
-
 @Controller()
 export class RbacController {
   logger: Logger = new Logger(RbacController.name)  ;

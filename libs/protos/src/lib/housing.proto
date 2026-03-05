@@ -59,6 +59,32 @@ message HouseImage {
 }
 
 // ===================================================
+// ANALYTICS CONTEXT MESSAGES (NEW)
+// ===================================================
+
+message ClientInfo {
+  string ipAddress = 1;
+  string userAgent = 2;
+  string device = 3;
+  string os = 4;
+}
+
+message SearchContext {
+  optional string searchId = 1;
+  optional string query = 2;
+  optional int32 position = 3;
+}
+
+message ListingViewContext {
+  optional string userId = 1;
+  string sessionId = 2;
+  ClientInfo client = 3;
+  string platform = 4;
+  string referrer = 5;
+  optional SearchContext search = 6;
+}
+
+// ===================================================
 // ENTITIES
 // ===================================================
 message HouseListing {
@@ -85,6 +111,8 @@ message HouseListing {
   AccountBasic account = 21;
   repeated HouseImage images = 22;
   string accountName = 23; // Added for the Lean Summary logic
+  optional double latitude = 24; // ADDED: For location-based features
+  optional double longitude = 25; // ADDED: For location-based features
 }
 
 message HouseViewing {
@@ -104,8 +132,8 @@ message HouseViewing {
 message CreateHouseListingRequest {
   string creatorId = 1;
   string accountId = 2;
-  string creatorName = 3; // Re-added to match your Controller's sanitizedDto
-  string accountName = 4; // Re-added to match your Controller's sanitizedDto
+  string creatorName = 3;
+  string accountName = 4;
   string title = 5;
   string description = 6;
   string categoryId = 7;
@@ -120,6 +148,8 @@ message CreateHouseListingRequest {
   string locationNeighborhood = 16;
   string address = 17;
   repeated string imageUrls = 18;
+  optional double latitude = 19; // ADDED
+  optional double longitude = 20; // ADDED
 }
 
 message SearchHouseListingsRequest {
@@ -136,7 +166,7 @@ message UpdateHouseListingRequest {
   string listingId = 1;
   string callerId = 2;
   string userRole = 3;
-  optional string accountId = 4; // To support the "own" update logic
+  optional string accountId = 4;
   UpdateHouseListingData data = 5;
 }
 
@@ -152,8 +182,10 @@ message UpdateHouseListingData {
   optional string locationNeighborhood = 9;
   optional string address = 10;
   optional string status = 11;
-  optional string creatorId = 12; // For Admin updates
-  optional string accountId = 13; // For Admin updates
+  optional string creatorId = 12;
+  optional string accountId = 13;
+  optional double latitude = 14; // ADDED
+  optional double longitude = 15; // ADDED
 }
 
 message UpdateHouseListingStatusRequest {
@@ -176,15 +208,19 @@ message ScheduleViewingRequest {
   optional string notes = 6;
 }
 
-message GetHouseListingByIdRequest { string id = 1; }
+// ===================================================
+// UPDATED REQUEST WITH ANALYTICS CONTEXT
+// ===================================================
+message GetHouseListingByIdRequest { 
+  string id = 1;
+  optional ListingViewContext context = 2; // ADDED: Analytics context
+}
 
-// UPDATED: Now includes status to fix the TS Object Literal error
 message GetListingsByOwnerRequest { 
   string ownerId = 1; 
   optional string status = 2;
 }
 
-// NEW: Admin specific filter
 message GetAdminListingsRequest {
   optional string status = 1;
   optional string accountId = 2;

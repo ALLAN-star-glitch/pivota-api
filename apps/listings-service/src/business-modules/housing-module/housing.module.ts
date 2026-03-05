@@ -8,18 +8,31 @@ import { PrismaModule } from '../../prisma/prisma.module';
 @Module({
   imports: [
     PrismaModule,
-        ClientsModule.register([
-                {
-                    name: 'PROFILE_GRPC',
-                    transport: Transport.GRPC,
-                    options: {
-                        package: 'profile',
-                        protoPath: PROFILE_PROTO_PATH,
-                        url: process.env.LISTINGS_GRPC_URL || 'localhost:50052'
-                    }
-                },
-        
-            ]),
+    ClientsModule.register([
+      {
+        name: 'PROFILE_GRPC',
+        transport: Transport.GRPC,
+        options: {
+          package: 'profile',
+          protoPath: PROFILE_PROTO_PATH,
+          url: process.env.LISTINGS_GRPC_URL || 'localhost:50052'
+        }
+      },
+      // ADD THIS - Kafka client configuration
+      {
+        name: 'KAFKA_SERVICE',
+        transport: Transport.KAFKA,
+        options: {
+          client: {
+            clientId: 'listings-service',
+            brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+          },
+          consumer: {
+            groupId: 'listings-service-producer-group',
+          },
+        }, 
+      }, 
+    ]),
   ],
   controllers: [HousingController],
   providers: [HousingService],

@@ -16,10 +16,13 @@ import {
   AuthUserDto,
   BaseResponseDto,
   ContractorProfileResponseDto,
+  JobSeekerProfileResponseDto,
   OnboardIndividualProviderRequestDto,
   OnboardProviderGrpcRequestDto,
   UpdateAdminProfileRequestDto,
   UpdateFullUserProfileDto,
+  UpdateJobSeekerGrpcRequestDto,
+  UpdateJobSeekerRequestDto,
   UpdateOwnProfileRequestDto,
   UserProfileResponseDto,
   UserResponseDto, 
@@ -61,8 +64,11 @@ import { imageFileFilter } from '@pivota-api/filters';
   UpdateAdminProfileRequestDto,
   UpdateFullUserProfileDto,
   OnboardIndividualProviderRequestDto,
-  ContractorProfileResponseDto
-)
+  ContractorProfileResponseDto,
+  UpdateJobSeekerGrpcRequestDto,
+  JobSeekerProfileResponseDto,
+  UpdateJobSeekerRequestDto
+) 
 @SetModule('profile')
 @Controller('users-profile-module')
 @UseGuards(JwtAuthGuard, RolesGuard, SubscriptionGuard)
@@ -348,4 +354,101 @@ export class UserController {
     return response;
   }
 
+ // ===========================================================
+  // UPDATE JOB SEEKER PROFILE (CV UPLOAD)
+  // ===========================================================
+  @Patch('users/profile/job-seeker/update')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Update job seeker status and upload CV',
+    description: 'Updates professional metadata (skills, industries, seniority) and CV document for the recommender engine.'
+  })
+  @UseInterceptors(FileInterceptor('cvFile', {
+    fileFilter: (req, file, cb) => {
+      if (!file.originalname.match(/\.(pdf|docx)$/)) {
+        return cb(new Error('Only PDF and DOCX files are allowed!'), false);
+      }
+      cb(null, true);
+    },
+    limits: { fileSize: 5 * 1024 * 1024 } 
+  }))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Update professional metadata and upload a CV document.',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(UpdateJobSeekerRequestDto) },
+        {
+          type: 'object',
+          properties: {
+            cvFile: { 
+              type: 'string', 
+              format: 'binary',
+              description: 'Professional CV (PDF or DOCX, max 5MB)'
+            },
+          },
+        },
+      ],
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BaseResponseDto) },
+        { properties: { data: { $ref: getSchemaPath(JobSeekerProfileResponseDto) } } },
+      ],
+    },
+  })
+  async updateJobSeekerProfile(
+    @Body() dto: UpdateJobSeekerRequestDto,
+    @Req() req: JwtRequest,
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<BaseResponseDto<JobSeekerProfileResponseDto>> {
+    const userUuid = req.user.userUuid;
+    let cvUrl: string | undefined;
+
+    // 1. Upload CV to Storage (Private Bucket)
+    if (file) {
+      const storagePath = `cvs/${userUuid}`;
+      cvUrl = await this.userService.uploadToStorage(
+        file,
+        storagePath,
+        'pivota-private' 
+      );
+    }
+
+    try {
+      // 2. Prepare the Internal/gRPC Payload
+      const grpcPayload: UpdateJobSeekerGrpcRequestDto = {
+        ...dto,
+        userUuid,
+        cvUrl,
+        // String to boolean conversion for multipart/form-data
+        isActivelySeeking: String(dto.isActivelySeeking) === 'true',
+        // Ensure arrays are handled correctly if sent as strings or single items
+        skills: typeof dto.skills === 'string' ? [dto.skills] : (dto.skills ?? []),
+        industries: typeof dto.industries === 'string' ? [dto.industries] : (dto.industries ?? []),
+        jobTypes: typeof dto.jobTypes === 'string' ? [dto.jobTypes] : (dto.jobTypes ?? []),
+      };
+
+      const response = await this.userService.updateJobSeekerProfile(grpcPayload);
+
+      // 3. Rollback storage if the microservice update fails
+      if (!response.success && cvUrl) {
+        this.logger.warn(`Job profile update failed. Cleaning up CV: ${cvUrl}`);
+        await this.userService.deleteFromStorage([cvUrl], 'pivota-private');
+        return response;
+      }
+
+      return response;
+    } catch (error) {
+      // 4. Critical Error Rollback
+      if (cvUrl) {
+        await this.userService.deleteFromStorage([cvUrl], 'pivota-private');
+      }
+      this.logger.error('Critical failure in Job Seeker Profile Update', error instanceof Error ? error.stack : error);
+      throw error;
+    }
+  }
 }

@@ -6,8 +6,10 @@ import {
   ContractorProfileResponseDto, 
   GetUserByEmailDto, 
   GetUserByUserCodeDto, 
+  JobSeekerProfileResponseDto, 
   OnboardProviderGrpcRequestDto, 
   UpdateFullUserProfileDto, 
+  UpdateJobSeekerGrpcRequestDto, 
   UserProfileResponseDto, 
   UserResponseDto, 
 } from '@pivota-api/dtos';
@@ -38,6 +40,8 @@ interface UserServiceGrpc {
   OnboardIndividualProvider(
     data: OnboardProviderGrpcRequestDto
   ): Observable<BaseResponseDto<ContractorProfileResponseDto>>;
+
+  UpdateJobSeekerProfile(data: UpdateJobSeekerGrpcRequestDto): Observable<BaseResponseDto<JobSeekerProfileResponseDto>>;
 }
 
 @Injectable()
@@ -136,6 +140,35 @@ export class UserService {
       return BaseResponseDto.fail(res.message || 'Update failed', res.code || 'INTERNAL');
     } catch (err) {
       this.logger.error(`gRPC Error updating profile for ${dto.userUuid}`, err);
+      return BaseResponseDto.fail('Profile service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  // ---------------- Update Job Seeker Profile (Recommender Ready) ----------------
+  /**
+   * Forwards job seeker metadata and CV link to the Profile Microservice.
+   * This handles the "Open to Jobs" logic for Individuals.
+   */
+  async updateJobSeekerProfile(
+    dto: UpdateJobSeekerGrpcRequestDto
+  ): Promise<BaseResponseDto<JobSeekerProfileResponseDto>> {
+    this.logger.log(`Forwarding job seeker update for user: ${dto.userUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.UpdateJobSeekerProfile(dto)
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(
+        res.message || 'Job profile update failed', 
+        res.code || 'INTERNAL_ERROR'
+      );
+    } catch (err) {
+      this.logger.error(`gRPC Error updating job profile for ${dto.userUuid}`, err);
       return BaseResponseDto.fail('Profile service communication error', 'SERVICE_UNAVAILABLE');
     }
   }

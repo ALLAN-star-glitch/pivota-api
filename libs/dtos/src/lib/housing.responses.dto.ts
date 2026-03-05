@@ -250,3 +250,118 @@ export class HouseViewingResponseDto {
   @IsString()
   notes?: string;
 }
+
+// Add these to your response DTOs file after the existing DTOs
+
+/* ======================================================
+   ANALYTICS RESPONSE DTOs
+====================================================== */
+
+/**
+ * Single housing view record for analytics
+ */
+export class HousingViewRecordDto {
+  @ApiProperty({ example: 'usr_123', description: 'User who viewed the listing' })
+  @IsString()
+  listingId!: string;
+
+  @ApiProperty({ example: 45000, description: 'Price of the listing' })
+  @IsNumber()
+  price!: number;
+
+  @ApiPropertyOptional({ example: 'Kilimani', description: 'Neighborhood of the listing' })
+  @IsOptional()
+  @IsString()
+  neighborhood?: string | null;
+
+  @ApiProperty({ example: '2026-03-04T10:30:00Z', description: 'When the view occurred' })
+  @IsDate()
+  viewedAt!: Date;
+}
+
+/**
+ * User housing statistics response
+ */
+export class UserHousingStatsResponseDto {
+  @ApiProperty({ example: 45, description: 'Total number of housing views by the user' })
+  @IsNumber()
+  totalViews!: number;
+
+  @ApiPropertyOptional({ example: 42500, description: 'Average price of viewed listings' })
+  @IsOptional()
+  @IsNumber()
+  averagePrice?: number | null;
+
+  @ApiProperty({ 
+    example: ['Kilimani', 'Westlands', 'Lavington'], 
+    description: 'Top 5 neighborhoods viewed by the user',
+    type: [String]
+  })
+  @IsArray()
+  @IsString({ each: true })
+  favoriteNeighborhoods!: string[];
+
+  @ApiProperty({ 
+    type: [HousingViewRecordDto],
+    description: 'Most recent 10 housing views'
+  })
+  @IsArray()
+  recentViews!: HousingViewRecordDto[];
+}
+
+/**
+ * Housing training data response for AI developer
+ */
+export class HousingTrainingDataResponseDto {
+  @ApiProperty({ example: 1250, description: 'Total number of records returned' })
+  @IsNumber()
+  recordCount!: number;
+
+  @ApiProperty({ 
+    type: 'array',
+    description: 'Sample of the first 5 records for preview',
+    example: [{
+      userUuid: 'usr_123',
+      listingId: 'listing_456',
+      listingPrice: 45000,
+      listingNeighborhood: 'Kilimani',
+      timestamp: '2026-03-04T10:30:00Z'
+    }]
+  })
+  @IsArray()
+  sampleData!: any[]; // This can remain any as it's just a preview
+
+  @ApiProperty({ 
+    example: { from: '2026-02-02T00:00:00Z', to: '2026-03-04T00:00:00Z' },
+    description: 'Date range of the training data'
+  })
+  dateRange!: {
+    from: Date;
+    to: Date;
+  };
+
+  @ApiProperty({ example: 'HOUSING', description: 'Vertical of the training data' })
+  @IsString()
+  vertical!: string;
+}
+
+/**
+ * Label update response
+ */
+export class LabelUpdateResponseDto {
+  @ApiProperty({ example: 'usr_123', description: 'User UUID' })
+  @IsString()
+  userUuid!: string;
+
+  @ApiProperty({ example: 'listing_456', description: 'Listing ID' })
+  @IsString()
+  listingId!: string;
+
+  @ApiProperty({ example: 'SAVE', description: 'Action performed' })
+  @IsString()
+  action!: string;
+
+  @ApiProperty({ example: true, description: 'Whether the label was updated' })
+  @IsBoolean()
+  updated!: boolean;
+}

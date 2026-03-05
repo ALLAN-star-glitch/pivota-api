@@ -104,7 +104,8 @@ export class EmailService {
             color: ${this.colors.white} !important;
             text-decoration: none;
           }
-          
+
+        
           .logo-accent {
             color: ${this.colors.goldenYellow};
             font-weight: 700;

@@ -7,9 +7,11 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import {
   HOUSE_LISTING_TYPES,
@@ -323,6 +325,714 @@ export class UpdateHouseListingGrpcRequestDto extends UpdateAdminHouseListingReq
 }
 
 /* ======================================================
+   ANALYTICS / FEATURE STORE DTOs (MOVED UP)
+====================================================== */
+
+/**
+ * Client information from the user's device
+ */
+export class ClientInfoDto {
+  @ApiProperty({
+    description: 'IP address of the user',
+    example: '192.168.1.1'
+  })
+  @IsString()
+  @IsNotEmpty()
+  ipAddress!: string;
+
+  @ApiProperty({
+    description: 'User agent string from the browser/device',
+    example: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)'
+  })
+  @IsString()
+  @IsNotEmpty()
+  userAgent!: string;
+
+  @ApiProperty({
+    description: 'Device model or type',
+    example: 'iPhone 14'
+  })
+  @IsString()
+  @IsNotEmpty()
+  device!: string;
+
+  @ApiProperty({
+    description: 'Operating system of the device',
+    example: 'iOS 16'
+  })
+  @IsString()
+  @IsNotEmpty()
+  os!: string;
+}
+
+/**
+ * Search context information for analytics
+ */
+export class SearchContextDto {
+  @ApiPropertyOptional({
+    description: 'Unique identifier for the search session',
+    example: 'search_123'
+  })
+  @IsOptional()
+  @IsString()
+  searchId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Search query text',
+    example: '2 bedroom apartment in Kilimani'
+  })
+  @IsOptional()
+  @IsString()
+  query?: string;
+
+  @ApiPropertyOptional({
+    description: 'Position of the listing in search results (1-based)',
+    example: 3
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  position?: number;
+}
+
+/**
+ * Complete context for a listing view event
+ */
+export class ListingViewContextDto {
+  @ApiPropertyOptional({
+    description: 'User UUID (if authenticated)',
+    example: 'user_123'
+  })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiProperty({
+    description: 'Session identifier from JWT or generated',
+    example: 'sess_123'
+  })
+  @IsString()
+  sessionId!: string;
+
+  @ApiProperty({
+    description: 'Client device information',
+    type: ClientInfoDto
+  })
+  @ValidateNested()
+  @Type(() => ClientInfoDto)
+  client!: ClientInfoDto;
+
+  @ApiProperty({
+    description: 'Platform where the event occurred',
+    example: 'WEB',
+    enum: ['WEB', 'MOBILE', 'API', 'CLI']
+  })
+  @IsString()
+  platform!: string;
+
+  @ApiProperty({
+    description: 'Referrer source',
+    example: 'DIRECT'
+  })
+  @IsString()
+  referrer!: string;
+
+  @ApiPropertyOptional({
+    description: 'Search context if the view came from search results',
+    type: SearchContextDto
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SearchContextDto)
+  search?: SearchContextDto;
+}
+
+/**
+ * Listing data structure for analytics
+ */
+export class ListingDataDto {
+  @ApiProperty({
+    description: 'Price of the listing',
+    example: 45000
+  })
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  price!: number;
+
+  @ApiPropertyOptional({
+    description: 'Number of bedrooms',
+    example: 2
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  bedrooms?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Number of bathrooms',
+    example: 2
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  bathrooms?: number | null;
+
+  @ApiProperty({
+    description: 'City where the listing is located',
+    example: 'Nairobi'
+  })
+  @IsString()
+  @IsNotEmpty()
+  locationCity!: string;
+
+  @ApiPropertyOptional({
+    description: 'Neighborhood where the listing is located',
+    example: 'Kilimani'
+  })
+  @IsOptional()
+  @IsString()
+  locationNeighborhood?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Latitude coordinate',
+    example: -1.2921
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  latitude?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Longitude coordinate',
+    example: 36.8219
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  longitude?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Category ID of the listing',
+    example: 'clm123housingid'
+  })
+  @IsOptional()
+  @IsString()
+  categoryId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Category slug for the listing type',
+    example: 'apartments'
+  })
+  @IsOptional()
+  @IsString()
+  categorySlug?: string | null;
+
+  @ApiProperty({
+    description: 'Type of listing',
+    example: 'RENTAL',
+    enum: HOUSE_LISTING_TYPES
+  })
+  @IsString()
+  @IsIn(HOUSE_LISTING_TYPES)
+  listingType!: string;
+
+  @ApiPropertyOptional({
+    description: 'Whether the listing is furnished',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isFurnished?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'List of amenities',
+    example: ['Parking', 'WiFi', 'Security'],
+    type: [String]
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  amenities?: string[];
+
+  @ApiProperty({
+    description: 'Creation timestamp of the listing',
+    example: '2026-03-04T10:30:00Z'
+  })
+  @IsDateString()
+  @IsNotEmpty()
+  createdAt!: string;
+
+  @ApiProperty({
+    description: 'Number of images for the listing',
+    example: 5
+  })
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  imagesCount!: number;
+
+  @ApiProperty({
+    description: 'Account ID that owns the listing',
+    example: 'acc_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  accountId!: string;
+
+  @ApiProperty({
+    description: 'Creator/user ID who posted the listing',
+    example: 'usr_456'
+  })
+  @IsString()
+  @IsNotEmpty()
+  creatorId!: string;
+}
+
+/**
+ * Event DTO for listing viewed events
+ */
+export class ListingViewedEventDto {
+  @ApiProperty({
+    description: 'UUID of the user viewing the listing',
+    example: 'usr_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  userUuid!: string;
+
+  @ApiProperty({
+    description: 'ID of the listing being viewed',
+    example: 'listing_456'
+  })
+  @IsString()
+  @IsNotEmpty()
+  listingId!: string;
+
+  @ApiProperty({
+    description: 'External ID of the listing',
+    example: 'ext_789'
+  })
+  @IsString()
+  @IsNotEmpty()
+  externalId!: string;
+
+  @ApiProperty({
+    description: 'Session ID from JWT or generated',
+    example: 'sess_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  sessionId!: string;
+
+  @ApiProperty({
+    description: 'Platform where the view occurred',
+    example: 'MOBILE',
+    enum: ['MOBILE', 'WEB', 'API', 'CLI']
+  })
+  @IsString()
+  @IsIn(['MOBILE', 'WEB', 'API', 'CLI'])
+  platform!: string;
+
+  @ApiProperty({
+    description: 'Referrer source',
+    example: 'SEARCH'
+  })
+  @IsString()
+  @IsNotEmpty()
+  referrer!: string;
+
+  @ApiPropertyOptional({
+    description: 'Client device information',
+    type: ClientInfoDto
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ClientInfoDto)
+  clientInfo?: ClientInfoDto;
+
+  @ApiPropertyOptional({
+    description: 'Search session ID if from search',
+    example: 'search_123'
+  })
+  @IsOptional()
+  @IsString()
+  searchId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Position in search results',
+    example: 3
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  searchPosition?: number;
+
+  @ApiPropertyOptional({
+    description: 'Search query text',
+    example: '2 bedroom apartment'
+  })
+  @IsOptional()
+  @IsString()
+  searchQuery?: string;
+
+  @ApiProperty({
+    description: 'Listing data snapshot',
+    type: ListingDataDto
+  })
+  @ValidateNested()
+  @Type(() => ListingDataDto)
+  listingData!: ListingDataDto;
+
+  @ApiProperty({
+    description: 'Timestamp of the event',
+    example: '2026-03-04T10:30:00Z'
+  })
+  @IsDateString()
+  @IsNotEmpty()
+  timestamp!: string;
+}
+
+/**
+ * Event DTO for listing saved events
+ */
+export class ListingSavedEventDto {
+  @ApiProperty({
+    description: 'UUID of the user saving the listing',
+    example: 'usr_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  userUuid!: string;
+
+  @ApiProperty({
+    description: 'ID of the listing being saved',
+    example: 'listing_456'
+  })
+  @IsString()
+  @IsNotEmpty()
+  listingId!: string;
+
+  @ApiProperty({
+    description: 'Timestamp of the save event',
+    example: '2026-03-04T10:30:00Z'
+  })
+  @IsDateString()
+  @IsNotEmpty()
+  timestamp!: string;
+}
+
+/**
+ * Event DTO for listing contacted events
+ */
+export class ListingContactedEventDto {
+  @ApiProperty({
+    description: 'UUID of the user contacting',
+    example: 'usr_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  userUuid!: string;
+
+  @ApiProperty({
+    description: 'ID of the listing being contacted',
+    example: 'listing_456'
+  })
+  @IsString()
+  @IsNotEmpty()
+  listingId!: string;
+
+  @ApiProperty({
+    description: 'Type of contact action',
+    example: 'SCHEDULE_VIEWING',
+    enum: ['SCHEDULE_VIEWING', 'CALL', 'EMAIL', 'CHAT']
+  })
+  @IsString()
+  @IsIn(['SCHEDULE_VIEWING', 'CALL', 'EMAIL', 'CHAT'])
+  actionType!: string;
+
+  @ApiProperty({
+    description: 'Timestamp of the contact event',
+    example: '2026-03-04T10:30:00Z'
+  })
+  @IsDateString()
+  @IsNotEmpty()
+  timestamp!: string;
+}
+
+/**
+ * Event DTO for search performed events
+ */
+export class SearchPerformedEventDto {
+  @ApiProperty({
+    description: 'UUID of the user performing the search',
+    example: 'usr_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  userUuid!: string;
+
+  @ApiProperty({
+    description: 'Session ID for the search',
+    example: 'sess_456'
+  })
+  @IsString()
+  @IsNotEmpty()
+  sessionId!: string;
+
+  @ApiProperty({
+    description: 'Platform where search occurred',
+    example: 'MOBILE',
+    enum: ['MOBILE', 'WEB', 'API', 'CLI']
+  })
+  @IsString()
+  @IsIn(['MOBILE', 'WEB', 'API', 'CLI'])
+  platform!: string;
+
+  @ApiPropertyOptional({
+    description: 'Search filters applied',
+    example: { minPrice: 20000, maxPrice: 50000, bedrooms: 2 }
+  })
+  @IsOptional()
+  filters?: Record<string, any>;
+
+  @ApiProperty({
+    description: 'Number of results returned',
+    example: 25
+  })
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  resultsCount!: number;
+
+  @ApiProperty({
+    description: 'Timestamp of the search',
+    example: '2026-03-04T10:30:00Z'
+  })
+  @IsDateString()
+  @IsNotEmpty()
+  timestamp!: string;
+}
+
+/**
+ * Batch event processing
+ */
+export class BatchEventDto {
+  @ApiProperty({
+    description: 'Type of event',
+    example: 'LISTING_VIEWED',
+    enum: ['LISTING_VIEWED', 'LISTING_SAVED', 'LISTING_CONTACTED', 'SEARCH_PERFORMED']
+  })
+  @IsString()
+  @IsIn(['LISTING_VIEWED', 'LISTING_SAVED', 'LISTING_CONTACTED', 'SEARCH_PERFORMED'])
+  type!: string;
+
+  @ApiProperty({
+    description: 'Event data based on type',
+    oneOf: [
+      { $ref: '#/components/schemas/ListingViewedEventDto' },
+      { $ref: '#/components/schemas/ListingSavedEventDto' },
+      { $ref: '#/components/schemas/ListingContactedEventDto' },
+      { $ref: '#/components/schemas/SearchPerformedEventDto' }
+    ]
+  })
+  @IsObject()
+  @IsNotEmpty()
+  data!:
+    | ListingViewedEventDto
+    | ListingSavedEventDto
+    | ListingContactedEventDto
+    | SearchPerformedEventDto;
+
+  @ApiProperty({
+    description: 'Timestamp of the event',
+    example: '2026-03-04T10:30:00Z'
+  })
+  @IsDateString()
+  @IsNotEmpty()
+  timestamp!: string;
+}
+
+export class BatchEventProcessDto {
+  @ApiProperty({
+    description: 'Array of events to process in batch',
+    type: [BatchEventDto]
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BatchEventDto)
+  events!: BatchEventDto[];
+
+  @ApiPropertyOptional({
+    description: 'Client identifier for the batch',
+    example: 'client_123'
+  })
+  @IsOptional()
+  @IsString()
+  clientId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Session identifier for the batch',
+    example: 'sess_456'
+  })
+  @IsOptional()
+  @IsString()
+  sessionId?: string;
+}
+
+export class BatchProcessResultDto {
+  @ApiProperty({
+    description: 'Number of successfully processed events',
+    example: 10
+  })
+  processed!: number;
+
+  @ApiProperty({
+    description: 'Number of failed events',
+    example: 2
+  })
+  failed!: number;
+}
+
+/**
+ * Health check response
+ */
+export class HealthCheckResponseDto {
+  @ApiProperty({
+    description: 'Database connection status',
+    example: true
+  })
+  database!: boolean;
+
+  @ApiProperty({
+    description: 'Kafka connection status',
+    example: true
+  })
+  kafka!: boolean;
+
+  @ApiProperty({
+    description: 'Service uptime in seconds',
+    example: 3600
+  })
+  uptime!: number;
+
+  @ApiProperty({
+    description: 'Service version',
+    example: '1.0.0'
+  })
+  version!: string;
+}
+
+/**
+ * Event process response
+ */
+export class EventProcessResponseDto {
+  @ApiProperty({
+    description: 'Processing status',
+    example: 'success'
+  })
+  status!: string;
+
+  @ApiProperty({
+    description: 'Status message',
+    example: 'Event processed successfully'
+  })
+  message!: string;
+
+  @ApiPropertyOptional({
+    description: 'User UUID if applicable',
+    example: 'usr_123'
+  })
+  @IsOptional()
+  @IsString()
+  userUuid?: string;
+
+  @ApiPropertyOptional({
+    description: 'Listing ID if applicable',
+    example: 'listing_456'
+  })
+  @IsOptional()
+  @IsString()
+  listingId?: string;
+}
+
+/* ======================================================
+   HOUSING SERVICE API DTOs (NOW CAN REFERENCE ANALYTICS DTOs)
+====================================================== */
+
+export class GetHouseListingByIdDto {
+  @ApiProperty({
+    description: 'The unique identifier of the house listing',
+    example: 'listing_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  id!: string;
+
+  @ApiPropertyOptional({
+    description: 'Context information for analytics tracking (device, session, etc.)',
+    type: () => ListingViewContextDto
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ListingViewContextDto)
+  context?: ListingViewContextDto;
+}
+
+export class GetListingsByOwnerDto {
+  @ApiProperty({
+    description: 'The account ID of the owner',
+    example: 'acc_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  ownerId!: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter listings by status',
+    example: 'AVAILABLE',
+    enum: HOUSE_LISTING_STATUSES
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(HOUSE_LISTING_STATUSES)
+  status?: string;
+}
+
+export class UpdateHouseListingStatusDto {
+  @ApiProperty({
+    description: 'The unique identifier of the listing',
+    example: 'listing_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  id!: string;
+
+  @ApiProperty({
+    description: 'The new status for the listing',
+    example: 'AVAILABLE',
+    enum: HOUSE_LISTING_STATUSES
+  })
+  @IsString()
+  @IsNotEmpty()
+  @IsIn(HOUSE_LISTING_STATUSES)
+  status!: string;
+
+  @ApiProperty({
+    description: 'The owner account ID for authorization',
+    example: 'acc_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  ownerId!: string;
+}
+
+/* ======================================================
    VIEWINGS & UTILITY
 ====================================================== */
 
@@ -360,38 +1070,6 @@ export class ArchiveHouseListingsGrpcRequestDto {
   @IsString()
   @IsNotEmpty()
   id!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  ownerId!: string;
-}
-
-export class GetHouseListingByIdDto {
-  @IsString()
-  @IsNotEmpty()
-  id!: string;
-}
-
-export class GetListingsByOwnerDto {
-  @IsString()
-  @IsNotEmpty()
-  ownerId!: string;
-
-  @IsOptional()
-  @IsString()
-  @IsIn(HOUSE_LISTING_STATUSES)
-  status?: string;
-}
-
-export class UpdateHouseListingStatusDto {
-  @IsString()
-  @IsNotEmpty()
-  id!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @IsIn(HOUSE_LISTING_STATUSES)
-  status!: string;
 
   @IsString()
   @IsNotEmpty()

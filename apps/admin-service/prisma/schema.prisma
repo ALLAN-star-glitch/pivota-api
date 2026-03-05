@@ -190,14 +190,1393 @@ model Subscription {
   @@index([status])
 }
 
-// ===================== AUDIT LOGS =====================
+// ===================== ANALYTICS: AGGREGATED METRICS =====================
+// Production-ready schema for PivotaConnect Analytics Module
+// Optimized for: Founder Intelligence, Investor Reporting, SmartMatch™ AI
 
-model AuditLog {
-  id          String   @id @default(cuid())
-  userUuid    String?
-  action      String
-  entity      String
-  entityId    String?
-  performedBy String?
-  createdAt   DateTime @default(now())
+// ==================== MARKETPLACE STATS (Daily Snapshots) ====================
+
+model MarketplaceStats {
+  id              String   @id @default(cuid())
+  date            DateTime @unique // Snapshot for a specific day
+  
+  // ==================== FINANCIALS ====================
+  gmv             Float    @default(0) // Gross Merchandise Value
+  commissions     Float    @default(0) // Platform commission earned
+  escrowVolume    Float    @default(0) // Total in escrow
+  payoutVolume    Float    @default(0) // Total paid out
+  refunds         Float    @default(0) // Total refunded amount
+  
+  // Breakdown by vertical (stored as JSON for flexibility)
+  gmvByVertical   Json?    // {"HOUSING": 150000, "JOBS": 75000, "SERVICES": 45000, "SOCIAL_SUPPORT": 25000}
+  commissionsByVertical Json?
+  
+  // ==================== GROWTH ====================
+  totalUsers      Int      @default(0)
+  activeUsers     Int      @default(0) // 30-day rolling
+  newUsers        Int      @default(0) // New signups today
+  returningUsers  Int      @default(0) // Users with prior sessions
+  
+  // Provider metrics
+  totalProviders  Int      @default(0)
+  newProviders    Int      @default(0)
+  activeProviders Int      @default(0) // Posted/offered in last 30 days
+  verifiedProviders Int    @default(0)
+  
+  // Consumer/Beneficiary metrics
+  totalBeneficiaries Int   @default(0)
+  newBeneficiaries Int     @default(0)
+  activeBeneficiaries Int  @default(0)
+  
+  // ==================== OPERATIONS ====================
+  // Jobs
+  totalJobs       Int      @default(0)
+  activeJobs      Int      @default(0)
+  completedJobs   Int      @default(0)
+  avgCompletionTime Float?  // In hours
+  jobsByType      Json?    // {"FULL_TIME": 45, "PART_TIME": 23, "CONTRACT": 67}
+  
+  // Housing
+  totalListings   Int      @default(0)
+  activeListings  Int      @default(0)
+  rentedListings  Int      @default(0)
+  soldListings    Int      @default(0)
+  listingsByType  Json?    // {"RENTAL": 234, "SALE": 56, "SHORT_STAY": 89}
+  
+  // Services
+  totalServices   Int      @default(0)
+  activeServices  Int      @default(0)
+  completedBookings Int    @default(0)
+  servicesByCategory Json?
+  
+  // Social Support
+  totalPrograms   Int      @default(0)
+  activePrograms  Int      @default(0)
+  endedPrograms   Int      @default(0) // Renamed from completedPrograms to avoid ambiguity
+  programsByType  Json?
+  
+  // ==================== MOBILE ENGAGEMENT ====================
+  totalSessions   Int      @default(0)
+  avgSessionDuration Float? // Minutes
+  totalScreenViews Int     @default(0)
+  
+  // Interaction metrics
+  totalSwipeCount Int      @default(0)
+  avgSwipeCount   Float    @default(0) // Average swipes per session
+  totalPhotoViews Int      @default(0)
+  photoViewRate   Float    @default(0) // Avg photos viewed per listing
+  totalMapExplores Int     @default(0)
+  mapExploreRate  Float    @default(0) // % of sessions with map interaction
+  
+  // Feature usage
+  savedItemsCount Int      @default(0)
+  sharedItemsCount Int     @default(0)
+  contactRequests Int      @default(0)
+  
+  // Platform breakdown
+  sessionsByPlatform Json? // {"MOBILE": 1234, "WEB": 567, "SYSTEM": 89}
+  devicesByOS     Json?    // {"iOS": 45, "Android": 52, "Other": 3}
+  
+  // ==================== SMARTMATCH™ PERFORMANCE ====================
+  suggestionsShown Int     @default(0)
+  suggestionsAccepted Int  @default(0)
+  suggestionAcceptanceRate Float? // % of AI suggestions accepted
+  
+  searchesWithSuggestions Int @default(0)
+  searchesWithoutSuggestions Int @default(0)
+  searchPivotRate  Float?  // % of users changing filters after suggestions
+  
+  implicitDriftScore Float? // Avg deviation: stated preference vs behavior
+  avgMatchScore    Float?   // Average match score for shown listings
+  
+  // Recommendation performance
+  ctrByRecommendationType Json? // Click-through rate by recommendation type
+  conversionByRecommendationType Json? // Conversion rate by type
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([date])
+}
+
+// ==================== COUNTY METRICS ====================
+
+model CountyMetrics {
+  id              String   @id @default(cuid())
+  countyName      String   // e.g., "Nairobi", "Mombasa"
+  date            DateTime
+  
+  // ==================== DEMOGRAPHICS ====================
+  totalPopulation Int      @default(0) // Total users in county
+  activeUsers     Int      @default(0)
+  newUsers        Int      @default(0)
+  
+  // Provider ecosystem
+  providerCount   Int      @default(0)
+  verifiedProviders Int    @default(0)
+  newProviders    Int      @default(0)
+  
+  // Beneficiary ecosystem
+  beneficiaryCount Int     @default(0)
+  newBeneficiaries Int     @default(0)
+  
+  // ==================== HOUSING METRICS ====================
+  housingListingCount    Int      @default(0)
+  housingActiveListings  Int      @default(0)
+  housingNewListings     Int      @default(0)
+  
+  // Pricing
+  housingAvgRent         Float?   // Average rent in county
+  housingMinRent         Float?
+  housingMaxRent         Float?
+  housingAvgSalePrice    Float?
+  
+  // Inventory
+  housingRentalListings  Int      @default(0)
+  housingSaleListings    Int      @default(0)
+  housingAvgBedrooms     Float?
+  housingFurnishedPercent Float?   // % furnished
+  
+  // Demand
+  housingListingViews    Int      @default(0)
+  housingViewingRequests Int      @default(0)
+  housingApplications    Int      @default(0) // Rental applications
+  
+  // ==================== JOBS METRICS ====================
+  jobsJobCount        Int      @default(0)
+  jobsActiveJobs      Int      @default(0)
+  jobsNewJobs         Int      @default(0)
+  
+  // Compensation
+  jobsAvgSalary       Float?
+  jobsMinSalary       Float?
+  jobsMaxSalary       Float?
+  
+  // Job types
+  jobsFullTime    Int      @default(0)
+  jobsPartTime    Int      @default(0)
+  jobsContract    Int      @default(0)
+  jobsRemote      Int      @default(0)
+  
+  // Demand
+  jobsViews        Int      @default(0)
+  jobsApplications Int      @default(0)
+  jobsFilled      Int      @default(0)
+  
+  // ==================== SOCIAL SUPPORT METRICS ====================
+  supportActivePrograms  Int      @default(0)
+  supportNewPrograms     Int      @default(0)
+  
+  // Reach
+  supportBeneficiaries   Int      @default(0)
+  supportApplications    Int      @default(0)
+  supportApprovedApplications Int @default(0)
+  
+  // Financial
+  supportTotalBudget     Float    @default(0)
+  supportTotalAidDisbursed Float  @default(0)
+  supportAvgAwardAmount  Float?
+  
+  // Program types
+  supportProgramsByType  Json?    // {"GRANT": 3, "FOOD": 5, "TRAINING": 2}
+  
+  // ==================== SERVICES METRICS ====================
+  servicesProviderCount Int     @default(0)
+  servicesActiveListings  Int      @default(0)
+  servicesTotalBookings   Int      @default(0)
+  servicesCompletedBookings Int    @default(0)
+  servicesAvgRating       Float?
+  
+  // ==================== ECONOMIC IMPACT ====================
+  totalRevenue    Float    @default(0) // GMV from county
+  platformCommission Float  @default(0)
+  avgTransactionValue Float?
+  
+  // Employment impact
+  jobsCreated     Int      @default(0) // Through platform
+  estimatedIncome Float?   // Estimated total income to providers
+  
+  // ==================== ENGAGEMENT ====================
+  mobileUsers     Int      @default(0) // Users from this county
+  webUsers        Int      @default(0)
+  avgSessionDuration Float? // Minutes
+  totalSessions   Int      @default(0)
+  
+  // Time analysis
+  peakActivityDay String?   // Day with most activity
+  peakActivityHour Int?     // Hour with most activity
+  
+  // Geographic density
+  latitude        Float?    // County center for maps
+  longitude       Float?
+  populationDensity Float?  // Users per sq km
+  
+  @@unique([countyName, date])
+  @@index([countyName])
+  @@index([date])
+  @@index([totalRevenue])
+}
+
+// ==================== CATEGORY METRICS ====================
+
+model CategoryMetrics {
+  id              String   @id @default(cuid())
+  categorySlug    String   // e.g., "plumbing", "apartments", "food-aid"
+  vertical        String   // "HOUSING", "JOBS", "SOCIAL_SUPPORT", "SERVICES"
+  date            DateTime
+
+  // ==================== CORE METRICS (All Verticals) ====================
+  
+  /// Supply Side
+  totalListings    Int      @default(0) // Jobs, Houses, Programs, Services
+  activeListings   Int      @default(0)
+  newListings      Int      @default(0) // Created in period
+  expiredListings  Int      @default(0) // Expired/deactivated
+  
+  // Provider metrics (Global - applies to all verticals)
+  creatorAccounts      Int      @default(0) // Unique accounts posting
+  repeatCreatorAccounts Int    @default(0) // Providers with >1 listing
+  verifiedCreatorAccounts Int @default(0)
+  
+  /// Demand Side
+  totalViews       Int      @default(0)
+  uniqueViewers    Int      @default(0)
+  avgViewDuration  Int?     // Seconds spent viewing
+  viewToActionRate Float?   // % of views that lead to action
+  
+  // Engagement
+  savesCount       Int      @default(0)
+  sharesCount      Int      @default(0)
+  reportsCount     Int      @default(0)
+  contactCount     Int      @default(0) // Contact provider clicks
+  
+  // Search visibility
+  searchAppearances Int     @default(0) // Times appeared in search
+  avgSearchPosition Float?   // Average position in search results
+  
+  // ==================== HOUSING SPECIFIC ====================
+  
+  /// Listings Breakdown
+  housingRentalListings   Int      @default(0)
+  housingSaleListings     Int      @default(0)
+  housingShortstayListings Int     @default(0)
+  housingCommercialListings Int    @default(0)
+  
+  /// Pricing
+  housingAvgRentPrice     Float?   // Monthly rent average
+  housingAvgSalePrice     Float?   // Sale price average
+  housingAvgPricePerSqm   Float?   // For comparison
+  housingMinPrice         Float?
+  housingMaxPrice         Float?
+  housingPriceVolatility  Float?   // Price variance indicator
+  
+  /// Property Stats
+  housingAvgBedrooms      Float?
+  housingAvgBathrooms     Float?
+  housingAvgSize          Float?   // Square meters
+  housingFurnishedPercent Float?   // % of listings that are furnished
+  housingAmenitiesCount   Float?   // Average amenities per listing
+  
+  /// Popular Amenities
+  housingTopAmenities     Json?    // ["wifi", "parking", "security"]
+  
+  /// Engagement
+  housingPhotoViews       Int      @default(0)
+  housingPhotoSwipeCount  Int      @default(0)
+  housingAvgPhotosPerListing Float?
+  housingMapExplores      Int      @default(0)
+  
+  /// Conversion Funnel
+  housingViewingRequests  Int      @default(0)
+  housingApplications     Int      @default(0) // Rental applications
+  housingViewingToApplicationRate Float?
+  housingListingsWithViewings Int  @default(0)
+  
+  /// Market Health
+  housingDaysOnMarket     Float?   // Average days until rented/sold
+  housingTurnoverRate     Float?   // Listings rented/sold / total listings
+  housingPriceReductionCount Int   @default(0) // Listings with price drops
+  
+  // ==================== JOBS SPECIFIC ====================
+  
+  /// Job Types
+  jobsFullTime     Int      @default(0)
+  jobsPartTime     Int      @default(0)
+  jobsContract     Int      @default(0)
+  jobsTemporary    Int      @default(0)
+  jobsInternship   Int      @default(0)
+  jobsFreelance    Int      @default(0)
+  
+  /// Work Mode
+  jobsRemote       Int      @default(0)
+  jobsHybrid       Int      @default(0)
+  jobsOnSite       Int      @default(0)
+  
+  /// Compensation
+  jobsAvgSalary        Float?   // Average pay amount
+  jobsMinSalary        Float?
+  jobsMaxSalary        Float?
+  jobsSalaryCurrency   String?  @default("KES")
+  jobsNegotiated       Int      @default(0) // Jobs marked as negotiable
+  jobsWithBenefits     Int      @default(0) // Jobs listing benefits
+  
+  /// Referrals
+  jobsReferral         Int      @default(0)
+  jobsAvgReferralBonus Float?
+  jobsMaxReferralBonus Float?
+  
+  /// Skills & Requirements
+  jobsTopSkills        Json?    // Most requested skills in category
+  jobsAvgSkillsPerJob  Float?   // Average skills required
+  jobsExperienceLevels Json?    // {"ENTRY": 45, "MID": 67, "SENIOR": 23}
+  
+  /// Education Requirements
+  jobsEducationLevels  Json?    // {"HIGH_SCHOOL": 34, "CERTIFICATE": 56, "DEGREE": 78}
+  
+  /// Conversion
+  jobsApplications     Int      @default(0)
+  jobsApplicationsPerJob Float?
+  jobsWithApplications Int @default(0)
+  jobsFilled           Int      @default(0)
+  jobsFillRate         Float?   // % of jobs filled
+  
+  /// Timing
+  jobsAvgTimeToFill    Float?   // Days
+  jobsAvgTimeToFirstApplication Float? // Hours
+  
+  /// Employer Quality
+  jobsRepeatEmployers  Int      @default(0)
+  jobsAvgEmployerRating Float?
+  
+  // ==================== SOCIAL SUPPORT SPECIFIC ====================
+  
+  /// Program Types
+  supportGrantPrograms    Int      @default(0)
+  supportTrainingPrograms Int      @default(0)
+  supportFoodPrograms     Int      @default(0)
+  supportHealthPrograms   Int      @default(0)
+  supportEducationPrograms Int     @default(0)
+  supportHousingAssistance Int     @default(0)
+  supportEmergencyRelief  Int      @default(0)
+  
+  /// Capacity
+  supportTotalCapacity    Int      @default(0) // Sum of maxBeneficiaries
+  supportCurrentBeneficiaries Int @default(0)
+  supportAvailableSlots   Int      @default(0)
+  supportUtilizationRate  Float?   // % of capacity filled
+  
+  /// Financial
+  supportTotalBudget      Float    @default(0)
+  supportTotalDisbursed   Float    @default(0)
+  supportRemainingBudget  Float    @default(0)
+  supportBudgetUtilization Float?
+  supportAvgAwardAmount   Float?
+  supportMinAwardAmount   Float?
+  supportMaxAwardAmount   Float?
+  
+  /// Accessibility
+  supportFreePrograms     Int      @default(0) // isFree = true
+  supportPaidPrograms     Int      @default(0)
+  supportAvgCost          Float?   // For paid programs
+  supportProgramsRequiringId Int   @default(0)
+  supportProgramsRequiringProof Int @default(0)
+  
+  /// Impact Metrics
+  supportApplications     Int   @default(0)
+  supportApprovedApplications Int @default(0)
+  supportRejectionRate     Float?
+  supportBeneficiaryCompletions Int @default(0) // Users who completed programs
+  supportCompletionRate    Float?
+  
+  /// Demographics Served
+  supportTargetAudiences  Json?    // {"YOUTH": 45, "WOMEN": 67, "PWD": 23}
+  
+  /// Provider Quality
+  supportProgramProviders  Int      @default(0)
+  supportVerifiedProviders Int      @default(0)
+  supportRepeatProviders   Int      @default(0)
+  
+  // ==================== SERVICES SPECIFIC (Contractor offerings) ====================
+  
+  /// Listings
+  servicesListings   Int      @default(0)
+  servicesActive     Int      @default(0)
+  servicesNew        Int      @default(0)
+  
+  /// Provider Quality
+  servicesTotalProviders    Int      @default(0)
+  servicesVerifiedProviders Int      @default(0) // Count of verified accounts
+  servicesAvgProviderRating Float?
+  servicesProvidersWithReviews Int   @default(0)
+  
+  /// Pricing
+  servicesAvgPrice   Float?
+  servicesMinPrice   Float?
+  servicesMaxPrice   Float?
+  servicesFixedPrice    Int      @default(0)
+  servicesHourlyRate    Int      @default(0)
+  servicesAvgHourlyRate Float?
+  
+  /// Booking Metrics
+  servicesTotalBookings     Int      @default(0)
+  servicesCompletedBookings Int      @default(0)
+  servicesCancelledBookings Int      @default(0)
+  servicesBookingCompletionRate Float?
+  
+  /// Reviews
+  servicesTotalReviews      Int      @default(0)
+  servicesAvgRating         Float?
+  servicesRatingDistribution Json?   // {5: 45, 4: 23, 3: 12, 2: 5, 1: 3}
+  
+  /// Provider Specialties
+  servicesTopSpecialties    Json?    // Most common specialties
+  
+  /// Service Areas
+  servicesAreaCoverage Json?  // Counties where services are offered
+  
+  // ==================== CROSS-VERTICAL METRICS ====================
+  
+  /// Financial Impact
+  totalRevenue      Float    @default(0) // GMV generated
+  platformCommission Float   @default(0) // Commission earned
+  avgTransactionValue Float?
+  
+  /// User Impact
+  uniqueProviders   Int      @default(0) // Unique accounts providing
+  uniqueBeneficiaries Int    @default(0) // Unique users benefiting
+  newUsersFromCategory Int   @default(0) // Users who joined via this category
+  
+  /// Geographic Distribution
+  locationBreakdown Json?    // { "Nairobi": 45, "Mombasa": 23, "Kisumu": 12 }
+  topLocations      Json?    // Top 5 locations by volume
+  
+  /// Temporal Patterns
+  peakHours         Json?    // When most viewed/applied (0-23)
+  peakDays          Json?    // Days of week with most activity
+  seasonalTrend     Float?   // Seasonal adjustment factor
+  
+  /// Growth Trends
+  momGrowth         Float?   // Month-over-month growth
+  yoyGrowth         Float?   // Year-over-year growth
+  categoryHealth    Float?   // Composite health score (0-100)
+  
+  /// Competitive Landscape
+  providerConcentration Float? // HHI index for provider concentration
+  avgListingsPerProvider Float?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([categorySlug, vertical, date])
+  @@index([categorySlug, date])
+  @@index([vertical, date])
+  @@index([totalRevenue, date])
+  @@index([totalViews, date])
+}
+
+// ==================== TRUST METRICS ====================
+
+model TrustMetrics {
+  id              String   @id @default(cuid())
+  date            DateTime @unique
+  
+  // ==================== DISPUTES ====================
+  disputesOpened  Int      @default(0)
+  disputesResolved Int     @default(0)
+  disputesEscalated Int    @default(0)
+  disputesByVertical Json? // {"JOBS": 5, "HOUSING": 3, "SERVICES": 2}
+  disputesByReason Json?   // {"PAYMENT": 4, "QUALITY": 3, "NO_SHOW": 2}
+  
+  // Resolution metrics
+  avgResolutionTime Float? // In hours
+  disputesInFavorOfConsumer Int @default(0)
+  disputesInFavorOfProvider Int @default(0)
+  disputeOutcomeRate Float? // % resolved in consumer favor
+  
+  // ==================== FRAUD ====================
+  fraudFlags      Int      @default(0)
+  confirmedFraud  Int      @default(0)
+  falsePositives  Int      @default(0)
+  fraudByType     Json?    // {"ACCOUNT_TAKEOVER": 2, "FAKE_LISTING": 5, "PAYMENT_FRAUD": 3}
+  
+  // ==================== ACCOUNT ACTIONS ====================
+  suspensions     Int      @default(0)
+  permanentBans   Int      @default(0)
+  temporaryLocks  Int      @default(0)
+  warningsIssued  Int      @default(0)
+  
+  actionsByReason Json?    // {"FRAUD": 4, "ABUSE": 3, "SPAM": 5}
+  
+  // ==================== VERIFICATION METRICS ====================
+  verifiedAccounts Int     @default(0)
+  verificationRate Float?  // % of accounts verified
+  pendingVerifications Int @default(0)
+  rejectedVerifications Int @default(0)
+  
+  verificationByType Json? // {"NATIONAL_ID": 234, "BUSINESS_REG": 56, "KRA_PIN": 89}
+  avgVerificationTime Float? // Hours
+  
+  // ==================== SAFETY & CONTENT MODERATION ====================
+  flaggedListings  Int     @default(0)
+  removedListings  Int     @default(0)
+  reinstatedListings Int   @default(0)
+  
+  userReports      Int     @default(0)
+  uniqueReporters  Int     @default(0)
+  reportsByType    Json?   // {"SCAM": 5, "INAPPROPRIATE": 3, "DUPLICATE": 2}
+  
+  // Auto-moderation
+  autoFlagged      Int     @default(0)
+  autoRemoved      Int     @default(0)
+  humanReviewed    Int     @default(0)
+  
+  // ==================== COMPLIANCE ====================
+  gdprRequests     Int     @default(0)
+  dataDeletions    Int     @default(0)
+  legalHolds       Int     @default(0)
+  
+  // ==================== TRUST SCORES ====================
+  avgTrustScore    Float?  // Average platform trust score (0-100)
+  trustScoreByVertical Json?
+  
+  // Risk indicators
+  highRiskUsers    Int     @default(0)
+  highRiskListings Int     @default(0)
+  riskDistribution Json?   // {"LOW": 456, "MEDIUM": 123, "HIGH": 45}
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([date])
+}
+
+// ===================== USER INTERACTION EVENTS (For AI SmartMatch™) =====================
+// This is the raw event stream for ML training and real-time personalization
+
+model UserEvent {
+  id           String   @id @default(cuid())
+  userUuid     String?  // References User.uuid in Profile Service
+  sessionId    String?  // References Session.tokenId in Auth Service
+  
+  // ==================== CONTEXT ====================
+  platform     String   @default("MOBILE") // MOBILE, WEB, or SYSTEM
+  eventType    String   // VIEW, CLICK, SAVE, SHARE, APPLY, CONTACT, etc.
+  vertical     String   // "HOUSING", "JOBS", "SOCIAL_SUPPORT", "SERVICES"
+  
+  // Event classification
+  eventCategory String  // "VIEW", "INTERACTION", "CONVERSION", "PREFERENCE"
+  eventAction   String  // Specific action within category
+  
+  // ==================== TARGET ====================
+  targetId     String?  // externalId of Job, House, Service, or Program
+  targetType   String?  // "JOB", "HOUSING", "SERVICE", "SUPPORT"
+  targetOwnerId String? // UUID of listing owner (for trust signals)
+  
+  // Category info (denormalized for speed)
+  categorySlug String?  // Category of the target
+  subCategorySlug String?
+  
+  // ==================== ENGAGEMENT METRICS ====================
+  dwellTime    Int?     // Seconds spent on this interaction
+  swipeCount   Int?     // Number of swipes in this session/event
+  scrollDepth  Int?     // % of page scrolled (0-100)
+  photoIndices Int[]    // Which photos they viewed (order)
+  videoWatched Boolean? @default(false)
+  videoDuration Int?    // Seconds of video watched
+  
+  // ==================== SEARCH CONTEXT ====================
+  searchId     String?  // Group events from same search
+  searchQuery  String?  // What they searched for
+  searchResultsCount Int? // Number of results shown
+  searchPosition Int?   // Position of clicked item (1-based)
+  filters      Json?    // Active filters during interaction
+  sortBy       String?  // How results were sorted
+  
+  // ==================== SMARTMATCH™ CONTEXT ====================
+  recommendationId String? // ID of the recommendation if shown
+  recommendationType String? // "AI_MATCH", "POPULAR", "NEARBY", "TRENDING"
+  recommendationScore Float? // Match score if applicable
+  userAcceptedSuggestion Boolean? // Did they accept AI suggestion
+  
+  // ==================== LOCATION CONTEXT ====================
+  locationLat   Float?
+  locationLng   Float?
+  locationCity  String?
+  locationCounty String?
+  locationAccuracy Int?   // Meters
+  
+  // ==================== PRICING CONTEXT ====================
+  priceViewed   Float?   // Price shown to user
+  priceCurrency String?  @default("KES")
+  comparedToAvg Float?   // How this price compares to category avg (-0.2 = 20% below avg)
+  
+  // ==================== USER STATE ====================
+  userType      String?  // "PROVIDER", "BENEFICIARY", "BOTH"
+  userTrustScore Float?  // User's trust score at time of event
+  userVerificationLevel String? // "NONE", "BASIC", "VERIFIED"
+  
+  // Session info
+  sessionNumber Int?     // User's nth session
+  eventsInSession Int?   // Total events in this session
+  timeInSession Int?     // Seconds into session
+  
+  // ==================== DEVICE INFO ====================
+  os           String?  
+  osVersion    String?
+  deviceModel  String?  
+  deviceBrand  String?
+  browser      String?
+  browserVersion String?
+  appVersion   String?  // Mobile app version
+  screenSize   String?  // e.g., "375x812"
+  networkType  String?  // "WIFI", "4G", "5G"
+  
+  // ==================== METADATA ====================
+  metadata     Json     // Flexible catch-all for AI training
+  
+  // Referrer info
+  referrerUrl  String?  // Where they came from
+  referrerType String?  // "DIRECT", "SEARCH", "SOCIAL", "EMAIL"
+  
+  // A/B testing
+  experimentId String?
+  experimentVariant String?
+  
+  createdAt    DateTime @default(now())
+
+  // Comprehensive indexes for AI queries
+  @@index([userUuid, createdAt])
+  @@index([sessionId])
+  @@index([eventType, vertical, createdAt])
+  @@index([targetId, targetType])
+  @@index([searchId])
+  @@index([recommendationId])
+  @@index([locationCity, eventType])
+  @@index([categorySlug, eventType])
+  @@index([createdAt])
+  
+  // Compound indexes for common AI patterns
+  @@index([userUuid, eventType, targetType])
+  @@index([userUuid, vertical, createdAt])
+  @@index([targetId, eventType])
+}
+
+// ===================== SMARTMATCH™ FEATURE STORE =====================
+// This model directly answers the AI developer's 28 feature requirements
+// Pre-computed features for ML training and inference
+
+model SmartMatchy {
+  id              String   @id @default(cuid())
+  
+  // ==================== COMPOSITE IDENTIFIERS ====================
+  userUuid        String   // The user
+  listingId       String   // The listing (house, job, service, program)
+  vertical        String   // "HOUSING", "JOBS", "SOCIAL_SUPPORT", "SERVICES"
+  interactionId   String?  // Link to specific UserEvent if applicable
+  
+  // Timestamp for time-based features
+  timestamp       DateTime @default(now())
+  featureSetVersion String  // Version of feature engineering pipeline
+  
+  // ==================== USER PREFERENCES (Features 1-8) ====================
+  
+  /// Budget Features
+  userMaxBudget   Float?   // Feature 1: Maximum budget user is willing to spend
+  userMinBudget   Float?   // User's minimum budget (if specified)
+  userBudgetMidpoint Float? // Feature 2: Middle value of user's budget range
+  
+  /// Bedroom Preferences
+  userMinBedrooms Int?     // Feature 3: Minimum number of bedrooms
+  userMaxBedrooms Int?     // Feature 4: Maximum number of bedrooms
+  
+  /// Property Preferences
+  userPropertyType String? // Feature 5: Type of property preferred (apartment, house, etc.)
+  
+  /// Location Preferences
+  userPreferredNeighborhood String? // Feature 6: Preferred neighborhood or area
+  userPreferredLat     Float?       // Feature 7: Preferred location latitude
+  userPreferredLng     Float?       // Feature 8: Preferred location longitude
+  userPreferredRadius  Float?       // Search radius in km
+  
+  // ==================== LISTING FEATURES (Features 9-18) ====================
+  
+  /// Price Features
+  listingPrice        Float?        // Feature 9: Price of the house
+  listingPriceCurrency String?       @default("KES")
+  
+  /// Property Details
+  listingBedrooms     Int?           // Feature 10: Number of bedrooms
+  listingBathrooms    Int?           // Feature 11: Number of bathrooms
+  listingPropertyType String?        // Feature 12: Type of property
+  
+  /// Location Details
+  listingNeighborhood String?        // Feature 13: Neighborhood or area
+  listingLat          Float?         // Feature 14: Latitude
+  listingLng          Float?         // Feature 15: Longitude
+  
+  /// Listing Metadata
+  listingAge          Int?           // Feature 16: Days since posted
+  listingPhotoCount   Int?           // Feature 17: Number of photos
+  listingVerified     Boolean?       @default(false) // Feature 18: Whether verified
+  listingStatus       String?        // "ACTIVE", "PENDING", "COMPLETED"
+  
+  // ==================== SESSION CONTEXT (Features 19-22) ====================
+  
+  /// Referrer Information
+  sessionReferrer     String?        // Feature 19: Where user came from
+  sessionReferrerType String?        // "HOME", "SEARCH", "SIMILAR", "SAVED"
+  
+  /// Device Information
+  sessionDevice       String?        // Feature 20: Device being used
+  sessionPlatform     String?        // "MOBILE", "WEB", "APP"
+  
+  /// Search Context
+  sessionSearchMaxBudget Float?      // Feature 21: Max budget in current search
+  sessionSearchNeighborhood String?  // Feature 22: Neighborhood selected in current search
+  sessionSearchFilters Json?         // All active filters
+  
+  // ==================== USER-LISTING MATCH FEATURES (Features 23-28) ====================
+  // These are the MOST IMPORTANT for ranking - pre-computed for ML
+  
+  /// Budget Match
+  isWithinBudget      Boolean?       // Feature 23: Whether house is within user's budget
+  priceToBudgetDiff   Float?         // Feature 24: Difference from budget midpoint (negative = under)
+  priceToBudgetRatio  Float?         // Feature 25: Price / Max Budget (0.0-1.0+)
+  
+  /// Bedroom Match
+  bedroomDiff         Int?           // Feature 26: Difference from preferred bedrooms
+  meetsBedroomRequirement Boolean?    // Whether within min/max range
+  
+  /// Location Match
+  locationDistance    Float?         // Feature 27: Distance in km between user pref and listing
+  isPreferredNeighborhood Boolean?    // Feature 28: Whether in same preferred neighborhood
+  
+  // ==================== ADDITIONAL MATCH SCORES ====================
+  
+  // Property Type Match
+  propertyTypeMatch   Boolean?       // Whether property type matches preference
+  
+  // Composite scores
+  overallMatchScore   Float?         // Final ranking score
+  priceScore          Float?         // Normalized price match (0-1)
+  locationScore       Float?         // Normalized location match (0-1)
+  propertyScore       Float?         // Normalized property match (0-1)
+  recencyScore        Float?         // Normalized recency match (0-1)
+  
+  // ==================== LABELS (For Training) ====================
+  userClicked         Boolean?       @default(false) // Did user click/view
+  userSaved           Boolean?       @default(false) // Did user save
+  userContacted       Boolean?       @default(false) // Did user contact/apply
+  userConverted       Boolean?       @default(false) // Did user complete transaction
+  dwellTime           Int?           // If clicked, how long they viewed
+  
+  // ==================== METADATA ====================
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  
+  // Indexes for ML training queries
+  @@index([userUuid, timestamp])
+  @@index([listingId, timestamp])
+  @@index([vertical, timestamp])
+  @@index([overallMatchScore])
+  @@index([userClicked])
+  @@index([userConverted])
+  
+  // Composite indexes for training batches
+  @@index([timestamp, vertical, userClicked])
+  @@index([vertical, isWithinBudget, userConverted])
+}
+
+// ===================== SMARTMATCH™ INSIGHTS (User Profiles) =====================
+// Pre-computed user profiles for personalization
+
+model SmartMatchInsight {
+  id           String   @id @default(cuid())
+  userUuid     String   @unique // One insight profile per user
+  
+  // ==================== USER SNAPSHOT ====================
+  userType     String?  // "PROVIDER", "BENEFICIARY", "BOTH"
+  accountAge   Int?     // Days since signup
+  trustScore   Float?   // User's trust score
+  isVerified   Boolean? @default(false)
+  
+  // ==================== EXPLICIT PREFERENCES ====================
+  explicitPrefs Json    // Snapshot of stated preferences from:
+                        // - HousingPreference (budget, bedrooms, neighborhood)
+                        // - JobSeekerProfile (skills, job types)
+                        // - UserProfile
+  
+  explicitPrefsUpdatedAt DateTime?
+  
+  // ==================== IMPLICIT SIGNALS ====================
+  implicitPrefs Json    // Derived preferences from behavior:
+                        // {
+                        //   "preferredNeighborhoods": [
+                        //     {"name": "Kilimani", "weight": 0.85},
+                        //     {"name": "Lavington", "weight": 0.72}
+                        //   ],
+                        //   "priceRange": {
+                        //     "min": 15000, 
+                        //     "max": 45000,
+                        //     "preferred": 25000,
+                        //     "flexibility": 0.3
+                        //   },
+                        //   "preferredBedrooms": 2,
+                        //   "bedroomFlexibility": 1
+                        // }
+  
+  // ==================== ENGAGEMENT PATTERNS ====================
+  avgSessionDuration Float? // Average time per session
+  totalSessions     Int     @default(0)
+  totalEvents       Int     @default(0)
+  
+  // Time patterns
+  peakActivityHours  Int[]  // Hours when most active (0-23)
+  peakActivityDays   Int[]  // Days of week (0-6, 0=Sunday)
+  
+  // Interaction patterns
+  avgSwipeRate      Float? // Swipes per minute
+  photoPreference   Float? // % of listings where they view photos
+  mapUsageRate      Float? // % of sessions with map
+  
+  // ==================== CATEGORY AFFINITIES ====================
+  categoryAffinities Json  // Weighted preferences by category:
+                          // {
+                          //   "apartments": 0.95,
+                          //   "plumbing": 0.45,
+                          //   "food-aid": 0.20
+                          // }
+  
+  verticalAffinities Json // By vertical: {"HOUSING": 0.8, "JOBS": 0.3}
+  
+  // ==================== CONVERSION PREDICTORS ====================
+  conversionProbability Json // ML model output:
+                            // {
+                            //   "application": 0.45,
+                            //   "contact": 0.67,
+                            //   "booking": 0.23
+                            // }
+  
+  // ==================== RECOMMENDATION HISTORY ====================
+  recommendationsShown Int @default(0)
+  recommendationsClicked Int @default(0)
+  recommendationsConverted Int @default(0)
+  ctrByType         Json?   // Click-through rate by recommendation type
+  
+  // ==================== FEEDBACK LOOP ====================
+  positiveFeedback  Json?   // Things user liked (saved, contacted)
+  negativeFeedback  Json?   // Things user dismissed/ignored
+  feedbackUpdatedAt DateTime?
+  
+  // ==================== MATCH SCORES (Cached) ====================
+  lastComputed  DateTime @updatedAt
+  matchVersion  String   // Version of matching algorithm
+  confidenceScore Float? // Confidence in this user profile (0-1)
+  
+  // Pre-computed matches (for performance)
+  topHousingMatches   Json?   // Top 10 housing recommendations
+  
+  // ==================== USER STATS ====================
+  totalInteractions Int @default(0)
+  uniqueListingsViewed Int @default(0)
+  savedListingsCount Int @default(0)
+  applicationCount Int @default(0)
+  contactCount    Int @default(0)
+  
+  // ==================== LIFECYCLE STAGE ====================
+  userStage       String? // "NEW", "ACTIVE", "ENGAGED", "DORMANT", "CHURNED"
+  stageLastUpdated DateTime?
+  
+  // Churn risk
+  churnRisk       Float?  // 0-1 probability of churn
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Comprehensive indexes
+  @@index([userUuid])
+  @@index([lastComputed])
+  @@index([userStage])
+  @@index([churnRisk])
+  @@index([userType])
+}
+
+// ===================== VERTICAL-SPECIFIC METRICS =====================
+// These models are kept but deduplicated - they reference common metrics
+// but add vertical-specific aggregations not covered by CategoryMetrics
+
+model HousingMetrics {
+  id              String   @id @default(cuid())
+  date            DateTime @unique
+  
+  // ==================== SUPPLY ====================
+  totalListings   Int      @default(0)
+  activeListings  Int      @default(0)
+  newListings     Int      @default(0)
+  expiredListings Int      @default(0)
+  
+  // By type
+  rentalListings  Int      @default(0)
+  saleListings    Int      @default(0)
+  shortstayListings Int   @default(0)
+  
+  // By furnishing
+  furnishedListings Int    @default(0)
+  unfurnishedListings Int  @default(0)
+  
+  // By bedrooms
+  studioListings  Int      @default(0)
+  oneBedListings  Int      @default(0)
+  twoBedListings  Int      @default(0)
+  threeBedListings Int     @default(0)
+  fourPlusBedListings Int  @default(0)
+  
+  // ==================== DEMAND ====================
+  totalSearches   Int      @default(0)
+  uniqueSearchers Int      @default(0)
+  avgSearchPrice  Float?
+  searchPriceRange Json?   // {"min": 10000, "max": 50000, "avg": 25000}
+  
+  // Search terms
+  topSearchTerms  Json?    // Most searched neighborhoods/features
+  
+  // ==================== ENGAGEMENT ====================
+  listingViews    Int      @default(0)
+  uniqueViewers   Int      @default(0)
+  photoViews      Int      @default(0)
+  avgPhotosPerListing Float?
+  viewsPerListing Float?
+  
+  savedListings   Int      @default(0)
+  savedPerUser    Float?
+  
+  // ==================== CONVERSION FUNNEL ====================
+  contactRequests Int      @default(0)
+  viewingRequests Int      @default(0)
+  applications    Int      @default(0) // Rental applications
+  
+  viewToContactRate Float?
+  contactToViewingRate Float?
+  viewingToApplicationRate Float?
+  
+  listingsWithViewings Int @default(0)
+  listingsWithApplications Int @default(0)
+  listingsRented   Int      @default(0)
+  listingsSold     Int      @default(0)
+  
+  // ==================== PRICING TRENDS ====================
+  avgRent         Float?
+  avgRentByType   Json?    // {"apartment": 25000, "house": 45000, "studio": 15000}
+  avgRentByBedroom Json?   // {"1": 15000, "2": 25000, "3": 35000}
+  
+  avgSalePrice     Float?
+  avgSalePriceByType Json?
+  
+  pricePerSqm      Float?
+  priceTrend       Float?   // % change from previous period
+  priceDistribution Json?   // Price percentiles
+  
+  // ==================== MARKET HEALTH ====================
+  daysOnMarket     Float?   // Average days until rented/sold
+  medianDaysOnMarket Int?
+  turnoverRate     Float?   // Listings rented/sold / total listings
+  vacancyRate      Float?   // Implied from active/listings ratio
+  priceReductionCount Int   @default(0)
+  avgPriceReduction Float? // % reduction
+  
+  // ==================== PROVIDER METRICS ====================
+  uniqueProviders  Int      @default(0)
+  newProviders     Int      @default(0)
+  activeProviders  Int      @default(0) // Posted in last 30 days
+  professionalProviders Int @default(0) // Agencies/companies
+  
+  providerHHI       Float?   // Market concentration
+  
+  // ==================== GEOGRAPHIC ====================
+  topCounties      Json?    // Top 5 counties by listings
+  topNeighborhoods Json?    // Top 10 neighborhoods by listings
+  priceByCounty    Json?    // Average rent by county
+  
+  // ==================== SEASONALITY ====================
+  monthlyTrend     Json?    // 12-month trend
+  quarterlyGrowth  Float?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([date])
+}
+
+model JobsMetrics {
+  id              String   @id @default(cuid())
+  date            DateTime @unique
+  
+  // ==================== SUPPLY ====================
+  totalJobs       Int      @default(0)
+  activeJobs      Int      @default(0)
+  newJobs         Int      @default(0)
+  expiredJobs     Int      @default(0)
+  
+  // By employment type
+  fullTimeJobs    Int      @default(0)
+  partTimeJobs    Int      @default(0)
+  contractJobs    Int      @default(0)
+  temporaryJobs   Int      @default(0)
+  internshipJobs  Int      @default(0)
+  
+  // By work mode
+  remoteJobs      Int      @default(0)
+  hybridJobs      Int      @default(0)
+  onSiteJobs      Int      @default(0)
+  
+  // By experience level
+  entryLevelJobs  Int      @default(0)
+  midLevelJobs    Int      @default(0)
+  seniorLevelJobs Int      @default(0)
+  
+  // ==================== DEMAND ====================
+  totalApplications Int    @default(0)
+  uniqueApplicants Int     @default(0)
+  avgApplicantsPerJob Float?
+  medianApplicantsPerJob Int?
+  applicationsByType Json? // {"FULL_TIME": 234, "PART_TIME": 56}
+  
+  // ==================== ENGAGEMENT ====================
+  jobViews        Int      @default(0)
+  uniqueViewers   Int      @default(0)
+  viewsPerJob     Float?
+  savedJobs       Int      @default(0)
+  savedPerUser    Float?
+  shareCount      Int      @default(0)
+  
+  // ==================== REFERRALS ====================
+  referralJobs    Int      @default(0)
+  referralApplications Int @default(0)
+  referralBonusAvg Float?
+  referralBonusMax Float?
+  referralConversionRate Float? // applications / views for referral jobs
+  
+  // ==================== COMPENSATION ====================
+  avgSalary       Float?
+  medianSalary    Float?
+  minSalary       Float?
+  maxSalary       Float?
+  salaryByType    Json?    // {"FULL_TIME": 50000, "PART_TIME": 25000}
+  salaryByLevel   Json?    // {"ENTRY": 30000, "MID": 50000, "SENIOR": 80000}
+  salaryPercentiles Json?  // {10: 20000, 25: 30000, 50: 45000, 75: 65000, 90: 90000}
+  
+  // ==================== SKILLS & REQUIREMENTS ====================
+  topSkills       Json?    // Top 20 most requested skills
+  emergingSkills  Json?    // Skills growing fastest
+  avgSkillsPerJob Float?
+  topCertifications Json?
+  topEducationReq Json?    // Most common education requirements
+  
+  // ==================== OUTCOMES ====================
+  jobsFilled      Int      @default(0)
+  fillRate        Float?   // % of jobs filled
+  avgTimeToFill   Float?   // Days
+  medianTimeToFill Int?    // Days
+  jobsWithHires   Int      @default(0)
+  avgHiresPerJob  Float?
+  
+  // ==================== EMPLOYER METRICS ====================
+  uniqueEmployers Int      @default(0)
+  newEmployers    Int      @default(0)
+  repeatEmployers Int      @default(0)
+  employerRetentionRate Float?
+  avgEmployerRating Float?
+  employersWithReviews Int @default(0)
+  
+  // ==================== JOB SEEKER METRICS ====================
+  uniqueSeekers   Int      @default(0)
+  activeSeekers   Int      @default(0) // Applied in last 30 days
+  newSeekers      Int      @default(0)
+  seekersWithHires Int     @default(0)
+  avgApplicationsToHire Float?
+  
+  // ==================== INDUSTRY TRENDS ====================
+  topIndustries   Json?    // Most active industries
+  growingIndustries Json?  // Industries with highest job growth
+  
+  // ==================== SEASONALITY ====================
+  monthlyTrend     Json?    // 12-month trend
+  quarterlyGrowth  Float?
+  yearOverYearGrowth Float?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([date])
+}
+
+model SocialSupportMetrics {
+  id              String   @id @default(cuid())
+  date            DateTime @unique
+  
+  // ==================== PROGRAM SUPPLY ====================
+  totalPrograms   Int      @default(0)
+  activePrograms  Int      @default(0)
+  newPrograms     Int      @default(0)
+  endedPrograms   Int      @default(0) // Programs that ended
+  
+  // By program type
+  programsByType  Json?    // {
+                           //   "GRANT": 15,
+                           //   "TRAINING": 23,
+                           //   "FOOD": 12,
+                           //   "HEALTH": 8,
+                           //   "EDUCATION": 10,
+                           //   "HOUSING": 5,
+                           //   "EMERGENCY": 7
+                           // }
+  
+  // By cost model
+  freePrograms    Int      @default(0)
+  paidPrograms    Int      @default(0)
+  slidingScalePrograms Int @default(0)
+  
+  // ==================== CAPACITY ====================
+  totalCapacity   Int      @default(0) // Sum of maxBeneficiaries
+  currentBeneficiaries Int @default(0)
+  availableSlots  Int      @default(0)
+  utilizationRate Float?   // % of capacity filled
+  capacityByType  Json?    // Capacity by program type
+  
+  // Waitlist
+  programsWithWaitlist Int @default(0)
+  totalWaitlisted  Int     @default(0)
+  avgWaitTime     Float?   // Days
+  
+  // ==================== REACH & DEMAND ====================
+  totalApplications Int    @default(0)
+  uniqueApplicants Int     @default(0)
+  applicationsPerProgram Float?
+  approvedApplications Int @default(0)
+  approvalRate     Float?
+  rejectedApplications Int @default(0)
+  rejectionRate    Float?
+  
+  // Demographics served
+  beneficiariesByDemographic Json? // {
+                                   //   "YOUTH": 234,
+                                   //   "WOMEN": 456,
+                                   //   "PWD": 78,
+                                   //   "ELDERLY": 123,
+                                   //   "DISPLACED": 45
+                                   // }
+  
+  // ==================== FINANCIAL IMPACT ====================
+  totalBudget     Float    @default(0)
+  totalDisbursed  Float    @default(0)
+  remainingBudget Float    @default(0)
+  budgetUtilization Float?
+  disbursedByType Json?    // Disbursement by program type
+  avgAwardAmount  Float?
+  medianAwardAmount Float?
+  minAwardAmount  Float?
+  maxAwardAmount  Float?
+  awardDistribution Json?  // Award percentiles
+  
+  // ==================== PROGRAM OUTCOMES ====================
+  programsWithCompletions Int @default(0) // Programs that had beneficiaries complete
+  beneficiaryCompletions Int @default(0) // Number of beneficiaries who completed
+  completionRate   Float?
+  outcomesByType  Json?    // Success metrics by program type
+  
+  // Impact metrics
+  beneficiariesEmployed Int @default(0) // After training programs
+  businessesStarted Int   @default(0) // After grant programs
+  foodSecurityImproved Int @default(0) // After food programs
+  
+  // ==================== PROVIDER METRICS ====================
+  uniqueProviders  Int      @default(0)
+  newProviders     Int      @default(0)
+  activeProviders  Int      @default(0)
+  verifiedProviders Int     @default(0)
+  avgProviderRating Float?
+  providersWithHistory Int @default(0) // >1 year on platform
+  
+  // ==================== GEOGRAPHIC REACH ====================
+  countiesServed   Int      @default(0)
+  topCounties      Json?    // Top 5 counties by programs
+  urbanVsRural     Json?    // {"URBAN": 45, "RURAL": 32, "PERI_URBAN": 12}
+  
+  // ==================== ACCESSIBILITY ====================
+  programsRequiringId Int   @default(0)
+  programsRequiringProof Int @default(0)
+  avgDocsRequired   Float?
+  languagesOffered Json?    // Languages programs are offered in
+  
+  // ==================== TIMELINESS ====================
+  avgTimeToApproval Float?  // Days from application to decision
+  avgTimeToDisbursement Float? // Days from approval to funds
+  
+  // ==================== TRENDS ====================
+  monthlyTrend     Json?    // 12-month trend
+  quarterlyGrowth  Float?
+  yearOverYearGrowth Float?
+  topNeeds         Json?    // Most requested support types
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([date])
+}
+
+// ===================== RETENTION & COHORT ANALYSIS =====================
+
+model UserCohort {
+  id              String   @id @default(cuid())
+  cohortDate      DateTime // When users signed up (month)
+  cohortSize      Int      @default(0)
+  
+  // ==================== COHORT IDENTIFICATION ====================
+  acquisitionChannel String? // How they joined: "ORGANIC", "REFERRAL", "SOCIAL", "PAID"
+  userType        String?    // "PROVIDER", "BENEFICIARY", "BOTH"
+  vertical        String?    // Primary vertical: "HOUSING", "JOBS", "SOCIAL_SUPPORT"
+  
+  // ==================== RETENTION BY PERIOD ====================
+  retentionDay7   Float?   // % active on day 7
+  retentionDay14  Float?   // % active on day 14
+  retentionDay30  Float?   // % active on day 30
+  retentionDay60  Float?   // % active on day 60
+  retentionDay90  Float?   // % active on day 90
+  retentionDay180 Float?   // % active on day 180
+  retentionDay365 Float?   // % active on day 365
+  retentionCurve  Json?    // Array of [day, percentage] pairs
+  
+  // ==================== ENGAGEMENT METRICS ====================
+  avgSessionsPerUser Float?
+  avgEventsPerUser   Float?
+  
+  // Engagement by vertical
+  housingUsers    Int      @default(0)
+  jobsUsers       Int      @default(0)
+  supportUsers    Int      @default(0)
+  servicesUsers   Int      @default(0)
+  multiVerticalUsers Int   @default(0) // Used >1 vertical
+  crossVerticalRate Float? // % using multiple verticals
+  
+  // ==================== POWER USERS ====================
+  powerUsers      Int      @default(0) // 20+ sessions
+  superUsers      Int      @default(0) // 50+ sessions
+  powerUserRate   Float?   // % of cohort that are power users
+  
+  // ==================== CONVERSION METRICS ====================
+  usersWithFirstView Int   @default(0)
+  usersWithFirstSave Int   @default(0)
+  usersWithFirstApply Int  @default(0)
+  usersWithFirstContact Int @default(0)
+  
+  avgDaysToFirstApply Float?
+  avgDaysToFirstContact Float?
+  
+  appliedUsers    Int      @default(0) // Users who applied to anything
+  applicationRate Float?   // % of cohort that applied
+  transactionUsers Int     @default(0) // Users with completed transactions
+  transactionRate Float?   // % that transacted
+  repeatApplicants Int     @default(0) // Applied to >1 thing
+  repeatTransactionUsers Int @default(0) // >1 transaction
+  
+  // ==================== LIFETIME VALUE ====================
+  avgLTV          Float?   // Average lifetime value
+  medianLTV       Float?
+  ltvByVertical   Json?    // LTV breakdown
+  totalRevenue    Float    @default(0)
+  avgRevenuePerUser Float?
+  
+  // ==================== CHURN ANALYSIS ====================
+  churnedUsers    Int      @default(0) // No activity in 90+ days
+  churnRate       Float?   // % churned
+  churnByMonth    Json?    // Churn rate by month after signup
+  churnReasons    Json?    // From exit surveys
+  
+  // ==================== RETENTION DRIVERS ====================
+  retentionFactors Json?   // What correlates with retention
+  featureAdoptionImpact Json? // How features affect retention
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([cohortDate, acquisitionChannel, userType])
+  @@index([cohortDate])
+  @@index([churnRate])
+  @@index([retentionDay30])
+}
+
+// ===================== FEATURE ADOPTION METRICS =====================
+
+model FeatureAdoption {
+  id              String   @id @default(cuid())
+  featureName     String   // e.g., "MAP_VIEW", "PHOTO_SWIPE", "SAVE_LISTING"
+  featureCategory String   // "SEARCH", "ENGAGEMENT", "CONVERSION", "SOCIAL"
+  date            DateTime
+  
+  // ==================== USAGE METRICS ====================
+  totalUsers      Int      @default(0) // Users who used feature
+  newUsers        Int      @default(0) // First time using feature today
+  returningUsers  Int      @default(0) // Used before, using again
+  totalSessions   Int      @default(0) // Sessions with feature use
+  totalUsage      Int      @default(0) // Total times feature used
+  avgUsagePerUser Float?   // Average times used per user
+  medianUsagePerUser Int?  // Median usage count
+  usageDistribution Json?  // {1: 45, 2-5: 67, 6-10: 23, 10+: 12}
+  
+  // ==================== ADOPTION RATES ====================
+  adoptionRate    Float?   // % of active users using feature
+  weeklyAdoption  Float?   // % using in last 7 days
+  monthlyAdoption Float?   // % using in last 30 days
+  adoptionByUserType Json? // {"PROVIDER": 0.45, "BENEFICIARY": 0.67}
+  adoptionByVertical Json? // {"HOUSING": 0.56, "JOBS": 0.34}
+  
+  // ==================== TIME TO ADOPTION ====================
+  avgDaysToFirstUse Float? // Days from signup to first use
+  medianDaysToFirstUse Int?
+  cumulativeAdoption Json? // % adopted by day: {7: 0.23, 30: 0.45}
+  
+  // ==================== IMPACT METRICS ====================
+  conversionRate   Float?  // % of users who completed action after using feature
+  conversionLift   Float?  // Improvement vs non-users
+  sessionLengthImpact Float? // Minutes added to session
+  retentionImpact  Float?   // % improvement in 30-day retention
+  satisfactionScore Float? // Based on post-interaction feedback (0-5)
+  feedbackCount    Int     @default(0)
+  positiveFeedback Int     @default(0)
+  negativeFeedback Int     @default(0)
+  
+  // ==================== A/B TESTING ====================
+  experimentId     String?
+  experimentGroup String?  // "control", "treatment_a", etc.
+  experimentVariant String?
+  testMetric      Float?   // Primary metric for test
+  testPValue      Float?   // Statistical significance
+  testWinner      Boolean? // Whether this variant won
+  
+  // ==================== USER FEEDBACK ====================
+  featureRequests Int      @default(0) // Times users asked for this
+  featureComplaints Int    @default(0) // Negative feedback specific
+  feedbackThemes  Json?    // Themes in user feedback
+  
+  // ==================== TECHNICAL METRICS ====================
+  avgLoadTime     Float?   // Milliseconds
+  errorRate       Float?   // % of uses with error
+  crashRate       Float?   // % of sessions with crash
+  usageByPlatform Json?    // {"MOBILE": 0.78, "WEB": 0.22}
+  
+  // ==================== TRENDS ====================
+  dailyTrend      Json?    // Last 30 days of usage
+  weeklyGrowth    Float?   // Week-over-week growth
+  monthlyGrowth   Float?   // Month-over-month growth
+  peakUsageHour   Int?     // Hour of day with most usage
+  peakUsageDay    String?  // Day of week with most usage
+  
+  // ==================== PREDICTIONS ====================
+  projectedAdoption Float? // Projected adoption in 30 days
+  saturationPoint Float?   // Estimated max adoption rate
+  
+  @@unique([featureName, date, experimentGroup])
+  @@index([featureName, date])
+  @@index([featureCategory, date])
+  @@index([adoptionRate])
 }

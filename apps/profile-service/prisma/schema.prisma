@@ -104,8 +104,11 @@ model User {
   sentInvitations OrganizationInvitation[] @relation("inviter")
 
   profile     UserProfile?
+
+  jobProfile  JobSeekerProfile? 
   completion  ProfileCompletion?
   memberships OrganizationMember[]
+  housingPreference HousingPreference?
 
   status    String   @default("ACTIVE")
   createdAt DateTime @default(now())
@@ -253,4 +256,51 @@ model OrganizationInvitation {
   @@index([expiresAt])
   @@index([organizationUuid])
   @@index([invitedByUserUuid])
+}
+
+// --- JOB SEEKER LAYER (Optional for Individuals) ---
+model JobSeekerProfile {
+  id                String    @id @default(cuid())
+  userUuid          String    @unique
+  user              User      @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+
+  // Professional Branding
+  headline          String?   // e.g., "Senior Full Stack Developer"
+  isActivelySeeking Boolean   @default(false)
+
+  // Recommender Metadata Vectors (Scalar Lists)
+  skills            String[]  // e.g., ["NestJS", "React", "PostgreSQL"]
+  industries        String[]  // e.g., ["FinTech", "HealthCare"]
+  jobTypes          String[]  // e.g., ["FULL_TIME", "CONTRACT"]
+  seniorityLevel    String?   // e.g., "SENIOR"
+  
+  // Logistics
+  noticePeriod      String?   // e.g., "Immediate", "1 Month"
+
+  // CV Logic
+  cvUrl             String?   // Private cloud storage link
+  cvLastUpdated     DateTime?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+// Add this to your Profile Service schema
+model HousingPreference {
+  id                String   @id @default(cuid())
+  userUuid          String   @unique
+  user              User     @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
+
+  minBedrooms       Int      @default(0)
+  maxBedrooms       Int      @default(5)
+  maxBudget         Float?
+  preferredType     String?  // Matches Category slug (e.g., "apartment")
+  preferredCity     String?
+  preferredNeighborhood String?
+  
+  // Coordinates for distance math
+  latitude          Float?
+  longitude         Float?
+
+  updatedAt         DateTime @updatedAt
 }

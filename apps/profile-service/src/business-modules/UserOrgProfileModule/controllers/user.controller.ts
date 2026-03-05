@@ -8,9 +8,10 @@ import {
   UpdateFullUserProfileDto,
   UserProfileResponseDto,
   UserSignupDataDto,
-  // Add your new DTOs here
   OnboardProviderGrpcRequestDto,
   ContractorProfileResponseDto,
+  UpdateJobSeekerGrpcRequestDto,
+  JobSeekerProfileResponseDto,
 } from '@pivota-api/dtos';
 
 @Controller()
@@ -18,6 +19,18 @@ export class UserController {
   private readonly logger = new Logger(UserController.name);
 
   constructor(private readonly userService: UserService) {}
+
+  /** ------------------ Update Job Seeker Profile ------------------ 
+   * Handles professional metadata, CV links, and "Open to Jobs" status.
+   * Crucial for the Recommender System engine.
+   */
+  @GrpcMethod('ProfileService', 'UpdateJobSeekerProfile')
+  async handleUpdateJobSeekerProfile(
+    @Payload() dto: UpdateJobSeekerGrpcRequestDto,
+  ): Promise<BaseResponseDto<JobSeekerProfileResponseDto>> {
+    this.logger.log(`[gRPC] UpdateJobSeekerProfile requested for: ${dto.userUuid}`);
+    return this.userService.updateJobSeekerProfile(dto);
+  }
 
   /** ------------------ Onboard Individual Service Provider ------------------ */
   @GrpcMethod('ProfileService', 'OnboardIndividualProvider')
