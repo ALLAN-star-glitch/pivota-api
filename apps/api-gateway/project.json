@@ -35,6 +35,36 @@
         }
       }
     },
+    "generate-openapi": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "ts-node apps/api-gateway/scripts/generate-openapi.ts",
+        "cwd": "{workspaceRoot}"
+      } 
+    },
+    "lint-api": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx @redocly/cli lint apps/api-gateway/dist/openapi.json",
+        "cwd": "{workspaceRoot}"
+      },
+      "dependsOn": ["generate-openapi"]
+    },
+    "build-docs": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx @redocly/cli build-docs apps/api-gateway/dist/openapi.json -o apps/api-gateway/docs/index.html",
+        "cwd": "{workspaceRoot}"
+      },
+      "dependsOn": ["generate-openapi"]
+    },
+    "preview-docs": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx @redocly/cli preview-docs apps/api-gateway/dist/openapi.json",
+        "cwd": "{workspaceRoot}"
+      }
+    },
     "test": {
       "options": {
         "passWithNoTests": true

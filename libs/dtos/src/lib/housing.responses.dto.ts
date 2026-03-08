@@ -219,20 +219,12 @@ export class HouseListingCreateResponseDto {
 }
 
 /* ======================================================
-   HOUSE VIEWING RESPONSE
+   LEAN: HOUSE VIEWING SUMMARY (For Lists & Dashboard)
 ====================================================== */
-export class HouseViewingResponseDto {
+export class HouseViewingSummaryDto {
   @ApiProperty({ example: 'view_789xyz' })
   @IsString()
   id!: string;
-
-  @ApiProperty({ example: 'house_123abc' })
-  @IsString()
-  houseId!: string;
-
-  @ApiProperty({ example: 'user_456def' })
-  @IsString()
-  viewerId!: string;
 
   @ApiProperty({ example: '2026-01-05T14:00:00Z' })
   @IsDate()
@@ -245,10 +237,90 @@ export class HouseViewingResponseDto {
   @IsIn(HOUSE_VIEWING_STATUSES)
   status!: string;
 
+  @ApiProperty({ example: 'house_123abc' })
+  @IsString()
+  houseId!: string;
+
+  @ApiProperty({ example: 'Modern 2 Bedroom Apartment' })
+  @IsString()
+  houseTitle!: string;
+
+  @ApiProperty({ example: 'https://example.com/images/house1_main.jpg' })
+  @IsString()
+  houseImageUrl!: string;
+}
+
+/* ======================================================
+   RICH: HOUSE VIEWING RESPONSE (For Details Page)
+====================================================== */
+export class HouseViewingResponseDto extends HouseViewingSummaryDto {
+  @ApiProperty({ example: 'user_456def' })
+  @IsString()
+  viewerId!: string;
+
+  @ApiProperty({ example: 'John Doe' })
+  @IsString()
+  viewerName!: string;
+
+  @ApiProperty({ example: '+254712345678' })
+  @IsString()
+  viewerPhone!: string;
+
   @ApiPropertyOptional({ example: 'I will be coming with my spouse' })
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({ example: 'user_123abc' })
+  @IsString()
+  bookedById!: string;
+
+  @ApiProperty({ example: 'Agent Jane' })
+  @IsString()
+  bookedByName!: string;
+
+  @ApiProperty({ example: '2026-03-04T10:30:00Z' })
+  @IsDate()
+  createdAt!: Date;
+
+  @ApiProperty({ example: '2026-03-04T10:30:00Z' })
+  @IsDate()
+  updatedAt!: Date;
+
+  // Nested house details for convenience
+  @ApiProperty({ example: 45000 })
+  @IsNumber()
+  housePrice!: number;
+
+  @ApiProperty({ example: 'Nairobi' })
+  @IsString()
+  houseLocation!: string;
+
+  @ApiPropertyOptional({ example: 'Kilimani' })
+  @IsOptional()
+  @IsString()
+  houseNeighborhood?: string;
+}
+
+/* ======================================================
+   ADMIN: HOUSE VIEWING RESPONSE (Extended for Admin)
+====================================================== */
+export class AdminHouseViewingResponseDto extends HouseViewingResponseDto {
+  @ApiProperty({ 
+    example: { 
+      ipAddress: '192.168.1.1',
+      userAgent: 'Mozilla/5.0...',
+      scheduledAt: '2026-03-04T10:30:00Z'
+    }
+  })
+  @IsObject()
+  adminMetadata?: {
+    ipAddress?: string;
+    userAgent?: string;
+    scheduledAt: Date;
+    isAdminBooking: boolean;
+    auditTrail?: string;
+  };
 }
 
 // Add these to your response DTOs file after the existing DTOs

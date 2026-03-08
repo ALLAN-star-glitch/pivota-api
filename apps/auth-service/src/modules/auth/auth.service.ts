@@ -1030,13 +1030,14 @@ async generateDevToken(
   
   const userData = profileResponse.data.user;
   const accountData = profileResponse.data.account;
-  const organizationUuid = profileResponse.data.organization.uuid
+  const organizationData = profileResponse.data.organization;
+  const organizationUuid = organizationData?.uuid || null;
   const fullName = `${userData.firstName} ${userData.lastName}`.trim();
 
   try {
     // 1. Pre-generate the Dev Token ID
     const devTokenId = `dev-${userUuid}-${Date.now()}`;
-
+ 
     // 2. Prepare Payload including the tokenId
     const payload: JwtPayload = {
       userUuid,

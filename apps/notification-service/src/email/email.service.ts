@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Client, SendEmailV3_1, LibraryResponse } from 'node-mailjet';
+import { Client, SendEmailV3_1 } from 'node-mailjet';
 import {  
   UserLoginEmailDto,
   UserOnboardedEventDto,
@@ -188,6 +188,44 @@ export class EmailService {
             margin-bottom: 8px;
           }
           
+          .viewing-card {
+            background: linear-gradient(145deg, ${this.colors.tealLight}, ${this.colors.white});
+            border: 1px solid ${this.colors.teal}20;
+            padding: 24px;
+            border-radius: 8px;
+            margin: 24px 0;
+          }
+          
+          .viewing-details {
+            background: ${this.colors.white};
+            padding: 16px;
+            border-radius: 8px;
+            margin: 16px 0;
+            border-left: 4px solid ${this.colors.teal};
+          }
+          
+          .viewing-details p {
+            margin: 8px 0;
+          }
+          
+          .property-highlight {
+            font-size: 20px;
+            font-weight: 600;
+            color: ${this.colors.teal};
+            margin: 0 0 8px 0;
+          }
+          
+          .admin-badge {
+            display: inline-block;
+            background: linear-gradient(145deg, ${this.colors.goldenYellow}, ${this.colors.goldenYellowLight});
+            color: ${this.colors.tealDark};
+            padding: 4px 12px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 8px 0;
+          }
+          
           .security-alert {
             background: linear-gradient(145deg, ${this.colors.redLight}, ${this.colors.white});
             border: 1px solid ${this.colors.red}40;
@@ -301,6 +339,7 @@ export class EmailService {
               <a href="${this.social.twitter}" class="social-link">Twitter</a>
               <a href="${this.social.linkedin}" class="social-link">LinkedIn</a>
               <a href="${this.social.facebook}" class="social-link">Facebook</a>
+              <a href="${this.social.instagram}" class="social-link">Instagram</a>
               <a href="${this.social.website}" class="social-link">Website</a>
             </div>
             <div class="footer-links">
@@ -310,7 +349,7 @@ export class EmailService {
               <a href="${this.social.website}/privacy">Privacy</a>
             </div>
             <div class="copyright">
-              © ${new Date().getFullYear()} PivotaConnect
+              © ${new Date().getFullYear()} PivotaConnect. All rights reserved.
             </div>
           </div>
         </div>
@@ -591,6 +630,286 @@ export class EmailService {
   }
 
   /* ======================================================
+       VIEWING SCHEDULED EMAIL (Viewer - Self Booking) WITH IMAGE
+  ====================================================== */
+  async sendViewingScheduledViewerEmail(data: {
+    email: string;
+    firstName: string;
+    houseTitle: string;
+    houseImageUrl?: string;
+    viewingDate: string;
+    location: string;
+    notes?: string;
+  }): Promise<void> {
+    const imageHtml = data.houseImageUrl ? `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <img src="${data.houseImageUrl}" alt="${data.houseTitle}" 
+             style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+      </div>
+    ` : '';
+
+    const content = `
+      <h1>Viewing Confirmed</h1>
+      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.firstName},</p>
+      <p>Your property viewing has been scheduled successfully.</p>
+      
+      <div class="viewing-card">
+        ${imageHtml}
+        <div class="property-highlight">${data.houseTitle}</div>
+        
+        <div class="viewing-details">
+          <p><strong>📅 Date & Time:</strong> ${data.viewingDate}</p>
+          <p><strong>📍 Location:</strong> ${data.location}</p>
+          ${data.notes ? `<p><strong>📝 Your notes:</strong> ${data.notes}</p>` : ''}
+        </div>
+      </div>
+      
+      <div class="info-box">
+        <h3>What to expect</h3>
+        <ul>
+          <li>The property owner/agent has been notified</li>
+          <li>They may contact you to confirm or ask questions</li>
+          <li>Arrive on time for your appointment</li>
+          <li>Bring any questions you have about the property</li>
+        </ul>
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="${this.social.website}/my-viewings" class="button">View My Schedule</a>
+      </div>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.email, Name: data.firstName }],
+        Subject: `Viewing Confirmed: ${data.houseTitle}`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.email);
+  }
+
+  /* ======================================================
+       VIEWING SCHEDULED EMAIL (Viewer - Admin Booking) WITH IMAGE
+  ====================================================== */
+  async sendViewingScheduledAdminViewerEmail(data: {
+    email: string;
+    firstName: string;
+    houseTitle: string;
+    houseImageUrl?: string;
+    viewingDate: string;
+    location: string;
+    notes?: string;
+  }): Promise<void> {
+    const imageHtml = data.houseImageUrl ? `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <img src="${data.houseImageUrl}" alt="${data.houseTitle}" 
+             style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+      </div>
+    ` : '';
+
+    const content = `
+      <h1>Viewing Scheduled by Support Team</h1>
+      <div class="admin-badge">SCHEDULED BY ADMIN</div>
+      
+      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.firstName},</p>
+      <p>A property viewing has been scheduled on your behalf by our support team.</p>
+      
+      <div class="viewing-card">
+        ${imageHtml}
+        <div class="property-highlight">${data.houseTitle}</div>
+        
+        <div class="viewing-details">
+          <p><strong>📅 Date & Time:</strong> ${data.viewingDate}</p>
+          <p><strong>📍 Location:</strong> ${data.location}</p>
+          ${data.notes ? `<p><strong>📝 Notes:</strong> ${data.notes}</p>` : ''}
+        </div>
+      </div>
+      
+      <div class="info-box">
+        <h3>Next Steps</h3>
+        <ul>
+          <li>The property owner has been notified</li>
+          <li>You'll receive any updates about this viewing</li>
+          <li>Questions? Reply to this email or contact support</li>
+        </ul>
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="${this.social.website}/my-viewings" class="button">View Details</a>
+      </div>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.email, Name: data.firstName }],
+        Subject: `Viewing Scheduled: ${data.houseTitle}`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.email);
+  }
+
+  /* ======================================================
+       VIEWING REQUEST EMAIL (Property Owner - Self Booking) WITH IMAGE
+  ====================================================== */
+  async sendViewingRequestedOwnerEmail(data: {
+    email: string;
+    ownerName: string;
+    houseTitle: string;
+    houseImageUrl?: string;
+    viewingDate: string;
+    location: string;
+    viewerName: string;
+    viewerEmail?: string;
+    notes?: string;
+  }): Promise<void> {
+    const viewerInfo = data.viewerEmail 
+      ? `${data.viewerName} (${data.viewerEmail})`
+      : data.viewerName;
+      
+    const imageHtml = data.houseImageUrl ? `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <img src="${data.houseImageUrl}" alt="${data.houseTitle}" 
+             style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+      </div>
+    ` : '';
+      
+    const content = `
+      <h1>New Viewing Request</h1>
+      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.ownerName},</p>
+      <p>A viewing has been scheduled for your property.</p>
+      
+      <div class="viewing-card">
+        ${imageHtml}
+        <div class="property-highlight">${data.houseTitle}</div>
+        
+        <div class="viewing-details">
+          <p><strong>📅 Date & Time:</strong> ${data.viewingDate}</p>
+          <p><strong>📍 Location:</strong> ${data.location}</p>
+          <p><strong>👤 Viewer:</strong> ${viewerInfo}</p>
+          ${data.notes ? `<p><strong>📝 Viewer notes:</strong> ${data.notes}</p>` : ''}
+        </div>
+      </div>
+      
+      <div class="info-box">
+        <h3>What to do next</h3>
+        <ul>
+          <li>Prepare the property for viewing</li>
+          <li>Be available at the scheduled time</li>
+          <li>Consider contacting the viewer to confirm</li>
+          <li>Have property documents ready to share</li>
+        </ul>
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="${this.social.website}/my-listings" class="button">Manage My Listings</a>
+      </div>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.email, Name: data.ownerName }],
+        Subject: `New Viewing Request: ${data.houseTitle}`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.email);
+  }
+
+  /* ======================================================
+       VIEWING REQUEST EMAIL (Property Owner - Admin Booking) WITH IMAGE
+  ====================================================== */
+  async sendViewingRequestedAdminOwnerEmail(data: {
+    email: string;
+    ownerName: string;
+    houseTitle: string;
+    houseImageUrl?: string;
+    viewingDate: string;
+    location: string;
+    viewerName: string;
+    viewerEmail?: string;
+    notes?: string;
+  }): Promise<void> {
+    const viewerInfo = data.viewerEmail 
+      ? `${data.viewerName} (${data.viewerEmail})`
+      : data.viewerName;
+      
+    const imageHtml = data.houseImageUrl ? `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <img src="${data.houseImageUrl}" alt="${data.houseTitle}" 
+             style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+      </div>
+    ` : '';
+      
+    const content = `
+      <h1>Viewing Scheduled by Admin</h1>
+      <div class="admin-badge">ADMIN SCHEDULED</div>
+      
+      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.ownerName},</p>
+      <p>Our support team has scheduled a viewing for your property.</p>
+      
+      <div class="viewing-card">
+        ${imageHtml}
+        <div class="property-highlight">${data.houseTitle}</div>
+        
+        <div class="viewing-details">
+          <p><strong>📅 Date & Time:</strong> ${data.viewingDate}</p>
+          <p><strong>📍 Location:</strong> ${data.location}</p>
+          <p><strong>👤 Viewer:</strong> ${viewerInfo}</p>
+          ${data.notes ? `<p><strong>📝 Notes:</strong> ${data.notes}</p>` : ''}
+        </div>
+      </div>
+      
+      <div class="info-box">
+        <h3>Information</h3>
+        <ul>
+          <li>This viewing was arranged by our support team</li>
+          <li>Please accommodate the viewer at the scheduled time</li>
+          <li>Contact support if you have questions</li>
+        </ul>
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="${this.social.website}/my-listings" class="button">View My Listings</a>
+      </div>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.email, Name: data.ownerName }],
+        Subject: `Admin Scheduled Viewing: ${data.houseTitle}`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.email);
+  }
+
+  /* ======================================================
        INVITATION EMAILS
   ====================================================== */
 
@@ -778,20 +1097,19 @@ export class EmailService {
     try {
       const result = await this.mailjet
         .post('send', { version: 'v3.1' })
-        .request(body) as any; // Use type assertion to avoid TypeScript errors
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .request(body) as any;
 
-      // Safely access the response
       if (result && result.body && result.body.Messages && result.body.Messages.length > 0) {
         const status = result.body.Messages[0].Status;
-        this.logger.log(` Email sent to ${recipient} with status: ${status}`);
+        this.logger.log(`📧 Email sent to ${recipient} with status: ${status}`);
       } else {
-        this.logger.log(` Email sent to ${recipient}`);
+        this.logger.log(`📧 Email sent to ${recipient}`);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      this.logger.error(` Failed to send email to ${recipient}: ${message}`);
+      this.logger.error(`❌ Failed to send email to ${recipient}: ${message}`);
       
-      // Log more details for debugging
       if (err && typeof err === 'object') {
         if ('response' in err) {
           const responseErr = err as { response?: { data?: unknown } };

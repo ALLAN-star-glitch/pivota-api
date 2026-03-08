@@ -384,42 +384,46 @@ model Rating {
 model HouseListing {
   id           String   @id @default(cuid())
   externalId   String   @default(uuid())
-  creatorId    String   // The individual User UUID
+  creatorId    String
   creatorName  String?
-  accountId    String   // The owning Account (Individual or Property Agency Org)
+  accountId    String
   accountName  String?
   
   title        String
   description  String
 
-  // Primary Categorization
   categoryId   String
   category     Category @relation("HouseMainCategory", fields: [categoryId], references: [id])
 
-  latitude    Float?  // Added for feature store
-  longitude   Float? // Added for feature store
+  latitude    Float?
+  longitude   Float?
   
-  // NEW: Sub-Categorization (Matches JobPost logic)
   subCategoryId String?
   subCategory   Category? @relation("HouseSubcategory", fields: [subCategoryId], references: [id])
   
-  listingType  String   // e.g., "RENTAL", "SALE"
-  
+  listingType  String
   price        Float
   currency     String   @default("KES")
+
+  ownerEmail   String?
   
-  // Property details
+  // Property details - Add these new fields
   bedrooms     Int?
   bathrooms    Int?
   amenities    String[] @default([])
   isFurnished  Boolean  @default(false)
+  
+  // NEW FIELDS FOR AI TRAINING
+  squareFootage Int?    // Total area in square feet/meters
+  yearBuilt    Int?     // Construction year
+  propertyType String?  // 'APARTMENT' | 'HOUSE' | 'CONDO' | 'TOWNHOUSE' | 'VILLA' | 'STUDIO'
   
   // Location
   locationCity         String
   locationNeighborhood String?
   address              String?
   
-  status       String   @default("AVAILABLE") // e.g., AVAILABLE, BOOKED, SOLD
+  status       String   @default("AVAILABLE")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -427,7 +431,6 @@ model HouseListing {
   images       HouseImage[]
   viewings     HouseViewing[]
 
-  // Indexes optimized for filtering and the shared Dashboard/Website Nav
   @@index([locationCity, listingType, categoryId])
   @@index([subCategoryId]) 
   @@index([creatorId])
@@ -727,4 +730,22 @@ model SavedListing {
 
   @@unique([userUuid, targetId])
   @@index([userUuid])
+}
+
+/// ======================================================
+/// ADMIN AUDIT LOG (For tracking admin actions)
+/// ======================================================
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  adminId    String   // UUID of admin who performed the action
+  action     String   // e.g., "SCHEDULE_VIEWING", "UPDATE_LISTING", "DELETE_LISTING"
+  targetId   String   // ID of the affected record
+  targetType String   // e.g., "HOUSE_VIEWING", "HOUSE_LISTING"
+  metadata   Json?    // Additional context (IP, userAgent, etc.)
+  timestamp  DateTime @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([targetId])
+  @@index([timestamp])
 }

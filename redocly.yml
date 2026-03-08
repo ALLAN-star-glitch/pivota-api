@@ -1,0 +1,26 @@
+# redocly.yaml
+extends:
+  - recommended
+
+rules:
+  operation-4xx-response: warn
+  operation-description: error
+  no-ambiguous-paths: error
+  
+  # Customize rules as needed
+  path-excludes-patterns:
+    severity: error
+    patterns:
+      - '/admin/.*'  # Warn about admin endpoints in public docs
+
+theme:
+  openapi:
+    theme:
+      colors:
+        primary:
+          main: '#2563eb'
+    generateCodeSamples:
+      languages:
+        - lang: curl
+        - lang: JavaScript
+        - lang: Python

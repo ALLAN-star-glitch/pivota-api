@@ -14,7 +14,8 @@ import {
   CreateHouseListingGrpcRequestDto,
   ArchiveHouseListingsGrpcRequestDto,
   HouseListingCreateResponseDto,
-  GetAdminHousingFilterDto, // Added missing import
+  GetAdminHousingFilterDto,
+  ScheduleAdminViewingGrpcRequestDto, // Added missing import
 } from '@pivota-api/dtos';
 
 import { StorageService } from '@pivota-api/shared-storage';
@@ -34,7 +35,12 @@ interface HousingServiceGrpc {
   SearchListings(data: SearchHouseListingsDto): Observable<BaseResponseDto<HouseListingResponseDto[]>>;
   UpdateListingStatus(data: UpdateHouseListingStatusDto): Observable<BaseResponseDto<HouseListingResponseDto>>;
   ArchiveHouseListing(data: ArchiveHouseListingsGrpcRequestDto): Observable<BaseResponseDto<null>>;
+
+  // 👤 USER viewing method - uses ScheduleViewingGrpcRequestDto
   ScheduleViewing(data: ScheduleViewingGrpcRequestDto): Observable<BaseResponseDto<HouseViewingResponseDto>>;
+  
+  // 🔐 ADMIN viewing method - uses ScheduleAdminViewingGrpcRequestDto
+  ScheduleAdminViewing(data: ScheduleAdminViewingGrpcRequestDto): Observable<BaseResponseDto<HouseViewingResponseDto>>;
 }
 
 @Injectable()
@@ -92,7 +98,7 @@ export class HousingGatewayService {
   }
 
   // FIXED: Changed parameter type from { id: string } to GetHouseListingByIdDto
-  async getHouseListingById(dto: GetHouseListingByIdDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
+  async getHouseListingWithTracking(dto: GetHouseListingByIdDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
     const res = await firstValueFrom(this.grpcService.GetHouseListingById(dto));
     return this.handleGrpcResponse(res, 'GetHouseListingById');
   }
@@ -102,13 +108,29 @@ export class HousingGatewayService {
     return this.handleGrpcResponse(res, 'SearchListings');
   }
 
+
+
   // ===========================================================
   // UTILITY METHODS
+  // ===========================================================
+// ===========================================================
+  // ===========================================================
+  // 👤 USER VIEWING METHODS
   // ===========================================================
   async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseDto<HouseViewingResponseDto>> {
     const res = await firstValueFrom(this.grpcService.ScheduleViewing(dto));
     return this.handleGrpcResponse(res, 'ScheduleViewing');
   }
+
+  // ===========================================================
+  // 🔐 ADMIN VIEWING METHODS
+  // ===========================================================
+  async scheduleAdminViewing(dto: ScheduleAdminViewingGrpcRequestDto): Promise<BaseResponseDto<HouseViewingResponseDto>> {
+    const res = await firstValueFrom(this.grpcService.ScheduleAdminViewing(dto));
+    return this.handleGrpcResponse(res, 'ScheduleAdminViewing');
+  }
+
+
 
   async archiveHouseListing(dto: ArchiveHouseListingsGrpcRequestDto): Promise<BaseResponseDto<null>> {
     const res = await firstValueFrom(this.grpcService.ArchiveHouseListing(dto));
@@ -119,7 +141,7 @@ export class HousingGatewayService {
     const res = await firstValueFrom(this.grpcService.UpdateListingStatus(dto));
     return this.handleGrpcResponse(res, 'UpdateListingStatus');
   }
-
+ 
   /**
    * Universal handler to standardize gRPC response mapping
    */
@@ -162,7 +184,7 @@ export class HousingGatewayService {
   ): Promise<string> {
     return this.storage.uploadFile(file, folder, bucketName);
   }
-
+   
   /**
    * Cleans up files from storage.
    * Use this when a listing creation fails after images have already been uploaded.

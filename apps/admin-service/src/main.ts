@@ -27,7 +27,7 @@ async function bootstrap() {
       protoPath: RBAC_PROTO_PATH,
       url:  '0.0.0.0:50055',
     },
-  });
+  }); 
 
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.GRPC,
@@ -38,6 +38,7 @@ async function bootstrap() {
     },
   });
 
+  
 
 
   app.connectMicroservice<MicroserviceOptions>({

@@ -31,4 +31,5 @@ export * from './lib/BaseValidateJobPostIdsReponseGrpc.interface';
 export * from './lib/BaseTokenResponseGrpc.interface';
 export * from './lib/PesapalTransactionStatus.interface';
 export * from './lib/events-interfaces.interface';
+export * from './lib/housing-ai-event.interface';   
 

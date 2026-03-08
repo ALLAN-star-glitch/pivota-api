@@ -38,7 +38,7 @@ import { SharedListingsGatewayModule } from '../gateway-modules/SharedListingsGa
     OrganisationGatewayModule,
     SharedListingsGatewayModule
   ],
-  controllers: [AppController],
+  controllers: [],
   providers: [AppService],
 })
 export class AppModule {}

@@ -23,6 +23,9 @@ service HousingService {
 
   // Viewings
   rpc ScheduleViewing (ScheduleViewingRequest) returns (BaseHouseViewingResponse);
+  
+  // Admin Viewings
+  rpc ScheduleAdminViewing (ScheduleAdminViewingRequest) returns (BaseHouseViewingResponse);
 }
 
 // ===================================================
@@ -38,11 +41,13 @@ message UserBasic {
   string id = 1;
   string fullName = 2;
   string phone = 3;
+  string email = 4;
 }
 
 message AccountBasic {
   string id = 1;
   string name = 2;
+  string email = 3;
 }
 
 message CategoryBasic {
@@ -59,7 +64,7 @@ message HouseImage {
 }
 
 // ===================================================
-// ANALYTICS CONTEXT MESSAGES (NEW)
+// ANALYTICS CONTEXT MESSAGES
 // ===================================================
 
 message ClientInfo {
@@ -82,6 +87,16 @@ message ListingViewContext {
   string platform = 4;
   string referrer = 5;
   optional SearchContext search = 6;
+}
+
+// ===================================================
+// ADMIN METADATA
+// ===================================================
+message AdminMetadata {
+  optional string ipAddress = 1;
+  optional string userAgent = 2;
+  string scheduledAt = 3;
+  bool isAdminBooking = 4;
 }
 
 // ===================================================
@@ -110,19 +125,26 @@ message HouseListing {
   UserBasic creator = 20;
   AccountBasic account = 21;
   repeated HouseImage images = 22;
-  string accountName = 23; // Added for the Lean Summary logic
-  optional double latitude = 24; // ADDED: For location-based features
-  optional double longitude = 25; // ADDED: For location-based features
+  string accountName = 23;
+  optional double latitude = 24;
+  optional double longitude = 25;
+  string ownerEmail = 26;  // ADDED - Email of the property owner/agent
 }
 
 message HouseViewing {
   string id = 1;
   string houseId = 2;
   string viewerId = 3;
-  string viewingDate = 4;
-  string status = 5;
-  string notes = 6;
-  string createdAt = 7;
+  string viewerEmail = 4;
+  string viewerName = 5;
+  string viewingDate = 6;
+  string status = 7;
+  string notes = 8;
+  string createdAt = 9;
+  string updatedAt = 10;
+  string bookedById = 11;
+  string bookedByEmail = 12;
+  string bookedByName = 13;
 }
 
 // ===================================================
@@ -148,8 +170,9 @@ message CreateHouseListingRequest {
   string locationNeighborhood = 16;
   string address = 17;
   repeated string imageUrls = 18;
-  optional double latitude = 19; // ADDED
-  optional double longitude = 20; // ADDED
+  optional double latitude = 19;
+  optional double longitude = 20;
+  string ownerEmail = 21;  // ADDED - Email of the property owner/agent
 }
 
 message SearchHouseListingsRequest {
@@ -160,6 +183,8 @@ message SearchHouseListingsRequest {
   optional int32 bedrooms = 5;
   optional int32 limit = 6;
   optional int32 offset = 7;
+  optional string categoryId = 8;
+  optional string subCategoryId = 9;
 }
 
 message UpdateHouseListingRequest {
@@ -184,8 +209,9 @@ message UpdateHouseListingData {
   optional string status = 11;
   optional string creatorId = 12;
   optional string accountId = 13;
-  optional double latitude = 14; // ADDED
-  optional double longitude = 15; // ADDED
+  optional double latitude = 14;
+  optional double longitude = 15;
+  optional string ownerEmail = 16;  // ADDED - Allow updating owner email
 }
 
 message UpdateHouseListingStatusRequest {
@@ -199,13 +225,35 @@ message ArchiveHouseListingRequest {
   string ownerId = 2;
 }
 
+// ===================================================
+// USER VIEWING REQUEST
+// ===================================================
 message ScheduleViewingRequest {
   string houseId = 1;
   string callerId = 2;
-  string userRole = 3;
-  string viewingDate = 4;
-  optional string targetViewerId = 5;
-  optional string notes = 6;
+  string callerEmail = 3;
+  string callerName = 4;
+  string userRole = 5;
+  string viewingDate = 6;
+  optional string targetViewerId = 7;
+  optional string notes = 8;
+}
+
+// ===================================================
+// ADMIN VIEWING REQUEST
+// ===================================================
+message ScheduleAdminViewingRequest {
+  string houseId = 1;
+  string callerId = 2;
+  string callerEmail = 3;
+  string callerName = 4;
+  string userRole = 5;
+  string viewingDate = 6;
+  string targetViewerId = 7;
+  string targetViewerEmail = 8;
+  string targetViewerName = 9;
+  optional string notes = 10;
+  optional AdminMetadata adminMetadata = 11;
 }
 
 // ===================================================
@@ -213,7 +261,7 @@ message ScheduleViewingRequest {
 // ===================================================
 message GetHouseListingByIdRequest { 
   string id = 1;
-  optional ListingViewContext context = 2; // ADDED: Analytics context
+  optional ListingViewContext context = 2;
 }
 
 message GetListingsByOwnerRequest { 
@@ -235,7 +283,7 @@ message HouseListingCreateData {
   string id = 1;
   string status = 2;
   string createdAt = 3;
-}
+} 
 
 message BaseHouseListingCreateResponse {
   bool success = 1;

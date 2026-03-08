@@ -8,6 +8,27 @@ import {
   SendOtpEventDto, 
 } from '@pivota-api/dtos';
 
+// Define the NotificationEmailData interface to match what housing service sends
+interface NotificationEmailData {
+  type: string;
+  recipientId: string;
+  recipientEmail: string | null;
+  recipientName: string;
+  template: string;
+  data: {
+    houseTitle: string;
+    houseImageUrl?: string;  // ADD THIS - property image URL
+    viewingDate: string;
+    location: string;
+    notes?: string;
+    bookedBy?: string;
+    viewerName?: string;      // Viewer's name
+    viewerEmail?: string;     // Viewer's email
+    bookedById?: string;
+    isAdminBooking?: boolean;
+  };
+}
+
 @Controller()
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class EmailController {
@@ -52,10 +73,107 @@ export class EmailController {
   }
 
   /* ======================================================
-       NEW: INVITATION EVENT HANDLERS
+       NOTIFICATION EMAIL HANDLER - UPDATED with image support
   ====================================================== */
 
-  /** ------------------ NEW: Invitation sent to new user (needs registration) ------------------ */
+  @EventPattern('notification.email')
+  async handleNotificationEmail(
+    @Payload() data: NotificationEmailData,
+    @Ctx() context: RmqContext
+  ) {
+    this.logger.debug(`[RMQ] Received notification email: ${data.template} for ${data.recipientId}`);
+    
+    // Check if we have a valid email to send to
+    if (!data.recipientEmail) {
+      this.logger.warn(`Cannot send email: No recipient email for ${data.recipientId}`);
+      // Still acknowledge the message to remove it from queue
+      const channel = context.getChannelRef();
+      const originalMsg = context.getMessage();
+      channel.ack(originalMsg);
+      return;
+    }
+
+    try {
+      // Route based on template
+      switch(data.template) {
+        case 'viewing-scheduled-viewer':
+          await this.emailService.sendViewingScheduledViewerEmail({
+            email: data.recipientEmail,
+            firstName: data.recipientName.split(' ')[0] || 'User',
+            houseTitle: data.data.houseTitle,
+            houseImageUrl: data.data.houseImageUrl,  // ADD THIS
+            viewingDate: data.data.viewingDate,
+            location: data.data.location,
+            notes: data.data.notes
+          });
+          break;
+          
+        case 'viewing-scheduled-admin-viewer':
+          await this.emailService.sendViewingScheduledAdminViewerEmail({
+            email: data.recipientEmail,
+            firstName: data.recipientName.split(' ')[0] || 'User',
+            houseTitle: data.data.houseTitle,
+            houseImageUrl: data.data.houseImageUrl,  // ADD THIS
+            viewingDate: data.data.viewingDate,
+            location: data.data.location,
+            notes: data.data.notes
+          });
+          break;
+          
+        case 'viewing-scheduled-owner':
+          await this.emailService.sendViewingRequestedOwnerEmail({
+            email: data.recipientEmail,
+            ownerName: data.recipientName,
+            houseTitle: data.data.houseTitle,
+            houseImageUrl: data.data.houseImageUrl,  // ADD THIS
+            viewingDate: data.data.viewingDate,
+            location: data.data.location,
+            viewerName: data.data.viewerName || 'A potential buyer',
+            viewerEmail: data.data.viewerEmail,
+            notes: data.data.notes
+          });
+          break;
+          
+        case 'viewing-scheduled-owner-admin':
+          await this.emailService.sendViewingRequestedAdminOwnerEmail({
+            email: data.recipientEmail,
+            ownerName: data.recipientName,
+            houseTitle: data.data.houseTitle,
+            houseImageUrl: data.data.houseImageUrl,  // ADD THIS
+            viewingDate: data.data.viewingDate, 
+            location: data.data.location,
+            viewerName: data.data.viewerName || 'A potential buyer',
+            viewerEmail: data.data.viewerEmail,
+            notes: data.data.notes
+          });
+          break;
+          
+        default:
+          this.logger.warn(`Unknown email template: ${data.template}`);
+      }
+      
+      // Acknowledge the message after successful processing
+      const channel = context.getChannelRef();
+      const originalMsg = context.getMessage();
+      channel.ack(originalMsg);
+      
+      this.logger.log(`[RMQ] Successfully sent ${data.template} email to ${data.recipientEmail}`);
+      
+    } catch (error) {
+      this.logger.error(`[RMQ] Failed to send ${data.template} email: ${error.message}`);
+      
+      // Don't throw - just nack and let it retry
+      const channel = context.getChannelRef();
+      const originalMsg = context.getMessage();
+      channel.nack(originalMsg, false, true);
+    }
+  }
+
+  /* ======================================================
+       INVITATION EVENT HANDLERS (keep as is)
+  ====================================================== */
+
+  /** ------------------ Invitation sent to new user ------------------ */
   @EventPattern('organization.invitation.sent.new')
   async handleInvitationSentNewUser(
     @Payload() data: {
@@ -76,7 +194,7 @@ export class EmailController {
     );
   }
 
-  /** ------------------ NEW: Invitation sent to existing user (already has account) ------------------ */
+  /** ------------------ Invitation sent to existing user ------------------ */
   @EventPattern('organization.invitation.sent.existing')
   async handleInvitationSentExistingUser(
     @Payload() data: {
@@ -97,54 +215,52 @@ export class EmailController {
     );
   }
 
-  /** ------------------ NEW: Invitation resent (new token generated) ------------------ */
-/** ------------------ NEW: Invitation resent (new token generated) ------------------ */
-@EventPattern('organization.invitation.resend')
-async handleInvitationResend(
-  @Payload() data: {
-    email: string;
-    organizationName: string;
-    inviterName: string;
-    inviteToken: string;
-    userType: 'EXISTING' | 'NEW';
-    roleName: string; // Add this - it should be included in the event payload
-    message?: string; // Add this optional field
-  },
-  @Ctx() context: RmqContext
-) {
-  this.logger.debug(`[RMQ] Received invitation resend for: ${data.email} to ${data.organizationName}`);
-  
-  // Choose the appropriate email method based on user type
-  if (data.userType === 'NEW') {
-    await this.processEvent(
-      context,
-      () => this.emailService.sendInvitationNewUserEmail({
-        email: data.email,
-        organizationName: data.organizationName,
-        inviterName: data.inviterName,
-        inviteToken: data.inviteToken,
-        roleName: data.roleName,
-        message: data.message
-      }),
-      data.email
-    );
-  } else {
-    await this.processEvent(
-      context,
-      () => this.emailService.sendInvitationExistingUserEmail({
-        email: data.email,
-        organizationName: data.organizationName,
-        inviterName: data.inviterName,
-        inviteToken: data.inviteToken,
-        roleName: data.roleName,
-        message: data.message
-      }),
-      data.email
-    );
+  /** ------------------ Invitation resent ------------------ */
+  @EventPattern('organization.invitation.resend')
+  async handleInvitationResend(
+    @Payload() data: {
+      email: string;
+      organizationName: string;
+      inviterName: string;
+      inviteToken: string;
+      userType: 'EXISTING' | 'NEW';
+      roleName: string;
+      message?: string;
+    },
+    @Ctx() context: RmqContext
+  ) {
+    this.logger.debug(`[RMQ] Received invitation resend for: ${data.email} to ${data.organizationName}`);
+    
+    if (data.userType === 'NEW') {
+      await this.processEvent(
+        context,
+        () => this.emailService.sendInvitationNewUserEmail({
+          email: data.email,
+          organizationName: data.organizationName,
+          inviterName: data.inviterName,
+          inviteToken: data.inviteToken,
+          roleName: data.roleName,
+          message: data.message
+        }),
+        data.email
+      );
+    } else {
+      await this.processEvent(
+        context,
+        () => this.emailService.sendInvitationExistingUserEmail({
+          email: data.email,
+          organizationName: data.organizationName,
+          inviterName: data.inviterName,
+          inviteToken: data.inviteToken,
+          roleName: data.roleName,
+          message: data.message
+        }),
+        data.email
+      );
+    }
   }
-}
 
-  /** ------------------ NEW: Password setup required (after invitation acceptance) ------------------ */
+  /** ------------------ Password setup required ------------------ */
   @EventPattern('user.password.setup.required')
   async handlePasswordSetupRequired(
     @Payload() data: {
@@ -164,7 +280,7 @@ async handleInvitationResend(
     );
   }
 
-  /** ------------------ NEW: Welcome new user who joined via invitation ------------------ */
+  /** ------------------ Welcome new user who joined via invitation ------------------ */
   @EventPattern('user.invitation.welcome')
   async handleInvitationWelcome(
     @Payload() data: {
@@ -177,12 +293,11 @@ async handleInvitationResend(
   ) {
     this.logger.debug(`[RMQ] Received invitation welcome for: ${data.email}`);
     
-    // Create a welcome email DTO from the invitation data
     const welcomeData: UserOnboardedEventDto = {
       accountId: data.accountId,
       firstName: data.firstName,
       email: data.email,
-      plan: 'Free Forever' // Default plan for invited users
+      plan: 'Free Forever'
     };
     
     await this.processEvent(
@@ -192,7 +307,7 @@ async handleInvitationResend(
     );
   }
 
-  /** ------------------ NEW: Admin notification when user accepts invitation ------------------ */
+  /** ------------------ Admin notification when user accepts invitation ------------------ */
   @EventPattern('admin.invitation.accepted')
   async handleAdminInvitationAccepted(
     @Payload() data: {
@@ -206,7 +321,6 @@ async handleInvitationResend(
   ) {
     this.logger.debug(`[RMQ] Sending admin notification for accepted invitation to: ${data.adminEmail}`);
     
-    // Create HTML content for admin notification
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -231,14 +345,13 @@ async handleInvitationResend(
             <p>You can manage team members in your organization dashboard.</p>
           </div>
           <div class="footer">
-            <p>© ${new Date().getFullYear()} Pivota. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} PivotaConnect. All rights reserved.</p>
           </div>
         </div>
       </body>
       </html>
     `;
 
-    // Send using Mailjet directly (or add a method to EmailService)
     const body = {
       Messages: [{
         From: {
@@ -271,7 +384,6 @@ async handleInvitationResend(
     try {
       await action();
       
-      // SUCCESS: Tell RabbitMQ to delete the message
       channel.ack(originalMsg);
       
       const duration = Date.now() - startTime;
@@ -280,10 +392,7 @@ async handleInvitationResend(
       const duration = Date.now() - startTime;
       this.logger.error(`[RMQ] Failed ${pattern} for ${identifier} after ${duration}ms: ${error.message}`);
       
-      // ❌ FAILURE: Tell RabbitMQ to put the message back in the queue to try again
       channel.nack(originalMsg, false, true); 
-      
-      throw error; 
     }
   }
 }

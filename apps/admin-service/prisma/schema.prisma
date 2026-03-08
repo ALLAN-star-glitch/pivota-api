@@ -884,19 +884,34 @@ model SmartMatchy {
   userMaxBudget   Float?   // Feature 1: Maximum budget user is willing to spend
   userMinBudget   Float?   // User's minimum budget (if specified)
   userBudgetMidpoint Float? // Feature 2: Middle value of user's budget range
+  userBudgetFlexibility Float? // 0-1 indicating how flexible on price (NEW)
   
   /// Bedroom Preferences
   userMinBedrooms Int?     // Feature 3: Minimum number of bedrooms
   userMaxBedrooms Int?     // Feature 4: Maximum number of bedrooms
+  userPreferredBathrooms Int? // Preferred number of bathrooms (NEW)
   
   /// Property Preferences
   userPropertyType String? // Feature 5: Type of property preferred (apartment, house, etc.)
+  userPreferredPropertyTypes Json? // ["APARTMENT", "HOUSE"] (NEW)
   
   /// Location Preferences
   userPreferredNeighborhood String? // Feature 6: Preferred neighborhood or area
   userPreferredLat     Float?       // Feature 7: Preferred location latitude
   userPreferredLng     Float?       // Feature 8: Preferred location longitude
   userPreferredRadius  Float?       // Search radius in km
+  userPreferredLocations Json?      // Array of preferred neighborhoods/cities (NEW)
+  
+  /// Amenity Preferences
+  userFavoriteAmenities Json?       // Array of amenities user prefers (NEW)
+  userPreferredAmenities Json?      // Weighted amenities: {"wifi": 0.9, "parking": 0.8} (NEW)
+  
+  /// Listing Type Preferences
+  userPreferredListingTypes Json?   // ["RENTAL", "SALE"] (NEW)
+  
+  /// User Context from Profile (Enriched by analytics)
+  userPreviousSearches Json?        // Array of recent search queries (NEW)
+  userPreviousViewings Json?        // Array of recently viewed listing IDs (NEW)
   
   // ==================== LISTING FEATURES (Features 9-18) ====================
   
@@ -908,17 +923,25 @@ model SmartMatchy {
   listingBedrooms     Int?           // Feature 10: Number of bedrooms
   listingBathrooms    Int?           // Feature 11: Number of bathrooms
   listingPropertyType String?        // Feature 12: Type of property
+  listingSquareFootage Int?          // Square footage of property (NEW)
+  listingYearBuilt    Int?           // Year property was built (NEW)
   
   /// Location Details
   listingNeighborhood String?        // Feature 13: Neighborhood or area
   listingLat          Float?         // Feature 14: Latitude
   listingLng          Float?         // Feature 15: Longitude
+  listingLatitude     Float?         // Exact latitude (NEW)
+  listingLongitude    Float?         // Exact longitude (NEW)
   
   /// Listing Metadata
   listingAge          Int?           // Feature 16: Days since posted
   listingPhotoCount   Int?           // Feature 17: Number of photos
   listingVerified     Boolean?       @default(false) // Feature 18: Whether verified
   listingStatus       String?        // "ACTIVE", "PENDING", "COMPLETED"
+  listingCategoryId   String?        // Category ID (NEW)
+  listingCategorySlug String?        // Category slug (NEW)
+  listingAmenities    Json?          // Array of amenities (NEW)
+  listingIsFurnished  Boolean?       @default(false) // Whether furnished (NEW)
   
   // ==================== SESSION CONTEXT (Features 19-22) ====================
   
@@ -929,32 +952,77 @@ model SmartMatchy {
   /// Device Information
   sessionDevice       String?        // Feature 20: Device being used
   sessionPlatform     String?        // "MOBILE", "WEB", "APP"
+  deviceType          String?        // "MOBILE", "TABLET", "DESKTOP" (NEW)
+  osVersion           String?        // Operating system version (NEW)
+  appVersion          String?        // App version if applicable (NEW)
   
   /// Search Context
+  sessionSearchId     String?        // Search session ID (NEW)
+  sessionSearchQuery  String?        // Search query text (NEW)
   sessionSearchMaxBudget Float?      // Feature 21: Max budget in current search
   sessionSearchNeighborhood String?  // Feature 22: Neighborhood selected in current search
   sessionSearchFilters Json?         // All active filters
+  searchPosition      Int?           // Position in search results (NEW)
+  
+  /// Interaction Context
+  interactionType     String?        // "CLICK", "SCROLL", "DWELL" (NEW)
+  scrollDepth         Int?           // % scrolled (0-100) (NEW)
+  viewDuration        Int?           // How long viewed in seconds (NEW)
+  timeSpent           Int?           // Time spent in seconds (NEW)
   
   // ==================== USER-LISTING MATCH FEATURES (Features 23-28) ====================
-  // These are the MOST IMPORTANT for ranking - pre-computed for ML
   
   /// Budget Match
   isWithinBudget      Boolean?       // Feature 23: Whether house is within user's budget
   priceToBudgetDiff   Float?         // Feature 24: Difference from budget midpoint (negative = under)
   priceToBudgetRatio  Float?         // Feature 25: Price / Max Budget (0.0-1.0+)
+  priceVsCategoryAvg  Float?         // Price compared to category average (NEW)
+  priceVsNeighborhoodAvg Float?      // Price compared to neighborhood average (NEW)
   
   /// Bedroom Match
   bedroomDiff         Int?           // Feature 26: Difference from preferred bedrooms
   meetsBedroomRequirement Boolean?    // Whether within min/max range
+  bathroomDiff        Int?           // Difference from preferred bathrooms (NEW)
   
   /// Location Match
   locationDistance    Float?         // Feature 27: Distance in km between user pref and listing
   isPreferredNeighborhood Boolean?    // Feature 28: Whether in same preferred neighborhood
+  locationMatchScore  Float?         // Composite location score (NEW)
+  isExactNeighborhoodMatch Boolean?   // Whether exact neighborhood match (NEW)
+  isCityMatch         Boolean?       // Whether same city (NEW)
+  distanceFromPreferred Float?       // Distance from preferred location (NEW)
+  
+  /// Amenity Match
+  amenityMatchScore   Float?         // How well amenities match user preferences (NEW)
+  amenityMatchCount   Int?           // Number of matching amenities (NEW)
+  
+  /// Property Type Match
+  propertyTypeMatch   Boolean?       // Whether property type matches preference
+  propertyTypeMatchScore Float?      // 0-1 score for property type match (NEW)
+  
+  // ==================== TEMPORAL FEATURES ====================
+  
+  hourOfDay           Int?            // Hour when event occurred (0-23) (NEW)
+  dayOfWeek           Int?            // Day of week (0-6, 0=Sunday) (NEW)
+  isWeekend           Boolean?        // Whether event on weekend (NEW)
+  daysSinceListingPosted Int?         // Age of listing at time of event (NEW)
+  timeToViewing       Int?            // For scheduled viewings: days until viewing (NEW)
+  
+  // ==================== VIEWING-SPECIFIC FEATURES ====================
+  
+  /// Viewing Details (Added for SCHEDULE_VIEWING events)
+  viewingDate         DateTime?       // When the viewing is scheduled - helps with time-based analysis
+  isAdminBooking      Boolean?        @default(false) // Distinguish between user vs admin initiated
+  viewingDuration     Int?            // Expected duration in minutes - indicates commitment level
+  viewingParticipants Int?            // Number of people attending - indicates scale of interest
+  
+  // ==================== AI EVENT METADATA ====================
+  
+  aiEventType         String?        // "VIEW", "SEARCH", "SAVE", "SCHEDULE_VIEWING", etc. (NEW)
+  aiEventId           String?        // Reference to original event if needed (NEW)
+  aiEventTimestamp    DateTime?      // When the original event occurred (NEW)
   
   // ==================== ADDITIONAL MATCH SCORES ====================
-  
-  // Property Type Match
-  propertyTypeMatch   Boolean?       // Whether property type matches preference
   
   // Composite scores
   overallMatchScore   Float?         // Final ranking score
@@ -970,11 +1038,19 @@ model SmartMatchy {
   userConverted       Boolean?       @default(false) // Did user complete transaction
   dwellTime           Int?           // If clicked, how long they viewed
   
+  // Enhanced conversion labels
+  userScheduledViewing Boolean?       @default(false) // Did they schedule viewing (NEW)
+  userCompletedViewing Boolean?       @default(false) // Did they complete viewing (NEW)
+  viewingCompletedAt  DateTime?       // When viewing actually occurred (NEW)
+  viewingFeedback     Json?           // Feedback from completed viewing (NEW)
+  
   // ==================== METADATA ====================
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   
-  // Indexes for ML training queries
+  // ==================== ENHANCED INDEXES ====================
+  
+  // Existing indexes
   @@index([userUuid, timestamp])
   @@index([listingId, timestamp])
   @@index([vertical, timestamp])
@@ -985,6 +1061,27 @@ model SmartMatchy {
   // Composite indexes for training batches
   @@index([timestamp, vertical, userClicked])
   @@index([vertical, isWithinBudget, userConverted])
+  
+  // NEW INDEXES for AI queries
+  @@index([aiEventType, timestamp])
+  @@index([listingPropertyType])
+  @@index([listingSquareFootage])
+  @@index([interactionType])
+  @@index([hourOfDay])
+  @@index([dayOfWeek])
+  @@index([deviceType])
+  @@index([distanceFromPreferred])
+  @@index([amenityMatchScore])
+  @@index([userScheduledViewing])
+  @@index([userCompletedViewing])
+  @@index([listingNeighborhood, userPreferredNeighborhood])
+  @@index([priceVsCategoryAvg])
+  @@index([sessionSearchId])
+  
+  // New indexes for viewing-specific features
+  @@index([viewingDate])
+  @@index([isAdminBooking])
+  @@index([viewingDuration])
 }
 
 // ===================== SMARTMATCH™ INSIGHTS (User Profiles) =====================

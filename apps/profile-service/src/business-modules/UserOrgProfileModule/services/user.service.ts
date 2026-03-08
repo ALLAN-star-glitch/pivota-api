@@ -115,9 +115,9 @@ async createUserProfile(
     
   const normalizedEmail = data.email.toLowerCase().trim();
 
-  this.logger.log(`Initiating individual profile creation: ${normalizedEmail} [Plan: ${data.planSlug || 'free-forever'}]`);
+  this.logger.log(`Initiating individual profile creation: ${normalizedEmail} [Plan: ${data.planSlug}]`);
 
-  const accountUuid = randomUUID();
+  const accountUuid = randomUUID(); 
   const userCode = `USR-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
   const targetPlanSlug = data.planSlug || 'free-forever';
 
@@ -137,6 +137,8 @@ async createUserProfile(
         ),
       ).catch(() => null),
     ]);
+
+    this.logger.debug(`Plan Response: ${planRes ? JSON.stringify(planRes.data) : 'No response or error'}`); 
 
     if (!roleRes?.data?.roleId) {
       return BaseResponseDto.fail('System Role: GeneralUser not found or RBAC service down', 'NOT_FOUND');

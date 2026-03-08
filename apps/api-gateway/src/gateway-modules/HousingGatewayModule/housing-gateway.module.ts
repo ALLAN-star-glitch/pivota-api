@@ -6,7 +6,7 @@ import { LISTINGS_HOUSING_PROTO_PATH } from '@pivota-api/protos';
 import { SubscriptionsGatewayModule } from '../SubscriptionsGatewayModule/subscriptions-gateway.module';
 import { SharedStorageModule } from '@pivota-api/shared-storage';
 
-@Module({
+@Module({  
   imports: [
     SharedStorageModule,
     SubscriptionsGatewayModule,

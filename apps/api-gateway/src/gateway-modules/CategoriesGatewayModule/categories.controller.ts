@@ -27,11 +27,11 @@ import {
 } from '@pivota-api/dtos';
 import { CategoriesService } from './categories.service';
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../../decorators/roles.decorator';
 import { RolesGuard } from '../../guards/role.guard';
-
-@ApiTags('Categories Module - (Listings-Service Microservice)')
+ 
+@ApiTags('Categories') // Main module tag
 @Controller('categories-module')
 export class CategoriesController {
   private readonly logger = new Logger(CategoriesController.name);
@@ -39,15 +39,81 @@ export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   // ===========================================================
-  // CREATE CATEGORY (Admin Only)
+  // 📁 CATEGORIES - ADMIN OPERATIONS
   // ===========================================================
+
+  /**
+   * Create a new category
+   * 
+   * Creates a new category in the system. Categories are used to organize listings
+   * across different verticals (Housing, Jobs, Services, Social Support).
+   * 
+   * @param dto - Category creation data including name, slug, vertical, and optional parent
+   * @returns The created category with all properties
+   */
+  @Post('categories')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SuperAdmin', 'SystemAdmin', 'ContentManagerAdmin')
   @Version('1')
-  @Post('categories')
-  @ApiOperation({ summary: 'Create a new category' })
-  @ApiResponse({ type: CategoryResponseDto })
+  @ApiTags('Categories - Admin')
+  @ApiOperation({ 
+    summary: 'Create a new category',
+    description: `
+      Creates a new category in the system.
+      
+      **Microservice:** Listings Service
+      **Authentication:** Required (JWT cookie)
+      **Permissions:** SuperAdmin, SystemAdmin, ContentManagerAdmin
+      
+      **Category Properties:**
+      • **name** - Display name (e.g., "Apartments")
+      • **slug** - URL-friendly identifier (e.g., "apartments")
+      • **vertical** - The pillar this belongs to (HOUSING, JOBS, SOCIAL_SUPPORT, SERVICES)
+      • **parentId** - Optional parent for hierarchical categories
+      • **icon** - Optional icon name for UI
+      • **color** - Optional color code for UI branding
+      
+      **Category Hierarchy:**
+      • Parent categories (e.g., "Property")
+      • Child categories (e.g., "Apartments", "Houses", "Land")
+      • Supports unlimited nesting levels
+      
+      **Validation Rules:**
+      • Slug must be unique within the same vertical
+      • Parent must exist if provided
+      • Cannot create circular references
+    `
+  })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Category created successfully',
+    type: CategoryResponseDto,
+    schema: {
+      example: {
+        success: true,
+        message: 'Category created successfully',
+        code: 'CREATED',
+        data: {
+          id: 'cat_123abc',
+          name: 'Apartments',
+          slug: 'apartments',
+          vertical: 'HOUSING',
+          icon: 'home',
+          color: '#3B82F6',
+          parentId: null,
+          hasSubcategories: false,
+          hasParent: false,
+          createdAt: '2026-03-05T10:30:00.000Z',
+          updatedAt: '2026-03-05T10:30:00.000Z'
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Validation error - Invalid input data' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Missing or invalid JWT token' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 409, description: 'Conflict - Category with same slug already exists' })
   async createCategory(
     @Body() dto: CreateCategoryRequestDto,
   ): Promise<BaseResponseDto<CategoryResponseDto>> {
@@ -55,15 +121,52 @@ export class CategoriesController {
     return this.categoriesService.createCategory(dto);
   }
 
-  // ===========================================================
-  // UPDATE CATEGORY (Admin Only)
-  // ===========================================================
+  /**
+   * Update an existing category
+   * 
+   * Updates properties of an existing category. Cannot change the vertical.
+   * 
+   * @param dto - Category update data including ID and fields to update
+   * @returns The updated category
+   */
+  @Patch('categories')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SuperAdmin', 'SystemAdmin', 'ContentManagerAdmin')
   @Version('1')
-  @Patch('categories')
-  @ApiOperation({ summary: 'Update an existing category' })
+  @ApiTags('Categories - Admin')
+  @ApiOperation({ 
+    summary: 'Update an existing category',
+    description: `
+      Updates an existing category's properties.
+      
+      **Microservice:** Listings Service
+      **Authentication:** Required (JWT cookie)
+      **Permissions:** SuperAdmin, SystemAdmin, ContentManagerAdmin
+      
+      **Updatable Fields:**
+      • **name** - Display name
+      • **slug** - URL-friendly identifier (must remain unique)
+      • **icon** - Optional icon name for UI
+      • **color** - Optional color code for UI branding
+      • **parentId** - Change parent category
+      
+      **Restrictions:**
+      • Cannot change the vertical
+      • Cannot create circular references
+      • Slug uniqueness enforced within the same vertical
+    `
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Category updated successfully',
+    type: CategoryResponseDto
+  })
+  @ApiResponse({ status: 400, description: 'Validation error - Invalid input data' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Category not found' })
+  @ApiResponse({ status: 409, description: 'Conflict - Category with same slug already exists' })
   async updateCategory(
     @Body() dto: UpdateCategoryRequestDto,
   ): Promise<BaseResponseDto<CategoryResponseDto>> {
@@ -71,12 +174,158 @@ export class CategoriesController {
     return this.categoriesService.updateCategory(dto);
   }
 
-  // ===========================================================
-  // GET CATEGORIES WITH STATS (Public)
-  // ===========================================================
+  /**
+   * Delete a category
+   * 
+   * Permanently removes a category from the system.
+   * 
+   * @param id - ID of the category to delete
+   * @returns Success confirmation
+   */
+  @Delete('categories/:id')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SuperAdmin', 'SystemAdmin')
   @Version('1')
+  @ApiTags('Categories - Admin')
+  @ApiOperation({ 
+    summary: 'Delete a category',
+    description: `
+      Permanently deletes a category from the system.
+      
+      **Microservice:** Listings Service
+      **Authentication:** Required (JWT cookie)
+      **Permissions:** SuperAdmin, SystemAdmin
+      
+      **Deletion Rules:**
+      • Category must have no child categories
+      • Category must not be in use by any listings
+      • Protected system categories cannot be deleted
+      • Operation cannot be undone
+      
+      **Validation:**
+      • Checks for existing subcategories
+      • Checks for listings using this category
+      • Prevents deletion of system-protected categories
+    `
+  })
+  @ApiParam({ 
+    name: 'id', 
+    type: String,
+    description: 'CUID of the category to delete',
+    example: 'cat_123abc'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Category deleted successfully',
+    schema: {
+      example: {
+        success: true,
+        message: 'Category deleted successfully',
+        code: 'OK',
+        data: null
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Category has subcategories or is in use' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Category not found' })
+  async deleteCategory(
+    @Param('id') id: string,
+  ): Promise<BaseResponseDto<null>> {
+    this.logger.warn(`REST deleteCategory request: ${id}`);
+    return this.categoriesService.deleteCategory(id);
+  }
+
+  // ===========================================================
+  // 📁 CATEGORIES - PUBLIC OPERATIONS
+  // ===========================================================
+
+  /**
+   * Get categories tree with usage stats
+   * 
+   * Retrieves all categories, optionally filtered by vertical,
+   * with usage statistics for each category.
+   * 
+   * @param query - Filter parameters (vertical)
+   * @returns Hierarchical category tree with usage stats
+   */
   @Get('categories')
-  @ApiOperation({ summary: 'Get categories tree with usage stats' })
+  @Version('1')
+  @ApiTags('Categories - Public')
+  @ApiOperation({ 
+    summary: 'Get categories tree with usage stats',
+    description: `
+      Retrieves the complete category hierarchy with usage statistics.
+      
+      **Microservice:** Listings Service
+      **Authentication:** Not required
+      
+      **Features:**
+      • Returns categories in a hierarchical tree structure
+      • Includes usage statistics (number of listings in each category)
+      • Can filter by vertical (HOUSING, JOBS, SOCIAL_SUPPORT, SERVICES)
+      • Sorted by category name
+      
+      **Use Cases:**
+      • Building navigation menus
+      • Category-based filtering UI
+      • Analytics dashboards
+      • SEO optimization
+      
+      **Response includes:**
+      • Full category details
+      • Child categories nested
+      • Listing counts per category
+      • Hierarchical relationships
+    `
+  })
+  @ApiQuery({ 
+    name: 'vertical', 
+    required: false,
+    description: 'Filter by vertical',
+    enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT', 'SERVICES'],
+    example: 'HOUSING'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Categories retrieved successfully',
+    type: [CategoryResponseDto],
+    schema: {
+      example: {
+        success: true,
+        message: 'Categories retrieved successfully',
+        code: 'OK',
+        data: [
+          {
+            id: 'cat_123abc',
+            name: 'Property',
+            slug: 'property',
+            vertical: 'HOUSING',
+            icon: 'building',
+            listingCount: 150,
+            subcategories: [
+              {
+                id: 'cat_456def',
+                name: 'Apartments',
+                slug: 'apartments',
+                listingCount: 85,
+                subcategories: []
+              },
+              {
+                id: 'cat_789ghi',
+                name: 'Houses',
+                slug: 'houses',
+                listingCount: 65,
+                subcategories: []
+              }
+            ]
+          }
+        ]
+      }
+    }
+  })
   async getCategories(
     @Query() query: GetCategoriesRequestDto,
   ): Promise<BaseResponseDto<CategoryResponseDto[]>> {
@@ -84,12 +333,78 @@ export class CategoriesController {
     return this.categoriesService.getCategories(query);
   }
 
-  // ===========================================================
-  // GET DISCOVERY METADATA (Public - Lightweight)
-  // ===========================================================
-  @Version('1')
+  /**
+   * Get lightweight discovery metadata
+   * 
+   * Returns a simplified category structure optimized for navigation UIs.
+   * 
+   * @param query - Filter parameters (vertical)
+   * @returns Lightweight category metadata
+   */
   @Get('categories/discovery')
-  @ApiOperation({ summary: 'Get lightweight discovery metadata for navigation' })
+  @Version('1')
+  @ApiTags('Categories - Public')
+  @ApiOperation({ 
+    summary: 'Get lightweight discovery metadata',
+    description: `
+      Returns a simplified category structure optimized for navigation UIs.
+      
+      **Microservice:** Listings Service
+      **Authentication:** Not required
+      
+      **Features:**
+      • Lightweight response format
+      • Only essential fields (id, name, slug, icon)
+      • Flat structure for easy rendering
+      • Ideal for dropdowns and navigation menus
+      
+      **Use Cases:**
+      • Category dropdowns in search forms
+      • Mobile navigation menus
+      • Quick category selection UI
+      • Filter components
+      
+      **Performance:**
+      • Optimized for fast loading
+      • Minimal data transfer
+      • Caching-friendly response
+    `
+  })
+  @ApiQuery({ 
+    name: 'vertical', 
+    required: true,
+    description: 'Vertical to get discovery metadata for',
+    enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT', 'SERVICES'],
+    example: 'HOUSING'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Discovery metadata retrieved successfully',
+    type: [DiscoveryCategoryResponseDto],
+    schema: {
+      example: {
+        success: true,
+        message: 'Discovery metadata retrieved',
+        code: 'OK',
+        data: [
+          {
+            id: 'cat_123abc',
+            name: 'Apartments',
+            slug: 'apartments',
+            icon: 'home',
+            color: '#3B82F6'
+          },
+          {
+            id: 'cat_456def',
+            name: 'Houses',
+            slug: 'houses',
+            icon: 'building',
+            color: '#10B981'
+          }
+        ]
+      }
+    }
+  })
   async getDiscoveryMetadata(
     @Query() query: DiscoveryParamsDto,
   ): Promise<BaseResponseDto<DiscoveryCategoryResponseDto[]>> {
@@ -97,12 +412,50 @@ export class CategoriesController {
     return this.categoriesService.getDiscoveryMetadata(query);
   }
 
-  // ===========================================================
-  // GET CATEGORY BY ID (Public)
-  // ===========================================================
-  @Version('1')
+  /**
+   * Get category by ID
+   * 
+   * Retrieves a single category by its unique identifier.
+   * 
+   * @param params - Parameters containing the category ID
+   * @returns Category details
+   */
   @Get('categories/id/:id')
-  @ApiOperation({ summary: 'Get a category by unique ID' })
+  @Version('1')
+  @ApiTags('Categories - Public')
+  @ApiOperation({ 
+    summary: 'Get category by ID',
+    description: `
+      Retrieves a single category by its unique identifier.
+      
+      **Microservice:** Listings Service
+      **Authentication:** Not required
+      
+      **Use Cases:**
+      • Category detail pages
+      • Breadcrumb navigation
+      • Category metadata retrieval
+      • SEO optimization
+      
+      **Returns:**
+      • Full category details
+      • Parent category reference (if any)
+      • Subcategories list (if any)
+      • Usage statistics
+    `
+  })
+  @ApiParam({ 
+    name: 'id', 
+    type: String,
+    description: 'CUID of the category',
+    example: 'cat_123abc'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Category retrieved successfully',
+    type: CategoryResponseDto
+  })
+  @ApiResponse({ status: 404, description: 'Category not found' })
   async getCategoryById(
     @Param() params: CategoryIdParamDto, 
   ): Promise<BaseResponseDto<CategoryResponseDto>> {
@@ -110,12 +463,63 @@ export class CategoriesController {
     return this.categoriesService.getCategory(params.id);
   }
 
-  // ===========================================================
-  // GET CATEGORY BY SLUG (Public - Critical for Web URLs)
-  // ===========================================================
-  @Version('1')
+  /**
+   * Get category by vertical and slug
+   * 
+   * Retrieves a category using its vertical and URL-friendly slug.
+   * This is the primary endpoint for public-facing URLs.
+   * 
+   * @param params - Parameters containing vertical and slug
+   * @returns Category details
+   */
   @Get('categories/slug/:vertical/:slug')
-  @ApiOperation({ summary: 'Get a category by vertical and slug' })
+  @Version('1')
+  @ApiTags('Categories - Public')
+  @ApiOperation({ 
+    summary: 'Get category by vertical and slug',
+    description: `
+      Retrieves a category using its vertical and URL-friendly slug.
+      This is the primary endpoint for public-facing URLs.
+      
+      **Microservice:** Listings Service
+      **Authentication:** Not required
+      
+      **URL Pattern:**
+      • Format: /categories/slug/{vertical}/{slug}
+      • Example: /categories/slug/HOUSING/apartments
+      
+      **Use Cases:**
+      • Category landing pages
+      • SEO-friendly URLs
+      • Breadcrumb navigation
+      • Link generation
+      
+      **Advantages:**
+      • Human-readable URLs
+      • SEO optimized
+      • Cache-friendly
+      • Consistent across environments
+    `
+  })
+  @ApiParam({ 
+    name: 'vertical', 
+    type: String,
+    description: 'Vertical (HOUSING, JOBS, SOCIAL_SUPPORT, SERVICES)',
+    enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT', 'SERVICES'],
+    example: 'HOUSING'
+  })
+  @ApiParam({ 
+    name: 'slug', 
+    type: String,
+    description: 'URL-friendly category slug',
+    example: 'apartments'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Category retrieved successfully',
+    type: CategoryResponseDto
+  })
+  @ApiResponse({ status: 404, description: 'Category not found' })
   async getCategoryBySlug(
     @Param() params: GetCategoryBySlugParamsDto,
   ): Promise<BaseResponseDto<CategoryResponseDto>> {
@@ -123,33 +527,65 @@ export class CategoriesController {
     return this.categoriesService.getCategoryBySlug(params);
   }
 
-  // ===========================================================
-  // GET CATEGORY BY NAME (Public)
-  // ===========================================================
-  @Version('1')
+  /**
+   * Search for category by name
+   * 
+   * Finds a category by its name within a specific vertical.
+   * Useful for auto-complete and search functionality.
+   * 
+   * @param query - Search parameters (name and vertical)
+   * @returns Matching category
+   */
   @Get('categories/search')
-  @ApiOperation({ summary: 'Search for a category by name and vertical' })
+  @Version('1')
+  @ApiTags('Categories - Public')
+  @ApiOperation({ 
+    summary: 'Search for category by name',
+    description: `
+      Finds a category by its name within a specific vertical.
+      
+      **Microservice:** Listings Service
+      **Authentication:** Not required
+      
+      **Features:**
+      • Case-insensitive search
+      • Exact name matching
+      • Returns first matching category
+      
+      **Use Cases:**
+      • Auto-complete components
+      • Category lookup by name
+      • Import/export functionality
+      • Admin tools
+      
+      **Limitations:**
+      • Returns only exact matches
+      • Consider using fuzzy search for partial matches
+    `
+  })
+  @ApiQuery({ 
+    name: 'name', 
+    required: true,
+    description: 'Category name to search for',
+    example: 'Apartments'
+  })
+  @ApiQuery({ 
+    name: 'vertical', 
+    required: true,
+    description: 'Vertical to search within',
+    enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT', 'SERVICES'],
+    example: 'HOUSING'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Category found',
+    type: CategoryResponseDto
+  })
+  @ApiResponse({ status: 404, description: 'Category not found' })
   async getCategoryByName(
     @Query() query: GetCategoryByNameQueryDto,
   ): Promise<BaseResponseDto<CategoryResponseDto>> {
     this.logger.debug(`REST getCategoryByName request: ${query.name}`);
     return this.categoriesService.getCategoryByName(query);
-  }
-
-  // ===========================================================
-  // DELETE CATEGORY (SuperAdmin Only)
-  // ===========================================================
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemAdmin')
-  @Version('1')
-  @Delete('categories/:id')
-  @ApiParam({ name: 'id', type: String })
-  @ApiOperation({ summary: 'Delete a category (only if unused and has no children)' })
-  async deleteCategory(
-    @Param('id') id: string,
-  ): Promise<BaseResponseDto<null>> {
-    this.logger.warn(`REST deleteCategory request: ${id}`);
-    return this.categoriesService.deleteCategory(id);
   }
 }
