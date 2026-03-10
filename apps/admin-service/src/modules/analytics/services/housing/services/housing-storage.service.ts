@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../../../prisma/prisma.service';
-import { SmartMatchy, Prisma } from '../../../../../generated/prisma/client';
+import { PrismaService } from '../../../../../prisma/prisma.service';
+import { SmartMatchy, Prisma } from '../../../../../../generated/prisma/client';
 import { HousingViewEvent } from '@pivota-api/interfaces';
 
 @Injectable()

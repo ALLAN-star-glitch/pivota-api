@@ -17,9 +17,9 @@ async function main() {
 
   // ---------- 1) CLEANUP ----------
   const activeModuleSlugs = [
-    'houses', 'jobs', 'help-and-support', 'services',
+    'houses', 'jobs', 'social-support', 'services', // Changed from help-and-support
     'dashboard', 'user-management', 'analytics',
-    'system-settings', 'module-management', 'registry' // Added registry
+    'system-settings', 'module-management', 'registry'
   ];
 
   const deletedModules = await prisma.module.deleteMany({
@@ -60,10 +60,10 @@ async function main() {
   const modules = [
     { slug: 'houses', name: 'Houses', description: 'Housing & rentals' },
     { slug: 'jobs', name: 'Jobs', description: 'Job listings & hiring' },
-    { slug: 'help-and-support', name: 'Help and Support', description: 'Community & social aid services' },
+    { slug: 'social-support', name: 'Social Support', description: 'Community & social aid services' }, // Changed from help-and-support
     { slug: 'services', name: 'Contractor Services', description: 'Professional service offerings & SmartMatch' },
     { slug: 'dashboard', name: 'Dashboard', system: true },
-    { slug: 'registry', name: 'Registry', description: 'Shared Navigation & Aggregated Portfolio', system: true }, // Added registry
+    { slug: 'registry', name: 'Registry', description: 'Shared Navigation & Aggregated Portfolio', system: true },
     { slug: 'user-management', name: 'User Management', system: true },
     { slug: 'analytics', name: 'Analytics', system: true },
     { slug: 'system-settings', name: 'System Settings', system: true },
@@ -96,7 +96,8 @@ async function main() {
     { action: 'listings.read', moduleSlug: 'registry' }, // Unified Registry Permission
   ];
 
-  const businessModuleSlugs = ['houses', 'jobs', 'help-and-support', 'services'];
+  const businessModuleSlugs = ['houses', 'jobs', 'social-support', 'services']; // Changed from help-and-support
+
   const permissionData = [...systemPermissions];
 
   for (const slug of businessModuleSlugs) {
@@ -191,9 +192,9 @@ async function main() {
   const roleModuleConfig = [
     { roleType: 'SuperAdmin', slugs: dbModules.map(m => m.slug), assignable: false },
     { roleType: 'SystemAdmin', slugs: dbModules.map(m => m.slug), assignable: false },
-    { roleType: 'BusinessSystemAdmin', slugs: ['houses','jobs','help-and-support','services','dashboard', 'registry'], assignable: true },
-    { roleType: 'BusinessContentManager', slugs: ['houses','jobs','help-and-support','services','dashboard', 'registry'], assignable: true },
-    { roleType: 'GeneralUser', slugs: ['houses','jobs','help-and-support','services','dashboard', 'registry'], assignable: false },
+    { roleType: 'BusinessSystemAdmin', slugs: ['houses','jobs','social-support','services','dashboard', 'registry'], assignable: true }, // Changed from help-and-support
+    { roleType: 'BusinessContentManager', slugs: ['houses','jobs','social-support','services','dashboard', 'registry'], assignable: true }, // Changed from help-and-support
+    { roleType: 'GeneralUser', slugs: ['houses','jobs','social-support','services','dashboard', 'registry'], assignable: false }, // Changed from help-and-support
   ];
 
   for (const cfg of roleModuleConfig) {

@@ -1,13 +1,23 @@
-//Representation of a user session (refresh token session)
-// Your SessionDto is just a TypeScript representation of one RefreshToken row, cleaned up for API
-// Representation of a user session (refresh token session)
+// Session DTO - matches your database schema
 export class SessionDto {
   id!: number;
   tokenId!: string;
+  
+  // Client info fields
   device?: string;
-  os?: string; 
+  deviceType?: 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | 'UNKNOWN';
+  os?: string;
+  osVersion?: string;
+  browser?: string;
+  browserVersion?: string;
   ipAddress?: string;
   userAgent?: string;
+  isMobile?: boolean;
+  isTablet?: boolean;
+  isDesktop?: boolean;
+  isBot?: boolean;
+  
+  // Session metadata
   createdAt!: string;
   expiresAt!: string;
   revoked!: boolean;

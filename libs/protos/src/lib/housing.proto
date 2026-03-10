@@ -71,13 +71,22 @@ message ClientInfo {
   string ipAddress = 1;
   string userAgent = 2;
   string device = 3;
-  string os = 4;
+  string deviceType = 4;      // "MOBILE", "TABLET", "DESKTOP", "BOT", "UNKNOWN"
+  string os = 5;
+  string osVersion = 6;
+  string browser = 7;
+  string browserVersion = 8;
+  bool isMobile = 9;
+  bool isTablet = 10;
+  bool isDesktop = 11;
+  bool isBot = 12;
 }
 
 message SearchContext {
   optional string searchId = 1;
   optional string query = 2;
   optional int32 position = 3;
+  optional string filters = 4; // JSON string of filters
 }
 
 message ListingViewContext {
@@ -87,6 +96,10 @@ message ListingViewContext {
   string platform = 4;
   string referrer = 5;
   optional SearchContext search = 6;
+  optional int32 timeSpent = 7;        // Time spent viewing in seconds
+  optional string interactionType = 8;  // "CLICK", "SCROLL", "DWELL"
+  optional int32 viewDuration = 9;      // How long they viewed
+  optional int32 scrollDepth = 10;       // How far they scrolled (0-100)
 }
 
 // ===================================================
@@ -237,6 +250,7 @@ message ScheduleViewingRequest {
   string viewingDate = 6;
   optional string targetViewerId = 7;
   optional string notes = 8;
+  optional ListingViewContext context = 9;  // ADD THIS
 }
 
 // ===================================================

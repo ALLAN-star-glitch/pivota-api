@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsISO8601 } from "class-validator";
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsISO8601, IsBoolean, IsIn } from "class-validator";
 
 /* ======================================================
    USER LOGIN EMAIL DTO
@@ -21,38 +21,86 @@ export class UserLoginEmailDto {
   @IsNotEmpty()
   lastName!: string;
 
-
-
   @ApiProperty({ example: 'New Login Detected' })
   @IsString()
   @IsNotEmpty()
   subject!: string;
 
+  // Device Information
   @ApiProperty({ example: 'iPhone 15' })
   @IsString()
   @IsNotEmpty()
   device!: string;
 
-  @ApiProperty({ example: 'iOS 17.2' })
+  @ApiPropertyOptional({ 
+    example: 'MOBILE',
+    enum: ['MOBILE', 'TABLET', 'DESKTOP', 'BOT', 'UNKNOWN']
+  })
+  @IsOptional()
+  @IsIn(['MOBILE', 'TABLET', 'DESKTOP', 'BOT', 'UNKNOWN'])
+  deviceType?: 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | 'UNKNOWN';
+
+  // OS Information
+  @ApiProperty({ example: 'iOS' })
   @IsString()
   @IsNotEmpty()
   os!: string;
+
+  @ApiPropertyOptional({ example: '17.2' })
+  @IsOptional()
+  @IsString()
+  osVersion?: string;
+
+  // Browser Information
+  @ApiPropertyOptional({ example: 'Safari' })
+  @IsOptional()
+  @IsString()
+  browser?: string;
+
+  @ApiPropertyOptional({ example: '17.2' })
+  @IsOptional()
+  @IsString()
+  browserVersion?: string;
 
   @ApiProperty({ example: 'Safari' })
   @IsString()
   @IsNotEmpty()
   userAgent!: string;
 
+  // Network Information
   @ApiProperty({ example: '192.168.1.1' })
   @IsString()
   @IsNotEmpty()
   ipAddress!: string;
 
+  // Device Classification Flags
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isMobile?: boolean;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  isTablet?: boolean;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  isDesktop?: boolean;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  isBot?: boolean;
+
+  // Timestamp
   @ApiProperty({ example: '2026-01-08T14:00:00Z' })
-  @IsISO8601() // Validates that it's a proper ISO date string
+  @IsISO8601()
   @IsNotEmpty()
   timestamp!: string;
 
+  // Organization Information (Optional)
   @ApiPropertyOptional({ example: 'Pivota Tech Ltd' })
   @IsOptional()
   @IsString()

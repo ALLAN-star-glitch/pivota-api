@@ -884,34 +884,34 @@ model SmartMatchy {
   userMaxBudget   Float?   // Feature 1: Maximum budget user is willing to spend
   userMinBudget   Float?   // User's minimum budget (if specified)
   userBudgetMidpoint Float? // Feature 2: Middle value of user's budget range
-  userBudgetFlexibility Float? // 0-1 indicating how flexible on price (NEW)
+  userBudgetFlexibility Float? // 0-1 indicating how flexible on price
   
   /// Bedroom Preferences
   userMinBedrooms Int?     // Feature 3: Minimum number of bedrooms
   userMaxBedrooms Int?     // Feature 4: Maximum number of bedrooms
-  userPreferredBathrooms Int? // Preferred number of bathrooms (NEW)
+  userPreferredBathrooms Int? // Preferred number of bathrooms
   
   /// Property Preferences
   userPropertyType String? // Feature 5: Type of property preferred (apartment, house, etc.)
-  userPreferredPropertyTypes Json? // ["APARTMENT", "HOUSE"] (NEW)
+  userPreferredPropertyTypes Json? // ["APARTMENT", "HOUSE"]
   
   /// Location Preferences
   userPreferredNeighborhood String? // Feature 6: Preferred neighborhood or area
   userPreferredLat     Float?       // Feature 7: Preferred location latitude
   userPreferredLng     Float?       // Feature 8: Preferred location longitude
   userPreferredRadius  Float?       // Search radius in km
-  userPreferredLocations Json?      // Array of preferred neighborhoods/cities (NEW)
+  userPreferredLocations Json?      // Array of preferred neighborhoods/cities
   
   /// Amenity Preferences
-  userFavoriteAmenities Json?       // Array of amenities user prefers (NEW)
-  userPreferredAmenities Json?      // Weighted amenities: {"wifi": 0.9, "parking": 0.8} (NEW)
+  userFavoriteAmenities Json?       // Array of amenities user prefers
+  userPreferredAmenities Json?      // Weighted amenities: {"wifi": 0.9, "parking": 0.8}
   
   /// Listing Type Preferences
-  userPreferredListingTypes Json?   // ["RENTAL", "SALE"] (NEW)
+  userPreferredListingTypes Json?   // ["RENTAL", "SALE"]
   
   /// User Context from Profile (Enriched by analytics)
-  userPreviousSearches Json?        // Array of recent search queries (NEW)
-  userPreviousViewings Json?        // Array of recently viewed listing IDs (NEW)
+  userPreviousSearches Json?        // Array of recent search queries
+  userPreviousViewings Json?        // Array of recently viewed listing IDs
   
   // ==================== LISTING FEATURES (Features 9-18) ====================
   
@@ -923,25 +923,25 @@ model SmartMatchy {
   listingBedrooms     Int?           // Feature 10: Number of bedrooms
   listingBathrooms    Int?           // Feature 11: Number of bathrooms
   listingPropertyType String?        // Feature 12: Type of property
-  listingSquareFootage Int?          // Square footage of property (NEW)
-  listingYearBuilt    Int?           // Year property was built (NEW)
+  listingSquareFootage Int?          // Square footage of property
+  listingYearBuilt    Int?           // Year property was built
   
   /// Location Details
   listingNeighborhood String?        // Feature 13: Neighborhood or area
   listingLat          Float?         // Feature 14: Latitude
   listingLng          Float?         // Feature 15: Longitude
-  listingLatitude     Float?         // Exact latitude (NEW)
-  listingLongitude    Float?         // Exact longitude (NEW)
+  listingLatitude     Float?         // Exact latitude
+  listingLongitude    Float?         // Exact longitude
   
   /// Listing Metadata
   listingAge          Int?           // Feature 16: Days since posted
   listingPhotoCount   Int?           // Feature 17: Number of photos
   listingVerified     Boolean?       @default(false) // Feature 18: Whether verified
   listingStatus       String?        // "ACTIVE", "PENDING", "COMPLETED"
-  listingCategoryId   String?        // Category ID (NEW)
-  listingCategorySlug String?        // Category slug (NEW)
-  listingAmenities    Json?          // Array of amenities (NEW)
-  listingIsFurnished  Boolean?       @default(false) // Whether furnished (NEW)
+  listingCategoryId   String?        // Category ID
+  listingCategorySlug String?        // Category slug
+  listingAmenities    Json?          // Array of amenities
+  listingIsFurnished  Boolean?       @default(false) // Whether furnished
   
   // ==================== SESSION CONTEXT (Features 19-22) ====================
   
@@ -949,26 +949,30 @@ model SmartMatchy {
   sessionReferrer     String?        // Feature 19: Where user came from
   sessionReferrerType String?        // "HOME", "SEARCH", "SIMILAR", "SAVED"
   
-  /// Device Information
-  sessionDevice       String?        // Feature 20: Device being used
+  /// Device Information - ENHANCED with all AuthClientInfoDto fields
+  sessionDevice       String?        // Feature 20: Device being used (model name)
   sessionPlatform     String?        // "MOBILE", "WEB", "APP"
-  deviceType          String?        // "MOBILE", "TABLET", "DESKTOP" (NEW)
-  osVersion           String?        // Operating system version (NEW)
-  appVersion          String?        // App version if applicable (NEW)
+  deviceType          String?        // "MOBILE", "TABLET", "DESKTOP", "BOT"
+  os                  String?        // Operating system name (iOS, Android, Windows)
+  osVersion           String?        // Operating system version
+  browser             String?        // Browser name (Chrome, Safari, Firefox)
+  browserVersion      String?        // Browser version
+  appVersion          String?        // App version if applicable
+  isBot               Boolean?       @default(false) // Whether the request is from a bot
   
   /// Search Context
-  sessionSearchId     String?        // Search session ID (NEW)
-  sessionSearchQuery  String?        // Search query text (NEW)
+  sessionSearchId     String?        // Search session ID
+  sessionSearchQuery  String?        // Search query text
   sessionSearchMaxBudget Float?      // Feature 21: Max budget in current search
   sessionSearchNeighborhood String?  // Feature 22: Neighborhood selected in current search
   sessionSearchFilters Json?         // All active filters
-  searchPosition      Int?           // Position in search results (NEW)
+  searchPosition      Int?           // Position in search results
   
   /// Interaction Context
-  interactionType     String?        // "CLICK", "SCROLL", "DWELL" (NEW)
-  scrollDepth         Int?           // % scrolled (0-100) (NEW)
-  viewDuration        Int?           // How long viewed in seconds (NEW)
-  timeSpent           Int?           // Time spent in seconds (NEW)
+  interactionType     String?        // "CLICK", "SCROLL", "DWELL"
+  scrollDepth         Int?           // % scrolled (0-100)
+  viewDuration        Int?           // How long viewed in seconds
+  timeSpent           Int?           // Time spent in seconds
   
   // ==================== USER-LISTING MATCH FEATURES (Features 23-28) ====================
   
@@ -976,37 +980,37 @@ model SmartMatchy {
   isWithinBudget      Boolean?       // Feature 23: Whether house is within user's budget
   priceToBudgetDiff   Float?         // Feature 24: Difference from budget midpoint (negative = under)
   priceToBudgetRatio  Float?         // Feature 25: Price / Max Budget (0.0-1.0+)
-  priceVsCategoryAvg  Float?         // Price compared to category average (NEW)
-  priceVsNeighborhoodAvg Float?      // Price compared to neighborhood average (NEW)
+  priceVsCategoryAvg  Float?         // Price compared to category average
+  priceVsNeighborhoodAvg Float?      // Price compared to neighborhood average
   
   /// Bedroom Match
   bedroomDiff         Int?           // Feature 26: Difference from preferred bedrooms
   meetsBedroomRequirement Boolean?    // Whether within min/max range
-  bathroomDiff        Int?           // Difference from preferred bathrooms (NEW)
+  bathroomDiff        Int?           // Difference from preferred bathrooms
   
   /// Location Match
   locationDistance    Float?         // Feature 27: Distance in km between user pref and listing
   isPreferredNeighborhood Boolean?    // Feature 28: Whether in same preferred neighborhood
-  locationMatchScore  Float?         // Composite location score (NEW)
-  isExactNeighborhoodMatch Boolean?   // Whether exact neighborhood match (NEW)
-  isCityMatch         Boolean?       // Whether same city (NEW)
-  distanceFromPreferred Float?       // Distance from preferred location (NEW)
+  locationMatchScore  Float?         // Composite location score
+  isExactNeighborhoodMatch Boolean?   // Whether exact neighborhood match
+  isCityMatch         Boolean?       // Whether same city
+  distanceFromPreferred Float?       // Distance from preferred location
   
   /// Amenity Match
-  amenityMatchScore   Float?         // How well amenities match user preferences (NEW)
-  amenityMatchCount   Int?           // Number of matching amenities (NEW)
+  amenityMatchScore   Float?         // How well amenities match user preferences
+  amenityMatchCount   Int?           // Number of matching amenities
   
   /// Property Type Match
   propertyTypeMatch   Boolean?       // Whether property type matches preference
-  propertyTypeMatchScore Float?      // 0-1 score for property type match (NEW)
+  propertyTypeMatchScore Float?      // 0-1 score for property type match
   
   // ==================== TEMPORAL FEATURES ====================
   
-  hourOfDay           Int?            // Hour when event occurred (0-23) (NEW)
-  dayOfWeek           Int?            // Day of week (0-6, 0=Sunday) (NEW)
-  isWeekend           Boolean?        // Whether event on weekend (NEW)
-  daysSinceListingPosted Int?         // Age of listing at time of event (NEW)
-  timeToViewing       Int?            // For scheduled viewings: days until viewing (NEW)
+  hourOfDay           Int?            // Hour when event occurred (0-23)
+  dayOfWeek           Int?            // Day of week (0-6, 0=Sunday)
+  isWeekend           Boolean?        // Whether event on weekend
+  daysSinceListingPosted Int?         // Age of listing at time of event
+  timeToViewing       Int?            // For scheduled viewings: days until viewing
   
   // ==================== VIEWING-SPECIFIC FEATURES ====================
   
@@ -1018,9 +1022,9 @@ model SmartMatchy {
   
   // ==================== AI EVENT METADATA ====================
   
-  aiEventType         String?        // "VIEW", "SEARCH", "SAVE", "SCHEDULE_VIEWING", etc. (NEW)
-  aiEventId           String?        // Reference to original event if needed (NEW)
-  aiEventTimestamp    DateTime?      // When the original event occurred (NEW)
+  aiEventType         String?        // "VIEW", "SEARCH", "SAVE", "SCHEDULE_VIEWING", etc.
+  aiEventId           String?        // Reference to original event if needed
+  aiEventTimestamp    DateTime?      // When the original event occurred
   
   // ==================== ADDITIONAL MATCH SCORES ====================
   
@@ -1039,10 +1043,10 @@ model SmartMatchy {
   dwellTime           Int?           // If clicked, how long they viewed
   
   // Enhanced conversion labels
-  userScheduledViewing Boolean?       @default(false) // Did they schedule viewing (NEW)
-  userCompletedViewing Boolean?       @default(false) // Did they complete viewing (NEW)
-  viewingCompletedAt  DateTime?       // When viewing actually occurred (NEW)
-  viewingFeedback     Json?           // Feedback from completed viewing (NEW)
+  userScheduledViewing Boolean?       @default(false) // Did they schedule viewing
+  userCompletedViewing Boolean?       @default(false) // Did they complete viewing
+  viewingCompletedAt  DateTime?       // When viewing actually occurred
+  viewingFeedback     Json?           // Feedback from completed viewing
   
   // ==================== METADATA ====================
   createdAt           DateTime       @default(now())
@@ -1070,6 +1074,9 @@ model SmartMatchy {
   @@index([hourOfDay])
   @@index([dayOfWeek])
   @@index([deviceType])
+  @@index([os])
+  @@index([browser])
+  @@index([isBot])
   @@index([distanceFromPreferred])
   @@index([amenityMatchScore])
   @@index([userScheduledViewing])
@@ -1676,4 +1683,116 @@ model FeatureAdoption {
   @@index([featureName, date])
   @@index([featureCategory, date])
   @@index([adoptionRate])
+}
+
+// ======================================================
+// KAFKA EVENTS FROM AUTH SERVICE
+// ======================================================
+
+model AuthEventLog {
+  id             String   @id @default(cuid())
+  
+  // Event metadata
+  eventType      String   // "user.registered", "user.login.google", "user.signup.failed", etc.
+  serviceSource  String   @default("auth")
+  
+  // User info (anonymized for analytics)
+  userUuid       String?
+  email          String?  // Store only for debugging, consider hashing for production
+  emailHash      String?  // For unique user tracking without PII
+  
+  // Event payload (full event data)
+  payload        Json     // Complete event payload
+  
+  // Client info from AuthClientInfoDto
+  clientInfo     Json?    // Store device, os, browser, etc. as JSON
+  
+  // Timestamps
+  occurredAt     DateTime // When the event happened in auth service
+  createdAt      DateTime @default(now())
+
+  @@index([eventType])
+  @@index([occurredAt])
+  @@index([userUuid])
+}
+
+// ======================================================
+// DAILY AUTH METRICS (Aggregated for dashboards)
+// ======================================================
+
+model DailyAuthMetrics {
+  id             String   @id @default(cuid())
+  date           DateTime @unique // Day of aggregation
+  
+  // Signups
+  totalSignups   Int      @default(0)
+  emailSignups   Int      @default(0)
+  googleSignups  Int      @default(0)
+  individualSignups Int   @default(0)
+  organizationSignups Int @default(0)
+  premiumSignups  Int     @default(0)
+  freeSignups     Int     @default(0)
+  
+  // Failed signups
+  failedSignups  Int      @default(0)
+  invalidOtpSignups Int   @default(0)
+  profileFailedSignups Int @default(0)
+  
+  // Logins
+  totalLogins     Int      @default(0)
+  googleLogins    Int      @default(0)
+  
+  // Failed logins
+  failedLogins    Int      @default(0)
+  loginErrors     Int      @default(0)
+  
+  // Account linking
+  accountsLinked  Int      @default(0) // Google account linking
+  
+  // OTP metrics
+  otpRequests     Int      @default(0)
+  otpVerified     Int      @default(0)
+  otpFailed       Int      @default(0)
+  otpRateLimited  Int      @default(0)
+  
+  // Device breakdown from clientInfo
+  mobileLogins    Int      @default(0)
+  desktopLogins   Int      @default(0)
+  tabletLogins    Int      @default(0)
+  botRequests     Int      @default(0)
+  
+  // OS breakdown
+  iosLogins       Int      @default(0)
+  androidLogins   Int      @default(0)
+  windowsLogins   Int      @default(0)
+  macLogins       Int      @default(0)
+  
+  // Browser breakdown
+  chromeLogins    Int      @default(0)
+  safariLogins    Int      @default(0)
+  firefoxLogins   Int      @default(0)
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([date])
+}
+
+// ======================================================
+// HOURLY AUTH METRICS (For real-time monitoring)
+// ======================================================
+
+model HourlyAuthMetrics {
+  id             String   @id @default(cuid())
+  hour           DateTime @unique // Hour of aggregation
+  
+  // Quick metrics
+  signups        Int      @default(0)
+  logins         Int      @default(0)
+  failures       Int      @default(0)
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([hour])
 }

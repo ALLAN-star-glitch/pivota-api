@@ -39,11 +39,21 @@ model Session {
   tokenId      String    @unique @default(uuid())
   hashedToken  String
   
-  // Contextual Data (Already in your schema, which is good)
+  // Contextual Data (Already present)
   device       String?
   ipAddress    String?
   userAgent    String?
   os           String?
+  
+  // --- NEW RICH CLIENT INFO FIELDS ---
+  deviceType   String?   // "MOBILE", "TABLET", "DESKTOP", "BOT", "UNKNOWN"
+  osVersion    String?
+  browser      String?
+  browserVersion String?
+  isMobile     Boolean?
+  isTablet     Boolean?
+  isDesktop    Boolean?
+  isBot        Boolean?
   
   // --- RECOMMENDED ADDITION ---
   lastActiveAt DateTime  @default(now()) // Update this on every refresh/authorized request

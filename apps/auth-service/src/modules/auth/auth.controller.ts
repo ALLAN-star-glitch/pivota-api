@@ -14,7 +14,8 @@ import {
   VerifyOtpDto,
   VerifyOtpResponseDataDto,
   ResetPasswordDto,
-  SessionDto, // Add this import
+  SessionDto,
+  AuthClientInfoDto, // Keep this import
 } from '@pivota-api/dtos';
 
 
@@ -45,25 +46,29 @@ export class AuthController {
   }
 
   /* ======================================================
-     ORGANIZATION SIGNUP
+     ORGANIZATION SIGNUP - UPDATED with clientInfo
   ====================================================== */
   @GrpcMethod('AuthService', 'OrganisationSignup')
   async handleOrganisationSignupGrpc(
-    dto: OrganisationSignupRequestDto,
+    data: OrganisationSignupRequestDto & { 
+      clientInfo?: AuthClientInfoDto  // Add clientInfo
+    }
   ): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
-    this.logger.log(`gRPC: Organisation Signup for ${dto.name}`);
-    return await this.authService.organisationSignup(dto);
+    this.logger.log(`gRPC: Organisation Signup for ${data.name} from ${data.clientInfo?.device || 'Unknown'}`);
+    return await this.authService.organisationSignup(data, data.clientInfo);
   }
-
+ 
   /* ======================================================
-     INDIVIDUAL SIGNUP
+     INDIVIDUAL SIGNUP - UPDATED with clientInfo
   ====================================================== */
   @GrpcMethod('AuthService', 'Signup')
   async handleSignupGrpc(
-    signupDto: UserSignupRequestDto,
+    data: UserSignupRequestDto & { 
+      clientInfo?: AuthClientInfoDto  // Add clientInfo
+    }
   ): Promise<BaseResponseDto<UserSignupDataDto>> {
-    this.logger.log(`gRPC: Individual Signup for ${signupDto.email}`);
-    return await this.authService.signup(signupDto);
+    this.logger.log(`gRPC: Individual Signup for ${data.email} from ${data.clientInfo?.device || 'Unknown'}`);
+    return await this.authService.signup(data, data.clientInfo);
   }
 
   /* ======================================================
@@ -78,49 +83,36 @@ export class AuthController {
   }
 
   /* ======================================================
-     VERIFY MFA LOGIN (Stage 2: Token Issuance)
+     VERIFY MFA LOGIN (Stage 2: Token Issuance) - UPDATED
   ====================================================== */
   @GrpcMethod('AuthService', 'VerifyMfaLogin')
   async handleVerifyMfaLoginGrpc(
     data: VerifyOtpDto & { 
-      clientInfo?: { 
-        device?: string; 
-        ipAddress?: string;
-        userAgent?: string; 
-        os?: string 
-      } 
+      clientInfo?: AuthClientInfoDto  // Use the full DTO
     }
   ): Promise<BaseResponseDto<LoginResponseDto>> {
     this.logger.debug(`gRPC: Login Stage 2 (MFA Verify) for ${data.email}`);
-
-    // Map gRPC message to session DTO shape
-    const clientInfo = {
-      device: data.clientInfo?.device || 'Unknown',
-      ipAddress: data.clientInfo?.ipAddress || 'Unknown',
-      userAgent: data.clientInfo?.userAgent || 'Unknown',
-      os: data.clientInfo?.os || 'Unknown',
-    };
-
-    return await this.authService.verifyMfaLogin(data, clientInfo);
+    
+    // Log device info if available
+    if (data.clientInfo) {
+      this.logger.debug(`Device: ${data.clientInfo.device} (${data.clientInfo.deviceType}), Browser: ${data.clientInfo.browser}`);
+    }
+    
+    return await this.authService.verifyMfaLogin(data, data.clientInfo);
   }
-
+ 
   /* ======================================================
-     GOOGLE LOGIN
+     GOOGLE LOGIN - UPDATED with full AuthClientInfoDto
   ====================================================== */
   @GrpcMethod('AuthService', 'GoogleLogin')
   async handleGoogleLoginGrpc(
     data: { 
       token: string; 
-      clientInfo?: { 
-        device?: string; 
-        ipAddress?: string; 
-        userAgent?: string; 
-        os?: string 
-      } 
+      clientInfo?: AuthClientInfoDto  // Use full AuthClientInfoDto
     }
   ): Promise<BaseResponseDto<LoginResponseDto>> {
-    const clientInfo = data.clientInfo || { device: 'Unknown', ipAddress: 'Unknown' };
-    return await this.authService.signInWithGoogle(data.token, clientInfo);
+    this.logger.log(`gRPC: Google Login from ${data.clientInfo?.device || 'Unknown'}`);
+    return await this.authService.signInWithGoogle(data.token, data.clientInfo);
   }
 
   /* ======================================================
@@ -139,6 +131,7 @@ export class AuthController {
   async handleRequestOtpGrpc(
     data: RequestOtpDto & { purpose: string } 
   ): Promise<BaseResponseDto<null>> {
+    this.logger.log(`gRPC: Request OTP for ${data.email} (${data.purpose})`);
     return await this.authService.requestOtp(data);
   }
 
@@ -146,6 +139,7 @@ export class AuthController {
   async handleVerifyOtpGrpc(
     data: VerifyOtpDto & { purpose: string }
   ): Promise<BaseResponseDto<VerifyOtpResponseDataDto>> {
+    this.logger.log(`gRPC: Verify OTP for ${data.email} (${data.purpose})`);
     return await this.authService.verifyOtp(data);
   }
 

@@ -17,10 +17,8 @@ async function main() {
   // Format: "VERTICAL:SLUG" -> "CUID_FROM_DB"
   const rootIds: Record<string, string> = {};
 
-
-  
   // ======================================================
-  // 1. Seed ROOT CATEGORIES
+  // 1. Seed ROOT CATEGORIES (with type field)
   // ======================================================
   console.log('➡️ Seeding root categories...');
   for (const category of ROOT_CATEGORIES) {
@@ -31,11 +29,13 @@ async function main() {
       update: {
         name: category.name,
         description: category.description,
+        type: category.type, // Added type field
         hasParent: false,
         hasSubcategories: true,
       },
       create: {
         vertical: category.vertical,
+        type: category.type, // Added type field
         name: category.name,
         slug: category.slug,
         description: category.description,
@@ -44,13 +44,15 @@ async function main() {
       },
     });
     rootIds[`${category.vertical}:${category.slug}`] = created.id;
+    console.log(`  ✅ Created root category: ${category.vertical} - ${category.name} (${category.type})`);
   }
 
   // ======================================================
-  // 2. Seed SUBCATEGORIES
+  // 2. Seed SUBCATEGORIES (with type field)
   // ======================================================
   console.log('➡️ Seeding subcategories...');
   const subCategoriesData = SUB_CATEGORIES(rootIds);
+  let subCount = 0;
 
   for (const sub of subCategoriesData) {
     await prisma.category.upsert({
@@ -58,26 +60,33 @@ async function main() {
         vertical_slug: { vertical: sub.vertical, slug: sub.slug },
       },
       update: {
+        name: sub.name,
+        description: sub.description,
+        type: sub.type, // Added type field
         parentId: sub.parentId,
         hasParent: true,
         hasSubcategories: false,
       },
       create: {
         vertical: sub.vertical,
+        type: sub.type, // Added type field
         name: sub.name,
         slug: sub.slug,
+        description: sub.description,
         parentId: sub.parentId,
         hasParent: true,
         hasSubcategories: false,
       },
     });
+    subCount++;
   }
-  console.log('✅ Categories and Subcategories synced.');
+  console.log(`✅ Created/updated ${subCount} subcategories.`);
 
   // ======================================================
   // 3. Seed CONTRACTOR PRICING RULES
   // ======================================================
   console.log('➡️ Seeding contractor pricing rules...');
+  let ruleCount = 0;
 
   for (const rule of PRICE_UNIT_RULES) {
     let targetCategoryId: string | null = null;
@@ -126,6 +135,7 @@ async function main() {
         where: { id: existingRule.id },
         data: commonData,
       });
+      console.log(`  🔄 Updated pricing rule for ${rule.vertical} - ${rule.unit}${rule.categorySlug ? ` (${rule.categorySlug})` : ''}`);
     } else {
       await prisma.contractorPricingRule.create({
         data: {
@@ -135,10 +145,31 @@ async function main() {
           categoryId: targetCategoryId,
         },
       });
+      console.log(`  ✅ Created pricing rule for ${rule.vertical} - ${rule.unit}${rule.categorySlug ? ` (${rule.categorySlug})` : ''}`);
     }
+    ruleCount++;
   }
 
-  console.log('✅ Contractor pricing rules seeded.');
+  console.log(`✅ Seeded ${ruleCount} contractor pricing rules.`);
+  
+  // ======================================================
+  // 4. Summary Statistics
+  // ======================================================
+  const totalCategories = await prisma.category.count();
+  const mainCategories = await prisma.category.count({ where: { type: 'MAIN' } });
+  const complimentaryCategories = await prisma.category.count({ where: { type: 'COMPLIMENTARY' } });
+  const housingCategories = await prisma.category.count({ where: { vertical: 'HOUSING' } });
+  const jobsCategories = await prisma.category.count({ where: { vertical: 'JOBS' } });
+  const socialCategories = await prisma.category.count({ where: { vertical: 'SOCIAL_SUPPORT' } });
+
+  console.log('\n📊 Seeding Summary:');
+  console.log(`   Total Categories: ${totalCategories}`);
+  console.log(`   ├─ MAIN: ${mainCategories}`);
+  console.log(`   └─ COMPLIMENTARY: ${complimentaryCategories}`);
+  console.log(`   By Vertical:`);
+  console.log(`   ├─ HOUSING: ${housingCategories}`);
+  console.log(`   ├─ JOBS: ${jobsCategories}`);
+  console.log(`   └─ SOCIAL_SUPPORT: ${socialCategories}`);
   console.log('🎉 Seeding process completed successfully!');
 }
 

@@ -3,6 +3,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsEnum,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -20,6 +21,7 @@ import {
   HOUSE_LISTING_STATUSES,
 } from '@pivota-api/constants';
 import { Transform, Type } from 'class-transformer';
+import { AuthClientInfoDto } from './auth-client-info.dto';
 
 /* ======================================================
    BASE SCHEMA (Shared properties)
@@ -192,46 +194,6 @@ export class AdminCreateHouseListingDto extends CreateHouseListingDto {
   creatorId?: string;
 }
 
-/* ======================================================
-   ANALYTICS / FEATURE STORE DTOs (Moved UP - before they're referenced)
-====================================================== */
-
-/**
- * Client information from the user's device
- */
-export class ClientInfoDto {
-  @ApiProperty({
-    description: 'IP address of the user',
-    example: '192.168.1.1'
-  })
-  @IsString()
-  @IsNotEmpty()
-  ipAddress!: string;
-
-  @ApiProperty({
-    description: 'User agent string from the browser/device',
-    example: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)'
-  })
-  @IsString()
-  @IsNotEmpty()
-  userAgent!: string;
-
-  @ApiProperty({
-    description: 'Device model or type',
-    example: 'iPhone 14'
-  })
-  @IsString()
-  @IsNotEmpty()
-  device!: string;
-
-  @ApiProperty({
-    description: 'Operating system of the device',
-    example: 'iOS 16'
-  })
-  @IsString()
-  @IsNotEmpty()
-  os!: string;
-}
 
 /**
  * Search context information for analytics
@@ -292,20 +254,20 @@ export class ListingViewContextDto {
   sessionId!: string;
 
   @ApiProperty({
-    description: 'Client device information',
-    type: ClientInfoDto
+    description: 'Client device information - includes rich device details like type, OS version, browser',
+    type: AuthClientInfoDto
   })
   @ValidateNested()
-  @Type(() => ClientInfoDto)
-  client!: ClientInfoDto;
+  @Type(() => AuthClientInfoDto)
+  client!: AuthClientInfoDto;
 
   @ApiProperty({
-    description: 'Platform where the event occurred',
+    description: 'Platform where the event occurred - derived from device info',
     example: 'WEB',
     enum: ['WEB', 'MOBILE', 'API', 'CLI']
   })
-  @IsString()
-  platform!: string;
+  @IsEnum(['WEB', 'MOBILE', 'API', 'CLI'])
+  platform!: 'WEB' | 'MOBILE' | 'API' | 'CLI';
 
   @ApiProperty({
     description: 'Referrer source',
@@ -993,12 +955,12 @@ export class ListingViewedEventDto {
 
   @ApiPropertyOptional({
     description: 'Client device information',
-    type: ClientInfoDto
+    type: AuthClientInfoDto
   })
   @IsOptional()
   @ValidateNested()
-  @Type(() => ClientInfoDto)
-  clientInfo?: ClientInfoDto;
+  @Type(() => AuthClientInfoDto)
+  clientInfo?: AuthClientInfoDto;
 
   @ApiPropertyOptional({
     description: 'Search session ID if from search',

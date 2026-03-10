@@ -78,23 +78,79 @@ export class EmailService {
           }
           
           .email-header {
-            background: linear-gradient(145deg, ${this.colors.teal} 0%, ${this.colors.tealDark} 100%);
-            padding: 48px 32px;
+            background: linear-gradient(135deg, rgba(0, 128, 128, 0.08) 0%, rgba(0, 102, 102, 0.12) 50%, rgba(0, 77, 77, 0.08) 100%);
+            padding: 24px 20px;
             text-align: center;
+            border-bottom: 1px solid rgba(0, 128, 128, 0.1);
           }
           
-          .logo {
-            font-size: 36px;
+          .logo-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+          }
+          
+          .logo-image {
+            max-width: 200px;
+            height: auto;
+            display: inline-block;
+          }
+          
+          .email-content {
+            padding: 40px 28px;
+            background: ${this.colors.white};
+          }
+          
+          h1 {
+            font-size: 26px;
+            color: ${this.colors.teal};
+            margin: 0 0 14px 0;
             font-weight: 600;
-            color: ${this.colors.white};
-            letter-spacing: -0.5px;
+          }
+          
+          p {
+            font-size: 16px;
+            line-height: 1.5;
+            color: ${this.colors.textDark};
+            margin: 0 0 16px 0;
+          }
+          
+          .role-badge {
+            display: inline-block;
+            background: linear-gradient(145deg, ${this.colors.tealLight}, ${this.colors.white});
+            color: ${this.colors.tealDark};
+            padding: 4px 14px;
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 500;
+            margin: 6px 0;
+            border: 1px solid ${this.colors.teal}20;
+          }
+          
+          .message-box {
+            background: linear-gradient(145deg, ${this.colors.goldenYellowLight}, ${this.colors.white});
+            border-left: 4px solid ${this.colors.goldenYellow};
+            padding: 16px;
+            border-radius: 4px;
+            margin: 20px 0;
+          }
+          
+          .button {
+            display: inline-block;
+            background: linear-gradient(145deg, ${this.colors.teal}, ${this.colors.tealDark});
+            color: ${this.colors.white} !important;
+            text-decoration: none;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 15px;
+            margin: 14px 0;
+            box-shadow: 0 2px 4px ${this.colors.teal}40;
           }
 
-          /* Force all button text to be white */
-          .button, 
-          .button:link, 
-          .button:visited, 
-          .button:hover, 
+          .button:link,
+          .button:visited,
+          .button:hover,
           .button:active,
           a.button,
           a.button:link,
@@ -104,134 +160,76 @@ export class EmailService {
             color: ${this.colors.white} !important;
             text-decoration: none;
           }
-
-        
-          .logo-accent {
-            color: ${this.colors.goldenYellow};
-            font-weight: 700;
-          }
-          
-          .email-content {
-            padding: 48px 32px;
-            background: ${this.colors.white};
-          }
-          
-          h1 {
-            font-size: 28px;
-            color: ${this.colors.teal};
-            margin: 0 0 16px 0;
-            font-weight: 600;
-          }
-          
-          p {
-            font-size: 16px;
-            line-height: 1.6;
-            color: ${this.colors.textDark};
-            margin: 0 0 20px 0;
-          }
-          
-          .role-badge {
-            display: inline-block;
-            background: linear-gradient(145deg, ${this.colors.tealLight}, ${this.colors.white});
-            color: ${this.colors.tealDark};
-            padding: 6px 16px;
-            border-radius: 100px;
-            font-size: 14px;
-            font-weight: 500;
-            margin: 8px 0;
-            border: 1px solid ${this.colors.teal}20;
-          }
-          
-          .message-box {
-            background: linear-gradient(145deg, ${this.colors.goldenYellowLight}, ${this.colors.white});
-            border-left: 4px solid ${this.colors.goldenYellow};
-            padding: 20px;
-            border-radius: 4px;
-            margin: 24px 0;
-          }
-          
-          .button {
-            display: inline-block;
-            background: linear-gradient(145deg, ${this.colors.teal}, ${this.colors.tealDark});
-            color: ${this.colors.white};
-            text-decoration: none;
-            padding: 14px 32px;
-            border-radius: 8px;
-            font-weight: 500;
-            font-size: 16px;
-            margin: 16px 0;
-            box-shadow: 0 2px 4px ${this.colors.teal}40;
-          }
           
           .info-box {
             background: linear-gradient(145deg, ${this.colors.tealLight}, ${this.colors.white});
             border: 1px solid ${this.colors.teal}20;
-            padding: 24px;
+            padding: 20px;
             border-radius: 8px;
-            margin: 24px 0;
+            margin: 20px 0;
           }
           
           .info-box h3 {
             color: ${this.colors.teal};
-            font-size: 18px;
-            margin: 0 0 12px 0;
+            font-size: 17px;
+            margin: 0 0 10px 0;
             font-weight: 600;
           }
           
           .info-box ul {
             margin: 0;
-            padding-left: 20px;
+            padding-left: 18px;
             color: ${this.colors.textDark};
           }
           
           .info-box li {
-            margin-bottom: 8px;
+            margin-bottom: 6px;
           }
           
           .viewing-card {
             background: linear-gradient(145deg, ${this.colors.tealLight}, ${this.colors.white});
             border: 1px solid ${this.colors.teal}20;
-            padding: 24px;
+            padding: 20px;
             border-radius: 8px;
-            margin: 24px 0;
+            margin: 20px 0;
           }
           
           .viewing-details {
             background: ${this.colors.white};
-            padding: 16px;
+            padding: 14px;
             border-radius: 8px;
-            margin: 16px 0;
+            margin: 14px 0;
             border-left: 4px solid ${this.colors.teal};
           }
           
           .viewing-details p {
-            margin: 8px 0;
+            margin: 6px 0;
           }
           
           .property-highlight {
-            font-size: 20px;
+            font-size: 18px; 
             font-weight: 600;
             color: ${this.colors.teal};
-            margin: 0 0 8px 0;
+            margin: 0 0 6px 0;
           }
           
           .admin-badge {
             display: inline-block;
             background: linear-gradient(145deg, ${this.colors.goldenYellow}, ${this.colors.goldenYellowLight});
             color: ${this.colors.tealDark};
-            padding: 4px 12px;
+            padding: 3px 10px;
             border-radius: 100px;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
-            margin: 8px 0;
+            margin: 6px 0;
           }
           
           .security-alert {
             background: linear-gradient(145deg, ${this.colors.redLight}, ${this.colors.white});
             border: 1px solid ${this.colors.red}40;
-            padding: 16px;
+            padding: 14px;
             border-radius: 8px;
-            margin: 24px 0;
+            margin: 20px 0;
           }
           
           .security-alert p {
@@ -241,97 +239,104 @@ export class EmailService {
           
           .device-details {
             background: linear-gradient(145deg, ${this.colors.grey}, ${this.colors.white});
-            padding: 20px;
+            padding: 16px; 
             border-radius: 8px;
-            margin: 24px 0;
+            margin: 20px 0;
             font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-            font-size: 14px;
+            font-size: 13px;
           }
           
           .device-details p {
-            margin: 0 0 8px 0;
+            margin: 0 0 6px 0;
             color: ${this.colors.textLight};
           }
           
           .expiry-box {
             background: linear-gradient(145deg, ${this.colors.grey}, ${this.colors.white});
             border: 1px solid ${this.colors.teal}20;
-            padding: 16px;
+            padding: 14px;
             border-radius: 8px;
-            margin: 24px 0;
+            margin: 20px 0;
             text-align: center;
             color: ${this.colors.textLight};
-            font-size: 14px;
+            font-size: 13px;
           }
           
           .link-box {
             background: linear-gradient(145deg, ${this.colors.grey}, ${this.colors.white});
-            padding: 12px 16px;
+            padding: 10px 14px;
             border-radius: 8px;
             font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-            font-size: 14px;
+            font-size: 13px;
             word-break: break-all;
             border: 1px solid ${this.colors.teal}20;
-            margin: 16px 0;
+            margin: 14px 0;
           }
           
           .divider {
             height: 1px;
             background: linear-gradient(90deg, transparent, ${this.colors.teal}40, transparent);
-            margin: 32px 0;
+            margin: 24px 0;
           }
           
           .email-footer {
-            padding: 32px;
+            padding: 24px 20px;
             background: linear-gradient(145deg, ${this.colors.grey}, ${this.colors.white});
             text-align: center;
             border-top: 1px solid ${this.colors.teal}20;
           }
           
           .social-links {
-            margin: 0 0 20px 0;
+            margin: 0 0 16px 0; 
           }
           
           .social-link {
             display: inline-block;
-            padding: 6px 12px;
-            margin: 0 6px;
+            padding: 4px 10px;
+            margin: 0 4px;
             color: ${this.colors.teal};
             text-decoration: none;
-            font-size: 13px;
+            font-size: 12px;
             border: 1px solid ${this.colors.teal}30;
             border-radius: 6px;
           }
           
           .footer-links {
-            margin: 16px 0;
+            margin: 12px 0;
           }
           
           .footer-links a {
             color: ${this.colors.teal};
             text-decoration: none;
-            margin: 0 12px;
-            font-size: 13px;
+            margin: 0 8px;
+            font-size: 12px;
           }
           
           .copyright {
-            font-size: 12px;
+            font-size: 11px;
             color: ${this.colors.textLight};
           }
           
           @media screen and (max-width: 600px) {
-            .email-header { padding: 32px 20px; }
-            .email-content { padding: 32px 20px; }
-            .email-footer { padding: 24px 20px; }
-            h1 { font-size: 24px; }
+            .email-header { padding: 18px 16px; }
+            .email-content { padding: 28px 18px; }
+            .email-footer { padding: 20px 16px; }
+            h1 { font-size: 22px; }
             .button { display: block; text-align: center; }
+            .logo-image { max-width: 160px; }
           }
         </style>
       </head>
-      <body style="background-color: ${this.colors.grey}; padding: 20px;">
+      <body style="background-color: ${this.colors.grey}; padding: 16px;"> 
         <div class="email-wrapper">
           <div class="email-header">
-            <div class="logo">Pivota<span class="logo-accent">Connect</span></div>
+            <div class="logo-container">
+              <img 
+                src="https://pivotaconnect.com/_next/image?url=%2Fpivotaconnectlogo.png&w=256&q=75" 
+                alt="PivotaConnect" 
+                class="logo-image"
+              />
+            </div>
           </div>
           <div class="email-content">${content}</div>
           <div class="email-footer">
@@ -505,25 +510,100 @@ export class EmailService {
 
     const isOrgLogin = !!dto.organizationName;
 
+    // Build device info
+    const deviceInfo = [];
+    
+    // Primary Device Info
+    if (dto.device) {
+      let deviceString = dto.device;
+      if (dto.deviceType) {
+        deviceString += ` (${dto.deviceType})`;
+      }
+      deviceInfo.push(`<p><strong>Device:</strong> ${deviceString}</p>`);
+    }
+    
+    // Operating System
+    if (dto.os) {
+      let osString = dto.os;
+      if (dto.osVersion) {
+        osString += ` ${dto.osVersion}`;
+      }
+      deviceInfo.push(`<p><strong>Operating System:</strong> ${osString}</p>`);
+    }
+    
+    // Browser
+    if (dto.browser) {
+      let browserString = dto.browser;
+      if (dto.browserVersion) {
+        browserString += ` ${dto.browserVersion}`;
+      }
+      deviceInfo.push(`<p><strong>Browser:</strong> ${browserString}</p>`);
+    }
+    
+    // Network Info
+    if (dto.ipAddress) {
+      deviceInfo.push(`<p><strong>IP Address:</strong> ${dto.ipAddress}</p>`);
+    }
+
+    // Security advice based on login context
+    const securityAdvice = [];
+    
+    if (dto.ipAddress === 'localhost' || dto.ipAddress === '127.0.0.1') {
+      securityAdvice.push(`
+        <p><strong>Development Environment:</strong> You're logged in from a local development environment. 
+        This is normal for testing but ensure you're not exposing your credentials.</p>
+      `);
+    }
+    
+    if (dto.isBot) {
+      securityAdvice.push(`
+        <p><strong>Automated Access Detected:</strong> This login appears to be from an automated tool or API. 
+        If this wasn't intentional, please secure your account immediately.</p>
+      `);
+    }
+    
+    if (dto.deviceType === 'MOBILE' && !dto.isMobile) {
+      securityAdvice.push(`
+        <p><strong>Mobile Best Practices:</strong> When using PivotaConnect on mobile, 
+        ensure you have a secure lock screen and avoid using public Wi-Fi for sensitive transactions.</p>
+      `);
+    }
+    
+    if (dto.isDesktop && dto.browser === 'Chrome' && parseInt(dto.browserVersion) < 120) {
+      securityAdvice.push(`
+        <p><strong>Browser Update Recommended:</strong> You're using an older version of Chrome. 
+        For the best security and experience, please update to the latest version.</p>
+      `);
+    } 
+
     const content = `
       <h1>${isOrgLogin ? 'Organization Login Alert' : 'New Login Detected'}</h1>
       <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${dto.firstName},</p>
       <p>A new login was detected on your ${isOrgLogin ? `organization <strong>${dto.organizationName}</strong>` : 'PivotaConnect'} account.</p>
       
       <div class="security-alert">
-        <p>If this wasn't you, secure your account immediately.</p>
+        <p>If this wasn't you, <strong>secure your account immediately</strong> by changing your password and reviewing active sessions.</p>
       </div>
       
       <div class="device-details">
-        <p><strong>Device:</strong> ${dto.device || 'Unknown'}</p>
-        <p><strong>OS:</strong> ${dto.os || 'Unknown'}</p>
-        <p><strong>Browser:</strong> ${dto.userAgent || 'Unknown'}</p>
-        <p><strong>IP Address:</strong> ${dto.ipAddress || 'Unknown'}</p>
+        <h3 style="color: ${this.colors.teal}; margin-top: 0; margin-bottom: 15px;">📋 Login Details</h3>
+        ${deviceInfo.join('')}
         <p><strong>Time:</strong> ${loginTime}</p>
       </div>
       
-      <div style="text-align: center;">
-        <a href="${this.social.website}/account/security" class="button" style="color: ${this.colors.white};">Review Security</a>
+      ${securityAdvice.length > 0 ? `
+      <div class="info-box" style="background: ${this.colors.goldenYellowLight}; border-left: 4px solid ${this.colors.goldenYellow};">
+        <h3 style="color: ${this.colors.tealDark}; margin-top: 0;">Security Recommendations</h3>
+        ${securityAdvice.join('')}
+      </div>
+      ` : ''} 
+      
+      <div style="text-align: center; margin-top: 30px;">
+        <a href="${this.social.website}/account/security" class="button">Review Security Settings</a>
+      </div>
+      
+      <div style="margin-top: 20px; font-size: 12px; color: ${this.colors.textLight}; text-align: center;">
+        <p>This is an automated security notification from PivotaConnect. If you have questions, please contact our support team.</p>
       </div>
     `;
 
@@ -534,7 +614,7 @@ export class EmailService {
           Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
         },
         To: [{ Email: dto.to, Name: dto.firstName }],
-        Subject: isOrgLogin ? `Login Alert - ${dto.organizationName}` : 'New Login Detected',
+        Subject: isOrgLogin ? `Security Alert: Admin Login - ${dto.organizationName}` : 'New Login Detected',
         HTMLPart: this.getBaseHtmlTemplate(content),
         TextPart: this.stripHtml(content),
       }],
@@ -542,20 +622,25 @@ export class EmailService {
 
     await this.sendEmail(body, dto.to);
 
+    // Also send to organization email if applicable
     if (isOrgLogin && dto.orgEmail && dto.orgEmail.toLowerCase() !== dto.to.toLowerCase()) {
       const orgContent = `
-        <h1>Admin Login Alert</h1>
+        <h1>Organization Admin Login Alert</h1>
         <p style="font-size: 18px; color: ${this.colors.teal};">${dto.organizationName}</p>
         <p>An administrator (${dto.firstName} ${dto.lastName || ''}) has logged into your organization account.</p>
         
-        <div class="device-details">
-          <p><strong>Device:</strong> ${dto.device || 'Unknown'}</p>
-          <p><strong>IP Address:</strong> ${dto.ipAddress || 'Unknown'}</p>
+        <div class="device-details"> 
+          <h3 style="color: ${this.colors.teal}; margin-top: 0; margin-bottom: 15px;">Login Details</h3>
+          ${deviceInfo.join('')}
           <p><strong>Time:</strong> ${loginTime}</p>
         </div>
         
         <div class="security-alert">
-          <p>If you don't recognize this activity, please contact us.</p>
+          <p>If you don't recognize this activity, please contact our support team immediately.</p>
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="${this.social.website}/admin/security" class="button">Review Organization Security</a>
         </div>
       `;
 
@@ -627,6 +712,114 @@ export class EmailService {
     };
 
     await this.sendEmail(body, dto.email);
+  }
+
+  /* ======================================================
+       ADMIN NOTIFICATION - NEW USER REGISTRATION
+  ====================================================== */
+  async sendAdminNewRegistrationEmail(data: {
+    recipientEmail: string;
+    userEmail: string;
+    userName: string;
+    accountType: string;
+    registrationMethod?: string;
+    registrationDate: string;
+    userCount?: number;
+    plan: string;
+  }): Promise<void> {
+    const regDate = format(new Date(data.registrationDate), 'MMMM do, yyyy \'at\' h:mm a');
+    const method = data.registrationMethod || 'Email/Password';
+
+    const content = `
+      <h1>New User Registration</h1>
+      <p style="font-size: 18px; color: ${this.colors.teal};">A new user has joined PivotaConnect</p>
+      
+      <div class="info-box">
+        <h3>User Details</h3>
+        <ul>
+          <li><strong>Name:</strong> ${data.userName}</li>
+          <li><strong>Email:</strong> ${data.userEmail}</li>
+          <li><strong>Account Type:</strong> ${data.accountType}</li>
+          <li><strong>Registration Method:</strong> ${method}</li>
+          <li><strong>Plan:</strong> ${data.plan}</li>
+          <li><strong>Date:</strong> ${regDate}</li>
+          ${data.userCount ? `<li><strong>Total Users:</strong> ${data.userCount}</li>` : ''}
+        </ul>
+      </div>
+      
+      <p>Welcome them to the community! 🎉</p>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.recipientEmail }],
+        Subject: `New User Registration: ${data.userName}`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.recipientEmail);
+  }
+
+  /* ======================================================
+       ADMIN NOTIFICATION - NEW ORGANIZATION REGISTRATION
+  ====================================================== */
+  async sendAdminNewOrganizationEmail(data: {
+    recipientEmail: string;
+    organizationName: string;
+    adminName: string;
+    adminEmail: string;
+    organizationEmail: string;
+    registrationDate: string;
+    plan: string;
+  }): Promise<void> {
+    const regDate = format(new Date(data.registrationDate), 'MMMM do, yyyy \'at\' h:mm a');
+
+    const content = `
+      <h1>New Organization Registration</h1>
+      <p style="font-size: 18px; color: ${this.colors.teal};">A new organization has joined PivotaConnect</p>
+      
+      <div class="info-box">
+        <h3>Organization Details</h3>
+        <ul>
+          <li><strong>Organization:</strong> ${data.organizationName}</li>
+          <li><strong>Official Email:</strong> ${data.organizationEmail}</li>
+          <li><strong>Plan:</strong> ${data.plan}</li>
+        </ul>
+      </div>
+      
+      <div class="info-box" style="margin-top: 10px;">
+        <h3>Admin Details</h3>
+        <ul>
+          <li><strong>Admin Name:</strong> ${data.adminName}</li>
+          <li><strong>Admin Email:</strong> ${data.adminEmail}</li>
+        </ul>
+      </div>
+      
+      <p><strong>Registration Date:</strong> ${regDate}</p>
+      
+      <p>Welcome them to the platform! 🏢</p>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.recipientEmail }],
+        Subject: `New Organization: ${data.organizationName}`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.recipientEmail);
   }
 
   /* ======================================================
@@ -1075,6 +1268,290 @@ export class EmailService {
         },
         To: [{ Email: data.email, Name: data.firstName }],
         Subject: `Set up your password for ${data.organizationName}`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.email);
+  }
+
+  /* ======================================================
+       PASSWORD SETUP CONFIRMATION EMAIL
+  ====================================================== */
+  async sendPasswordSetupConfirmationEmail(data: {
+    email: string;
+    userUuid: string;
+  }): Promise<void> {
+    const content = `
+      <h1>Password Setup Complete</h1>
+      <p style="font-size: 18px; color: ${this.colors.teal};">Your password has been successfully set.</p>
+      <p>You can now log in to your account using your email and new password.</p>
+      
+      <div style="text-align: center;">
+        <a href="${this.social.website}/login" class="button">Log In Now</a>
+      </div>
+      
+      <div class="info-box">
+        <h3>Security Tips</h3>
+        <ul>
+          <li>Never share your password with anyone</li>
+          <li>Use a unique password for each service</li>
+          <li>Enable two-factor authentication for extra security</li>
+        </ul>
+      </div>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.email }],
+        Subject: 'Password Setup Complete',
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.email);
+  }
+
+  /* ======================================================
+       ADMIN INVITATION ACCEPTED EMAIL
+  ====================================================== */
+  async sendAdminInvitationAcceptedEmail(data: {
+    adminEmail: string;
+    adminName: string;
+    newMemberEmail: string;
+    newMemberName: string;
+    organizationName: string;
+  }): Promise<void> {
+    const content = `
+      <h1>New Team Member Joined</h1>
+      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.adminName},</p>
+      <p><strong>${data.newMemberName}</strong> has accepted your invitation and joined <strong>${data.organizationName}</strong>.</p>
+      
+      <div class="info-box">
+        <h3>Member Details</h3>
+        <ul>
+          <li><strong>Name:</strong> ${data.newMemberName}</li>
+          <li><strong>Email:</strong> ${data.newMemberEmail}</li>
+          <li><strong>Status:</strong> Active</li>
+        </ul>
+      </div>
+      
+      <p>They now have access to your organization's workspace and can start collaborating with the team.</p>
+      <p>You can manage team members in your organization dashboard.</p>
+      
+      <div style="text-align: center;">
+        <a href="${this.social.website}/org/members" class="button">Manage Team</a>
+      </div>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.adminEmail, Name: data.adminName }],
+        Subject: `🎉 ${data.newMemberName} joined ${data.organizationName}`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.adminEmail);
+  }
+
+  /* ======================================================
+       ACCOUNT LINKED EMAIL (Google to existing account)
+  ====================================================== */
+  async sendAccountLinkedEmail(data: {
+    email: string;
+    provider: string;
+    timestamp: string;
+  }): Promise<void> {
+    const linkTime = format(new Date(data.timestamp), 'MMMM do, yyyy \'at\' h:mm a');
+
+    const content = `
+      <h1>Account Linked Successfully</h1>
+      <p style="font-size: 18px; color: ${this.colors.teal};">Hello,</p>
+      <p>Your PivotaConnect account has been successfully linked with <strong>${data.provider}</strong>.</p>
+      
+      <div class="info-box">
+        <h3>What this means</h3>
+        <ul>
+          <li>You can now log in using your ${data.provider} account</li>
+          <li>Your account security has been enhanced with social authentication</li>
+          <li>You can still use your email and password to log in</li>
+        </ul>
+      </div>
+      
+      <div class="security-alert" style="background: ${this.colors.tealLight}; border-color: ${this.colors.teal};">
+        <p><strong>Time of linking:</strong> ${linkTime}</p>
+        <p><strong>Provider:</strong> ${data.provider}</p>
+      </div>
+      
+      <p>If you didn't authorize this linking, please contact support immediately.</p>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.email }],
+        Subject: `Account Linked with ${data.provider}`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.email);
+  }
+
+  /* ======================================================
+       PAYMENT REQUIRED EMAIL
+  ====================================================== */
+  async sendPaymentRequiredEmail(data: {
+    email: string;
+    firstName: string;
+    plan: string;
+    redirectUrl: string;
+  }): Promise<void> {
+    const content = `
+      <h1>Complete Your Subscription</h1>
+      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.firstName},</p>
+      <p>Thank you for choosing PivotaConnect. To activate your ${data.plan} plan, please complete the payment process.</p>
+      
+      <div class="info-box">
+        <h3>Plan Details</h3>
+        <ul>
+          <li><strong>Plan:</strong> ${data.plan}</li>
+          <li><strong>Status:</strong> Awaiting Payment</li>
+        </ul>
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="${data.redirectUrl}" class="button">Complete Payment</a>
+      </div>
+      
+      <p>Your account has been created but is pending payment activation. Once payment is confirmed, you'll have full access to all features.</p>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.email, Name: data.firstName }],
+        Subject: `Complete Payment for ${data.plan} Plan`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.email);
+  }
+
+  /* ======================================================
+       PAYMENT CONFIRMATION EMAIL
+  ====================================================== */
+  async sendPaymentConfirmationEmail(data: {
+    email: string;
+    firstName: string;
+    plan: string;
+    accountId: string;
+  }): Promise<void> {
+    const content = `
+      <h1>Payment Confirmed! 🎉</h1>
+      <p style="font-size: 18px; color: ${this.colors.teal};">Congratulations ${data.firstName},</p>
+      <p>Your payment has been successfully processed. Your ${data.plan} plan is now active.</p>
+      
+      <div class="info-box">
+        <h3>What's included in ${data.plan}</h3>
+        <ul>
+          <li>Access to all premium features</li>
+          <li>Priority support</li>
+          <li>Advanced analytics and insights</li>
+          <li>Unlimited opportunities and listings</li>
+        </ul>
+      </div>
+      
+      <p><strong>Account ID:</strong> ${data.accountId}</p>
+      
+      <div style="text-align: center;">
+        <a href="${this.social.website}/dashboard" class="button">Go to Dashboard</a>
+      </div>
+      
+      <p>Thank you for upgrading your PivotaConnect experience!</p>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.email, Name: data.firstName }],
+        Subject: `Payment Confirmed: ${data.plan} Plan Activated`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.email);
+  }
+
+  /* ======================================================
+       GOOGLE WELCOME EMAIL
+  ====================================================== */
+  async sendGoogleWelcomeEmail(data: {
+    email: string;
+    firstName: string;
+    accountId: string;
+  }): Promise<void> {
+    const joinDate = format(new Date(), 'MMMM do, yyyy');
+
+    const content = `
+      <h1>Welcome to PivotaConnect via Google</h1>
+      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.firstName},</p>
+      <p>You've successfully signed up using your Google account. Welcome to our community!</p>
+      
+      <div class="info-box">
+        <h3>Getting Started</h3>
+        <ul>
+          <li>Complete your profile to stand out</li>
+          <li>Browse opportunities across Africa</li>
+          <li>Connect with trusted service providers</li>
+        </ul>
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="${this.social.website}/dashboard" class="button">Go to Dashboard</a>
+      </div>
+      
+      <div class="divider"></div>
+      
+      <p style="font-size: 14px; color: ${this.colors.textLight};">
+        Account ID: ${data.accountId}<br>
+        Member since: ${joinDate}
+      </p>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.email, Name: data.firstName }],
+        Subject: `Welcome to PivotaConnect, ${data.firstName}`,
         HTMLPart: this.getBaseHtmlTemplate(content),
         TextPart: this.stripHtml(content),
       }],

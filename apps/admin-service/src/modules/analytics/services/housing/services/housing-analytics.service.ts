@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Injectable, Logger } from '@nestjs/common';
-import { HousingStorageService } from './housing-storage.service';
+
 import { 
   BaseResponseDto, 
   UserHousingStatsResponseDto,
@@ -8,12 +8,13 @@ import {
   LabelUpdateResponseDto,
   HousingViewRecordDto  
 } from '@pivota-api/dtos';
-import type { SmartMatchy } from '../../../../../generated/prisma/client';
+import type { SmartMatchy } from '../../../../../../generated/prisma/client';
 import { 
   HousingViewEvent, 
   HousingSearchEvent, 
   HousingViewingScheduledEvent 
 } from '@pivota-api/interfaces';
+import { HousingStorageService } from './housing-storage.service';
 
 export interface HousingViewedEvent {
   key: string;
@@ -211,13 +212,17 @@ export class HousingAnalyticsService {
       listingAge: metadata.listingData.daysSincePosted,
       listingStatus: metadata.listingData.status,
       
-      // Session Context
+      // Session Context - ENHANCED with all browser/device fields
       sessionReferrer: metadata.referrer,
       sessionReferrerType: metadata.referrerType,
       sessionDevice: metadata.deviceType,
       sessionPlatform: metadata.platform,
       deviceType: metadata.deviceType,
+      os: metadata.os,
       osVersion: metadata.osVersion,
+      browser: metadata.browser,
+      browserVersion: metadata.browserVersion,
+      isBot: metadata.isBot,
       appVersion: metadata.appVersion,
       sessionSearchId: metadata.searchId,
       sessionSearchQuery: metadata.searchQuery,
@@ -307,7 +312,7 @@ export class HousingAnalyticsService {
   /**
    * Transform HousingSearchEvent to SmartMatchy format
    */
-  private async transformSearchToSmartMatchy(event: HousingSearchEvent): Promise<Record<string, any>> {
+ private async transformSearchToSmartMatchy(event: HousingSearchEvent): Promise<Record<string, any>> {
     const { userId, metadata } = event;
     
     return {
@@ -321,11 +326,16 @@ export class HousingAnalyticsService {
       aiEventId: `search_${userId}_${Date.now()}`,
       aiEventTimestamp: new Date(metadata.timestamp),
       
-      // Session Context
-      sessionId: metadata.sessionId,
-      sessionPlatform: metadata.platform,
-      sessionDevice: metadata.deviceType,
+      // Session Context - CORRECTLY MAPPED to schema
+      sessionReferrer: metadata.referrer,                    // Traffic source URL
+      sessionReferrerType: metadata.referrerType,            // SEARCH, SOCIAL, etc.
+      sessionDevice: metadata.deviceType,                    // Device type
+      sessionPlatform: metadata.platform,                    // Platform
+      os: metadata.os,
       osVersion: metadata.osVersion,
+      browser: metadata.browser,
+      browserVersion: metadata.browserVersion,
+      isBot: metadata.isBot,
       appVersion: metadata.appVersion,
       sessionSearchId: metadata.searchId,
       sessionSearchQuery: metadata.searchQuery,
@@ -344,10 +354,11 @@ export class HousingAnalyticsService {
     };
   }
 
+
   /**
    * Transform HousingViewingScheduledEvent to SmartMatchy format
    */
-  private async transformViewingScheduledToSmartMatchy(event: HousingViewingScheduledEvent): Promise<Record<string, any>> {
+private async transformViewingScheduledToSmartMatchy(event: HousingViewingScheduledEvent): Promise<Record<string, any>> {
     const { userId, listingId, metadata } = event;
     
     return {
@@ -391,10 +402,17 @@ export class HousingAnalyticsService {
       listingAmenities: metadata.listingData.amenities,
       listingIsFurnished: metadata.listingData.isFurnished,
       
-      // Session Context
-      sessionId: metadata.sessionId,
-      sessionPlatform: metadata.platform,
-      sessionDevice: metadata.deviceType,
+      // Session Context - CORRECTLY MAPPED to schema (NO sessionId)
+      sessionReferrer: metadata.referrer,                    // Traffic source URL
+      sessionReferrerType: metadata.referrerType,            // SEARCH, SOCIAL, etc.
+      sessionDevice: metadata.deviceType,                    // Device type
+      sessionPlatform: metadata.platform,                    // Platform
+      deviceType: metadata.deviceType,   
+      os: metadata.os,
+      osVersion: metadata.osVersion,
+      browser: metadata.browser,
+      browserVersion: metadata.browserVersion,
+      isBot: metadata.isBot,
       sessionSearchId: metadata.searchId,
       sessionSearchQuery: metadata.searchQuery,
       sessionSearchFilters: metadata.searchFilters,
@@ -407,11 +425,15 @@ export class HousingAnalyticsService {
       timeSpent: metadata.timeSpent,
       
       // Viewing specific
-
       viewingDate: new Date(metadata.viewingDate),
       isAdminBooking: metadata.isAdminBooking,
       viewingDuration: metadata.viewingDuration,
       viewingParticipants: metadata.participants,
+      
+      // Temporal Features - ADDED
+      hourOfDay: new Date(metadata.timestamp).getHours(),
+      dayOfWeek: new Date(metadata.timestamp).getDay(),
+      isWeekend: [0, 6].includes(new Date(metadata.timestamp).getDay()),
       
       // Match Scores
       isWithinBudget: this.calculateIsWithinBudget(

@@ -58,176 +58,187 @@ export class HousingTrackingService {
   /**
    * Track when user views a listing
    */
-  trackView(
-    userId: string,
-    listingId: string,
-    listingData: HouseListingData,
-    context?: ListingViewContextDto
-  ): void {
-    if (!userId) return;
+trackView(
+  userId: string,
+  listingId: string,
+  listingData: HouseListingData,
+  context?: ListingViewContextDto
+): void {
+  if (!userId) return;
 
-    const event: HousingViewEvent = {
-      userId,
-      listingId,
-      eventType: 'VIEW',
-      metadata: {
-        // Core tracking from ListingViewContextDto
-        timestamp: new Date().toISOString(),
-        sessionId: context?.sessionId,
-        platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
-        referrer: context?.referrer,
-        referrerType: undefined, // Not in DTO yet
-        
-        // Device context from client object
-        deviceType: context?.client?.device as 'MOBILE' | 'TABLET' | 'DESKTOP' | undefined,
-        osVersion: context?.client?.os,
-        appVersion: undefined, // Not in DTO
-        
-        // Search context from search object
-        searchId: context?.search?.searchId,
-        searchQuery: context?.search?.query,
-        searchFilters: context?.search?.filters,
-        position: context?.search?.position,
-        
-        // Interaction data
-        timeSpent: context?.timeSpent,
-        interactionType: context?.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined,
-        viewDuration: context?.viewDuration,
-        scrollDepth: context?.scrollDepth,
-        
-        // Housing listing data
-        listingData: {
-          price: listingData.price,
-          currency: undefined, // Not in HouseListingData yet
-          bedrooms: listingData.bedrooms,
-          bathrooms: listingData.bathrooms,
-          locationCity: listingData.locationCity,
-          locationNeighborhood: listingData.locationNeighborhood,
-          listingType: listingData.listingType,
-          categoryId: listingData.categoryId,
-          categorySlug: listingData.category?.slug,
-          amenities: listingData.amenities,
-          isFurnished: listingData.isFurnished,
-          squareFootage: listingData.squareFootage,
-          yearBuilt: listingData.yearBuilt,
-          propertyType: listingData.propertyType as any,
-          latitude: listingData.latitude,
-          longitude: listingData.longitude,
-          imagesCount: listingData.images?.length || 0,
-          daysSincePosted: listingData.daysSincePosted,
-          accountId: listingData.accountId,
-          creatorId: listingData.creatorId,
-          status: listingData.status
-        },
-        
-        // User context - will be enriched by analytics service
-        userContext: {}
-      }
-    };
+  const event: HousingViewEvent = {
+    userId,
+    listingId,
+    eventType: 'VIEW',
+    metadata: {
+      // Core tracking from ListingViewContextDto
+      timestamp: new Date().toISOString(),
+      sessionId: context?.sessionId,
+      platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
+      referrer: context?.referrer,
+      referrerType: undefined, // Not in DTO yet
+      
+      // Device context from client object - ENHANCED with all AuthClientInfoDto fields
+      deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
+      os: context?.client?.os,
+      osVersion: context?.client?.osVersion,
+      browser: context?.client?.browser,
+      browserVersion: context?.client?.browserVersion,
+      appVersion: undefined, // Not in DTO yet
+      isBot: context?.client?.isBot,
+      
+      // Search context from search object
+      searchId: context?.search?.searchId,
+      searchQuery: context?.search?.query,
+      searchFilters: context?.search?.filters,
+      position: context?.search?.position,
+      
+      // Interaction data
+      timeSpent: context?.timeSpent,
+      interactionType: context?.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined,
+      viewDuration: context?.viewDuration,
+      scrollDepth: context?.scrollDepth,
+      
+      // Housing listing data
+      listingData: {
+        price: listingData.price,
+        currency: undefined, // Not in HouseListingData yet
+        bedrooms: listingData.bedrooms,
+        bathrooms: listingData.bathrooms,
+        locationCity: listingData.locationCity,
+        locationNeighborhood: listingData.locationNeighborhood,
+        listingType: listingData.listingType,
+        categoryId: listingData.categoryId,
+        categorySlug: listingData.category?.slug,
+        amenities: listingData.amenities,
+        isFurnished: listingData.isFurnished,
+        squareFootage: listingData.squareFootage,
+        yearBuilt: listingData.yearBuilt,
+        propertyType: listingData.propertyType as any,
+        latitude: listingData.latitude,
+        longitude: listingData.longitude,
+        imagesCount: listingData.images?.length || 0,
+        daysSincePosted: listingData.daysSincePosted,
+        accountId: listingData.accountId,
+        creatorId: listingData.creatorId,
+        status: listingData.status
+      },
+      
+      // User context - will be enriched by analytics service
+      userContext: {}
+    }
+  };
 
-    this.kafkaClient.emit('housing.ai.tracking', {
-      key: event.userId,
-      value: event
-    });
+  this.kafkaClient.emit('housing.ai.tracking', {
+    key: event.userId,
+    value: event
+  });
 
-    this.logger.debug(`📤 Tracked VIEW event for listing ${listingId} by user ${userId}`);
-  }
+  this.logger.debug(`📤 Tracked VIEW event for listing ${listingId} by user ${userId}`);
+  this.logger.debug(`📊 Device: ${context?.client?.device} (${context?.client?.deviceType}), OS: ${context?.client?.os} ${context?.client?.osVersion || ''}, Browser: ${context?.client?.browser} ${context?.client?.browserVersion || ''}${context?.client?.isBot ? ' [BOT]' : ''}`);
+}
 
   /**
    * Track when user performs a search
    */
-  trackSearch(
-    userId: string,
-    searchDto: SearchHouseListingsDto,
-    resultsCount: number,
-    context?: ListingViewContextDto
-  ): void {
-    if (!userId) return;
+trackSearch(
+  userId: string,
+  searchDto: SearchHouseListingsDto,
+  resultsCount: number,
+  context?: ListingViewContextDto
+): void {
+  if (!userId) return;
 
-    // Convert search DTO to a plain object for filters
-    const filtersObject: Record<string, unknown> = {
-      city: searchDto.city,
-      minPrice: searchDto.minPrice,
-      maxPrice: searchDto.maxPrice,
-      bedrooms: searchDto.bedrooms,
-      listingType: searchDto.listingType,
-      categoryId: searchDto.categoryId,
-      subCategoryId: searchDto.subCategoryId,
-      propertyType: searchDto.propertyType,
-      minSquareFootage: searchDto.minSquareFootage,
-      maxSquareFootage: searchDto.maxSquareFootage,
-      minYearBuilt: searchDto.minYearBuilt,
-      isFurnished: searchDto.isFurnished,
-      amenities: searchDto.amenities,
-      limit: searchDto.limit,
-      offset: searchDto.offset
-    };
+  // Convert search DTO to a plain object for filters
+  const filtersObject: Record<string, unknown> = {
+    city: searchDto.city,
+    minPrice: searchDto.minPrice,
+    maxPrice: searchDto.maxPrice,
+    bedrooms: searchDto.bedrooms,
+    listingType: searchDto.listingType,
+    categoryId: searchDto.categoryId,
+    subCategoryId: searchDto.subCategoryId,
+    propertyType: searchDto.propertyType,
+    minSquareFootage: searchDto.minSquareFootage,
+    maxSquareFootage: searchDto.maxSquareFootage,
+    minYearBuilt: searchDto.minYearBuilt,
+    isFurnished: searchDto.isFurnished,
+    amenities: searchDto.amenities,
+    limit: searchDto.limit,
+    offset: searchDto.offset
+  };
 
-    // Remove undefined values
-    Object.keys(filtersObject).forEach(key => 
-      filtersObject[key] === undefined && delete filtersObject[key]
-    );
+  // Remove undefined values
+  Object.keys(filtersObject).forEach(key => 
+    filtersObject[key] === undefined && delete filtersObject[key]
+  );
 
-    const searchId = context?.search?.searchId || `search_${Date.now()}`;
+  const searchId = context?.search?.searchId || `search_${Date.now()}`;
 
-    const event: HousingSearchEvent = {
-      userId,
-      listingId: '',
-      eventType: 'SEARCH',
-      metadata: {
-        timestamp: new Date().toISOString(),
-        sessionId: context?.sessionId,
-        platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
-        referrer: context?.referrer,
-        referrerType: undefined,
-        
-        // Device context
-        deviceType: context?.client?.device as 'MOBILE' | 'TABLET' | 'DESKTOP' | undefined,
-        osVersion: context?.client?.os,
-        appVersion: undefined,
-        
-        // Search context
-        searchId,
-        searchQuery: context?.search?.query,
-        searchFilters: filtersObject,
-        position: context?.search?.position,
-        
-        // Interaction data (minimal for search)
-        timeSpent: undefined,
-        interactionType: undefined,
-        viewDuration: undefined,
-        scrollDepth: undefined,
-        
-        // Search specific
-        resultsCount,
-        filters: filtersObject,
-        searchDuration: undefined,
-        resultsShown: resultsCount,
-        pagination: {
-          page: Math.floor((searchDto.offset || 0) / (searchDto.limit || 20)) + 1,
-          limit: searchDto.limit || 20,
-          offset: searchDto.offset || 0
-        },
-        
-        listingData: {
-          price: 0,
-          locationCity: '',
-          listingType: '',
-          amenities: [],
-          isFurnished: false
-        },
-        
-        userContext: {}
-      }
-    };
+  const event: HousingSearchEvent = {
+    userId,
+    listingId: '',
+    eventType: 'SEARCH',
+    metadata: {
+      // Core tracking
+      timestamp: new Date().toISOString(),
+      sessionId: context?.sessionId,
+      platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
+      referrer: context?.referrer,
+      referrerType: undefined,
+      
+      // Device context - ENHANCED with all AuthClientInfoDto fields
+      deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
+      os: context?.client?.os,
+      osVersion: context?.client?.osVersion,
+      browser: context?.client?.browser,
+      browserVersion: context?.client?.browserVersion,
+      appVersion: undefined,
+      isBot: context?.client?.isBot,
+      
+      // Search context
+      searchId,
+      searchQuery: context?.search?.query,
+      searchFilters: filtersObject,
+      position: context?.search?.position,
+      
+      // Interaction data (minimal for search)
+      timeSpent: undefined,
+      interactionType: undefined,
+      viewDuration: undefined,
+      scrollDepth: undefined,
+      
+      // Search specific
+      resultsCount,
+      filters: filtersObject,
+      searchDuration: undefined,
+      resultsShown: resultsCount,
+      pagination: {
+        page: Math.floor((searchDto.offset || 0) / (searchDto.limit || 20)) + 1,
+        limit: searchDto.limit || 20,
+        offset: searchDto.offset || 0
+      },
+      
+      listingData: {
+        price: 0,
+        locationCity: '',
+        listingType: '',
+        amenities: [],
+        isFurnished: false
+      },
+      
+      userContext: {}
+    }
+  };
 
-    this.kafkaClient.emit('housing.ai.tracking', {
-      key: event.userId,
-      value: event
-    });
+  this.kafkaClient.emit('housing.ai.tracking', {
+    key: event.userId,
+    value: event
+  });
 
-    this.logger.debug(`📤 Tracked SEARCH event for user ${userId} - ${resultsCount} results`);
-  }
+  this.logger.debug(`📤 Tracked SEARCH event for user ${userId} - ${resultsCount} results`);
+  this.logger.debug(`🔍 Search from: ${context?.client?.device} (${context?.client?.deviceType}), OS: ${context?.client?.os} ${context?.client?.osVersion || ''}, Browser: ${context?.client?.browser} ${context?.client?.browserVersion || ''}${context?.client?.isBot ? ' [BOT]' : ''}`);
+}
 
   /**
    * Track when user saves a listing
@@ -311,89 +322,96 @@ export class HousingTrackingService {
    * Track when user schedules a viewing
    */
   trackViewingScheduled(
-    userId: string,
-    listingId: string,
-    viewingId: string,
-    viewingDate: Date,
-    listingData: HouseListingData,
-    context?: ListingViewContextDto,
-    isAdminBooking = false,
-    adminMetadata?: any
-  ): void {
-    if (!userId) return;
+  userId: string,
+  listingId: string,
+  viewingId: string,
+  viewingDate: Date,
+  listingData: HouseListingData,
+  context?: ListingViewContextDto,
+  isAdminBooking = false,
+  adminMetadata?: any
+): void {
+  if (!userId) return;
 
-    const event: HousingViewingScheduledEvent = {
-      userId,
-      listingId,
-      eventType: 'SCHEDULE_VIEWING',
-      metadata: {
-        timestamp: new Date().toISOString(),
-        sessionId: context?.sessionId,
-        platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
-        referrer: context?.referrer,
-        referrerType: undefined,
-        
-        // Device context
-        deviceType: context?.client?.device as 'MOBILE' | 'TABLET' | 'DESKTOP' | undefined,
-        osVersion: context?.client?.os,
-        appVersion: undefined,
-        
-        // Search context (if scheduled from search results)
-        searchId: context?.search?.searchId,
-        searchQuery: context?.search?.query,
-        searchFilters: context?.search?.filters,
-        position: context?.search?.position,
-        
-        // Interaction data (if coming from a view)
-        timeSpent: context?.timeSpent,
-        interactionType: context?.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined ,
-        viewDuration: context?.viewDuration,
-        scrollDepth: context?.scrollDepth,
-        
-        // Viewing specific data
-        viewingId,
-        viewingDate: viewingDate.toISOString(),
-        isAdminBooking,
-        viewingDuration: 60, // Default 60 minutes, could be configurable
-        participants: 1, // Default 1 person
-        
-        // Admin metadata if applicable
-        ...(adminMetadata && { adminMetadata }),
-        
-        listingData: {
-          price: listingData.price,
-          currency: undefined,
-          bedrooms: listingData.bedrooms,
-          bathrooms: listingData.bathrooms,
-          locationCity: listingData.locationCity,
-          locationNeighborhood: listingData.locationNeighborhood,
-          listingType: listingData.listingType,
-          categoryId: listingData.categoryId,
-          categorySlug: listingData.category?.slug,
-          amenities: listingData.amenities,
-          isFurnished: listingData.isFurnished,
-          squareFootage: listingData.squareFootage,
-          yearBuilt: listingData.yearBuilt,
-          propertyType: listingData.propertyType as any,
-          latitude: listingData.latitude,
-          longitude: listingData.longitude,
-          imagesCount: listingData.images?.length || 0,
-          accountId: listingData.accountId,
-          creatorId: listingData.creatorId,
-          status: listingData.status
-        },
-        
-        userContext: {}
-      }
-    };
+  const event: HousingViewingScheduledEvent = {
+    userId,
+    listingId,
+    eventType: 'SCHEDULE_VIEWING',
+    metadata: {
+      // Core tracking
+      timestamp: new Date().toISOString(),
+      sessionId: context?.sessionId,
+      platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
+      referrer: context?.referrer,
+      referrerType: undefined,
+      
+      // Device context - ENHANCED with all AuthClientInfoDto fields
+      deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
+      os: context?.client?.os,
+      osVersion: context?.client?.osVersion,
+      browser: context?.client?.browser,
+      browserVersion: context?.client?.browserVersion,
+      appVersion: undefined,
+      isBot: context?.client?.isBot,
+      
+      // Search context (if scheduled from search results)
+      searchId: context?.search?.searchId,
+      searchQuery: context?.search?.query,
+      searchFilters: context?.search?.filters,
+      position: context?.search?.position,
+      
+      // Interaction data (if coming from a view)
+      timeSpent: context?.timeSpent,
+      interactionType: context?.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined,
+      viewDuration: context?.viewDuration,
+      scrollDepth: context?.scrollDepth,
+      
+      // Viewing specific data
+      viewingId,
+      viewingDate: viewingDate.toISOString(),
+      isAdminBooking,
+      viewingDuration: 60, // Default 60 minutes, could be configurable
+      participants: 1, // Default 1 person
+      
+      // Admin metadata if applicable
+      ...(adminMetadata && { adminMetadata }),
+      
+      // Housing listing data
+      listingData: {
+        price: listingData.price,
+        currency: undefined,
+        bedrooms: listingData.bedrooms,
+        bathrooms: listingData.bathrooms,
+        locationCity: listingData.locationCity,
+        locationNeighborhood: listingData.locationNeighborhood,
+        listingType: listingData.listingType,
+        categoryId: listingData.categoryId,
+        categorySlug: listingData.category?.slug,
+        amenities: listingData.amenities,
+        isFurnished: listingData.isFurnished,
+        squareFootage: listingData.squareFootage,
+        yearBuilt: listingData.yearBuilt,
+        propertyType: listingData.propertyType as any,
+        latitude: listingData.latitude,
+        longitude: listingData.longitude,
+        imagesCount: listingData.images?.length || 0,
+        accountId: listingData.accountId,
+        creatorId: listingData.creatorId,
+        status: listingData.status
+      },
+      
+      userContext: {}
+    }
+  };
 
-    this.kafkaClient.emit('housing.ai.tracking', {
-      key: event.userId,
-      value: event
-    });
+  this.kafkaClient.emit('housing.ai.tracking', {
+    key: event.userId,
+    value: event
+  });
 
-    this.logger.debug(`📤 Tracked SCHEDULE_VIEWING event for listing ${listingId}`);
-  }
+  this.logger.debug(`📤 Tracked SCHEDULE_VIEWING event for listing ${listingId}`);
+  this.logger.debug(`📅 Scheduled from: ${context?.client?.device} (${context?.client?.deviceType}), OS: ${context?.client?.os} ${context?.client?.osVersion || ''}, Browser: ${context?.client?.browser} ${context?.client?.browserVersion || ''}${context?.client?.isBot ? ' [BOT]' : ''}`);
+}
 
   /**
    * Track when user makes an inquiry

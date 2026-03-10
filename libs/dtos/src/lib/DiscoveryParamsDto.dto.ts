@@ -14,4 +14,16 @@ export class DiscoveryParamsDto {
     message: () => `Invalid vertical. Must be one of: ${VERTICALS.join(', ')}`,
   })
   vertical!: string;
+
+  @ApiProperty({
+    example: 'MAIN',
+    description: 'The type of category to fetch',
+    enum: ['MAIN', 'COMPLIMENTARY'],
+  })
+  @IsString()
+  @IsNotEmpty()
+  @IsIn(['MAIN', 'COMPLIMENTARY'], {
+    message: () => `Invalid type. Must be one of: MAIN, COMPLIMENTARY`,
+  })
+  type!: 'MAIN' | 'COMPLIMENTARY';  
 }

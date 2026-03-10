@@ -47,115 +47,117 @@ export class CategoriesService {
   /** -------------------------------
    * Recursive mapper for category responses
    * ------------------------------- */
-  private mapCategory(cat: FullCategory): CategoryResponseDto {
-    const jobPostsCount = (cat.jobPosts?.length ?? 0) + (cat.subCategoryPosts?.length ?? 0);
-    const servicesCount = cat.serviceOfferings?.length ?? 0;
-    const supportCount = cat.supportPrograms?.length ?? 0;
-    const subcategoriesCount = cat.subcategories?.length ?? 0;
+ private mapCategory(cat: FullCategory): CategoryResponseDto {
+  const jobPostsCount = (cat.jobPosts?.length ?? 0) + (cat.subCategoryPosts?.length ?? 0);
+  const servicesCount = cat.serviceOfferings?.length ?? 0;
+  const supportCount = cat.supportPrograms?.length ?? 0;
+  const subcategoriesCount = cat.subcategories?.length ?? 0;
 
-    return {
-      id: cat.id,
-      name: cat.name,
-      vertical: cat.vertical,
-      slug: cat.slug,
-      description: cat.description ?? null,
-      parentId: cat.parentId ?? null,
-      jobPostsCount,
-      servicesCount,
-      supportCount,
-      subcategoriesCount,
-      hasSubcategories: subcategoriesCount > 0,
-      hasParent: !!cat.parentId,
-      subcategories: (cat.subcategories ?? []).map((child) =>
-        this.mapCategory(child as FullCategory),
-      ),
-      createdAt: cat.createdAt.toISOString(),
-      updatedAt: cat.updatedAt.toISOString(),
-    };
-  }
+  return {
+    id: cat.id,
+    name: cat.name,
+    vertical: cat.vertical,
+    type: cat.type as 'MAIN' | 'COMPLIMENTARY', // ADD THIS - Cast to the correct type
+    slug: cat.slug,
+    description: cat.description ?? null,
+    parentId: cat.parentId ?? null,
+    jobPostsCount,
+    servicesCount,
+    supportCount,
+    subcategoriesCount,
+    hasSubcategories: subcategoriesCount > 0,
+    hasParent: !!cat.parentId,
+    subcategories: (cat.subcategories ?? []).map((child) =>
+      this.mapCategory(child as FullCategory),
+    ),
+    createdAt: cat.createdAt.toISOString(),
+    updatedAt: cat.updatedAt.toISOString(),
+  };
+}
 
   /** -------------------------------
    * CREATE CATEGORY
    * ------------------------------- */
-  async createCategory(dto: CreateCategoryRequestDto): Promise<BaseResponseDto<CategoryResponseDto>> {
-    this.logger.log(`Creating category: ${dto.name} for vertical: ${dto.vertical}`);
+async createCategory(dto: CreateCategoryRequestDto): Promise<BaseResponseDto<CategoryResponseDto>> {
+  this.logger.log(`Creating category: ${dto.name} for vertical: ${dto.vertical} (${dto.type || 'MAIN'})`);
 
-    try {
-      let hasParent = false;
-      if (dto.parentId) {
-        const parent = await this.prisma.category.findUnique({
-          where: { id: dto.parentId },
-        });
-        if (!parent) {
-          return {
-            success: false,
-            message: 'Parent category not found',
-            code: 'PARENT_NOT_FOUND',
-            data: null,
-            error: { message: 'Provided parentId does not exist.', details: null },
-          };
-        }
-        hasParent = true;
-      }
-
-      const slug = dto.slug || dto.name.toLowerCase().replace(/ /g, '-');
-
-      // Prevent duplicates within the SAME vertical using slug uniqueness
-      const existing = await this.prisma.category.findUnique({
-        where: { 
-          vertical_slug: { vertical: dto.vertical, slug } 
-        },
+  try {
+    let hasParent = false;
+    if (dto.parentId) {
+      const parent = await this.prisma.category.findUnique({
+        where: { id: dto.parentId },
       });
-      
-      if (existing) {
+      if (!parent) {
         return {
           success: false,
-          message: 'Category already exists in this vertical',
-          code: 'DUPLICATE_CATEGORY',
+          message: 'Parent category not found',
+          code: 'PARENT_NOT_FOUND',
           data: null,
-          error: { message: 'Duplicate slug detected for this vertical.', details: null },
+          error: { message: 'Provided parentId does not exist.', details: null },
         };
       }
+      hasParent = true;
+    }
 
-      const created = await this.prisma.category.create({
-        data: {
-          name: dto.name,
-          slug,
-          description: dto.description,
-          vertical: dto.vertical,
-          parentId: dto.parentId || null,
-          hasParent,
-          hasSubcategories: false,
-        },
-        include: this.standardInclude,
-      });
+    const slug = dto.slug || dto.name.toLowerCase().replace(/ /g, '-');
 
-      if (dto.parentId) {
-        await this.prisma.category.update({
-          where: { id: dto.parentId },
-          data: { hasSubcategories: true },
-        });
-      }
-
-      return {
-        success: true,
-        message: 'Category created successfully',
-        code: 'CREATED',
-        data: this.mapCategory(created as FullCategory),
-        error: null,
-      };
-    } catch (error) {
-      const err = error as Error;
-      this.logger.error(`Create category failed: ${err.message}`);
+    // Prevent duplicates within the SAME vertical using slug uniqueness
+    const existing = await this.prisma.category.findUnique({
+      where: { 
+        vertical_slug: { vertical: dto.vertical, slug } 
+      },
+    });
+    
+    if (existing) {
       return {
         success: false,
-        message: 'Failed to create category',
-        code: 'CATEGORY_CREATION_FAILED',
+        message: 'Category already exists in this vertical',
+        code: 'DUPLICATE_CATEGORY',
         data: null,
-        error: { message: err.message, details: null },
+        error: { message: 'Duplicate slug detected for this vertical.', details: null },
       };
     }
+
+    const created = await this.prisma.category.create({
+      data: {
+        name: dto.name,
+        slug,
+        description: dto.description,
+        vertical: dto.vertical,
+        type: dto.type || 'MAIN', // ADD THIS: Default to MAIN if not specified
+        parentId: dto.parentId || null,
+        hasParent,
+        hasSubcategories: false,
+      },
+      include: this.standardInclude,
+    });
+
+    if (dto.parentId) {
+      await this.prisma.category.update({
+        where: { id: dto.parentId },
+        data: { hasSubcategories: true },
+      });
+    }
+
+    return {
+      success: true,
+      message: 'Category created successfully',
+      code: 'CREATED',
+      data: this.mapCategory(created as FullCategory),
+      error: null,
+    };
+  } catch (error) {
+    const err = error as Error;
+    this.logger.error(`Create category failed: ${err.message}`);
+    return {
+      success: false,
+      message: 'Failed to create category',
+      code: 'CATEGORY_CREATION_FAILED',
+      data: null,
+      error: { message: err.message, details: null },
+    };
   }
+}
 
   /** -------------------------------
    * GET CATEGORY BY SLUG (Critical for Validation)
@@ -198,120 +200,146 @@ export class CategoriesService {
   /** -------------------------------
    * GET DISCOVERY METADATA (Lightweight list)
    * ------------------------------- */
-  async getDiscoveryMetadata(dto: DiscoveryParamsDto): Promise<BaseResponseDto<DiscoveryCategoryResponseDto[]>> {
-    try {
-      const categories = await this.prisma.category.findMany({
-        where: { vertical: dto.vertical, parentId: null },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          vertical: true,
-          hasSubcategories: true,
-        },
-        orderBy: { name: 'asc' }
-      });
+async getDiscoveryMetadata(dto: DiscoveryParamsDto): Promise<BaseResponseDto<DiscoveryCategoryResponseDto[]>> {
+  try {
+    const categories = await this.prisma.category.findMany({
+      where: { 
+        vertical: dto.vertical, 
+        parentId: null,
+        ...(dto.type && { type: dto.type }) // ADD THIS - optional type filter
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        vertical: true,
+        type: true, // ADD THIS - include type in selection
+        hasSubcategories: true,
+      },
+      orderBy: { name: 'asc' }
+    });
 
-      return {
-        success: true,
-        message: 'Discovery metadata fetched successfully',
-        code: 'FETCHED',
-        data: categories,
-        error: null,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'Failed to fetch discovery metadata',
-        code: 'FETCH_FAILED',
-        data: null,
-        error: { message: (error as Error).message, details: null },
-      };
-    }
+    return {
+      success: true,
+      message: 'Discovery metadata fetched successfully',
+      code: 'FETCHED',
+      data: categories,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Failed to fetch discovery metadata',
+      code: 'FETCH_FAILED',
+      data: null,
+      error: { message: (error as Error).message, details: null },
+    };
   }
+}
 
   /** -------------------------------
    * UPDATE CATEGORY
    * ------------------------------- */
-  async updateCategory( dto: UpdateCategoryRequestDto): Promise<BaseResponseDto<CategoryResponseDto>> {
-    try {
-      const existing = await this.prisma.category.findUnique({ where: { id: dto.id  } });
-      if (!existing) {
-        return {
-          success: false,
-          message: 'Category not found',
-          code: 'CATEGORY_NOT_FOUND',
-          data: null,
-          error: null,
-        };
-      }
-
-      const updated = await this.prisma.category.update({
-        where: { id: dto.id },
-        data: {
-          name: dto.name,
-          description: dto.description,
-          vertical: dto.vertical,
-          slug: dto.name && !dto.slug ? dto.name.toLowerCase().replace(/ /g, '-') : dto.slug,
-          parentId: dto.parentId,
-          hasParent: !!dto.parentId,
-        },
-        include: this.standardInclude,
-      });
-
-      if (dto.parentId) {
-        await this.prisma.category.update({
-          where: { id: dto.parentId },
-          data: { hasSubcategories: true },
-        });
-      }
-
-      return {
-        success: true,
-        message: 'Category updated successfully',
-        code: 'UPDATED',
-        data: this.mapCategory(updated as FullCategory),
-        error: null,
-      };
-    } catch (error) {
+async updateCategory(dto: UpdateCategoryRequestDto): Promise<BaseResponseDto<CategoryResponseDto>> {
+  try {
+    const existing = await this.prisma.category.findUnique({ where: { id: dto.id } });
+    if (!existing) {
       return {
         success: false,
-        message: 'Failed to update category',
-        code: 'UPDATE_FAILED',
+        message: 'Category not found',
+        code: 'CATEGORY_NOT_FOUND',
         data: null,
-        error: { message: (error as Error).message, details: null },
+        error: null,
       };
     }
+
+    // Log what's being updated
+    this.logger.log(`Updating category: ${existing.name} (${existing.type})`);
+
+    const updated = await this.prisma.category.update({
+      where: { id: dto.id },
+      data: {
+        name: dto.name,
+        description: dto.description,
+        vertical: dto.vertical,
+        type: dto.type, // ADD THIS: Update the type if provided
+        slug: dto.name && !dto.slug ? dto.name.toLowerCase().replace(/ /g, '-') : dto.slug,
+        parentId: dto.parentId,
+        hasParent: !!dto.parentId,
+      },
+      include: this.standardInclude,
+    });
+
+    if (dto.parentId) {
+      await this.prisma.category.update({
+        where: { id: dto.parentId },
+        data: { hasSubcategories: true },
+      });
+    }
+
+    return {
+      success: true,
+      message: 'Category updated successfully',
+      code: 'UPDATED',
+      data: this.mapCategory(updated as FullCategory),
+      error: null,
+    };
+  } catch (error) {
+    this.logger.error(`Update category failed: ${(error as Error).message}`);
+    return {
+      success: false,
+      message: 'Failed to update category',
+      code: 'UPDATE_FAILED',
+      data: null,
+      error: { message: (error as Error).message, details: null },
+    };
   }
+}
 
   /** -------------------------------
    * GET CATEGORIES BY VERTICAL
    * ------------------------------- */
   async getCategoriesWithStats(dto: GetCategoriesRequestDto): Promise<BaseResponseDto<CategoryResponseDto[]>> {
-    try {
-      const categories = await this.prisma.category.findMany({
-        where: dto.vertical ? { vertical: dto.vertical, parentId: null } : { parentId: null },
-        include: this.standardInclude,
-      });
-
-      return {
-        success: true,
-        message: 'Categories fetched successfully',
-        code: 'FETCHED',
-        data: categories.map((cat) => this.mapCategory(cat as FullCategory)),
-        error: null,
-      };
-    } catch (error) {
-      this.logger.error('Fetch categories failed', (error as Error).stack);
-      return {
-        success: false,
-        message: 'Failed to fetch categories',
-        code: 'FETCH_FAILED',
-        data: null,
-        error: { message: (error as Error).message, details: null },
-      };
+  try {
+    // Build the where clause dynamically
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: any = { parentId: null };
+    
+    if (dto.vertical) {
+      where.vertical = dto.vertical;
     }
+    
+    // ADD THIS - optional type filter
+    if (dto.type) {
+      where.type = dto.type;
+    }
+
+    const categories = await this.prisma.category.findMany({
+      where,
+      include: this.standardInclude,
+      orderBy: [{ vertical: 'asc' }, { name: 'asc' }] // Optional: add ordering
+    });
+
+    this.logger.debug(`Fetched ${categories.length} categories - Vertical: ${dto.vertical || 'ALL'}, Type: ${dto.type || 'ALL'}`);
+
+    return {
+      success: true,
+      message: 'Categories fetched successfully',
+      code: 'FETCHED',
+      data: categories.map((cat) => this.mapCategory(cat as FullCategory)),
+      error: null,
+    };
+  } catch (error) {
+    this.logger.error('Fetch categories failed', (error as Error).stack);
+    return {
+      success: false,
+      message: 'Failed to fetch categories',
+      code: 'FETCH_FAILED',
+      data: null,
+      error: { message: (error as Error).message, details: null },
+    };
   }
+}
 
   /** -------------------------------
    * GET CATEGORY BY ID
@@ -420,41 +448,42 @@ export class CategoriesService {
   /** -------------------------------
    * GET CATEGORY BY NAME
    * ------------------------------- */
-  async getCategoryByName(dto: GetCategoryByNameQueryDto): Promise<BaseResponseDto<CategoryResponseDto>> {
-    try {
-      const cat = await this.prisma.category.findFirst({
-        where: { 
-          name: { equals: dto.name, mode: 'insensitive' },
-          ...(dto.vertical && { vertical: dto.vertical })
-        },
-        include: this.standardInclude,
-      });
+async getCategoryByName(dto: GetCategoryByNameQueryDto): Promise<BaseResponseDto<CategoryResponseDto>> {
+  try {
+    const cat = await this.prisma.category.findFirst({
+      where: { 
+        name: { equals: dto.name, mode: 'insensitive' },
+        ...(dto.vertical && { vertical: dto.vertical }),
+        ...(dto.type && { type: dto.type }) // ADD THIS - optional type filter
+      },
+      include: this.standardInclude,
+    });
 
-      if (!cat) {
-        return {
-          success: false,
-          message: 'Category not found',
-          code: 'CATEGORY_NOT_FOUND',
-          data: null,
-          error: null,
-        };
-      }
-
-      return {
-        success: true,
-        message: 'Category fetched successfully',
-        code: 'FETCHED',
-        data: this.mapCategory(cat as FullCategory),
-        error: null,
-      };
-    } catch (error) {
+    if (!cat) {
       return {
         success: false,
-        message: 'Failed to fetch category',
-        code: 'FETCH_FAILED',
+        message: 'Category not found',
+        code: 'CATEGORY_NOT_FOUND',
         data: null,
-        error: { message: (error as Error).message, details: null },
+        error: null,
       };
     }
+
+    return {
+      success: true,
+      message: 'Category fetched successfully',
+      code: 'FETCHED',
+      data: this.mapCategory(cat as FullCategory),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Failed to fetch category',
+      code: 'FETCH_FAILED',
+      data: null,
+      error: { message: (error as Error).message, details: null },
+    };
   }
+}
 }

@@ -26,6 +26,14 @@ export class CategoryResponseDto {
   })
   name!: string;
 
+  @ApiProperty({ 
+    example: 'MAIN', 
+    enum: ['MAIN', 'COMPLIMENTARY'],
+    description: 'Category type - MAIN for primary listings, COMPLIMENTARY for service providers'
+  })
+  type!: 'MAIN' | 'COMPLIMENTARY';
+
+
   @ApiPropertyOptional({
     description: 'Description of the category',
     example: 'Jobs related to web, mobile, and software development',

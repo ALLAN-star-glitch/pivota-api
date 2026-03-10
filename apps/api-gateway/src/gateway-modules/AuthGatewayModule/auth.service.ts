@@ -18,18 +18,17 @@ import {
   VerifyOtpDto,         
   VerifyOtpResponseDataDto,
   ResetPasswordDto,
+  AuthClientInfoDto,
 } from '@pivota-api/dtos';
 import { BaseRefreshTokenResponseGrpc, JwtPayload } from '@pivota-api/interfaces';
 
 // Updated gRPC interface for AuthService
 interface AuthServiceGrpc {
   signup(
-    data: UserSignupRequestDto
+    data: UserSignupRequestDto & { clientInfo?: AuthClientInfoDto }
   ): Observable<BaseResponseDto<UserSignupDataDto>>;
 
-  organisationSignup(
-    data: OrganisationSignupRequestDto
-  ): Observable<BaseResponseDto<OrganizationSignupDataDto>>;
+  organisationSignup(data: OrganisationSignupRequestDto & { clientInfo?: AuthClientInfoDto }): Observable<BaseResponseDto<OrganizationSignupDataDto>>;
 
   requestOtp(
     data: RequestOtpDto & { purpose: string }
@@ -161,46 +160,83 @@ export class AuthService {
     return BaseResponseDto.fail(response.message, response.code);
   }
   /** ------------------ Signup ------------------ */
-  async signup(signupDto: UserSignupRequestDto): Promise<BaseResponseDto<UserSignupDataDto>> {
-    this.logger.log('📩 Calling Auth microservice for signup');
+  async signup(
+  signupDto: UserSignupRequestDto,
+  clientInfo: AuthClientInfoDto
+): Promise<BaseResponseDto<UserSignupDataDto>> {
+  this.logger.log('📩 Calling Auth microservice for signup');
+  
+  // Log the client info for debugging
+  this.logger.debug(`[gRPC] Sending client info with signup: ${JSON.stringify({
+    device: clientInfo.device,
+    deviceType: clientInfo.deviceType,
+    os: clientInfo.os,
+    browser: clientInfo.browser,
+    ipAddress: clientInfo.ipAddress
+  })}`);
 
-    const grcpSignupResponse = await firstValueFrom(this.authGrpc.signup(signupDto));
-    this.logger.log(`📩 Received response from Auth microservice: ${JSON.stringify(grcpSignupResponse)}`);
+  // Combine both parameters into a single request object
+  const request = {
+    ...signupDto,
+    clientInfo: clientInfo  // Add clientInfo to the request
+  };
 
-    if (grcpSignupResponse.success) {
-      return BaseResponseDto.ok(grcpSignupResponse.data, grcpSignupResponse.message, grcpSignupResponse.code);
-    }
+  const grcpSignupResponse = await firstValueFrom(this.authGrpc.signup(request));
+  this.logger.log(`📩 Received response from Auth microservice: ${JSON.stringify(grcpSignupResponse)}`);
 
-    return BaseResponseDto.fail(grcpSignupResponse.message, grcpSignupResponse.code);
+  if (grcpSignupResponse.success) {
+    return BaseResponseDto.ok(grcpSignupResponse.data, grcpSignupResponse.message, grcpSignupResponse.code);
   }
 
+  return BaseResponseDto.fail(grcpSignupResponse.message, grcpSignupResponse.code);
+}
+
   /** ------------------ Organisation Signup ------------------ */
-  async signupOrganisation(
-    dto: OrganisationSignupRequestDto,
-  ): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
-    this.logger.log('📩 Calling Auth microservice for organisation signup');
+async signupOrganisation(
+  dto: OrganisationSignupRequestDto,
+  clientInfo: AuthClientInfoDto
+): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
+  this.logger.log('📩 Calling Auth microservice for organisation signup');
+  
+  // Log the client info for debugging
+  this.logger.debug(`[gRPC] Organisation signup - Client info received: ${JSON.stringify({
+    device: clientInfo?.device,
+    deviceType: clientInfo?.deviceType,
+    os: clientInfo?.os,
+    osVersion: clientInfo?.osVersion,
+    browser: clientInfo?.browser,
+    browserVersion: clientInfo?.browserVersion,
+    ipAddress: clientInfo?.ipAddress,
+    isBot: clientInfo?.isBot
+  })}`);
 
-    const grpcResponse = await firstValueFrom(
-      this.authGrpc.organisationSignup(dto),
-    );
+  // Combine DTO and clientInfo into a single request object
+  const request = {
+    ...dto,
+    clientInfo: clientInfo
+  };
 
-    this.logger.debug(
-      `📩 Received response from Auth microservice: ${JSON.stringify(grpcResponse)}`,
-    );
+  const grpcResponse = await firstValueFrom(
+    this.authGrpc.organisationSignup(request),
+  );
 
-    if (grpcResponse.success) {
-      return BaseResponseDto.ok(
-        grpcResponse.data,
-        grpcResponse.message,
-        grpcResponse.code,
-      );
-    }
+  this.logger.debug(
+    `📩 Received response from Auth microservice: ${JSON.stringify(grpcResponse)}`,
+  );
 
-    return BaseResponseDto.fail(
+  if (grpcResponse.success) {
+    return BaseResponseDto.ok(
+      grpcResponse.data,
       grpcResponse.message,
       grpcResponse.code,
     );
   }
+
+  return BaseResponseDto.fail(
+    grpcResponse.message,
+    grpcResponse.code,
+  );
+}
 
   /** ------------------ Login (Stage 1) ------------------ */
   async login(

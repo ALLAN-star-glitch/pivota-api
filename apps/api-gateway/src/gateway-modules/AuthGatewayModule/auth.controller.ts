@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Body,
   Controller,
@@ -9,13 +10,13 @@ import {
   Req,
   Get,
   Query,
-  Delete,
+  Delete, 
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt.guard';
 import {
-  
+    
   LoginRequestDto,
   SessionDto,
   GoogleLoginRequestDto,
@@ -32,6 +33,7 @@ import {
   ResetPasswordDto,
   RevokeSessionDto,
   OtpPurposeQueryDto,
+  AuthClientInfoDto,
 } from '@pivota-api/dtos';
 import { ClientInfo } from '../../decorators/client-info.decorator';
 import {
@@ -43,11 +45,14 @@ import {
   getSchemaPath,
   ApiExtraModels,
   ApiQuery,
+  ApiHeader,
 } from '@nestjs/swagger';
 import { JwtRequest } from '@pivota-api/interfaces';
 import { RolesGuard } from '../../guards/role.guard';
 import { Roles } from '../../decorators/roles.decorator';
 import { ThrottlerGuard, Throttle} from '@nestjs/throttler';
+import { Headers } from '@nestjs/common';
+import { ALLOWED_OTP_PURPOSES } from '@pivota-api/constants';
 
 @ApiTags('Auth') // Main module tag
 @ApiExtraModels(
@@ -112,7 +117,7 @@ export class AuthController {
     • **firstName** - User's first name
     • **lastName** - User's last name
     • **phone** - Kenyan phone number (will be normalized to +254 format)
-    • **otpCode** - Valid OTP code received via email
+    • **code** - Valid OTP code received via email
     
     **Phone Number Format:**
     Accepts various Kenyan formats:
@@ -142,6 +147,44 @@ export class AuthController {
     2. Call POST /auth-module/login with credentials
     3. Complete 2FA verification (if enabled)
     4. Receive JWT tokens upon successful login
+    
+    **🤖 AI Analytics & Tracking**
+    
+    This endpoint captures registration data for analytics and personalization:
+    
+    **📊 Data Collected for Analytics:**
+    
+    | Category | Fields | Purpose |
+    |----------|--------|---------|
+    | **User Identity** | User UUID, Email, Account ID | User profiling |
+    | **Registration Method** | Email/Password | Channel analysis |
+    | **Device Info** | Device type, OS, Browser | Platform optimization |
+    | **Geographic** | IP-based location | Regional insights |
+    | **Timing** | Registration timestamp | Cohort analysis |
+    
+    **Device Information Captured:**
+    • **Device Model** - iPhone 15, Samsung Galaxy, etc.
+    • **Device Type** - MOBILE, TABLET, DESKTOP, BOT, UNKNOWN
+    • **Operating System** - iOS, Android, Windows, macOS
+    • **OS Version** - 17.2, 14, 11, etc.
+    • **Browser** - Chrome, Safari, Firefox, etc.
+    • **Browser Version** - 120.0.0, 17.2, etc.
+    • **Device Classification** - isMobile, isTablet, isDesktop, isBot flags
+    • **IP Address** - For geographic analysis
+    • **User Agent** - Raw user agent string
+    
+    **Analytics Events Emitted:**
+    
+    | Event | Destination | Purpose |
+    |-------|-------------|---------|
+    | **user.registered** | Kafka (Analytics) | Store registration data with device info |
+    | **user.onboarded** | RabbitMQ (Notifications) | Send welcome email (no device info) |
+    | **admin.new.registration** | RabbitMQ (Notifications) | Notify admins of new user |
+    
+    **Privacy & Compliance:**
+    • Device info stored for analytics only
+    • IP addresses anonymized after 30 days
+    • Data used for platform improvement and personalization
   `
 })
 @ApiBody({ 
@@ -160,9 +203,54 @@ export class AuthController {
     }
   }
 })
+@ApiHeader({
+  name: 'x-platform',
+  description: 'Platform identifier (web/mobile/api) - used for platform-specific behavior analysis',
+  required: false,
+  enum: ['web', 'mobile', 'api']
+})
+@ApiHeader({
+  name: 'x-device',
+  description: 'Custom device identifier (for mobile apps)',
+  required: false,
+  example: 'iPhone15,3'
+})
+@ApiHeader({
+  name: 'x-device-type',
+  description: 'Custom device type (MOBILE/TABLET/DESKTOP)',
+  required: false,
+  enum: ['MOBILE', 'TABLET', 'DESKTOP']
+})
+@ApiHeader({
+  name: 'x-os',
+  description: 'Custom OS identifier',
+  required: false,
+  example: 'iOS'
+})
+@ApiHeader({
+  name: 'x-os-version',
+  description: 'Custom OS version',
+  required: false,
+  example: '17.2'
+})
+@ApiHeader({
+  name: 'referer',
+  description: 'Source URL - for traffic source analysis',
+  required: false
+})
 @ApiResponse({
   status: 201,
   description: 'User signed up successfully. User must now log in.',
+  headers: {
+    'X-Device-Info': {
+      description: 'Device classification for debugging',
+      schema: { type: 'string', example: 'MOBILE|iOS|17.2|Safari' }
+    },
+    'X-Analytics-ID': {
+      description: 'Analytics event ID for tracking',
+      schema: { type: 'string', example: 'reg_abc123_20260304' }
+    }
+  },
   schema: {
     allOf: [
       { $ref: getSchemaPath(BaseResponseDto) },
@@ -171,15 +259,23 @@ export class AuthController {
           data: { 
             $ref: getSchemaPath(UserSignupDataDto),
             example: {
-              userUuid: 'usr_123abc',
-              accountId: 'acc_456def',
-              email: 'john.doe@example.com',
-              firstName: 'John',
-              lastName: 'Doe',
-              phone: '+254712345678',
-              status: 'ACTIVE',
-              requiresPayment: false,
-              requiresMfa: false,
+              user: {
+                uuid: 'usr_123abc',
+                email: 'john.doe@example.com',
+                firstName: 'John',
+                lastName: 'Doe',
+                phone: '+254712345678',
+                status: 'ACTIVE'
+              },
+              account: {
+                uuid: 'acc_456def',
+                accountCode: 'ACC-USR-ABCD1234',
+                type: 'INDIVIDUAL'
+              },
+              profile: {
+                completion: 60,
+                requiresAdditionalInfo: ['profile_picture', 'id_verification']
+              },
               createdAt: '2026-03-05T10:30:00.000Z',
               message: 'Account created successfully. Please log in.'
             }
@@ -226,17 +322,58 @@ export class AuthController {
     }
   }
 })
+@ApiResponse({ 
+  status: 429, 
+  description: 'Too many attempts - Rate limited',
+  schema: {
+    example: {
+      success: false,
+      message: 'Maximum verification attempts reached. Please try again later.',
+      code: 'TOO_MANY_REQUESTS',
+      retryAfter: 60
+    }
+  }
+})
 async signup(
-  @Body() signupDto: UserSignupRequestDto  
+  @Body() signupDto: UserSignupRequestDto,
+  @ClientInfo() clientInfo: AuthClientInfoDto,
+  @Headers('x-platform') platform?: string,
+  @Headers('referer') referer?: string,
 ): Promise<BaseResponseDto<UserSignupDataDto>> {
+  // Log the signup attempt with device info
   this.logger.log(`📩 Signup request: ${signupDto.email}`);
-  const response = await this.authService.signup(signupDto);
+  
+  // Log rich device info for debugging and analytics
+  this.logger.debug(`[GATEWAY] Client info received for signup:`);
+  this.logger.debug(`📱 Device: ${clientInfo.device} (${clientInfo.deviceType})`);
+  this.logger.debug(`💻 OS: ${clientInfo.os} ${clientInfo.osVersion || ''}`);
+  this.logger.debug(`🌐 Browser: ${clientInfo.browser} ${clientInfo.browserVersion || ''}`);
+  this.logger.debug(`📍 IP: ${clientInfo.ipAddress}`);
+  this.logger.debug(`🤖 Is Bot: ${clientInfo.isBot}`);
+  this.logger.debug(`📊 Platform: ${platform || 'Not specified'}`);
+  this.logger.debug(`🔗 Referer: ${referer || 'Direct'}`);
+  
+  // Add platform and referer to clientInfo if needed
+  if (platform) {
+    clientInfo.deviceType = platform.toUpperCase() as any;
+  }
+  
+  // Call the auth service with both DTO and client info
+  const response = await this.authService.signup(signupDto, clientInfo);
+  
   if (!response.success) {
     this.logger.warn(`⚠️ Signup failed for ${signupDto.email}: ${response.message}`);
     throw response;
   } else {
     this.logger.log(`✅ Signup successful for: ${signupDto.email}`);
+    this.logger.debug(`[ANALYTICS] User registered event will include device info:`, {
+      userUuid: response.data?.user?.uuid,
+      deviceType: clientInfo.deviceType,
+      os: clientInfo.os,
+      browser: clientInfo.browser
+    });
   }
+  
   return response;
 }
 
@@ -248,102 +385,288 @@ async signup(
    * @param dto - Organization registration details
    * @returns Created organization details
    */
-  @Post('signup/organization')
-  @Version('1')
-  @ApiTags('Auth - Registration')
-  @ApiOperation({ 
-    summary: 'Register a new organisation',
-    description: `
-      Creates a new organization account in the system.
-      
-      **Microservice:** Auth Service
-      **Authentication:** Not required (public)
-      
-      **Organization Registration Flow:**
-      1. Admin requests OTP via /otp/request
-      2. Admin receives OTP via email
-      3. Admin submits OTP with organization details
-      4. System validates OTP and creates organization account
-      5. Admin user is created as organization admin
-      
-      **Required Information:**
-      • **name** - Organization name
-      • **email** - Admin email address
-      • **password** - Admin password
-      • **firstName** - Admin first name
-      • **lastName** - Admin last name
-      • **phone** - Admin phone number
-      • **otpCode** - Valid OTP code
-      
-      **Organization Features:**
-      • Team member management
-      • Multi-user access
-      • Organization-wide listings
-      • Shared resources
-      • Role-based permissions
-      
-      **Account Structure:**
-      • Organization Account (root)
-      • Admin User (creator)
-      • Organization Profile
-      • Team members can be added later
-      
-      **Post-Creation:**
-      • Admin can invite team members
-      • Organization can be onboarded as provider
-      • Can manage organization listings
-    `
-  })
-  @ApiBody({ 
-    type: OrganisationSignupRequestDto,
-    examples: {
-      'Organization signup': {
-        value: {
-          name: 'Pivota Properties Ltd',
-          email: 'admin@pivotaproperties.com',
-          password: 'SecurePass123!',
-          firstName: 'John',
-          lastName: 'Doe',
-          phone: '+254712345678',
-          otpCode: '123456'
-        }
+@Post('signup/organization')
+@Version('1')
+@ApiTags('Auth - Registration')
+@ApiOperation({ 
+  summary: 'Register a new organisation',
+  description: `
+    Creates a new organization account in the system.
+    
+    **Microservice:** Auth Service
+    **Authentication:** Not required (public)
+    
+    **Organization Registration Flow:**
+    1. Admin requests OTP via /otp/request
+    2. Admin receives OTP via email
+    3. Admin submits OTP with organization details
+    4. System validates OTP and creates organization account
+    5. Admin user is created as organization admin
+    
+    **Required Information:**
+    • **name** - Organization name
+    • **email** - Admin email address
+    • **password** - Admin password
+    • **firstName** - Admin first name
+    • **lastName** - Admin last name
+    • **phone** - Admin phone number
+    • **otpCode** - Valid OTP code
+    
+    **Organization Features:**
+    • Team member management
+    • Multi-user access
+    • Organization-wide listings
+    • Shared resources
+    • Role-based permissions
+    
+    **Account Structure:**
+    • Organization Account (root)
+    • Admin User (creator)
+    • Organization Profile
+    • Team members can be added later
+    
+    **Post-Creation:**
+    • Admin can invite team members
+    • Organization can be onboarded as provider
+    • Can manage organization listings
+    
+    **🤖 AI Analytics & Tracking**
+    
+    This endpoint captures organization registration data for analytics:
+    
+    **📊 Data Collected for Analytics:**
+    
+    | Category | Fields | Purpose |
+    |----------|--------|---------|
+    | **Organization Identity** | Org UUID, Name, Type | Org profiling |
+    | **Admin Identity** | Admin UUID, Email | User profiling |
+    | **Registration Method** | Email/Password | Channel analysis |
+    | **Device Info** | Device type, OS, Browser | Platform optimization |
+    | **Geographic** | IP-based location | Regional insights |
+    | **Timing** | Registration timestamp | Cohort analysis |
+    
+    **Device Information Captured:**
+    • **Device Model** - iPhone 15, Samsung Galaxy, etc.
+    • **Device Type** - MOBILE, TABLET, DESKTOP, BOT, UNKNOWN
+    • **Operating System** - iOS, Android, Windows, macOS
+    • **OS Version** - 17.2, 14, 11, etc.
+    • **Browser** - Chrome, Safari, Firefox, etc.
+    • **Browser Version** - 120.0.0, 17.2, etc.
+    • **Device Classification** - isMobile, isTablet, isDesktop, isBot flags
+    • **IP Address** - For geographic analysis
+    • **User Agent** - Raw user agent string
+    
+    **Analytics Events Emitted:**
+    
+    | Event | Destination | Purpose |
+    |-------|-------------|---------|
+    | **organization.registered** | Kafka (Analytics) | Store registration data with device info |
+    | **organization.onboarded** | RabbitMQ (Notifications) | Send welcome email (no device info) |
+    | **admin.new.organization.registration** | RabbitMQ (Notifications) | Notify admins of new organization |
+    
+    **Privacy & Compliance:**
+    • Device info stored for analytics only
+    • IP addresses anonymized after 30 days
+    • Data used for platform improvement and personalization
+  `
+})
+@ApiBody({ 
+  type: OrganisationSignupRequestDto,
+  examples: {
+    'Organization signup': {
+      value: {
+        name: 'Pivota Properties Ltd',
+        email: 'admin@pivotaproperties.com',
+        password: 'SecurePass123!',
+        firstName: 'John',
+        lastName: 'Doe',
+        phone: '+254712345678',
+        code: '123456',
+        officialEmail: 'info@pivotaproperties.com',
+        officialPhone: '+254720000000',
+        physicalAddress: 'Nairobi, Kenya',
+        organizationType: 'PRIVATE_LIMITED',
+        planSlug: 'business-pro'
       }
     }
-  })
-  @ApiResponse({
-    status: 201,
-    description: 'Organisation signed up successfully',
-    schema: {
-      allOf: [
-        { $ref: getSchemaPath(BaseResponseDto) },
-        {
-          properties: {
-            data: { 
-              $ref: getSchemaPath(OrganizationSignupDataDto),
-              example: {
-                organizationUuid: 'org_123abc',
-                accountId: 'acc_456def',
-                name: 'Pivota Properties Ltd',
-                adminUserUuid: 'usr_789ghi',
-                email: 'admin@pivotaproperties.com',
-                status: 'ACTIVE',
-                createdAt: '2026-03-05T10:30:00.000Z'
-              }
-            }
-          },
-        },
-      ],
-    },
-  })
-  @ApiResponse({ status: 400, description: 'Validation error - Invalid input data' })
-  @ApiResponse({ status: 409, description: 'Conflict - Organization with same email already exists' })
-  @ApiResponse({ status: 410, description: 'OTP expired or invalid' })
-  async signupOrganisation(
-    @Body() dto: OrganisationSignupRequestDto,
-  ): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
-    this.logger.log(`🏢 Organisation signup request: ${dto.name}`);
-    return this.authService.signupOrganisation(dto);
   }
+})
+@ApiHeader({
+  name: 'x-platform',
+  description: 'Platform identifier (web/mobile/api) - used for platform-specific behavior analysis',
+  required: false,
+  enum: ['web', 'mobile', 'api']
+})
+@ApiHeader({
+  name: 'x-device',
+  description: 'Custom device identifier (for mobile apps)',
+  required: false,
+  example: 'iPhone15,3'
+})
+@ApiHeader({
+  name: 'x-device-type',
+  description: 'Custom device type (MOBILE/TABLET/DESKTOP)',
+  required: false,
+  enum: ['MOBILE', 'TABLET', 'DESKTOP']
+})
+@ApiHeader({
+  name: 'x-os',
+  description: 'Custom OS identifier',
+  required: false,
+  example: 'iOS'
+})
+@ApiHeader({
+  name: 'x-os-version',
+  description: 'Custom OS version',
+  required: false,
+  example: '17.2'
+})
+@ApiHeader({
+  name: 'referer',
+  description: 'Source URL - for traffic source analysis',
+  required: false
+})
+@ApiResponse({
+  status: 201,
+  description: 'Organisation signed up successfully',
+  headers: {
+    'X-Device-Info': {
+      description: 'Device classification for debugging',
+      schema: { type: 'string', example: 'MOBILE|iOS|17.2|Safari' }
+    },
+    'X-Analytics-ID': {
+      description: 'Analytics event ID for tracking',
+      schema: { type: 'string', example: 'org_reg_abc123_20260304' }
+    }
+  },
+  schema: {
+    allOf: [
+      { $ref: getSchemaPath(BaseResponseDto) },
+      {
+        properties: {
+          data: { 
+            $ref: getSchemaPath(OrganizationSignupDataDto),
+            example: {
+              organization: {
+                uuid: 'org_123abc',
+                name: 'Pivota Properties Ltd',
+                orgCode: 'ORG-PROP-12345',
+                verificationStatus: 'PENDING'
+              },
+              admin: {
+                uuid: 'usr_789ghi',
+                email: 'admin@pivotaproperties.com',
+                firstName: 'John',
+                lastName: 'Doe',
+                roleName: 'Business System Admin'
+              },
+              account: {
+                uuid: 'acc_456def',
+                accountCode: 'ACC-ORG-ABCD1234',
+                type: 'ORGANIZATION'
+              },
+              createdAt: '2026-03-05T10:30:00.000Z',
+              message: 'Organization created successfully. Please log in.'
+            }
+          }
+        },
+      },
+    ],
+  },
+})
+@ApiResponse({ 
+  status: 400, 
+  description: 'Validation error - Invalid input data',
+  schema: {
+    example: {
+      success: false,
+      message: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+      errors: [
+        { field: 'email', message: 'email must be a valid email address' },
+        { field: 'organizationType', message: 'organizationType must be a valid type' }
+      ]
+    }
+  }
+})
+@ApiResponse({ 
+  status: 409, 
+  description: 'Conflict - Organization with same email already exists',
+  schema: {
+    example: {
+      success: false,
+      message: 'An organization with this email already exists',
+      code: 'ALREADY_EXISTS'
+    }
+  }
+})
+@ApiResponse({ 
+  status: 410, 
+  description: 'OTP expired or invalid',
+  schema: {
+    example: {
+      success: false,
+      message: 'OTP code expired or invalid',
+      code: 'INVALID_OTP'
+    }
+  }
+})
+@ApiResponse({ 
+  status: 429, 
+  description: 'Too many attempts - Rate limited',
+  schema: {
+    example: {
+      success: false,
+      message: 'Maximum verification attempts reached. Please try again later.',
+      code: 'TOO_MANY_REQUESTS',
+      retryAfter: 60
+    }
+  }
+})
+async signupOrganisation(
+  @Body() dto: OrganisationSignupRequestDto,
+  @ClientInfo() clientInfo: AuthClientInfoDto,
+  @Headers('x-platform') platform?: string,
+  @Headers('referer') referer?: string,
+): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
+  this.logger.log(`🏢 Organisation signup request: ${dto.name}`);
+  
+  // Log rich device info for debugging and analytics
+  this.logger.debug(`[GATEWAY] Organization signup - Client info received:`);
+  this.logger.debug(`📱 Device: ${clientInfo.device} (${clientInfo.deviceType})`);
+  this.logger.debug(`💻 OS: ${clientInfo.os} ${clientInfo.osVersion || ''}`);
+  this.logger.debug(`🌐 Browser: ${clientInfo.browser} ${clientInfo.browserVersion || ''}`);
+  this.logger.debug(`📍 IP: ${clientInfo.ipAddress}`);
+  this.logger.debug(`🤖 Is Bot: ${clientInfo.isBot}`);
+  this.logger.debug(`📊 Platform: ${platform || 'Not specified'}`);
+  this.logger.debug(`🔗 Referer: ${referer || 'Direct'}`);
+  this.logger.debug(`🏢 Organization: ${dto.name}`);
+  this.logger.debug(`👤 Admin: ${dto.adminFirstName} ${dto.adminLastName} (${dto.email})`);
+  
+  // Add platform to clientInfo if specified
+  if (platform) {
+    clientInfo.deviceType = platform.toUpperCase() as any;
+  }
+  
+  // Call the auth service with both DTO and client info
+  const response = await this.authService.signupOrganisation(dto, clientInfo);
+  
+  if (!response.success) {
+    this.logger.warn(`⚠️ Organization signup failed for ${dto.name}: ${response.message}`);
+    throw response;
+  } else {
+    this.logger.log(`✅ Organization signup successful for: ${dto.name}`);
+    this.logger.debug(`[ANALYTICS] Organization registered event will include device info:`, {
+      organizationUuid: response.data?.organization?.uuid,
+      adminUuid: response.data?.admin?.uuid,
+      deviceType: clientInfo.deviceType,
+      os: clientInfo.os,
+      browser: clientInfo.browser
+    });
+  }
+  
+  return response;
+}
 
   // ===========================================================
   // 🔐 AUTH - LOGIN
@@ -439,97 +762,111 @@ async signup(
    * @param res - Express response object for setting cookies
    * @returns Login success with user data
    */
-  @Post('login/verify-mfa')
-  @Version('1')
-  @ApiTags('Auth - Login')
-  @ApiOperation({ 
-    summary: 'Step 2: Verify OTP and issue JWT cookies',
-    description: `
-      Completes the two-factor authentication process.
-      
-      **Microservice:** Auth Service
-      **Authentication:** Not required (completes login)
-      
-      **Process:**
-      1. User submits OTP received via email
-      2. System validates OTP code
-      3. If valid, creates session and issues cookies
-      4. Returns user data and session info
-      
-      **Cookie Setup:**
-      • Sets secure HTTP-only cookies
-      • Access token (short-lived)
-      • Refresh token (long-lived)
-      • Session tracking cookie
-      
-      **Session Tracking:**
-      • Records device information
-      • Tracks IP address
-      • Stores user agent
-      • Creates session record in database
-      
-      **Security Features:**
-      • OTP expires after use
-      • Session limited duration
-      • Device fingerprinting
-      • Concurrent session limits
-      
-      **Response includes:**
-      • User profile data
-      • Account information
-      • Session details
-      • Cookies automatically set
-    `
-  })
-  @ApiBody({ 
-    type: VerifyOtpDto,
-    examples: {
-      'Verify MFA': {
-        value: {
-          email: 'john.doe@example.com',
-          code: '123456'
-        }
+ @Post('login/verify-mfa')
+@Version('1')
+@ApiTags('Auth - Login')
+@ApiOperation({ 
+  summary: 'Step 2: Verify OTP and issue JWT cookies',
+  description: `
+    Completes the two-factor authentication process.
+    
+    **Microservice:** Auth Service
+    **Authentication:** Not required (completes login)
+    
+    **Process:**
+    1. User submits OTP received via email
+    2. System validates OTP code
+    3. If valid, creates session and issues cookies
+    4. Returns user data and session info
+    
+    **Cookie Setup:**
+    • Sets secure HTTP-only cookies
+    • Access token (short-lived)
+    • Refresh token (long-lived)
+    • Session tracking cookie
+    
+    **Session Tracking:**
+    • Records device information
+    • Tracks IP address
+    • Stores user agent
+    • Creates session record in database
+    
+    **Security Features:**
+    • OTP expires after use
+    • Session limited duration
+    • Device fingerprinting
+    • Concurrent session limits
+    
+    **Response includes:**
+    • User profile data
+    • Account information
+    • Session details
+    • Cookies automatically set
+  `
+})
+@ApiBody({ 
+  type: VerifyOtpDto,
+  examples: {
+    'Verify MFA': {
+      value: {
+        email: 'john.doe@example.com',
+        code: '123456'
       }
     }
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'MFA Verified. User logged in and cookies issued.',
-    schema: {
-      example: {
-        success: true,
-        message: 'Login successful',
-        code: 'OK',
-        data: {
-          userUuid: 'usr_123abc',
-          email: 'john.doe@example.com',
-          firstName: 'John',
-          lastName: 'Doe',
-          role: 'GeneralUser',
-          accountId: 'acc_456def',
-          sessionId: 'sess_789ghi',
-          expiresIn: 3600
-        }
-      }
-    }
-  })
-  @ApiResponse({ status: 400, description: 'Invalid or expired OTP' })
-  @ApiResponse({ status: 401, description: 'Authentication failed' })
-  async verifyMfaLogin(
-    @Body() dto: VerifyOtpDto,
-    @ClientInfo() clientInfo: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
-    @Res({ passthrough: true }) res: Response
-  ): Promise<BaseResponseDto<LoginResponseDto>> {
-    this.logger.log(`🛡️ MFA Login Verification for: ${dto.email}`);
-    const resp = await this.authService.verifyMfaLogin(dto, clientInfo, res);
-    if (!resp.success) {
-      this.logger.warn(`⚠️ MFA Login failed for ${dto.email}: ${resp.message}`);
-      throw resp;
-    } else {
-      this.logger.log(`✅ MFA Login successful for: ${dto.email}`);
-    }
-    return resp;  
   }
+})
+@ApiResponse({
+  status: 200,
+  description: 'MFA Verified. User logged in and cookies issued.',
+  schema: {
+    example: {
+      success: true,
+      message: 'Login successful',
+      code: 'OK',
+      data: {
+        userUuid: 'usr_123abc',
+        email: 'john.doe@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        role: 'GeneralUser',
+        accountId: 'acc_456def',
+        sessionId: 'sess_789ghi',
+        expiresIn: 3600
+      }
+    }
+  }
+})
+@ApiResponse({ status: 400, description: 'Invalid or expired OTP' })
+@ApiResponse({ status: 401, description: 'Authentication failed' })
+async verifyMfaLogin(
+  @Body() dto: VerifyOtpDto,
+  @ClientInfo() clientInfo: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+  @Res({ passthrough: true }) res: Response
+): Promise<BaseResponseDto<LoginResponseDto>> {
+  this.logger.log(`🛡️ MFA Login Verification for: ${dto.email}`);
+  
+  // DEBUG: Log client info received in verify-mfa
+  this.logger.log('\n🔍 VERIFY-MFA ENDPOINT - CLIENT INFO DEBUG');
+  this.logger.debug('Email:', dto.email);
+  this.logger.debug('Code:', dto.code);
+  this.logger.debug('ClientInfo received:', JSON.stringify({
+    device: clientInfo?.device,
+    ipAddress: clientInfo?.ipAddress,
+    userAgent: clientInfo?.userAgent,
+    os: clientInfo?.os
+  }, null, 2)); 
+  console.log('Raw clientInfo object:', clientInfo);
+  console.log('=========================================\n');
+  
+  const resp = await this.authService.verifyMfaLogin(dto, clientInfo, res);
+  if (!resp.success) {
+    this.logger.warn(`⚠️ MFA Login failed for ${dto.email}: ${resp.message}`);
+    throw resp;
+  } else {
+    this.logger.log(`✅ MFA Login successful for: ${dto.email}`);
+  }
+  return resp;  
+}
 
   /**
    * Login or register using Google OAuth
@@ -790,7 +1127,7 @@ async signup(
   @ApiQuery({ 
     name: 'purpose', 
     required: true,
-    enum: ['signup', 'login', 'password-reset', 'email-verify'],
+    enum: ALLOWED_OTP_PURPOSES,
     description: 'Purpose of the OTP request'
   })
   @ApiResponse({

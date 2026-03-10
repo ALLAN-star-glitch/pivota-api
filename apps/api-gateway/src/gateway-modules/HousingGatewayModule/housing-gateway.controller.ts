@@ -44,13 +44,15 @@ import {
   AdminCreateHouseListingDto,
   GetHouseListingByIdDto,
   ListingViewContextDto,
-  ClientInfoDto,
   SearchContextDto,
   GetListingHeadersDto,
   GetListingQueryDto,
   AdminScheduleViewingDto,
   ScheduleAdminViewingGrpcRequestDto,
+  AuthClientInfoDto,
 } from '@pivota-api/dtos';
+
+
 
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
 import { RolesGuard } from '../../guards/role.guard';
@@ -459,29 +461,25 @@ export class HousingGatewayController {
 })
 async searchListings(
   @Query() dto: SearchHouseListingsDto,
+  @ClientInfo() clientInfo: AuthClientInfoDto, // Add this
   @Headers('x-session-id') sessionId?: string,
   @Headers('x-platform') platform?: 'web' | 'mobile' | 'api',
   @Headers('referer') referer?: string,
 ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
   this.logger.log(`🔍 Public search executed with filters: ${JSON.stringify(dto)}`);
   
-  // Add context to DTO if headers are present
-  if (sessionId || platform || referer) {
-    // Create a partial context object
-    const context: Partial<ListingViewContextDto> = {
-      sessionId: sessionId,
-      platform: platform?.toUpperCase() as 'WEB' | 'MOBILE' | 'API' | undefined,
-      referrer: referer,
-      client: {
-        ipAddress: '0.0.0.0', // Will be set by gateway
-        userAgent: '',
-        device: '',
-        os: ''
-      }
-    };
-    
-    dto.context = context as ListingViewContextDto;
-  }
+  // Log device info for debugging
+  this.logger.debug(`📱 Search from Device: ${clientInfo.device} (${clientInfo.deviceType})`);
+  
+  // Add context to DTO
+  const context: Partial<ListingViewContextDto> = {
+    sessionId: sessionId || this.generateAnonymousId(clientInfo),
+    platform: platform?.toUpperCase() as 'WEB' | 'MOBILE' | 'API' | undefined || this.determinePlatform(clientInfo),
+    referrer: referer || 'DIRECT',
+    client: clientInfo, // Now using AuthClientInfoDto directly
+  };
+  
+  dto.context = context as ListingViewContextDto;
   
   const resp = await this.housingService.searchListings(dto);
   
@@ -493,6 +491,8 @@ async searchListings(
   this.logger.log(`✅ Search returned ${resp.data?.length || 0} results`);
   return resp;
 }
+
+
 
 @Version('1')
 @Get('details/:id')
@@ -518,13 +518,26 @@ async searchListings(
     
     **📈 Data Collected:**
     • **User Context** - User ID, Session ID
-    • **Device Info** - Platform, Device Type, OS from ClientInfo
+    • **Device Info** - Platform, Device Type, OS, Browser, Device Classification
     • **Search Context** - Search ID, Position, Query
-    • **Interaction Metrics** - Time Spent, Scroll Depth
-    • **Listing Features** - Price, Location, Amenities
+    • **Interaction Metrics** - Time Spent, Scroll Depth, Interaction Type
+    • **Listing Features** - Price, Location, Amenities, Property Details
+    
+    **Device Information Captured:**
+    • **Device Model** - iPhone 15, Samsung Galaxy, etc.
+    • **Device Type** - MOBILE, TABLET, DESKTOP, BOT, UNKNOWN
+    • **Operating System** - iOS, Android, Windows, macOS
+    • **OS Version** - 17.2, 14, 11, etc.
+    • **Browser** - Chrome, Safari, Firefox, etc.
+    • **Browser Version** - 120.0.0, 17.2, etc.
+    • **Device Classification** - isMobile, isTablet, isDesktop, isBot flags
     
     **Context Parameters:**
     • **x-platform** - Client platform (web, mobile, api)
+    • **x-device** - Custom device identifier (for mobile apps)
+    • **x-device-type** - Custom device type (MOBILE/TABLET/DESKTOP)
+    • **x-os** - Custom OS identifier
+    • **x-os-version** - Custom OS version
     • **referer** - Source URL of the request
     • **searchId** - Search session identifier
     • **pos** - Listing position in search results
@@ -546,6 +559,30 @@ async searchListings(
   description: 'Platform (web, mobile, api) - used for device segmentation',
   required: false,
   enum: ['web', 'mobile', 'api']
+})
+@ApiHeader({
+  name: 'x-device',
+  description: 'Custom device identifier (for mobile apps)',
+  required: false,
+  example: 'iPhone15,3'
+})
+@ApiHeader({
+  name: 'x-device-type',
+  description: 'Custom device type (MOBILE/TABLET/DESKTOP)',
+  required: false,
+  enum: ['MOBILE', 'TABLET', 'DESKTOP']
+})
+@ApiHeader({
+  name: 'x-os',
+  description: 'Custom OS identifier',
+  required: false,
+  example: 'iOS'
+})
+@ApiHeader({
+  name: 'x-os-version',
+  description: 'Custom OS version',
+  required: false,
+  example: '17.2'
 })
 @ApiHeader({
   name: 'referer',
@@ -593,6 +630,12 @@ async searchListings(
   status: 200, 
   description: 'House listing retrieved successfully with analytics tracking',
   type: HouseListingResponseDto,
+  headers: {
+    'X-Device-Info': {
+      description: 'Device classification for debugging',
+      schema: { type: 'string', example: 'MOBILE|iOS|17.2|Safari' }
+    }
+  },
   schema: {
     example: {
       success: true,
@@ -675,12 +718,20 @@ async searchListings(
 async viewHouseListing(
   @Param('id', ParseCuidPipe) id: string,
   @Req() req: JwtRequest,
-  @ClientInfo() clientInfo: ClientInfoDto,
+  @ClientInfo() clientInfo: AuthClientInfoDto,
   @Headers() headers: GetListingHeadersDto,
   @Query() query: GetListingQueryDto,
 ): Promise<BaseResponseDto<HouseListingResponseDto>> {
   
   const sessionId = req.user?.tokenId;
+  
+  // Log rich device info for debugging
+  this.logger.debug(`📱 Device: ${clientInfo.device} (${clientInfo.deviceType})`);
+  this.logger.debug(`💻 OS: ${clientInfo.os} ${clientInfo.osVersion || ''}`);
+  this.logger.debug(`🌐 Browser: ${clientInfo.browser} ${clientInfo.browserVersion || ''}`);
+  this.logger.debug(`📊 Classification: ${[
+    clientInfo.isBot ? 'Bot' : ''
+  ].filter(Boolean).join(', ') || 'Unknown'}`);
   
   this.logger.debug(`📱 Listing view - User: ${req.user?.userUuid || 'anonymous'}, Listing: ${id}`);
 
@@ -690,16 +741,12 @@ async viewHouseListing(
   context.userId = req.user?.userUuid;
   context.sessionId = sessionId || this.generateAnonymousId(clientInfo);
   
-  // Set client/device info
-  const clientInfoDto = new ClientInfoDto();
-  clientInfoDto.ipAddress = clientInfo.ipAddress;
-  clientInfoDto.userAgent = clientInfo.userAgent;
-  clientInfoDto.device = clientInfo.device;
-  clientInfoDto.os = clientInfo.os;
-  context.client = clientInfoDto;
+  // Set client/device info - now using AuthClientInfoDto directly
+  context.client = clientInfo; // No need to create a new DTO, just assign directly
   
   // Set platform and referrer
-  context.platform = headers['x-platform'] || this.determinePlatform(clientInfo);
+  context.platform = (headers['x-platform'] as 'WEB' | 'MOBILE' | 'API' | 'CLI') || 
+                     this.determinePlatform(clientInfo);
   context.referrer = headers.referer || 'DIRECT';
   
   // Set interaction data from query params
@@ -1206,19 +1253,24 @@ async scheduleViewing(
   @Param('id', ParseCuidPipe) listingId: string,
   @Body() body: ScheduleViewingDto,
   @Req() req: JwtRequest,
+  @ClientInfo() clientInfo: AuthClientInfoDto, // Add this
   @Headers('x-platform') platform?: string,
   @Headers('x-session-id') sessionId?: string,
   @Headers('referer') referer?: string,
 ): Promise<BaseResponseDto<HouseViewingResponseDto>> {
   this.logger.log(`📅 User ${req.user.userUuid} scheduling viewing for listing ${listingId}`);
+  
+  // Log device info for debugging
+  this.logger.debug(`📱 Scheduling from Device: ${clientInfo.device} (${clientInfo.deviceType})`);
 
-  // Build context object for tracking
-  const context = {
-    platform,
-    sessionId,
-    referrer: referer,
-    userId: req.user.userUuid
-  };
+  // Build context object for tracking with full client info
+  const context = new ListingViewContextDto();
+  context.userId = req.user.userUuid;
+  context.sessionId = sessionId || this.generateAnonymousId(clientInfo);
+  context.platform = (platform?.toUpperCase() as 'WEB' | 'MOBILE' | 'API' | 'CLI') || 
+                     this.determinePlatform(clientInfo);
+  context.referrer = referer || 'DIRECT';
+  context.client = clientInfo; // Now using AuthClientInfoDto directly
 
   const grpcDto: ScheduleViewingGrpcRequestDto = {
     ...body,
@@ -1227,7 +1279,7 @@ async scheduleViewing(
     userRole: req.user.role,
     callerEmail: req.user.email,
     callerName: req.user.userName,
-    context: context as ListingViewContextDto  
+    context: context
   };
   
   const resp = await this.housingService.scheduleViewing(grpcDto);
@@ -1416,7 +1468,7 @@ async scheduleAdminViewing(
   @Param('id', ParseCuidPipe) listingId: string,
   @Body() body: AdminScheduleViewingDto,
   @Req() req: JwtRequest,
-  @ClientInfo() clientInfo: ClientInfoDto,
+  @ClientInfo() clientInfo: AuthClientInfoDto,
 ): Promise<BaseResponseDto<HouseViewingResponseDto>> {
   this.logger.log(`👑 ADMIN ${req.user.userUuid} scheduling viewing for user ${body.targetViewerId} on listing ${listingId}`);
 
@@ -1682,37 +1734,25 @@ async scheduleAdminViewing(
     return resp;
   } 
 
-  // ===========================================================
-  // HELPER METHODS
-  // ===========================================================
-  private generateAnonymousId(clientInfo: ClientInfoDto): string {
-    const deviceFingerprint = `${clientInfo.device}_${clientInfo.os}_${clientInfo.ipAddress}`
-      .replace(/\s+/g, '')
-      .substring(0, 100);
-    
-    const buffer = Buffer.from(deviceFingerprint);
-    const hash = buffer.toString('base64').substring(0, 20).replace(/[^a-zA-Z0-9]/g, '');
-    
-    return `anon_${hash}`;
-  }
+  // Helper method to determine platform from AuthClientInfoDto
+private determinePlatform(clientInfo: AuthClientInfoDto): 'WEB' | 'MOBILE' | 'API' | 'CLI' {
+  if (clientInfo.isBot) return 'API';
+  if (clientInfo.deviceType === 'MOBILE' || clientInfo.deviceType === 'TABLET') return 'MOBILE';
+  if (clientInfo.deviceType === 'DESKTOP') return 'WEB';
+  return 'WEB'; // Default
+}
+ 
+// Helper method to generate anonymous ID using AuthClientInfoDto
+private generateAnonymousId(clientInfo: AuthClientInfoDto): string {
+  const deviceFingerprint = `${clientInfo.device}_${clientInfo.os}_${clientInfo.osVersion || ''}_${clientInfo.browser || ''}_${clientInfo.ipAddress}`
+    .replace(/\s+/g, '')
+    .substring(0, 100);
+  
+  const buffer = Buffer.from(deviceFingerprint);
+  const hash = buffer.toString('base64').substring(0, 20).replace(/[^a-zA-Z0-9]/g, '');
+  
+  return `anon_${hash}`;
+}
 
-  private determinePlatform(clientInfo: ClientInfoDto): string {
-    const device = clientInfo.device.toLowerCase();
-    const ua = clientInfo.userAgent.toLowerCase();
-    
-    if (device.includes('mobile') || device.includes('phone') || device.includes('tablet') ||
-        ua.includes('mobile') || ua.includes('android') || ua.includes('iphone') || ua.includes('ipad')) {
-      return 'MOBILE';
-    }
-    
-    if (ua.includes('postman') || ua.includes('insomnia') || ua.includes('thunder client')) {
-      return 'API';
-    }
-    
-    if (ua.includes('curl') || ua.includes('wget') || ua.includes('httpie')) {
-      return 'CLI';
-    }
-    
-    return 'WEB';
-  }
+
 }

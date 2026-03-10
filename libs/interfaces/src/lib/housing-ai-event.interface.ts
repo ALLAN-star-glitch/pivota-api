@@ -12,10 +12,15 @@ export interface HousingAIEvent {
     referrer?: string;
     referrerType?: 'DIRECT' | 'SEARCH' | 'SOCIAL' | 'EMAIL' | 'INTERNAL';
     
-    // Device context
-    deviceType?: 'MOBILE' | 'TABLET' | 'DESKTOP';
-    osVersion?: string;
-    appVersion?: string;
+     // Device context - ENHANCED
+    deviceType?: 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT';
+    os?: string;              // Operating system name
+    osVersion?: string;       // OS version
+    browser?: string;         // Browser name
+    browserVersion?: string;  // Browser version
+    appVersion?: string;      // App version (if applicable)
+    isBot?: boolean;          // Bot detection flag
+    
     
     // Search context
     searchId?: string;

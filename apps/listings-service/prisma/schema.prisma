@@ -8,7 +8,7 @@ datasource db {
 }
 
 /// =====================================================================
-///                            JOB CATEGORIES
+///                              CATEGORIES & HIERARCHY
 /// =====================================================================
 model Category {
   id            String   @id @default(cuid())
@@ -16,6 +16,9 @@ model Category {
   
   // NEW: Discriminator for which pillar this belongs to
   vertical      String   // e.g., "JOBS", "HOUSING", "SOCIAL_SUPPORT"
+  
+  // NEW: Category type - MAIN for primary listings, COMPLIMENTARY for service providers
+  type          String   @default("MAIN") // "MAIN" or "COMPLIMENTARY"
   
   name          String   
   slug          String   // e.g., "plumbing"
@@ -49,6 +52,7 @@ model Category {
 
   @@unique([vertical, slug])
   @@index([vertical])
+  @@index([type]) // Add index for faster filtering by type
 }
 
 

@@ -26,11 +26,8 @@ service AuthService {
   // Development
   rpc GenerateDevToken(GenerateDevTokenRequest) returns (BaseDevTokenResponse);
 
-
   rpc RevokeSessions(RevokeSessionRequest) returns (BaseResponse);
   rpc GetActiveSessions(GetActiveSessionsRequest) returns (GetActiveSessionsResponse);
-
-
 }
 
 // ------------------ Forgot Password Messages ------------------
@@ -39,6 +36,7 @@ message ResetPasswordRequest {
   string email = 1;
   string code = 2;         // The OTP verification code
   string newPassword = 3;  // The new hashed/plain password to be set
+  ClientInfo clientInfo = 4; // Add client info
 }
 
 // ------------------ MFA / Login Stage 2 Message ------------------
@@ -47,19 +45,21 @@ message VerifyMfaLoginRequest {
   string email = 1;
   string code = 2;
   ClientInfo clientInfo = 3; 
-}
+} 
 
 // ------------------ OTP Messages ------------------
 
 message RequestOtpRequest {
   string email = 1;
   string purpose = 2; // e.g., "SIGNUP", "2FA", "PASSWORD_RESET"
+  ClientInfo clientInfo = 3; // Add client info
 }
 
 message VerifyOtpRequest {
   string email = 1;
   string code = 2;
   string purpose = 3;
+  ClientInfo clientInfo = 4; // Add client info
 }
 
 message BaseOtpResponse {
@@ -88,7 +88,8 @@ message SignupRequest {
   string password = 4;
   string phone = 5;
   string planSlug = 6;
-  string code = 7; 
+  string code = 7;
+  ClientInfo clientInfo = 8; // Add client info
 }
 
 message OrganisationSignupRequest {
@@ -110,6 +111,7 @@ message OrganisationSignupRequest {
   // --- VERIFICATION ---
   string code = 11;               // 6-digit OTP code
   string planSlug = 12;           // Subscription plan for the organization
+  ClientInfo clientInfo = 13;     // Add client info
 }
 
 // ------------------ Auth / Login Flow ------------------
@@ -244,14 +246,24 @@ message OrgBase {
 
 message ClientInfo {
   string device = 1;
-  string ipAddress = 2;
-  string userAgent = 3;
-  string os = 4;
+  string deviceType = 2;      // "MOBILE", "TABLET", "DESKTOP", "BOT", "UNKNOWN"
+  string ipAddress = 3;
+  string userAgent = 4;
+  string os = 5;
+  string osVersion = 6;
+  string browser = 7;
+  string browserVersion = 8;
+  bool isMobile = 9;
+  bool isTablet = 10;
+  bool isDesktop = 11;
+  bool isBot = 12;
+  string timestamp = 13;      // Add timestamp
 }
 
 message LoginRequest {
   string email = 1;
   string password = 2;
+  ClientInfo clientInfo = 3;  // Add client info
 }
 
 message GoogleLoginRequest {
@@ -260,7 +272,8 @@ message GoogleLoginRequest {
 }
 
 message RefreshRequest { 
-  string refreshToken = 1; 
+  string refreshToken = 1;
+  ClientInfo clientInfo = 2;  // Add client info
 }
 
 message BaseRefreshTokenResponse {
@@ -281,6 +294,7 @@ message GenerateDevTokenRequest {
   string email = 2;
   string role = 3;
   string accountId = 4; 
+  ClientInfo clientInfo = 5;  // Add client info
 }
 
 message BaseDevTokenResponse {
@@ -328,5 +342,6 @@ message SessionDto {
 // This allows you to revoke one session OR all sessions for a user.
 message RevokeSessionRequest {
   string userUuid = 1;
-  optional string tokenId = 2; 
+  optional string tokenId = 2;
+  ClientInfo clientInfo = 3; // Add client info
 }

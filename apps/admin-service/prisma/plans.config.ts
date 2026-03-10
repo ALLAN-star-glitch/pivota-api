@@ -20,7 +20,7 @@ export interface ModuleRestrictions {
 
 
 export interface PlanModule {
-  slug: 'houses' | 'jobs' | 'help-and-support' | 'services';
+  slug: 'houses' | 'jobs' | 'social-support' | 'services';
   restrictions: ModuleRestrictions;
 }
 
@@ -62,7 +62,7 @@ export const plans: Plan[] = [
         restrictions: { isAllowed: true, listingLimit: 1, listingDurationDays: 7, imageLimit: 1, approvalRequired: true },
       },
       {
-        slug: 'help-and-support',
+        slug: 'social-support',
         restrictions: { isAllowed: true, listingLimit: 1, listingDurationDays: 14, imageLimit: 1, requiresVerification: true, approvalRequired: true },
       },
       {
@@ -88,7 +88,7 @@ export const plans: Plan[] = [
         restrictions: { isAllowed: true, listingLimit: 5, listingDurationDays: 14, imageLimit: 3, approvalRequired: true },
       },
       {
-        slug: 'help-and-support',
+        slug: 'social-support',
         restrictions: { isAllowed: true, listingLimit: 10, listingDurationDays: 30, imageLimit: 5, canMarkAsUrgent: true, externalLinksAllowed: true, requiresVerification: true, approvalRequired: false },
       },
       {
@@ -114,7 +114,7 @@ export const plans: Plan[] = [
         restrictions: { isAllowed: true, listingLimit: 25, listingDurationDays: 30, imageLimit: 5, canMarkAsUrgent: true, externalLinksAllowed: true, approvalRequired: false },
       },
       {
-        slug: 'help-and-support',
+        slug: 'social-support',
         restrictions: { isAllowed: true, listingLimit: 30, listingDurationDays: 90, imageLimit: 15, canMarkAsUrgent: true, externalLinksAllowed: true, requiresVerification: true, approvalRequired: false },
       },
       {
@@ -140,7 +140,7 @@ export const plans: Plan[] = [
         restrictions: { isAllowed: true, listingLimit: 60, listingDurationDays: 60, imageLimit: 10, canMarkAsUrgent: true, externalLinksAllowed: true, approvalRequired: false },
       },
       {
-        slug: 'help-and-support',
+        slug: 'social-support',
         restrictions: { isAllowed: true, listingLimit: 80, listingDurationDays: 365, imageLimit: 30, canMarkAsUrgent: true, externalLinksAllowed: true, requiresVerification: true, approvalRequired: false },
       },
       {

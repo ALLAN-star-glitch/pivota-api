@@ -25,13 +25,13 @@ import {
   UserSignupDataDto,
   CreateUserRequestDto,
   UserSignupRequestDto,
-  UserLoginEmailDto,
   UserProfileResponseDto,
   VerifyOtpDto,
   RequestOtpDto,
   SendOtpEventDto,
   ResetPasswordDto,
   SetupPasswordRequestDto,
+  AuthClientInfoDto,
 } from '@pivota-api/dtos';
 import { firstValueFrom, lastValueFrom, map, Observable } from 'rxjs';
 import { BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
@@ -81,6 +81,8 @@ export class AuthService implements OnModuleInit {
    
   @Inject('RBAC_PACKAGE') 
   private readonly rbacClient: ClientGrpc,
+
+  @Inject('KAFKA_SERVICE') private readonly kafkaClient: ClientProxy, 
 
   @Inject('NOTIFICATION_EVENT_BUS') private readonly notificationBus: ClientProxy,
 ) {}
@@ -208,11 +210,11 @@ async validateUser(email: string, password: string): Promise<UserProfileResponse
   /** ------------------ Generate Tokens ------------------ */
 async generateTokens(
   profile: UserProfileResponseDto,
-  clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+  clientInfo?: AuthClientInfoDto
 ): Promise<{ accessToken: string; refreshToken: string }> {
   const userData = profile.user;
   const accountData = profile.account;
-  const orgData = profile.organization; // This might be undefined
+  const orgData = profile.organization;
 
   this.logger.debug(`[AUTH] Generating tokens for User: ${userData.uuid} in Account: ${accountData.uuid}`);
 
@@ -227,7 +229,7 @@ async generateTokens(
 
   const tokenId = `${userData.uuid}-${Date.now()}`;
 
-  // 2. Prepare JWT Payload - SAFELY handle undefined organization
+  // 2. Prepare JWT Payload
   const payload: JwtPayload = {
     userUuid: userData.uuid,
     email: userData.email,
@@ -235,9 +237,7 @@ async generateTokens(
     tokenId: tokenId,
     accountId: accountData.uuid,
     userName: fullName,
-    // ✅ SAFE: Use optional chaining
     organizationUuid: orgData?.uuid,
-    // ✅ SAFE: Check if orgData exists before accessing name
     accountName: accountData.type === 'ORGANIZATION' && orgData?.name 
       ? orgData.name 
       : fullName,
@@ -252,16 +252,26 @@ async generateTokens(
   const hashedToken = await bcrypt.hash(refreshToken, 10);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-  // 5. CREATE SESSION
+  // 5. CREATE SESSION WITH ALL CLIENT INFO FIELDS
   await this.prisma.session.create({
     data: {
       userUuid: userData.uuid,
       tokenId: tokenId,
       hashedToken,
+      
+      // Basic client info (already present)
       device: clientInfo?.device,
       ipAddress: clientInfo?.ipAddress,
       userAgent: clientInfo?.userAgent,
       os: clientInfo?.os,
+      
+      // NEW rich client info fields
+      deviceType: clientInfo?.deviceType,
+      osVersion: clientInfo?.osVersion,
+      browser: clientInfo?.browser,
+      browserVersion: clientInfo?.browserVersion,
+      isBot: clientInfo?.isBot,
+      
       lastActiveAt: new Date(),
       expiresAt,
       revoked: false,
@@ -269,17 +279,25 @@ async generateTokens(
   });
 
   this.logger.debug(`[AUTH] Session ${tokenId} created for User: ${userData.uuid}`);
+  
+  // Log rich client info for debugging
+  if (clientInfo) {
+    this.logger.debug(`[AUTH] Client: ${clientInfo.device} (${clientInfo.deviceType}), OS: ${clientInfo.os} ${clientInfo.osVersion}, Browser: ${clientInfo.browser}`);
+  }
 
   return { accessToken, refreshToken };
 }
-
 /* ======================================================
    INDIVIDUAL SIGNUP (With Transactional OTP Verification)
 ====================================================== */
 async signup(
   signupDto: UserSignupRequestDto,
+  clientInfo?: AuthClientInfoDto
 ): Promise<BaseResponseDto<UserSignupDataDto>> {
   const profileGrpcService = this.getProfileGrpcService();
+
+  // Log registration with device info (for debugging only)
+  this.logger.log(`📝 Signup attempt: ${signupDto.email} from ${clientInfo?.device || 'Unknown'} (${clientInfo?.deviceType || 'Unknown'})`);
 
   try {
     // 1. VERIFY OTP
@@ -294,6 +312,23 @@ async signup(
 
     if (!validOtp) {
       this.logger.warn(`[AUTH] Blocked signup attempt: Invalid/Expired OTP for ${signupDto.email}`);
+      
+      // Send to Kafka for analytics (not to RabbitMQ)
+      this.kafkaClient.emit('user.signup.failed', {
+        email: signupDto.email,
+        reason: 'INVALID_OTP',
+        clientInfo: clientInfo ? {
+          device: clientInfo.device,
+          deviceType: clientInfo.deviceType,
+          os: clientInfo.os,
+          osVersion: clientInfo.osVersion,
+          browser: clientInfo.browser,
+          browserVersion: clientInfo.browserVersion,
+          isBot: clientInfo.isBot
+        } : null,
+        timestamp: new Date().toISOString()
+      });
+
       return BaseResponseDto.fail(
         'Invalid or expired verification code.', 
         'UNAUTHORIZED', 
@@ -301,7 +336,6 @@ async signup(
       );
     }
 
-    // 2. Anchor Identity
     const userUuid = randomUUID();
 
     // 3. Call Profile Service
@@ -316,11 +350,24 @@ async signup(
       }),
     );
 
-    // CAPTURE PROFILE SERVICE FAILURES PROPERLY
     if (!profileResponse.success || !profileResponse.data) {
       this.logger.error(`[PROFILE FAIL] ${signupDto.email}: ${profileResponse.message}`);
       
-      // Forward the exact message and code from the profile service (e.g., "A user with this phone number already exists")
+      // Send to Kafka for analytics
+      this.kafkaClient.emit('user.signup.failed', {
+        email: signupDto.email,
+        reason: 'PROFILE_CREATION_FAILED',
+        error: profileResponse.message,
+        clientInfo: clientInfo ? {
+          device: clientInfo.device,
+          deviceType: clientInfo.deviceType,
+          os: clientInfo.os,
+          browser: clientInfo.browser,
+          isBot: clientInfo.isBot
+        } : null,
+        timestamp: new Date().toISOString()
+      });
+
       return BaseResponseDto.fail(
         profileResponse.message, 
         profileResponse.code, 
@@ -363,27 +410,27 @@ async signup(
           callbackurl: 'https://app.pivota.com/onboarding/payment-status'
         }; 
 
-        this.logger.log(`[PAYMENT] Attempting to hit Spring Boot at: ${process.env.PAYMENT_SERVICE_URL}/api/v1/payments/initiate`);
-        this.logger.debug(`[PAYMENT] Outgoing Payload: ${JSON.stringify(paymentPayload)}`);
-
         const paymentInitResponse = await lastValueFrom(
           this.httpService.post(
             `${process.env.PAYMENT_SERVICE_URL}/api/v1/payments/initiate`,
             paymentPayload,
-            { 
-              headers: { 
-                'Content-Type': 'application/json' 
-              } 
-            }
-          ).pipe(
-            map(res => {
-              this.logger.log(`[PAYMENT] Spring Boot Status: ${res.status}`);
-              this.logger.debug(`[PAYMENT] Spring Boot Response: ${JSON.stringify(res.data)}`);
-              return res.data; 
-            })
-          )
+            { headers: { 'Content-Type': 'application/json' } }
+          ).pipe(map(res => res.data))
         );
 
+        // Track premium signup in Kafka
+        this.kafkaClient.emit('user.signup.premium', {
+          userUuid,
+          email: signupDto.email,
+          plan: signupDto.planSlug,
+          clientInfo: clientInfo ? {
+            device: clientInfo.device,
+            deviceType: clientInfo.deviceType,
+            os: clientInfo.os,
+            browser: clientInfo.browser
+          } : null,
+          timestamp: new Date().toISOString()
+        });
 
         return BaseResponseDto.ok(
           {
@@ -397,14 +444,8 @@ async signup(
         );
 
       } catch (paymentErr: unknown) {
-        // Detailed error logging to troubleshoot ngrok/Spring Boot connection
         const errorMessage = paymentErr instanceof Error ? paymentErr.message : 'Unknown error';
-        const errorData = paymentErr['response']?.data;
-        
         this.logger.error(`[PAYMENT BRIDGE DOWN] ${signupDto.email}: ${errorMessage}`);
-        if (errorData) {
-          this.logger.error(`[PAYMENT ERROR DETAILS] ${JSON.stringify(errorData)}`);
-        }
 
         return BaseResponseDto.ok(
           {
@@ -421,13 +462,53 @@ async signup(
     }
 
     /* ======================================================
-       7. FREEMIUM BRANCH: NOTIFICATION
+       7. NOTIFICATIONS & ANALYTICS
     ====================================================== */
+    
+    // ✅ Send welcome email via RabbitMQ - NO client info
     this.notificationBus.emit('user.onboarded', {
       accountId: profileResponse.data.account.accountCode,
       firstName: signupDto.firstName,
       email: signupDto.email,
       plan: 'Free Forever',
+    });
+
+   const adminEmail = process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com';
+
+this.logger.debug(`[NOTIFICATION] Emitting admin.new.registration for ${signupDto.email} to ${adminEmail}`);
+
+// Log the exact payload being sent
+    const payload = {
+      adminEmail: adminEmail,
+      userEmail: signupDto.email,
+      userName: `${signupDto.firstName} ${signupDto.lastName}`,
+      accountType: 'INDIVIDUAL',
+      registrationDate: new Date().toISOString(),
+      userCount: await this.getTotalUserCount(),
+      plan: 'Free Forever'
+    };
+
+    this.logger.debug(`[NOTIFICATION] Payload: ${JSON.stringify(payload)}`);
+
+    // Send to RabbitMQ
+    this.notificationBus.emit('admin.new.registration', payload);
+
+    // ✅ Send analytics via Kafka - WITH client info
+    this.kafkaClient.emit('user.registered', {
+      userUuid,
+      email: signupDto.email,
+      accountId: profileResponse.data.account.accountCode,
+      plan: signupDto.planSlug || 'free-forever',
+      signupSource: {
+        device: clientInfo?.device,
+        deviceType: clientInfo?.deviceType,
+        os: clientInfo?.os,
+        osVersion: clientInfo?.osVersion,
+        browser: clientInfo?.browser,
+        browserVersion: clientInfo?.browserVersion,
+        isBot: clientInfo?.isBot,
+        timestamp: new Date().toISOString()
+      }
     });
 
     return BaseResponseDto.ok(
@@ -445,10 +526,34 @@ async signup(
     const errorMessage = err instanceof Error ? err.message : 'Unexpected failure';
     this.logger.error(`[AUTH SIGNUP CRASH] ${errorMessage}`);
 
+    // Send error to Kafka for analytics
+    this.kafkaClient.emit('user.signup.error', {
+      email: signupDto.email,
+      error: errorMessage,
+      clientInfo: clientInfo ? {
+        device: clientInfo.device,
+        deviceType: clientInfo.deviceType,
+        os: clientInfo.os,
+        browser: clientInfo.browser,
+        isBot: clientInfo.isBot
+      } : null,
+      timestamp: new Date().toISOString()
+    });
+
     return BaseResponseDto.fail(
       errorMessage,
       'INTERNAL_ERROR'
     );
+  }
+}
+
+// Optional helper method to get total user count
+private async getTotalUserCount(): Promise<number> {
+  try {
+    return await this.prisma.credential.count();
+  } catch (error) {
+    this.logger.error(`Failed to get user count: ${error.message}`);
+    return 0;
   }
 }
 
@@ -459,8 +564,13 @@ async signup(
 ====================================================== */
 async organisationSignup(
   dto: OrganisationSignupRequestDto,
+  clientInfo?: AuthClientInfoDto
 ): Promise<BaseResponseDto<OrganizationSignupDataDto>> {
-  this.logger.log(`Starting Org Signup for: ${dto.name} [Plan: ${dto.planSlug || 'free'}]`);
+  this.logger.log(`🏢 Org Signup: ${dto.name} from ${clientInfo?.device || 'Unknown'} (${clientInfo?.deviceType || 'Unknown'})`);
+
+  if (clientInfo) {
+    this.logger.debug(`Org signup client - Device: ${clientInfo.device}, Type: ${clientInfo.deviceType}, OS: ${clientInfo.os} ${clientInfo.osVersion || ''}, Browser: ${clientInfo.browser} ${clientInfo.browserVersion || ''}, Bot: ${clientInfo.isBot}`);
+  }
 
   try {
     // 1. VERIFY OTP
@@ -473,9 +583,24 @@ async organisationSignup(
       },
     });
 
-
     if (!validOtp) {
       this.logger.warn(`[AUTH] Org Signup blocked: Invalid OTP for ${dto.email}`);
+      
+      // Track failed org signup in KAFKA (analytics)
+      this.kafkaClient.emit('organization.signup.failed', {
+        email: dto.email,
+        organizationName: dto.name,
+        reason: 'INVALID_OTP',
+        clientInfo: clientInfo ? {
+          device: clientInfo.device,
+          deviceType: clientInfo.deviceType,
+          os: clientInfo.os,
+          browser: clientInfo.browser,
+          isBot: clientInfo.isBot
+        } : null,
+        timestamp: new Date().toISOString()
+      });
+
       return BaseResponseDto.fail(
         'Invalid or expired verification code.', 
         'UNAUTHORIZED', 
@@ -507,6 +632,22 @@ async organisationSignup(
 
     // Properly capture Profile Service failures (duplicates, etc.)
     if (!orgResponse.success || !orgResponse.data) {
+      // Track profile failure in KAFKA
+      this.kafkaClient.emit('organization.signup.failed', {
+        email: dto.email,
+        organizationName: dto.name,
+        reason: 'PROFILE_CREATION_FAILED',
+        error: orgResponse.message,
+        clientInfo: clientInfo ? {
+          device: clientInfo.device,
+          deviceType: clientInfo.deviceType,
+          os: clientInfo.os,
+          browser: clientInfo.browser,
+          isBot: clientInfo.isBot
+        } : null,
+        timestamp: new Date().toISOString()
+      });
+
       return BaseResponseDto.fail(
         orgResponse.message || 'Organisation profile creation failed',
         orgResponse.code || 'INTERNAL_ERROR',
@@ -555,6 +696,22 @@ async organisationSignup(
           )
         );
 
+        // Track premium org signup in KAFKA
+        this.kafkaClient.emit('organization.signup.premium', {
+          organizationUuid: orgResponse.data.uuid,
+          organizationName: dto.name,
+          adminEmail: dto.email,
+          adminUserUuid,
+          plan: dto.planSlug,
+          clientInfo: clientInfo ? {
+            device: clientInfo.device,
+            deviceType: clientInfo.deviceType,
+            os: clientInfo.os,
+            browser: clientInfo.browser
+          } : null,
+          timestamp: new Date().toISOString()
+        });
+
         return BaseResponseDto.ok(
           {
             orgCode: orgResponse.data.orgCode,
@@ -584,16 +741,50 @@ async organisationSignup(
       }
     }
 
-    /* ======================================================
-       6. FREEMIUM BRANCH: ASYNC EVENT EMISSION
-    ====================================================== */
+   /* ======================================================
+   6. NOTIFICATIONS & ANALYTICS
+====================================================== */
+
+    // ✅ Send organization welcome email via RabbitMQ - NO client info
     this.notificationBus.emit('organization.onboarded', {
       accountId: orgResponse.data.account.accountCode,
       name: dto.name,
       adminFirstName: orgResponse.data.admin.firstName,
-      adminEmail: dto.email,
+      adminEmail: dto.email, // This is the admin user's email (for welcome email)
       orgEmail: dto.officialEmail,
       plan: 'Free Forever',
+      // NO client info here
+    });
+
+    // ✅ Send pivota admin notification via RabbitMQ - New organization registration
+    this.notificationBus.emit('admin.new.organization.registration', {
+      recipientEmail: process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com', // Changed from adminEmail
+      organizationName: dto.name,
+      adminName: `${dto.adminFirstName} ${dto.adminLastName}`,
+      adminEmail: dto.email, // This is the new admin's email
+      organizationEmail: dto.officialEmail,
+      registrationDate: new Date().toISOString(),
+      plan: 'Free Forever'
+    });
+
+    // ✅ Send analytics via Kafka - WITH client info
+    this.kafkaClient.emit('organization.registered', {
+      organizationUuid: orgResponse.data.uuid,
+      organizationName: dto.name,
+      adminUserUuid,
+      adminEmail: dto.email,
+      accountId: orgResponse.data.account.accountCode,
+      plan: 'free-forever',
+      signupSource: {
+        device: clientInfo?.device,
+        deviceType: clientInfo?.deviceType,
+        os: clientInfo?.os,
+        osVersion: clientInfo?.osVersion,
+        browser: clientInfo?.browser,
+        browserVersion: clientInfo?.browserVersion,
+        isBot: clientInfo?.isBot,
+        timestamp: new Date().toISOString()
+      }
     });
 
     return BaseResponseDto.ok(
@@ -627,6 +818,21 @@ async organisationSignup(
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unexpected Auth failure';
     this.logger.error(`[ORG SIGNUP CRASH] ${message}`);
+
+    // Track error in KAFKA
+    this.kafkaClient.emit('organization.signup.error', {
+      email: dto.email,
+      organizationName: dto.name,
+      error: message,
+      clientInfo: clientInfo ? {
+        device: clientInfo.device,
+        deviceType: clientInfo.deviceType,
+        os: clientInfo.os,
+        browser: clientInfo.browser,
+        isBot: clientInfo.isBot
+      } : null,
+      timestamp: new Date().toISOString()
+    });
 
     return BaseResponseDto.fail(message, 'INTERNAL_ERROR');
   }
@@ -828,7 +1034,7 @@ async organisationSignup(
 
 async signInWithGoogle(
   idToken: string, 
-  clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>
+  clientInfo?: AuthClientInfoDto
 ): Promise<BaseResponseDto<LoginResponseDto>> {
   try {
     const profileGrpc = this.getProfileGrpcService();
@@ -873,6 +1079,23 @@ async signInWithGoogle(
       );
       profileData = profileResponse.data;
 
+      // Track existing user login in Kafka
+      this.kafkaClient.emit('user.login.google', {
+        userUuid: credential.userUuid,
+        email,
+        isNewUser: false,
+        clientInfo: clientInfo ? {
+          device: clientInfo.device,
+          deviceType: clientInfo.deviceType,
+          os: clientInfo.os,
+          osVersion: clientInfo.osVersion,
+          browser: clientInfo.browser,
+          browserVersion: clientInfo.browserVersion,
+          isBot: clientInfo.isBot
+        } : null,
+        timestamp: new Date().toISOString()
+      });
+
     } else {
       // --- PATH B: NO CREDENTIAL FOUND ---
       try {
@@ -892,6 +1115,21 @@ async signInWithGoogle(
             },
           });
           this.logger.log(`[Google Auth] Anchored Google login to pre-existing profile: ${email}`);
+          
+          // Track linked account in Kafka
+          this.kafkaClient.emit('user.account.linked', {
+            userUuid: profileData.user.uuid,
+            email,
+            provider: 'GOOGLE',
+            clientInfo: clientInfo ? {
+              device: clientInfo.device,
+              deviceType: clientInfo.deviceType,
+              os: clientInfo.os,
+              browser: clientInfo.browser,
+              isBot: clientInfo.isBot
+            } : null,
+            timestamp: new Date().toISOString()
+          });
         }
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (profileErr) {
@@ -926,12 +1164,42 @@ async signInWithGoogle(
         );
         profileData = fullProfile.data;
 
-        // Emit Onboarding Event (Welcome Email)
+        // ✅ Send welcome email via RabbitMQ - NO client info
         this.notificationBus.emit('user.onboarded', {
           accountId: profileData.account.accountCode,
           firstName: profileData.user.firstName,
           email: profileData.user.email,
           plan: 'Free Forever',
+        });
+
+        // ✅ Send admin notification via RabbitMQ - New user registration
+        this.notificationBus.emit('admin.new.registration', {
+          recipientEmail: process.env.ADMIN_NOTIFICATION_EMAIL || 'admin@pivotaconnect.com',
+          userEmail: email,
+          userName: `${given_name || 'User'} ${family_name || ''}`.trim(),
+          accountType: 'INDIVIDUAL',
+          registrationMethod: 'GOOGLE',
+          registrationDate: new Date().toISOString(),
+          plan: 'Free Forever'
+        });
+
+        // ✅ Track new user registration in Kafka - WITH client info
+        this.kafkaClient.emit('user.registered', {
+          userUuid,
+          email,
+          accountId: profileData.account.accountCode,
+          plan: 'free-forever',
+          registrationMethod: 'GOOGLE',
+          signupSource: {
+            device: clientInfo?.device,
+            deviceType: clientInfo?.deviceType,
+            os: clientInfo?.os,
+            osVersion: clientInfo?.osVersion,
+            browser: clientInfo?.browser,
+            browserVersion: clientInfo?.browserVersion,
+            isBot: clientInfo?.isBot,
+            timestamp: new Date().toISOString()
+          }
         });
       }
     }
@@ -946,7 +1214,7 @@ async signInWithGoogle(
       const adminRoles = ['Business System Admin'];
       const isUserAdmin = isOrgAccount && adminRoles.includes(profileData.user.roleName);
 
-      const loginEmailPayload: UserLoginEmailDto = {
+      const loginEmailPayload = {
         to: profileData.user.email,
         firstName: profileData.user.firstName || 'User',
         lastName: profileData.user.lastName || '',
@@ -955,11 +1223,17 @@ async signInWithGoogle(
         subject: isUserAdmin
           ? `SECURITY: Admin Login to ${profileData.organization?.name}` 
           : 'New Login to Your Pivota Account (via Google)',
+        // Use all fields from AuthClientInfoDto
         device: clientInfo?.device || 'Unknown Device',
+        deviceType: clientInfo?.deviceType,
         os: clientInfo?.os || 'Unknown OS',
+        osVersion: clientInfo?.osVersion,
+        browser: clientInfo?.browser,
+        browserVersion: clientInfo?.browserVersion,
         userAgent: clientInfo?.userAgent || 'Unknown Browser',
         ipAddress: clientInfo?.ipAddress || '0.0.0.0',
         timestamp: new Date().toISOString(),
+        isBot: clientInfo?.isBot,
       };
 
       this.logger.log(`[RMQ Emit] Sending Google login notification for: ${loginEmailPayload.to}`);
@@ -996,6 +1270,21 @@ async signInWithGoogle(
   } catch (err) {
     const errorMessage = err.details || err.message;
     this.logger.error(`[Google Auth] Failure: ${errorMessage}`);
+
+    // Track error in Kafka
+    this.kafkaClient.emit('user.login.error', {
+      error: errorMessage,
+      method: 'GOOGLE',
+      clientInfo: clientInfo ? {
+        device: clientInfo.device,
+        deviceType: clientInfo.deviceType,
+        os: clientInfo.os,
+        browser: clientInfo.browser,
+        isBot: clientInfo.isBot
+      } : null,
+      timestamp: new Date().toISOString()
+    });
+
     throw new UnauthorizedException(`Google Auth failed: ${errorMessage}`);
   }
 }
@@ -1281,9 +1570,27 @@ async verifyOtp(data: VerifyOtpDto & { purpose: string }): Promise<BaseResponseD
 
 async verifyMfaLogin(
   verifyDto: VerifyOtpDto,
-  clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+  clientInfo?: AuthClientInfoDto
 ): Promise<BaseResponseDto<LoginResponseDto>> {
   this.logger.debug(`Login Stage 2 (MFA) received for: ${verifyDto.email}`);
+
+  // ==================== DEBUG: Log received clientInfo ====================
+  this.logger.log('🔍 VERIFY-MFA - AUTH SERVICE - CLIENT INFO RECEIVED');
+  this.logger.debug(`Email: ${verifyDto.email}`);
+  this.logger.debug(`Code: ${verifyDto.code}`);
+  this.logger.debug(`Raw clientInfo parameter: ${JSON.stringify(clientInfo)}`);
+  this.logger.debug(`ClientInfo details:
+    device: ${clientInfo?.device}
+    deviceType: ${clientInfo?.deviceType}
+    ipAddress: ${clientInfo?.ipAddress}
+    userAgent: ${clientInfo?.userAgent}
+    os: ${clientInfo?.os}
+    osVersion: ${clientInfo?.osVersion}
+    browser: ${clientInfo?.browser}
+    browserVersion: ${clientInfo?.browserVersion}
+    isBot: ${clientInfo?.isBot}
+  `);
+  this.logger.log('========================================================');
 
   try {
     // 1. Verify OTP in Database
@@ -1361,7 +1668,21 @@ async verifyMfaLogin(
     const isOrgAccount = profile.account.type === 'ORGANIZATION';
     const isUserAdmin = isOrgAccount && adminRoles.includes(userData.roleName);
 
-    const loginEmailPayload: UserLoginEmailDto = {
+    // ==================== DEBUG: Log email payload before sending ====================
+    this.logger.log('📧 PREPARING LOGIN EMAIL PAYLOAD');
+    this.logger.debug(`Email to: ${userData.email}`);
+    this.logger.debug(`Device info for email:
+      device: ${clientInfo?.device}
+      deviceType: ${clientInfo?.deviceType}
+      os: ${clientInfo?.os}
+      osVersion: ${clientInfo?.osVersion}
+      browser: ${clientInfo?.browser}
+      browserVersion: ${clientInfo?.browserVersion}
+      isBot: ${clientInfo?.isBot}
+    `);
+    this.logger.log('========================================================');
+
+    const loginEmailPayload = {
       to: userData.email,
       firstName: userData.firstName,
       lastName: userData.lastName,
@@ -1369,10 +1690,15 @@ async verifyMfaLogin(
       orgEmail: isUserAdmin ? profile.organization?.officialEmail : undefined,
       subject: isUserAdmin ? `SECURITY: Admin Login` : 'New Login detected',
       device: clientInfo?.device || 'Unknown',
+      deviceType: clientInfo?.deviceType,
       os: clientInfo?.os || 'Unknown',
+      osVersion: clientInfo?.osVersion,
+      browser: clientInfo?.browser,
+      browserVersion: clientInfo?.browserVersion,
       userAgent: clientInfo?.userAgent || 'Unknown',
       ipAddress: clientInfo?.ipAddress || '0.0.0.0',
       timestamp: new Date().toISOString(),
+      isBot: clientInfo?.isBot,
     };
 
     this.notificationBus.emit('user.login.email', loginEmailPayload);
@@ -1419,7 +1745,6 @@ async verifyMfaLogin(
     );
   }
 }
-
 
 /** ------------------ Forgot Password: Step 1 (Request) ------------------ */
   async requestPasswordReset(dto: RequestOtpDto): Promise<BaseResponseDto<null>> {

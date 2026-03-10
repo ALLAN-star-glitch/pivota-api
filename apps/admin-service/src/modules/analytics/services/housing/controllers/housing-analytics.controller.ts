@@ -1,6 +1,6 @@
 import { Controller, Logger, OnModuleInit, UsePipes, ValidationPipe } from '@nestjs/common';
 import { GrpcMethod, EventPattern, Payload } from '@nestjs/microservices';
-import { HousingAnalyticsService } from '../services/housing/housing-analytics.service';
+import { HousingAnalyticsService } from '../services/housing-analytics.service';
 import { 
   BaseResponseDto, 
   UserHousingStatsResponseDto,

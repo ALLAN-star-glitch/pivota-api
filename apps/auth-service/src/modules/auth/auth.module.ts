@@ -52,6 +52,19 @@ import { InvitationEventController } from './invitation-event.controller';
           queueOptions: { durable: true },
         },
       },
+
+      {
+        name: 'KAFKA_SERVICE',
+        transport: Transport.KAFKA,
+        options: {
+          client: {
+            brokers: [process.env.KAFKA_BROKER || 'localhost:9092'],
+          },
+          consumer: {
+            groupId: 'auth-service-consumer',
+          },
+        },
+       },
     ]),
   ],
   providers: [AuthService],

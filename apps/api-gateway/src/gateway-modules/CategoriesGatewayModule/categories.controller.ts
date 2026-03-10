@@ -70,6 +70,7 @@ export class CategoriesController {
       • **name** - Display name (e.g., "Apartments")
       • **slug** - URL-friendly identifier (e.g., "apartments")
       • **vertical** - The pillar this belongs to (HOUSING, JOBS, SOCIAL_SUPPORT, SERVICES)
+      • **type** - Category type: MAIN or COMPLIMENTARY
       • **parentId** - Optional parent for hierarchical categories
       • **icon** - Optional icon name for UI
       • **color** - Optional color code for UI branding
@@ -99,6 +100,7 @@ export class CategoriesController {
           name: 'Apartments',
           slug: 'apartments',
           vertical: 'HOUSING',
+          type: 'MAIN',
           icon: 'home',
           color: '#3B82F6',
           parentId: null,
@@ -147,6 +149,7 @@ export class CategoriesController {
       **Updatable Fields:**
       • **name** - Display name
       • **slug** - URL-friendly identifier (must remain unique)
+      • **type** - Category type (MAIN or COMPLIMENTARY)
       • **icon** - Optional icon name for UI
       • **color** - Optional color code for UI branding
       • **parentId** - Change parent category
@@ -245,10 +248,10 @@ export class CategoriesController {
   /**
    * Get categories tree with usage stats
    * 
-   * Retrieves all categories, optionally filtered by vertical,
+   * Retrieves all categories, optionally filtered by vertical and type,
    * with usage statistics for each category.
    * 
-   * @param query - Filter parameters (vertical)
+   * @param query - Filter parameters (vertical, type)
    * @returns Hierarchical category tree with usage stats
    */
   @Get('categories')
@@ -266,6 +269,7 @@ export class CategoriesController {
       • Returns categories in a hierarchical tree structure
       • Includes usage statistics (number of listings in each category)
       • Can filter by vertical (HOUSING, JOBS, SOCIAL_SUPPORT, SERVICES)
+      • Can filter by type (MAIN, COMPLIMENTARY)
       • Sorted by category name
       
       **Use Cases:**
@@ -288,6 +292,13 @@ export class CategoriesController {
     enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT', 'SERVICES'],
     example: 'HOUSING'
   })
+  @ApiQuery({ 
+    name: 'type', 
+    required: false,
+    description: 'Filter by category type (MAIN or COMPLIMENTARY)',
+    enum: ['MAIN', 'COMPLIMENTARY'],
+    example: 'MAIN'
+  })
   @ApiResponse({ 
     status: 200, 
     description: 'Categories retrieved successfully',
@@ -303,6 +314,7 @@ export class CategoriesController {
             name: 'Property',
             slug: 'property',
             vertical: 'HOUSING',
+            type: 'MAIN',
             icon: 'building',
             listingCount: 150,
             subcategories: [
@@ -310,6 +322,7 @@ export class CategoriesController {
                 id: 'cat_456def',
                 name: 'Apartments',
                 slug: 'apartments',
+                type: 'MAIN',
                 listingCount: 85,
                 subcategories: []
               },
@@ -317,6 +330,7 @@ export class CategoriesController {
                 id: 'cat_789ghi',
                 name: 'Houses',
                 slug: 'houses',
+                type: 'MAIN',
                 listingCount: 65,
                 subcategories: []
               }
@@ -329,7 +343,7 @@ export class CategoriesController {
   async getCategories(
     @Query() query: GetCategoriesRequestDto,
   ): Promise<BaseResponseDto<CategoryResponseDto[]>> {
-    this.logger.debug(`REST getCategories request - Vertical: ${query.vertical || 'ALL'}`);
+    this.logger.debug(`REST getCategories request - Vertical: ${query.vertical || 'ALL'}, Type: ${query.type || 'ALL'}`);
     return this.categoriesService.getCategories(query);
   }
 
@@ -338,7 +352,7 @@ export class CategoriesController {
    * 
    * Returns a simplified category structure optimized for navigation UIs.
    * 
-   * @param query - Filter parameters (vertical)
+   * @param query - Filter parameters (vertical, type)
    * @returns Lightweight category metadata
    */
   @Get('categories/discovery')
@@ -357,6 +371,7 @@ export class CategoriesController {
       • Only essential fields (id, name, slug, icon)
       • Flat structure for easy rendering
       • Ideal for dropdowns and navigation menus
+      • Can filter by type (MAIN, COMPLIMENTARY)
       
       **Use Cases:**
       • Category dropdowns in search forms
@@ -377,6 +392,13 @@ export class CategoriesController {
     enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT', 'SERVICES'],
     example: 'HOUSING'
   })
+  @ApiQuery({ 
+    name: 'type', 
+    required: false,
+    description: 'Filter by category type (MAIN or COMPLIMENTARY)',
+    enum: ['MAIN', 'COMPLIMENTARY'],
+    example: 'MAIN'
+  })
   @ApiResponse({ 
     status: 200, 
     description: 'Discovery metadata retrieved successfully',
@@ -391,6 +413,7 @@ export class CategoriesController {
             id: 'cat_123abc',
             name: 'Apartments',
             slug: 'apartments',
+            type: 'MAIN',
             icon: 'home',
             color: '#3B82F6'
           },
@@ -398,6 +421,7 @@ export class CategoriesController {
             id: 'cat_456def',
             name: 'Houses',
             slug: 'houses',
+            type: 'MAIN',
             icon: 'building',
             color: '#10B981'
           }
@@ -408,7 +432,7 @@ export class CategoriesController {
   async getDiscoveryMetadata(
     @Query() query: DiscoveryParamsDto,
   ): Promise<BaseResponseDto<DiscoveryCategoryResponseDto[]>> {
-    this.logger.debug(`REST getDiscoveryMetadata request - Vertical: ${query.vertical}`);
+    this.logger.debug(`REST getDiscoveryMetadata request - Vertical: ${query.vertical}, Type: ${query.type || 'ALL'}`);
     return this.categoriesService.getDiscoveryMetadata(query);
   }
 
@@ -533,7 +557,7 @@ export class CategoriesController {
    * Finds a category by its name within a specific vertical.
    * Useful for auto-complete and search functionality.
    * 
-   * @param query - Search parameters (name and vertical)
+   * @param query - Search parameters (name, vertical, type)
    * @returns Matching category
    */
   @Get('categories/search')
@@ -550,6 +574,7 @@ export class CategoriesController {
       **Features:**
       • Case-insensitive search
       • Exact name matching
+      • Can filter by type (MAIN, COMPLIMENTARY)
       • Returns first matching category
       
       **Use Cases:**
@@ -575,6 +600,13 @@ export class CategoriesController {
     description: 'Vertical to search within',
     enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT', 'SERVICES'],
     example: 'HOUSING'
+  })
+  @ApiQuery({ 
+    name: 'type', 
+    required: false,
+    description: 'Filter by category type (MAIN or COMPLIMENTARY)',
+    enum: ['MAIN', 'COMPLIMENTARY'],
+    example: 'MAIN'
   })
   @ApiResponse({ 
     status: 200, 

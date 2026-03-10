@@ -14,4 +14,16 @@ export class GetCategoriesRequestDto {
     message: `vertical must be one of: ${VERTICALS.join(', ')}`,
   })
   vertical?: string;
+
+  @ApiPropertyOptional({
+    example: 'MAIN',
+    description: 'Filter categories by type. If omitted, returns all root categories.',
+    enum: ['MAIN', 'COMPLIMENTARY'],
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['MAIN', 'COMPLIMENTARY'], {
+    message: `type must be one of: MAIN, COMPLIMENTARY`,
+  })
+  type?: string;
 }

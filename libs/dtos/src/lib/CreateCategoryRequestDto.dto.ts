@@ -1,14 +1,6 @@
-
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { VERTICALS } from '@pivota-api/constants';
-import {
-  IsIn,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  Length,
-  Matches,
-} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { VERTICALS } from "@pivota-api/constants";
+import { IsString, IsNotEmpty, Length, IsOptional, Matches, IsIn } from "class-validator";
 
 
 export class CreateCategoryRequestDto {
@@ -50,6 +42,20 @@ export class CreateCategoryRequestDto {
     message: `vertical must be one of: ${VERTICALS.join(', ')}`,
   })
   vertical!: string;
+
+  // ADD THIS NEW FIELD
+  @ApiPropertyOptional({
+    example: 'MAIN',
+    description: 'Category type - MAIN for primary listings, COMPLIMENTARY for service providers',
+    enum: ['MAIN', 'COMPLIMENTARY'],
+    default: 'MAIN',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['MAIN', 'COMPLIMENTARY'], {
+    message: 'type must be either MAIN or COMPLIMENTARY',
+  })
+  type?: 'MAIN' | 'COMPLIMENTARY';
 
   @ApiPropertyOptional({
     example: 'ckxparent123',
