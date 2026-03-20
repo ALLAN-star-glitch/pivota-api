@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HousingService } from './housing.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ScheduleViewingGrpcRequestDto, BaseResponseDto } from '@pivota-api/dtos';
+import { ScheduleViewingGrpcRequestDto } from '@pivota-api/dtos';
 
 const mockPrismaService = {
   houseListing: {

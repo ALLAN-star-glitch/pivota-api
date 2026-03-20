@@ -139,7 +139,7 @@ export class HousingService {
   async getAdminListings(dto: GetAdminHousingFilterDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
   try {
     // 1. Build the query object with explicit types
-    const where: any = {};
+    const where: Record<string, unknown> = {};
 
     if (dto.status) {
       where.status = dto.status;
@@ -178,17 +178,17 @@ export class HousingService {
       'OK'
     );
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 5. Advanced Error Logging
-    const errorMessage = error.message || 'Unknown database error';
+    const errorMessage = (error as Error).message || 'Unknown database error';
 
     // Check for specific Prisma errors (e.g., invalid UUID format in accountId)
-    if (error.code === 'P2023') { // Inconsistent column data (often bad UUID)
+    if ((error as { code?: string }).code === 'P2023') { // Inconsistent column data (often bad UUID)
       this.logger.warn(`⚠️ Admin provided invalid UUID format: ${dto.accountId}`);
       return BaseResponseDto.fail('Invalid Account ID format provided', 'BAD_REQUEST');
     }
 
-    this.logger.error(`❌ Admin Fetch Failure: ${errorMessage}`, error.stack);
+    this.logger.error(`❌ Admin Fetch Failure: ${errorMessage}`, (error as Error).stack);
 
     return BaseResponseDto.fail(
       'System error occurred while fetching admin records',
@@ -236,12 +236,12 @@ export class HousingService {
       'OK'
     );
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 4. Categorize Errors
-    this.logger.error(`❌ Database Error while fetching listings for ${ownerId}: ${error.message}`, error.stack);
+    this.logger.error(`❌ Database Error while fetching listings for ${ownerId}: ${(error as Error).message}`, (error as Error).stack);
 
     // Specific Prisma Error handling (Optional but recommended)
-    if (error.code === 'P2021') {
+    if ((error as { code?: string }).code === 'P2021') {
       return BaseResponseDto.fail('Internal database table missing', 'DATABASE_CONFIG_ERROR');
     }
 
@@ -271,7 +271,7 @@ export class HousingService {
   async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
   try {
     // Define the 'where' object using the formal Prisma type instead of 'any'
-    const where: any = {
+    const where: Record<string, unknown> = {
       status: 'AVAILABLE',
     };
 
@@ -302,11 +302,45 @@ export class HousingService {
     })) as unknown as HouseListingWithRelations[];
 
     return BaseResponseDto.ok(listings.map((l) => this.mapToDto(l)));
-  } catch (error) {
+  } catch (error: unknown) {
     this.logger.error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     return BaseResponseDto.fail('Search failed', 'ERROR');
   }
 }
+
+  async getHousesByStatus(status: string): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    try {
+      // Validate status input
+      const validStatuses = ['AVAILABLE', 'SOLD', 'RENTED', 'ARCHIVED', 'PENDING'];
+      if (!validStatuses.includes(status)) {
+        return BaseResponseDto.fail('Invalid status provided', 'BAD_REQUEST');
+      }
+
+      const listings = await this.prisma.houseListing.findMany({
+        where: { status },
+        include: {
+          images: true,
+          category: true
+        },
+        orderBy: { createdAt: 'desc' },
+      }) as unknown as HouseListingWithRelations[];
+
+      if (!listings || listings.length === 0) {
+        this.logger.log(`No listings found with status: ${status}`);
+        return BaseResponseDto.ok([], 'No listings found for the given status', 'SUCCESS_EMPTY');
+      }
+
+      this.logger.debug(`Fetched ${listings.length} listings with status: ${status}`);
+      return BaseResponseDto.ok(
+        listings.map((l) => this.mapToDto(l)),
+        'Listings fetched successfully',
+        'OK'
+      );
+    } catch (error: unknown) {
+      this.logger.error(`Error fetching listings by status ${status}: ${(error as Error).message}`, (error as Error).stack);
+      return BaseResponseDto.fail('Failed to fetch listings', 'INTERNAL_SERVER_ERROR');
+    }
+  }
 
   // ======================================================
   // UPDATE METHODS
@@ -357,13 +391,13 @@ export class HousingService {
 
           return BaseResponseDto.ok(this.mapToDto(updated), 'Update successful');
       }
-    } catch (error: any) {
-      if (error.code === 'P2025') {
-          this.logger.warn(`Update failed for listing ${dto.listingId}: Not found or unauthorized access by ${dto.callerId}.`);
-          return BaseResponseDto.fail('Listing not found or you are not authorized to perform this action', 'NOT_FOUND');
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+        this.logger.warn(`Update failed for listing ${dto.listingId}: Not found or unauthorized access by ${dto.callerId}.`);
+        return BaseResponseDto.fail('Listing not found or you are not authorized to perform this action', 'NOT_FOUND');
       }
 
-      this.logger.error(`Update failed for listing ${dto.listingId}: ${error.message}`, error.stack);
+      this.logger.error(`Update failed for listing ${dto.listingId}: ${(error as Error).message}`, (error as Error).stack);
       return BaseResponseDto.fail('Update failed due to an internal error', 'ERROR');
     }
   }
@@ -380,12 +414,12 @@ export class HousingService {
       }) as unknown as HouseListingWithRelations;
 
       return BaseResponseDto.ok(this.mapToDto(updated));
-    } catch (error: any) {
-      if (error.code === 'P2025') {
+    } catch (error: unknown) {
+      if ((error as { code?: string }).code === 'P2025') {
         this.logger.warn(`Status update failed for listing ${dto.id}: Not found or unauthorized by account ${dto.ownerId}.`);
         return BaseResponseDto.fail('Listing not found or you are not authorized to change its status', 'NOT_FOUND');
       }
-      this.logger.error(`Status update failed for listing ${dto.id}: ${error.message}`, error.stack);
+      this.logger.error(`Status update failed for listing ${dto.id}: ${(error as Error).message}`, (error as Error).stack);
       return BaseResponseDto.fail('Status update failed', 'ERROR');
     }
   }
@@ -457,13 +491,13 @@ export class HousingService {
 
         return BaseResponseDto.ok(viewing as unknown as HouseViewingResponseDto, 'Viewing scheduled successfully.');
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // e.g., Foreign key constraint failed on houseId
-      if (error.code === 'P2003') {
-        this.logger.error(`ScheduleViewing FK Error: ${error.message}`);
+      if ((error as { code?: string }).code === 'P2003') {
+        this.logger.error(`ScheduleViewing FK Error: ${(error as Error).message}`);
         return BaseResponseDto.fail('Invalid data provided for scheduling.', 'BAD_REQUEST');
       }
-      this.logger.error(`ScheduleViewing Transaction Error: ${error.message}`, error.stack);
+      this.logger.error(`ScheduleViewing Transaction Error: ${(error as Error).message}`, (error as Error).stack);
       return BaseResponseDto.fail('An unexpected error occurred while scheduling the viewing.', 'ERROR');
     }
   }

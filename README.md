@@ -1,6 +1,6 @@
 # Pivota API Monorepo
 
-# PivotaApi
+## NxPivotaApi
 
 <a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
 
@@ -98,6 +98,27 @@ Current workspace applications:
 - `listings-service`: Jobs, housing, categories, contractors.
 - `notification-service`: Email + SMS delivery, activity tracking, realtime WebSocket stream.
 - `payment-service`: Payment domain scaffold.
+
+## Recent Listings-Service Improvements
+
+These recent changes were implemented in `apps/listings-service/src/business-modules`:
+
+### Housing Module Enhancements
+
+- **New `getHousesByStatus` method**: Added dedicated method to fetch house listings filtered by status (AVAILABLE, SOLD, RENTED, ARCHIVED, PENDING) with proper validation and error handling.
+- **Enhanced update operations**: `executeUpdate` now has separate admin/user paths with ownership checks, explicit field extraction, and robust Prisma error handling (`P2025`) to prevent unauthorized updates.
+- **Status filtering improvements**: `getAdminListings` and `getListingsByOwner` now support filtering by `status` and return structured responses with enhanced error handling.
+- **TypeScript improvements**: Replaced all `any` types with proper `unknown` and type assertions for better type safety and linting compliance.
+
+### Jobs Module Enhancements  
+
+- **New `getJobsByStatus` method**: Added dedicated method to fetch job posts filtered by status (ACTIVE, CLOSED, DRAFT, EXPIRED, PAUSED) with validation.
+- **Status filtering improvements**: `jobs.service.ts` now supports status filtering in `getOwnJobs` and `getAdminJobs` (with optional creator/account filters), and returns clean `BaseResponseDto` results.
+
+### General Improvements
+
+- **Endpoint audit and improvement**: All house listing and job endpoints (`getHouseListingById`, `searchListings`, `archiveHouseListing`, `updateListingStatus`, etc.) have been reviewed and adjusted for consistent response formats and guard logic.
+- **Error handling standardization**: Consistent error handling patterns across all methods with proper logging and user-friendly error messages.
 
 Shared libraries:
 

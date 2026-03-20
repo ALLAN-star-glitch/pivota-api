@@ -70,7 +70,7 @@ export class HousingController {
     this.logger.debug(`GetListingsByOwner Request for Account: ${data.ownerId}`);
     return this.housingService.getListingsByOwner(data);
   }
-  
+
   @GrpcMethod('HousingService', 'GetAdminListings')
   async getAdminListings(
     data: GetAdminHousingFilterDto,
@@ -127,5 +127,13 @@ export class HousingController {
   ): Promise<BaseResponseDto<HouseViewingResponseDto>> {
     this.logger.debug(`ScheduleViewing Request: ${JSON.stringify(data)}`);
     return this.housingService.scheduleViewing(data);
+  }
+
+  @GrpcMethod('HousingService', 'GetHousesByStatus')
+  async getHousesByStatus(
+    data: { status: string },
+  ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    this.logger.debug(`GetHousesByStatus Request for status: ${data.status}`);
+    return this.housingService.getHousesByStatus(data.status);
   }
 }
