@@ -9,6 +9,18 @@ import {
 } from '@pivota-api/dtos';
 
 // Define the NotificationEmailData interface to match what housing service sends
+
+interface ListingCreatedEmailDto {
+  email: string;
+  firstName: string;
+  listingTitle: string;
+  listingId: string;
+  listingPrice: number;
+  locationCity: string;
+  listingType: string;
+  status: string;
+  imageUrl?: string;
+}
 interface NotificationEmailData {
   type: string;
   recipientId: string;
@@ -111,6 +123,30 @@ interface AdminNewOrganizationRegistrationDto {
   plan: string;
 }
 
+// ======================================================
+// NEW: Listing Milestone Email Interface
+// ======================================================
+interface ListingMilestoneEmailDto {
+  recipientEmail: string;
+  accountId: string;
+  accountName: string;
+  creatorId: string;
+  creatorName?: string;
+  listingId: string;
+  listingTitle: string;
+  listingPrice: number;
+  listingType: string;
+  locationCity: string;
+  milestone: number;
+  milestoneTier: 'ONBOARDING' | 'ENGAGEMENT' | 'GROWTH' | 'POWER' | 'PROFESSIONAL';
+  suggestedTeam: 'onboarding' | 'success' | 'sales' | 'marketing' | 'partnerships';
+  totalValue: number;
+  averagePrice: number;
+  message: string;
+  timestamp: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
 @Controller()
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class EmailController {
@@ -120,7 +156,7 @@ export class EmailController {
     // Log controller initialization with RabbitMQ connection info
     this.logger.log('📧 EmailController initialized');
     this.logger.log(`🔌 RabbitMQ URL: ${process.env.RABBITMQ_URL || 'amqp://localhost:5672'}`);
-    this.logger.log(`📋 Listening for patterns: otp.requested, user.onboarded, organization.onboarded, user.login.email, admin.new.registration, admin.new.organization.registration, notification.email, organization.invitation.sent.new, organization.invitation.sent.existing, organization.invitation.resend, user.password.setup.required, user.password.setup.completed, user.invitation.welcome, admin.invitation.accepted`);
+    this.logger.log(`📋 Listening for patterns: otp.requested, user.onboarded, organization.onboarded, user.login.email, admin.new.registration, admin.new.organization.registration, notification.email, organization.invitation.sent.new, organization.invitation.sent.existing, organization.invitation.resend, user.password.setup.required, user.password.setup.completed, user.invitation.welcome, admin.invitation.accepted, admin.listing.milestone, listing.created.owner`);
   }
 
   /** ------------------ OTP / Verification ------------------ */
@@ -540,7 +576,7 @@ export class EmailController {
       <body style="background-color: #F5F5F5; padding: 20px;">
         <div class="container">
           <div class="header">
-            <h2>🎉 New Team Member Joined!</h2>
+            <h2>New Team Member Joined!</h2>
           </div>
           <div class="content">
             <p style="font-size: 18px; color: #008080;">Hello ${data.adminName},</p>
@@ -584,6 +620,78 @@ export class EmailController {
     );
   }
 
+  // ======================================================
+  // NEW: Listing Milestone Email Handler
+  // ======================================================
+  @EventPattern('admin.listing.milestone')
+  async handleListingMilestone(
+    @Payload() data: ListingMilestoneEmailDto,
+    @Ctx() context: RmqContext
+  ) {
+    this.logger.log(`🏆 [RMQ] Received listing milestone event: ${data.milestone} for account ${data.accountName}`);
+    this.logger.debug(`[RAW] Milestone payload: ${JSON.stringify(data)}`);
+
+    if (!data || !data.recipientEmail) {
+      this.logger.error('❌ admin.listing.milestone event missing recipientEmail');
+      const channel = context.getChannelRef();
+      const originalMsg = context.getMessage();
+      channel.ack(originalMsg);
+      return;
+    }
+
+    // Map milestone to appropriate email template
+    let subject: string;
+    
+    switch(data.milestone) {
+      case 1:
+     
+        subject = `First Listing: ${data.accountName} just posted their first property!`;
+        break;
+      case 2:
+      
+        subject = `Second Listing: ${data.accountName} is getting engaged!`;
+        break;
+      case 3:
+       
+        subject = `Third Listing: ${data.accountName} is on a roll!`;
+        break;
+      case 5:
+        
+        subject = `Milestone: ${data.accountName} has posted 5 listings!`;
+        break;
+      case 10:
+        subject = `Power User: ${data.accountName} hit 10 listings!`;
+        break;
+      default:
+        subject = `Listing Milestone: ${data.accountName} reached ${data.milestone} listings`;
+    }
+
+    // Prepare email data for the service
+    const emailData = {
+      recipientEmail: data.recipientEmail,
+      accountName: data.accountName,
+      listingTitle: data.listingTitle,
+      listingPrice: data.listingPrice,
+      locationCity: data.locationCity,
+      milestone: data.milestone,
+      milestoneTier: data.milestoneTier,
+      suggestedTeam: data.suggestedTeam,
+      totalValue: data.totalValue,
+      averagePrice: data.averagePrice,
+      message: data.message,
+      priority: data.priority,
+      listingUrl: `https://pivotaconnect.com/listings/${data.listingId}`,
+      accountDashboardUrl: `https://pivotaconnect.com/admin/accounts/${data.accountId}`,
+      timestamp: data.timestamp
+    };
+
+    await this.processEvent(
+      context,
+      () => this.emailService.sendListingMilestoneEmail(emailData, subject),
+      data.recipientEmail
+    );
+  }
+
   /** ------------------ Shared Private Processor ------------------ */
   private async processEvent(context: RmqContext, action: () => Promise<void>, identifier: string) {
     const channel = context.getChannelRef();
@@ -608,4 +716,40 @@ export class EmailController {
       channel.nack(originalMsg, false, true); 
     }
   }
+
+  @EventPattern('listing.created.owner')
+async handleListingCreated(
+  @Payload() data: ListingCreatedEmailDto,
+  @Ctx() context: RmqContext
+) {
+  this.logger.log(`🏠 [RMQ] Received listing created event for: ${data.email}`);
+  this.logger.debug(`[RAW] Listing payload: ${JSON.stringify(data)}`);
+
+  if (!data || !data.email) {
+    this.logger.error('❌ listing.created.owner event missing email');
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+    channel.ack(originalMsg);
+    return;
+  }
+
+  const listingUrl = `https://pivotaconnect.com/listings/${data.listingId}`;
+
+  await this.processEvent(
+    context,
+    () => this.emailService.sendListingCreatedEmail({
+      email: data.email,
+      firstName: data.firstName,
+      listingTitle: data.listingTitle,
+      listingId: data.listingId,
+      listingUrl,
+      listingPrice: data.listingPrice,
+      locationCity: data.locationCity,
+      listingType: data.listingType,
+      status: data.status,
+      imageUrl: data.imageUrl
+    }),
+    data.email
+  );
+}
 }

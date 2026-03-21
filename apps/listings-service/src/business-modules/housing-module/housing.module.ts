@@ -21,7 +21,7 @@ import { HousingTrackingService } from './services/housing-tracking.service';
       },
       // Kafka client for analytics events
       {
-        name: 'KAFKA_SERVICE',
+        name: 'KAFKA_SERVICE', 
         transport: Transport.KAFKA,
         options: {
           client: {
@@ -29,7 +29,7 @@ import { HousingTrackingService } from './services/housing-tracking.service';
             brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
           },
           consumer: {
-            groupId: 'listings-service-producer-group',
+            groupId: 'admin-service-consumer-V2',
           },
         },
       },

@@ -91,253 +91,258 @@ export class AuthController {
 @Post('signup')
 @Version('1')
 @ApiTags('Auth - Registration')
+@ApiHeader({
+  name: 'referer',
+  description: 'Source URL - for traffic source analysis (optional)',
+  required: false,
+  schema: { type: 'string', example: 'https://google.com/search?q=pivota' }
+})
 @ApiOperation({ 
-  summary: 'Register a new user',
+  summary: 'Complete registration after OTP verification',
   description: `
-    Creates a new individual user account in the system.
+    **Flow Overview:**
+    This endpoint completes the registration process after OTP verification. 
+    User data is collected incrementally through the onboarding screens and only 
+    persisted to the database after successful OTP verification to prevent ghost accounts.
     
-    **Microservice:** Auth Service
-    **Authentication:** Not required (public)
+    **Complete Registration Flow:**
     
-    **Registration Flow:**
-    1. User requests OTP via /otp/request
-    2. User receives OTP via email
-    3. User submits OTP with registration details
-    4. System validates OTP and creates account
-    5. User must **manually log in** after successful registration
+    1. **User Input Collection (Client-Side Storage)**
+       - User fills in account details and optional profile data across multiple screens
+       - All data is temporarily stored in local storage/device storage
+       - No data is sent to the server during this phase
     
-    **Important Notes:**
-    •  User is **NOT automatically logged in** after signup
-    •  User must call the login endpoint separately
-    •  JWT tokens are NOT issued by this endpoint
+    2. **OTP Request**
+       - After completing all screens, user clicks "Continue" or "Register"
+       - Client calls \`POST /otp/request\` with email and purpose
+       - System sends 6-digit code to user's email
     
-    **Required Information:**
-    • **email** - Valid email address (will be normalized to lowercase)
-    • **password** - Strong password (min 8 chars with uppercase, lowercase, number, special char)
-    • **firstName** - User's first name
-    • **lastName** - User's last name
-    • **phone** - Kenyan phone number (will be normalized to +254 format)
-    • **code** - Valid OTP code received via email
+    3. **OTP Verification & Final Registration (THIS ENDPOINT)**
+       - User enters the OTP code
+       - Client sends all collected data along with the OTP code
+       - System validates the OTP
+       - If valid, creates account and all associated profiles atomically
+       - Deletes used OTP codes
     
-    **Phone Number Format:**
-    Accepts various Kenyan formats:
-    • 0712345678 → +254712345678
-    • 0112345678 → +254112345678
-    • 254712345678 → +254712345678
-    • +254712345678 → +254712345678
+    **Why This Approach:**
+    • Prevents ghost/incomplete accounts in the database
+    • Ensures only verified users with complete onboarding are created
+    • Reduces database cleanup overhead
+    • Provides better user experience by allowing users to complete full onboarding before account creation
     
-    All are normalized to E.164 format (+254XXXXXXXXX).
+    **What Gets Created:**
     
-    **Account Creation Process:**
-    • Creates Account record (root identity)
-    • Creates User record (login identity)
-    • Creates UserProfile (metadata)
-    • Assigns default 'GeneralUser' role
-    • Sets up free tier subscription (if applicable)
+    **Always Created:**
+    • Account record (root identity with accountCode)
+    • User record (login credentials with userCode)
+    • IndividualProfile (basic profile with firstName, lastName)
     
-    **Response includes:**
-    • User UUID and details
-    • Account information
-    • Profile completion status
-    • **No tokens are returned** - user must log in
+    **Conditionally Created (based on primaryPurpose):**
     
-    **Next Steps:**
-    After successful signup, the user should:
-    1. Navigate to login page
-    2. Call POST /auth-module/login with credentials
-    3. Complete 2FA verification (if enabled)
-    4. Receive JWT tokens upon successful login
+    **FIND_JOB** → JobSeekerProfile (use \`jobSeekerData\` field)
+    **OFFER_SKILLED_SERVICES** → SkilledProfessionalProfile (use \`skilledProfessionalData\` field)
+    **WORK_AS_AGENT** → IntermediaryAgentProfile (use \`intermediaryAgentData\` field)
+    **FIND_HOUSING** → HousingSeekerProfile (use \`housingSeekerData\` field)
+    **GET_SOCIAL_SUPPORT** → SupportBeneficiaryProfile (use \`supportBeneficiaryData\` field)
+    **HIRE_EMPLOYEES** → EmployerProfile (use \`employerData\` field)
+    **LIST_PROPERTIES** → PropertyOwnerProfile (use \`propertyOwnerData\` field)
+    **JUST_EXPLORING** → No additional profile created
     
-    **🤖 AI Analytics & Tracking**
-    
-    This endpoint captures registration data for analytics and personalization:
-    
-    **📊 Data Collected for Analytics:**
-    
-    | Category | Fields | Purpose |
-    |----------|--------|---------|
-    | **User Identity** | User UUID, Email, Account ID | User profiling |
-    | **Registration Method** | Email/Password | Channel analysis |
-    | **Device Info** | Device type, OS, Browser | Platform optimization |
-    | **Geographic** | IP-based location | Regional insights |
-    | **Timing** | Registration timestamp | Cohort analysis |
-    
-    **Device Information Captured:**
-    • **Device Model** - iPhone 15, Samsung Galaxy, etc.
-    • **Device Type** - MOBILE, TABLET, DESKTOP, BOT, UNKNOWN
-    • **Operating System** - iOS, Android, Windows, macOS
-    • **OS Version** - 17.2, 14, 11, etc.
-    • **Browser** - Chrome, Safari, Firefox, etc.
-    • **Browser Version** - 120.0.0, 17.2, etc.
-    • **Device Classification** - isMobile, isTablet, isDesktop, isBot flags
-    • **IP Address** - For geographic analysis
-    • **User Agent** - Raw user agent string
-    
-    **Analytics Events Emitted:**
-    
-    | Event | Destination | Purpose |
-    |-------|-------------|---------|
-    | **user.registered** | Kafka (Analytics) | Store registration data with device info |
-    | **user.onboarded** | RabbitMQ (Notifications) | Send welcome email (no device info) |
-    | **admin.new.registration** | RabbitMQ (Notifications) | Notify admins of new user |
-    
-    **Privacy & Compliance:**
-    • Device info stored for analytics only
-    • IP addresses anonymized after 30 days
-    • Data used for platform improvement and personalization
+    **Important:** Use the specific field that matches your \`primaryPurpose\`. The deprecated \`profileData\` field will be ignored.
   `
 })
 @ApiBody({ 
   type: UserSignupRequestDto,
   examples: {
-    'New user signup': {
+    'Job Seeker Registration': {
+      summary: 'Complete job seeker registration',
       value: {
-        email: 'john.doe@example.com',
-        password: 'SecurePass123!',
-        firstName: 'John',
+        firstName: 'Jane',
         lastName: 'Doe',
-        phone: '+254712345678',
+        email: 'jane.doe@example.com',
+        password: 'SecurePass123',
+        phone: '0712345678',
         planSlug: 'free-forever',
+        code: '123456',
+        primaryPurpose: 'FIND_JOB',
+        jobSeekerData: {
+          headline: 'Senior Full Stack Developer',
+          isActivelySeeking: true,
+          skills: ['JavaScript', 'TypeScript', 'React', 'Node.js'],
+          industries: ['FinTech', 'HealthTech'],
+          jobTypes: ['FULL_TIME', 'REMOTE'],
+          seniorityLevel: 'SENIOR',
+          expectedSalary: 250000,
+          workAuthorization: ['Citizen', 'Work Permit'],
+          linkedInUrl: 'linkedin.com/in/janedoe',
+          githubUrl: 'github.com/janedoe'
+        }
+      }
+    },
+    'Skilled Professional Registration': {
+      summary: 'Complete skilled professional registration',
+      value: {
+        firstName: 'John',
+        lastName: 'Smith',
+        email: 'john.smith@example.com',
+        password: 'SecurePass123',
+        phone: '0723456789',
+        code: '123456',
+        primaryPurpose: 'OFFER_SKILLED_SERVICES',
+        skilledProfessionalData: {
+          title: 'Master Electrician',
+          profession: 'ELECTRICIAN',
+          specialties: ['Wiring', 'Solar Installation', 'Security Systems'],
+          serviceAreas: ['Nairobi', 'Kiambu', 'Machakos'],
+          yearsExperience: 8,
+          licenseNumber: 'EBK/1234/2020',
+          hourlyRate: 800,
+          availableToday: true,
+          availableWeekends: true
+        }
+      }
+    },
+    'Agent Registration': {
+      summary: 'Complete agent registration',
+      value: {
+        firstName: 'Mary',
+        lastName: 'Njeri',
+        email: 'mary.njeri@example.com',
+        password: 'SecurePass123',
+        phone: '0734567890',
+        code: '123456',
+        primaryPurpose: 'WORK_AS_AGENT',
+        intermediaryAgentData: {
+          agentType: 'HOUSING_AGENT',
+          specializations: ['RESIDENTIAL', 'COMMERCIAL', 'LUXURY'],
+          serviceAreas: ['Nairobi', 'Kiambu', 'Mombasa'],
+          licenseNumber: 'ERB/5678/2021',
+          yearsExperience: 5,
+          agencyName: 'Prime Properties Agency',
+          commissionRate: 5.0,
+          about: 'Specializing in luxury apartments in Nairobi'
+        }
+      }
+    },
+    'Housing Seeker Registration': {
+      summary: 'Complete housing seeker registration',
+      value: {
+        firstName: 'Peter',
+        lastName: 'Omondi',
+        email: 'peter.omondi@example.com',
+        password: 'SecurePass123',
+        phone: '0745678901',
+        code: '123456',
+        primaryPurpose: 'FIND_HOUSING',
+        housingSeekerData: {
+          minBedrooms: 2,
+          maxBedrooms: 4,
+          minBudget: 25000,
+          maxBudget: 60000,
+          preferredTypes: ['APARTMENT', 'HOUSE'],
+          preferredCities: ['Nairobi', 'Kiambu'],
+          preferredNeighborhoods: ['Kilimani', 'Lavington', 'Westlands'],
+          moveInDate: '2026-04-15',
+          leaseDuration: '1_YEAR',
+          householdSize: 4,
+          hasPets: true,
+          petDetails: 'One dog',
+          searchRadiusKm: 15
+        }
+      }
+    },
+    'Support Beneficiary Registration': {
+      summary: 'Complete support beneficiary registration',
+      value: {
+        firstName: 'Grace',
+        lastName: 'Atieno',
+        email: 'grace.atieno@example.com',
+        password: 'SecurePass123',
+        phone: '0756789012',
+        code: '123456',
+        primaryPurpose: 'GET_SOCIAL_SUPPORT',
+        supportBeneficiaryData: {
+          needs: ['FOOD', 'SHELTER', 'MEDICAL'],
+          urgentNeeds: ['FOOD'],
+          familySize: 4,
+          city: 'Nairobi',
+          neighborhood: 'Kawangware',
+          prefersAnonymity: true,
+          consentToShare: false,
+          languagePreference: ['ENGLISH', 'SWAHILI']
+        }
+      }
+    },
+    'Employer Registration': {
+      summary: 'Complete employer registration (hiring employees)',
+      value: {
+        firstName: 'Michael',
+        lastName: 'Njenga',
+        email: 'michael.njenga@example.com',
+        password: 'SecurePass123',
+        phone: '0767890123',
+        code: '123456',
+        primaryPurpose: 'HIRE_EMPLOYEES',
+        employerData: {
+          businessName: 'Njenga Tech Solutions',
+          isRegistered: true,
+          yearsExperience: 5,
+          industry: 'Technology',
+          companySize: '11-50',
+          description: 'Software development and IT consulting',
+          preferredSkills: ['JavaScript', 'Python', 'React', 'Node.js'],
+          remotePolicy: 'HYBRID'
+        }
+      }
+    },
+    'Property Owner Registration': {
+      summary: 'Complete property owner registration (listing properties)',
+      value: {
+        firstName: 'Grace',
+        lastName: 'Wanjiku',
+        email: 'grace.wanjiku@example.com',
+        password: 'SecurePass123',
+        phone: '0778901234',
+        code: '123456',
+        primaryPurpose: 'LIST_PROPERTIES',
+        propertyOwnerData: {
+          isProfessional: false,
+          propertyCount: 3,
+          propertyTypes: ['APARTMENT', 'HOUSE'],
+          propertyPurpose: 'INVESTMENT',
+          preferredPropertyTypes: ['APARTMENT', 'HOUSE', 'COMMERCIAL'],
+          serviceAreas: ['Nairobi', 'Kiambu']
+        }
+      }
+    },
+    'Just Exploring Registration': {
+      summary: 'Just exploring (no profile created)',
+      value: {
+        firstName: 'Sarah',
+        lastName: 'Kamau',
+        email: 'sarah.kamau@example.com',
+        password: 'SecurePass123',
+        phone: '0789012345',
+        code: '123456',
+        primaryPurpose: 'JUST_EXPLORING'
+      }
+    },
+    'Minimal Registration': {
+      summary: 'Minimal registration with only required fields',
+      value: {
+        firstName: 'James',
+        lastName: 'Kariuki',
+        email: 'james.kariuki@example.com',
+        password: 'SecurePass123',
+        phone: '0790123456',
         code: '123456'
       }
     }
   }
-})
-@ApiHeader({
-  name: 'x-platform',
-  description: 'Platform identifier (web/mobile/api) - used for platform-specific behavior analysis',
-  required: false,
-  enum: ['web', 'mobile', 'api']
-})
-@ApiHeader({
-  name: 'x-device',
-  description: 'Custom device identifier (for mobile apps)',
-  required: false,
-  example: 'iPhone15,3'
-})
-@ApiHeader({
-  name: 'x-device-type',
-  description: 'Custom device type (MOBILE/TABLET/DESKTOP)',
-  required: false,
-  enum: ['MOBILE', 'TABLET', 'DESKTOP']
-})
-@ApiHeader({
-  name: 'x-os',
-  description: 'Custom OS identifier',
-  required: false,
-  example: 'iOS'
-})
-@ApiHeader({
-  name: 'x-os-version',
-  description: 'Custom OS version',
-  required: false,
-  example: '17.2'
-})
-@ApiHeader({
-  name: 'referer',
-  description: 'Source URL - for traffic source analysis',
-  required: false
-})
-@ApiResponse({
-  status: 201,
-  description: 'User signed up successfully. User must now log in.',
-  headers: {
-    'X-Device-Info': {
-      description: 'Device classification for debugging',
-      schema: { type: 'string', example: 'MOBILE|iOS|17.2|Safari' }
-    },
-    'X-Analytics-ID': {
-      description: 'Analytics event ID for tracking',
-      schema: { type: 'string', example: 'reg_abc123_20260304' }
-    }
-  },
-  schema: {
-    allOf: [
-      { $ref: getSchemaPath(BaseResponseDto) },
-      {
-        properties: {
-          data: { 
-            $ref: getSchemaPath(UserSignupDataDto),
-            example: {
-              user: {
-                uuid: 'usr_123abc',
-                email: 'john.doe@example.com',
-                firstName: 'John',
-                lastName: 'Doe',
-                phone: '+254712345678',
-                status: 'ACTIVE'
-              },
-              account: {
-                uuid: 'acc_456def',
-                accountCode: 'ACC-USR-ABCD1234',
-                type: 'INDIVIDUAL'
-              },
-              profile: {
-                completion: 60,
-                requiresAdditionalInfo: ['profile_picture', 'id_verification']
-              },
-              createdAt: '2026-03-05T10:30:00.000Z',
-              message: 'Account created successfully. Please log in.'
-            }
-          }
-        },
-      },
-    ],
-  },
-})
-@ApiResponse({ 
-  status: 400, 
-  description: 'Validation error - Invalid input data',
-  schema: {
-    example: {
-      success: false,
-      message: 'Validation failed',
-      code: 'VALIDATION_ERROR',
-      errors: [
-        { field: 'email', message: 'email must be a valid email address' },
-        { field: 'password', message: 'password must be at least 8 characters' }
-      ]
-    }
-  }
-})
-@ApiResponse({ 
-  status: 409, 
-  description: 'Conflict - Email already registered',
-  schema: {
-    example: {
-      success: false,
-      message: 'A user with this email address already exists',
-      code: 'ALREADY_EXISTS'
-    }
-  }
-})
-@ApiResponse({ 
-  status: 410, 
-  description: 'OTP expired or invalid',
-  schema: {
-    example: {
-      success: false,
-      message: 'OTP code expired or invalid',
-      code: 'INVALID_OTP'
-    }
-  }
-})
-@ApiResponse({ 
-  status: 429, 
-  description: 'Too many attempts - Rate limited',
-  schema: {
-    example: {
-      success: false,
-      message: 'Maximum verification attempts reached. Please try again later.',
-      code: 'TOO_MANY_REQUESTS',
-      retryAfter: 60
-    }
-  }
-})
+}) 
 async signup(
   @Body() signupDto: UserSignupRequestDto,
   @ClientInfo() clientInfo: AuthClientInfoDto,
-  @Headers('x-platform') platform?: string,
   @Headers('referer') referer?: string,
 ): Promise<BaseResponseDto<UserSignupDataDto>> {
   // Log the signup attempt with device info
@@ -350,12 +355,26 @@ async signup(
   this.logger.debug(`🌐 Browser: ${clientInfo.browser} ${clientInfo.browserVersion || ''}`);
   this.logger.debug(`📍 IP: ${clientInfo.ipAddress}`);
   this.logger.debug(`🤖 Is Bot: ${clientInfo.isBot}`);
-  this.logger.debug(`📊 Platform: ${platform || 'Not specified'}`);
   this.logger.debug(`🔗 Referer: ${referer || 'Direct'}`);
+  this.logger.debug(`🎯 Primary Purpose: ${signupDto.primaryPurpose || 'Not specified'}`);
   
-  // Add platform and referer to clientInfo if needed
-  if (platform) {
-    clientInfo.deviceType = platform.toUpperCase() as any;
+  // Log which specific data field is being used
+  if (signupDto.jobSeekerData) {
+    this.logger.debug(`📝 Using jobSeekerData for FIND_JOB`);
+  } else if (signupDto.skilledProfessionalData) {
+    this.logger.debug(`📝 Using skilledProfessionalData for OFFER_SKILLED_SERVICES`);
+  } else if (signupDto.intermediaryAgentData) {
+    this.logger.debug(`📝 Using intermediaryAgentData for WORK_AS_AGENT`);
+  } else if (signupDto.housingSeekerData) {
+    this.logger.debug(`📝 Using housingSeekerData for FIND_HOUSING`);
+  } else if (signupDto.supportBeneficiaryData) {
+    this.logger.debug(`📝 Using supportBeneficiaryData for GET_SOCIAL_SUPPORT`);
+  } else if (signupDto.employerData) {
+    this.logger.debug(`📝 Using employerData for HIRE_EMPLOYEES`);
+  } else if (signupDto.propertyOwnerData) {
+    this.logger.debug(`📝 Using propertyOwnerData for LIST_PROPERTIES`);
+  } else if (signupDto.profileData) {
+    this.logger.debug(`⚠️ Deprecated profileData field used - please update to use specific fields`);
   }
   
   // Call the auth service with both DTO and client info
@@ -364,10 +383,16 @@ async signup(
   if (!response.success) {
     this.logger.warn(`⚠️ Signup failed for ${signupDto.email}: ${response.message}`);
     throw response;
-  } else {
+  } else { 
     this.logger.log(`✅ Signup successful for: ${signupDto.email}`);
-    this.logger.debug(`[ANALYTICS] User registered event will include device info:`, {
+    this.logger.debug(`[ANALYTICS] User registered event will include device info and purpose:`, {
       userUuid: response.data?.user?.uuid,
+      email: signupDto.email,
+      primaryPurpose: signupDto.primaryPurpose || 'NOT_SPECIFIED',
+      hasProfileData: !!(signupDto.jobSeekerData || signupDto.skilledProfessionalData || 
+                         signupDto.intermediaryAgentData || signupDto.housingSeekerData || 
+                         signupDto.supportBeneficiaryData || signupDto.employerData || 
+                         signupDto.propertyOwnerData),
       deviceType: clientInfo.deviceType,
       os: clientInfo.os,
       browser: clientInfo.browser
@@ -1074,89 +1099,160 @@ async verifyMfaLogin(
    * @returns Success confirmation
    */
   @Post('otp/request')
-  @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @Version('1')
-  @ApiTags('Auth - OTP')
-  @ApiOperation({ 
-    summary: 'Request a security code (OTP) via email',
-    description: `
-      Sends a verification code to the user's email for various purposes.
-      
-      **Microservice:** Auth Service
-      **Authentication:** Not required
-      
-      **OTP Purposes:**
-      • **signup** - Verify email during registration
-      • **login** - Two-factor authentication
-      • **password-reset** - Reset forgotten password
-      • **email-verify** - Verify email change
-      
-      **Rate Limiting:**
-      • Maximum 5 requests per minute
-      • Prevents abuse and spam
-      • Per email address tracking
-      
-      **Process:**
-      1. Generate 6-digit numeric code
-      2. Store with expiration (10 minutes)
-      3. Send via email
-      4. Track attempts
-      
-      **Security:**
-      • Codes expire after 10 minutes
-      • One-time use only
-      • Limited attempts before lockout
-      • Email rate limiting
-      
-      **Note:**
-      Always returns success (even if email not found)
-      to prevent email enumeration attacks.
-    `
-  })
-  @ApiBody({ 
-    type: RequestOtpDto,
-    examples: {
-      'Request signup OTP': {
-        value: {
-          email: 'john.doe@example.com'
-        }
-      }
-    }
-  })
-  @ApiQuery({ 
-    name: 'purpose', 
-    required: true,
-    enum: ALLOWED_OTP_PURPOSES,
-    description: 'Purpose of the OTP request'
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'OTP sent successfully',
-    schema: {
-      example: {
-        success: true,
-        message: 'OTP sent successfully',
-        code: 'OK'
-      }
-    }
-  })
-  @ApiResponse({ status: 429, description: 'Too many requests - rate limited' })
-  async requestOtp(
-    @Body() dto: RequestOtpDto,
-    @Query() query: OtpPurposeQueryDto
-  ): Promise<BaseResponseDto<null>> {
-    this.logger.log(`📩 OTP Request [${query.purpose}] for: ${dto.email}`);
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { limit: 3, ttl: 600000 } }) // 3 requests per 10 minutes (600,000 ms)
+@Version('1')
+@ApiTags('Auth - OTP')
+@ApiOperation({ 
+  summary: 'Request a security code (OTP) via email',
+  description: `
+    Sends a verification code to the user's email for various purposes.
     
-    const result = await this.authService.requestOtp(dto, query.purpose);
-
-    if (!result.success) {
-      this.logger.warn(`⚠️ OTP Request failed for ${dto.email}: ${result.message}`);
-      throw result; 
+    **Microservice:** Auth Service
+    **Authentication:** Not required
+    
+    **OTP Purposes:**
+    • **SIGNUP** - Verify email during registration
+    • **ORGANIZATION_SIGNUP** - Verify email during organization registration
+    • **PASSWORD_RESET** - Reset forgotten password
+    • **2FA** - Two-factor authentication
+    • **CHANGE_EMAIL** - Verify email change
+    • **CHANGE_PHONE** - Verify phone number change
+    
+    **Rate Limiting:**
+    • Maximum 3 requests per 10 minutes
+    • Prevents abuse and spam
+    • Per email address tracking
+    
+    **Process:**
+    1. Validate request based on purpose
+    2. Check rate limits (3 attempts per 10 minutes)
+    3. Generate 6-digit numeric code
+    4. Store with 10-minute expiration
+    5. Delete any existing OTPs for this email/purpose
+    6. Send code via email
+    7. Track attempts
+    
+    **Security:**
+    • Codes expire after 10 minutes
+    • One-time use only
+    • Only one valid OTP per email/purpose
+    • Limited attempts before lockout
+    • Email rate limiting
+    
+    **Note:**
+    Always returns success (even if email not found)
+    to prevent email enumeration attacks.
+  `
+})
+@ApiBody({ 
+  type: RequestOtpDto,
+  examples: {
+    'Request signup OTP': {
+      value: {
+        email: 'john.doe@example.com'
+      },
+      description: 'Request OTP for new user registration'
+    },
+    'Request password reset OTP': {
+      value: {
+        email: 'john.doe@example.com'
+      },
+      description: 'Request OTP to reset password'
+    },
+    'Request 2FA OTP': {
+      value: {
+        email: 'john.doe@example.com'
+      },
+      description: 'Request OTP for two-factor authentication'
     }
-
-    return result;
   }
+})
+@ApiQuery({ 
+  name: 'purpose', 
+  required: true,
+  enum: ALLOWED_OTP_PURPOSES,
+  description: 'Purpose of the OTP request (determines validation rules and email template)'
+})
+@ApiResponse({
+  status: 200,
+  description: 'OTP sent successfully',
+  schema: {
+    example: {
+      success: true,
+      message: 'Verification code sent to your email',
+      code: 'OK',
+      data: null
+    }
+  }
+})
+@ApiResponse({ 
+  status: 429, 
+  description: 'Too many requests - rate limited',
+  schema: {
+    example: {
+      success: false,
+      message: 'Too many verification attempts. Please try again in 10 minutes.',
+      code: 'TOO_MANY_REQUESTS',
+      data: null,
+      error: {
+        code: 'TOO_MANY_REQUESTS',
+        message: 'Too many verification attempts. Please try again in 10 minutes.'
+      }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 409, 
+  description: 'Conflict - Email already registered (for SIGNUP purposes)',
+  schema: {
+    example: {
+      success: false,
+      message: 'This email is already registered.',
+      code: 'CONFLICT',
+      data: null,
+      error: {
+        code: 'CONFLICT',
+        message: 'This email is already registered.'
+      }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 404, 
+  description: 'Not found - Account does not exist (for PASSWORD_RESET, 2FA)',
+  schema: {
+    example: {
+      success: false,
+      message: 'Account not found.',
+      code: 'NOT_FOUND',
+      data: null,
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Account not found.'
+      }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 400, 
+  description: 'Bad request - Invalid purpose or missing data'
+})
+async requestOtp(
+  @Body() dto: RequestOtpDto,
+  @Query() query: OtpPurposeQueryDto
+): Promise<BaseResponseDto<null>> {
+  this.logger.log(`📩 OTP Request [${query.purpose}] for: ${dto.email}`);
+  
+  const result = await this.authService.requestOtp(dto, query.purpose);
+
+  if (!result.success) {
+    this.logger.warn(`⚠️ OTP Request failed for ${dto.email}: ${result.message}`);
+    throw result; 
+  }
+
+  return result;
+}
 
   /**
    * Verify a one-time password (OTP)

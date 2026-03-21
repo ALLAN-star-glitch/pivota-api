@@ -1,0 +1,45 @@
+import { BadRequestException } from '@nestjs/common';
+import { Request } from 'express';
+import 'multer'; 
+
+// Define a type for the Multer callback to replace 'any'
+type FileFilterCallback = (error: Error | null, acceptFile: boolean) => void;
+
+export const imageFileFilter = (
+  _req: Request, 
+  file: Express.Multer.File, 
+  callback: FileFilterCallback
+): void => {
+  if (!file.mimetype.match(/\/(jpg|jpeg|png|webp)$/)) {
+    return callback(
+      new BadRequestException('Only image files (JPG, PNG, WebP) are allowed.'),
+      false,
+    );
+  }
+  callback(null, true);
+};
+
+export const documentFileFilter = (
+  _req: Request, 
+  file: Express.Multer.File, 
+  callback: FileFilterCallback
+): void => {
+  // Check by mimetype for better security
+  const allowedMimeTypes = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain'
+  ];
+  
+  // Also check by extension as fallback
+  const allowedExtensions = /\.(pdf|doc|docx|txt)$/i;
+  
+  if (!allowedMimeTypes.includes(file.mimetype) && !allowedExtensions.test(file.originalname)) {
+    return callback(
+      new BadRequestException('Only document files (PDF, DOC, DOCX, TXT) are allowed.'),
+      false,
+    );
+  }
+  callback(null, true);
+};

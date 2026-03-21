@@ -5,9 +5,6 @@ import {
   BaseResponseDto,
   CreateOrganisationRequestDto,
   OrganizationProfileResponseDto, 
-  // NEW DTOs
-  OnboardOrgProviderGrpcRequestDto,
-  ContractorProfileResponseDto,
   // Invitation DTOs
   InviteMemberGrpcRequestDto,
   InviteMemberResponseDto,
@@ -21,7 +18,27 @@ import {
   CancelInvitationGrpcRequestDto,
   CheckInvitationStatusRequestDto,
   CheckInvitationStatusResponseDto,
+  // Update DTOs
+  UpdateOrgProfileRequestDto,
+  // Profile update DTOs
+  UpdateEmployerGrpcRequestDto,
+  UpdateSocialServiceProviderGrpcRequestDto,
+  UpdateOrganizationPropertyOwnerGrpcRequestDto,
+  UpdateOrganizationSkilledProfessionalGrpcRequestDto,
+  UpdateOrganizationIntermediaryAgentGrpcRequestDto,
+
+  EmployerProfileDataDto,
+  EmployerProfileResponseDto,
+  IntermediaryAgentProfileDataDto,
+  IntermediaryAgentProfileResponseDto,
+  SocialServiceProviderProfileDataDto,
+  SocialServiceProviderProfileResponseDto,
+  PropertyOwnerProfileResponseDto,
+  PropertyOwnerProfileDataDto,
+  SkilledProfessionalProfileResponseDto,
+  SkilledProfessionalProfileDataDto,
 } from '@pivota-api/dtos';
+import { ProfileType } from '@pivota-api/constants';
 
 @Controller()
 export class OrganisationController {
@@ -32,81 +49,179 @@ export class OrganisationController {
   ) {}
 
   /* ======================================================
-     ONBOARD ORGANIZATION AS SERVICE PROVIDER
+     CREATE ORGANIZATION ACCOUNT WITH PROFILES
   ====================================================== */
-  @GrpcMethod('ProfileService', 'OnboardOrganizationProvider')
-  async onboardOrganizationProvider(
-    @Payload() data: OnboardOrgProviderGrpcRequestDto,
-  ): Promise<BaseResponseDto<ContractorProfileResponseDto>> {
-    this.logger.log(`gRPC → OnboardOrganizationProvider for: ${data.orgUuid}`);
-    
-    return this.organisationService.onboardOrganizationProvider(data);
-  }
-
-  /* ======================================================
-     CREATE ORGANIZATION PROFILE (Auth → Profile)
-  ====================================================== */
-  @GrpcMethod('ProfileService', 'CreateOrganizationProfile')
-  async createOrganizationProfile(
-    data: CreateOrganisationRequestDto,
+  @GrpcMethod('ProfileService', 'CreateOrganizationAccountWithProfiles')
+  async createOrganizationAccountWithProfiles(
+    @Payload() data: CreateOrganisationRequestDto,
   ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
     this.logger.log(
-      `gRPC → CreateOrganizationProfile: ${data.name}`,
+      `gRPC → CreateOrganizationAccountWithProfiles: ${data.organizationName}`,
     );
-
-    return this.organisationService.createOrganizationProfile(data);
+    return this.organisationService.createOrganizationAccountWithProfiles(data);
   }
 
   /* ======================================================
      GET ORGANIZATION BY UUID
   ====================================================== */
-  @GrpcMethod('ProfileService', 'GetOrganisationByUuid')
-  async getOrganisationByUuid(
-    data: { orgUuid: string },
+  @GrpcMethod('ProfileService', 'GetOrganizationByUuid')
+  async getOrganizationByUuid(
+    @Payload() data: { orgUuid: string },
   ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
-    return this.organisationService.getOrganisationByUuid(
-      data.orgUuid,
-    );
+    this.logger.log(`gRPC → GetOrganizationByUuid: ${data.orgUuid}`);
+    return this.organisationService.getOrganizationByUuid(data.orgUuid);
   }
 
-  // /* ======================================================
-  //    ADD ORGANIZATION MEMBER
-  // ====================================================== */
-  // @GrpcMethod('ProfileService', 'AddOrganisationMember')
-  // async addOrganisationMember(
-  //   data: AddOrgMemberRequestDto,
-  // ): Promise<BaseResponseDto<null>> {
-  //   return this.organisationService.addMember(data);
-  // }
+  /* ======================================================
+     GET ORGANIZATION BY ACCOUNT UUID
+  ====================================================== */
+  @GrpcMethod('ProfileService', 'GetOrganizationByAccountUuid')
+  async getOrganizationByAccountUuid(
+    @Payload() data: { accountUuid: string },
+  ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
+    this.logger.log(`gRPC → GetOrganizationByAccountUuid: ${data.accountUuid}`);
+    return this.organisationService.getOrganizationByAccountUuid(data.accountUuid);
+  }
 
   /* ======================================================
      GET ORGANIZATIONS BY TYPE
-     - Filters organizations based on the OrganizationType slug
   ====================================================== */
-  @GrpcMethod('ProfileService', 'GetOrganisationsByType')
-  async getOrganisationsByType(
-    data: { typeSlug: string },
+  @GrpcMethod('ProfileService', 'GetOrganizationsByType')
+  async getOrganizationsByType(
+    @Payload() data: { typeSlug: string },
   ): Promise<BaseResponseDto<OrganizationProfileResponseDto[]>> {
-    this.logger.log(`gRPC → GetOrganisationsByType: ${data.typeSlug}`);
-    return this.organisationService.getOrganisationsByType(data.typeSlug);
+    this.logger.log(`gRPC → GetOrganizationsByType: ${data.typeSlug}`);
+    return this.organisationService.getOrganizationsByType(data.typeSlug);
   }
 
   /* ======================================================
-     INVITE MEMBER - Send email invitation
+     UPDATE ORGANIZATION PROFILE
+  ====================================================== */
+  @GrpcMethod('ProfileService', 'UpdateOrganizationProfile')
+  async updateOrganizationProfile(
+    @Payload() data: { accountUuid: string; data: UpdateOrgProfileRequestDto },
+  ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
+    this.logger.log(`gRPC → UpdateOrganizationProfile for account: ${data.accountUuid}`);
+    return this.organisationService.updateOrganizationProfile(data.accountUuid, data.data);
+  }
+
+  /* ======================================================
+     EMPLOYER PROFILE METHODS
+  ====================================================== */
+  @GrpcMethod('ProfileService', 'CreateEmployerProfile')
+  async createEmployerProfile(
+    @Payload() data: { accountUuid: string; data: EmployerProfileDataDto },
+  ): Promise<BaseResponseDto<EmployerProfileResponseDto>> {
+    this.logger.log(`gRPC → CreateEmployerProfile for account: ${data.accountUuid}`);
+    return this.organisationService.createEmployerProfile(data.accountUuid, data.data);
+  }
+
+  @GrpcMethod('ProfileService', 'UpdateEmployerProfile')
+  async updateEmployerProfile(
+    @Payload() data: UpdateEmployerGrpcRequestDto,
+  ): Promise<BaseResponseDto<EmployerProfileResponseDto>> {
+    this.logger.log(`gRPC → UpdateEmployerProfile for account: ${data.accountUuid}`);
+    return this.organisationService.updateEmployerProfile(data.accountUuid, data);
+  }
+
+  /* ======================================================
+     SOCIAL SERVICE PROVIDER PROFILE METHODS
+  ====================================================== */
+  @GrpcMethod('ProfileService', 'CreateSocialServiceProviderProfile')
+  async createSocialServiceProviderProfile(
+    @Payload() data: { accountUuid: string; data: SocialServiceProviderProfileDataDto },
+  ): Promise<BaseResponseDto<SocialServiceProviderProfileResponseDto>> {
+    this.logger.log(`gRPC → CreateSocialServiceProviderProfile for account: ${data.accountUuid}`);
+    return this.organisationService.createSocialServiceProviderProfile(data.accountUuid, data.data);
+  }
+
+  @GrpcMethod('ProfileService', 'UpdateSocialServiceProviderProfile')
+  async updateSocialServiceProviderProfile(
+    @Payload() data: UpdateSocialServiceProviderGrpcRequestDto,
+  ): Promise<BaseResponseDto<SocialServiceProviderProfileResponseDto>> {
+    this.logger.log(`gRPC → UpdateSocialServiceProviderProfile for account: ${data.accountUuid}`);
+    return this.organisationService.updateSocialServiceProviderProfile(data.accountUuid, data);
+  }
+
+  /* ======================================================
+     PROPERTY OWNER PROFILE METHODS
+  ====================================================== */
+  @GrpcMethod('ProfileService', 'CreateOrganizationPropertyOwnerProfile')
+  async createOrganizationPropertyOwnerProfile(
+    @Payload() data: { accountUuid: string; data: PropertyOwnerProfileDataDto },
+  ): Promise<BaseResponseDto<PropertyOwnerProfileResponseDto>> {
+    this.logger.log(`gRPC → CreateOrganizationPropertyOwnerProfile for account: ${data.accountUuid}`);
+    return this.organisationService.createOrganizationPropertyOwnerProfile(data.accountUuid, data.data);
+  }
+
+  @GrpcMethod('ProfileService', 'UpdateOrganizationPropertyOwnerProfile')
+  async updateOrganizationPropertyOwnerProfile(
+    @Payload() data: UpdateOrganizationPropertyOwnerGrpcRequestDto,
+  ): Promise<BaseResponseDto<PropertyOwnerProfileResponseDto>> {
+    this.logger.log(`gRPC → UpdateOrganizationPropertyOwnerProfile for account: ${data.accountUuid}`);
+    return this.organisationService.updateOrganizationPropertyOwnerProfile(data.accountUuid, data);
+  }
+
+  /* ======================================================
+     SKILLED PROFESSIONAL PROFILE METHODS
+  ====================================================== */
+  @GrpcMethod('ProfileService', 'CreateOrganizationSkilledProfessionalProfile')
+  async createOrganizationSkilledProfessionalProfile(
+    @Payload() data: { accountUuid: string; data: SkilledProfessionalProfileDataDto },
+  ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+    this.logger.log(`gRPC → CreateOrganizationSkilledProfessionalProfile for account: ${data.accountUuid}`);
+    return this.organisationService.createOrganizationSkilledProfessionalProfile(data.accountUuid, data.data);
+  }
+
+  @GrpcMethod('ProfileService', 'UpdateOrganizationSkilledProfessionalProfile')
+  async updateOrganizationSkilledProfessionalProfile(
+    @Payload() data: UpdateOrganizationSkilledProfessionalGrpcRequestDto,
+  ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+    this.logger.log(`gRPC → UpdateOrganizationSkilledProfessionalProfile for account: ${data.accountUuid}`);
+    return this.organisationService.updateOrganizationSkilledProfessionalProfile(data.accountUuid, data);
+  }
+
+  /* ======================================================
+     INTERMEDIARY AGENT PROFILE METHODS
+  ====================================================== */
+  @GrpcMethod('ProfileService', 'CreateOrganizationIntermediaryAgentProfile')
+  async createOrganizationIntermediaryAgentProfile(
+    @Payload() data: { accountUuid: string; data: IntermediaryAgentProfileDataDto },
+  ): Promise<BaseResponseDto<IntermediaryAgentProfileResponseDto>> {
+    this.logger.log(`gRPC → CreateOrganizationIntermediaryAgentProfile for account: ${data.accountUuid}`);
+    return this.organisationService.createOrganizationIntermediaryAgentProfile(data.accountUuid, data.data);
+  }
+
+  @GrpcMethod('ProfileService', 'UpdateOrganizationIntermediaryAgentProfile')
+  async updateOrganizationIntermediaryAgentProfile(
+    @Payload() data: UpdateOrganizationIntermediaryAgentGrpcRequestDto,
+  ): Promise<BaseResponseDto<IntermediaryAgentProfileResponseDto>> {
+    this.logger.log(`gRPC → UpdateOrganizationIntermediaryAgentProfile for account: ${data.accountUuid}`);
+    return this.organisationService.updateOrganizationIntermediaryAgentProfile(data.accountUuid, data);
+  }
+
+  /* ======================================================
+     REMOVE PROFILE
+  ====================================================== */
+  @GrpcMethod('ProfileService', 'RemoveOrganizationProfile')
+  async removeProfile(
+    @Payload() data: { accountUuid: string; profileType: ProfileType },
+  ): Promise<BaseResponseDto<null>> {
+    this.logger.log(`gRPC → RemoveProfile: ${data.profileType} from account ${data.accountUuid}`);
+    return this.organisationService.removeProfile(data.accountUuid, data.profileType);
+  }
+
+  /* ======================================================
+     TEAM MANAGEMENT METHODS
   ====================================================== */
   @GrpcMethod('ProfileService', 'InviteMember')
   async inviteMember(
     @Payload() data: InviteMemberGrpcRequestDto,
   ): Promise<BaseResponseDto<InviteMemberResponseDto>> {
     this.logger.log(`gRPC → InviteMember: ${data.email} to org ${data.organizationUuid}`);
-    const resp = await this.organisationService.inviteMember(data);
-    this.logger.log(`Response from inviteMember: ${JSON.stringify(resp)}`);
-    return resp;
+    return this.organisationService.inviteMember(data);
   }
 
-  /* ======================================================
-     VERIFY INVITATION - Check if token is valid
-  ====================================================== */
   @GrpcMethod('ProfileService', 'VerifyInvitation')
   async verifyInvitation(
     @Payload() data: VerifyInvitationRequestDto,
@@ -115,9 +230,6 @@ export class OrganisationController {
     return this.organisationService.verifyInvitation(data);
   }
 
-  /* ======================================================
-     ACCEPT INVITATION - Complete the invitation flow
-  ====================================================== */
   @GrpcMethod('ProfileService', 'AcceptInvitation')
   async acceptInvitation(
     @Payload() data: AcceptInvitationGrpcRequestDto,
@@ -126,9 +238,6 @@ export class OrganisationController {
     return this.organisationService.acceptInvitation(data);
   }
 
-  /* ======================================================
-     GET ORGANIZATION INVITATIONS - List pending invites
-  ====================================================== */
   @GrpcMethod('ProfileService', 'GetOrganizationInvitations')
   async getOrganizationInvitations(
     @Payload() data: GetOrganizationInvitationsRequestDto,
@@ -137,9 +246,6 @@ export class OrganisationController {
     return this.organisationService.getOrganizationInvitations(data);
   }
 
-  /* ======================================================
-     RESEND INVITATION - Generate new token
-  ====================================================== */
   @GrpcMethod('ProfileService', 'ResendInvitation')
   async resendInvitation(
     @Payload() data: ResendInvitationGrpcRequestDto,
@@ -148,9 +254,6 @@ export class OrganisationController {
     return this.organisationService.resendInvitation(data);
   }
 
-  /* ======================================================
-     CANCEL INVITATION - Remove pending invitation
-  ====================================================== */
   @GrpcMethod('ProfileService', 'CancelInvitation')
   async cancelInvitation(
     @Payload() data: CancelInvitationGrpcRequestDto,
@@ -159,9 +262,6 @@ export class OrganisationController {
     return this.organisationService.cancelInvitation(data);
   }
 
-  /* ======================================================
-     CHECK INVITATION STATUS - For admin dashboard
-  ====================================================== */
   @GrpcMethod('ProfileService', 'CheckInvitationStatus')
   async checkInvitationStatus(
     @Payload() data: CheckInvitationStatusRequestDto,

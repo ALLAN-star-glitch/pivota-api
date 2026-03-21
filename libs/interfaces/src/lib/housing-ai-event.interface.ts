@@ -3,7 +3,7 @@
 export interface HousingAIEvent {
   userId: string;
   listingId: string;
-  eventType: 'VIEW' | 'SEARCH' | 'SAVE' | 'SCHEDULE_VIEWING' | 'COMPLETE_VIEWING' | 'INQUIRY';
+  eventType: 'VIEW' | 'SEARCH' | 'SAVE' | 'SCHEDULE_VIEWING' | 'COMPLETE_VIEWING' | 'INQUIRY' | 'LISTING_MILESTONE';
   metadata: {
     // Core tracking
     timestamp: string;
@@ -199,6 +199,57 @@ export interface HousingViewingCompletedEvent extends HousingAIEvent {
       concerns?: string[]; // Any concerns they had
     };
     outcome?: 'INTERESTED' | 'NOT_INTERESTED' | 'APPLIED' | 'RENTED';
+  };
+}
+
+// NEW: Listing Milestone Event Interface
+export interface HousingListingMilestoneEvent extends Omit<HousingAIEvent, 'userId' | 'listingId'> {
+  eventType: 'LISTING_MILESTONE';
+  accountId: string;  // Account that owns the listings
+  listingId: string;  // The listing that triggered the milestone
+  metadata: HousingAIEvent['metadata'] & {
+    // Milestone specific data
+    milestone: number;  // 1, 2, 3, 5, 10, 25, 50, 100
+    milestoneTier: 'ONBOARDING' | 'ENGAGEMENT' | 'GROWTH' | 'POWER' | 'PROFESSIONAL';
+    suggestedTeam: 'onboarding' | 'success' | 'sales' | 'marketing' | 'partnerships';
+    
+    // Account metrics
+    accountId: string;
+    accountName: string;
+    creatorId: string;
+    creatorName?: string;
+    
+    // Listing details
+    listingId: string;
+    listingTitle: string;
+    listingPrice: number;
+    listingType: string;
+    locationCity: string;
+    categoryId?: string;
+    
+    // Calculated metrics
+    totalListings: number;
+    totalValue: number;
+    averagePrice: number;
+    daysSinceFirstListing?: number;
+    categories?: string[];
+    
+    // Milestone-specific messaging
+    message: string;
+    
+    // Routing hints for notification service
+    routing: {
+      primaryTeam: string;
+      priority: 'HIGH' | 'MEDIUM' | 'LOW';
+      requiresFollowUp: boolean;
+      notificationTemplate: string;
+    };
+    
+    // User context (optional - who triggered this)
+    userContext?: HousingAIEvent['metadata']['userContext'];
+    
+    // Match scores (optional - not typically used for milestones)
+    matchScores?: HousingAIEvent['metadata']['matchScores'];
   };
 }
 

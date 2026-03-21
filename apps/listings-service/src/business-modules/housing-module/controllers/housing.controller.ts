@@ -42,7 +42,8 @@ export class HousingController {
   ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
     this.logger.debug(`CreateAdminHouseListing Request by admin`);
     return this.housingService.createAdminHouseListing(data);
-  }
+  } 
+   
 
   // ===========================================================
   // READ METHODS

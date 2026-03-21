@@ -366,6 +366,8 @@ export class CreateHouseListingGrpcRequestDto extends BaseHouseListingDto {
   @IsOptional()
   @IsString()
   ownerEmail?: string;
+
+  clientInfo?: AuthClientInfoDto; // Add this
 }
 
 /* ======================================================

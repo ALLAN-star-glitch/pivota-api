@@ -16,20 +16,49 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private readonly mailjet: Client;
 
-  // PivotaConnect Brand Colors
+  // PivotaConnect Brand Colors (Material Design 3)
+  // Following the 60-30-10 rule:
+  // Primary: 60% - African Sapphire
+  // Secondary: 30% - Warm Terracotta  
+  // Tertiary: 10% - Baobab Gold
   private readonly colors = {
-    teal: '#008080',
-    tealLight: '#E6F3F3',
-    tealDark: '#006666',
-    goldenYellow: '#FFD700',
-    goldenYellowLight: '#FFF9E6',
-    grey: '#F5F5F5',
-    greyDark: '#666666',
-    red: '#DC3545',
-    redLight: '#FFE6E8',
-    white: '#FFFFFF',
-    textDark: '#333333',
-    textLight: '#666666',
+    // Core Colors (Material Roles)
+    primary: '#1B4B6C',      // African Sapphire - 60% of UI
+    secondary: '#C95D3A',    // Warm Terracotta - 30% of UI
+    tertiary: '#E6B422',     // Baobab Gold - 10% of UI
+    
+    // Supporting Colors
+    error: '#BA2D2D',        // Sunset Red
+    success: '#2E7D32',      // Forest Green
+    warning: '#ED6C02',      // Harvest Amber
+    info: '#0288D1',         // Ocean Blue
+    neutral: '#5D6A75',      // Warm Gray
+    neutralVariant: '#D9CFC1', // Soft Sand
+    
+    // Surface Colors
+    surface: '#FFFFFF',
+    background: '#F5F5F5',
+    surfaceVariant: '#F9F7F3',
+    
+    // On Colors (Text on colored backgrounds)
+    onPrimary: '#FFFFFF',
+    onSecondary: '#FFFFFF',
+    onTertiary: '#1B4B6C',
+    onError: '#FFFFFF',
+    onSuccess: '#FFFFFF',
+    onWarning: '#1B1B1B',
+    onInfo: '#FFFFFF',
+    onSurface: '#1B1B1B',
+    onBackground: '#1B1B1B',
+    
+    // Text Colors
+    textPrimary: '#1B1B1B',
+    textSecondary: '#5D6A75',
+    textHint: '#9CA3AF',
+    
+    // Border Colors
+    borderLight: '#E5E7EB',
+    borderMedium: '#D1D5DB',
   };
 
   // Social Media Handles
@@ -51,7 +80,7 @@ export class EmailService {
   /**
    * Generates the base HTML template with PivotaConnect branding
    */
-  private getBaseHtmlTemplate(content: string): string {
+private getBaseHtmlTemplate(content: string): string {
     return `
       <!DOCTYPE html>
       <html>
@@ -63,25 +92,25 @@ export class EmailService {
           body {
             margin: 0;
             padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: ${this.colors.grey};
+            font-family: 'Merriweather', Georgia, 'Times New Roman', serif;
+            background-color: ${this.colors.background};
             -webkit-font-smoothing: antialiased;
           }
           
           .email-wrapper {
             max-width: 600px;
             margin: 0 auto;
-            background-color: ${this.colors.white};
-            border-radius: 8px;
+            background-color: ${this.colors.surface};
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
           }
           
           .email-header {
-            background: linear-gradient(135deg, rgba(0, 128, 128, 0.08) 0%, rgba(0, 102, 102, 0.12) 50%, rgba(0, 77, 77, 0.08) 100%);
-            padding: 24px 20px;
+            background: linear-gradient(135deg, ${this.colors.primary}20 0%, ${this.colors.primary}08 50%, ${this.colors.primary}15 100%);
+            padding: 32px 24px;
             text-align: center;
-            border-bottom: 1px solid rgba(0, 128, 128, 0.1);
+            border-bottom: 1px solid ${this.colors.borderLight};
           }
           
           .logo-container {
@@ -97,57 +126,99 @@ export class EmailService {
           }
           
           .email-content {
-            padding: 40px 28px;
-            background: ${this.colors.white};
+            padding: 48px 32px;
+            background: ${this.colors.surface};
           }
           
           h1 {
-            font-size: 26px;
-            color: ${this.colors.teal};
-            margin: 0 0 14px 0;
+            font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            color: ${this.colors.primary};
+            margin: 0 0 16px 0;
+            letter-spacing: -0.5px;
+          }
+          
+          h2 {
+            font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 20px;
             font-weight: 600;
+            color: ${this.colors.primary};
+            margin: 24px 0 16px 0;
+          }
+          
+          h3 {
+            font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 16px;
+            font-weight: 500;
+            color: ${this.colors.textSecondary};
+            margin: 0 0 12px 0;
           }
           
           p {
+            font-family: 'Merriweather', Georgia, 'Times New Roman', serif;
             font-size: 16px;
-            line-height: 1.5;
-            color: ${this.colors.textDark};
+            line-height: 1.6;
+            color: ${this.colors.textPrimary};
             margin: 0 0 16px 0;
           }
           
           .role-badge {
             display: inline-block;
-            background: linear-gradient(145deg, ${this.colors.tealLight}, ${this.colors.white});
-            color: ${this.colors.tealDark};
-            padding: 4px 14px;
+            background: ${this.colors.secondary}10;
+            color: ${this.colors.secondary};
+            padding: 6px 16px;
             border-radius: 100px;
             font-size: 13px;
             font-weight: 500;
-            margin: 6px 0;
-            border: 1px solid ${this.colors.teal}20;
+            font-family: 'Montserrat', sans-serif;
+            margin: 8px 0;
+            border: 1px solid ${this.colors.secondary}20;
           }
           
           .message-box {
-            background: linear-gradient(145deg, ${this.colors.goldenYellowLight}, ${this.colors.white});
-            border-left: 4px solid ${this.colors.goldenYellow};
-            padding: 16px;
-            border-radius: 4px;
+            background: ${this.colors.neutralVariant}40;
+            border-left: 4px solid ${this.colors.tertiary};
+            padding: 16px 20px;
+            border-radius: 8px;
             margin: 20px 0;
+          }
+          
+          .message-box p {
+            margin: 0;
+            font-style: italic;
           }
           
           .button {
             display: inline-block;
-            background: linear-gradient(145deg, ${this.colors.teal}, ${this.colors.tealDark});
-            color: ${this.colors.white} !important;
+            background: ${this.colors.secondary};
+            color: ${this.colors.onSecondary} !important;
             text-decoration: none;
             padding: 12px 28px;
             border-radius: 8px;
-            font-weight: 500;
+            font-weight: 600;
             font-size: 15px;
+            font-family: 'Montserrat', sans-serif;
             margin: 14px 0;
-            box-shadow: 0 2px 4px ${this.colors.teal}40;
+            transition: all 0.2s ease;
+            border: none;
           }
 
+          .button:hover {
+            background: ${this.colors.secondary}E6;
+            transform: translateY(-1px);
+          }
+          
+          .button-secondary {
+            background: ${this.colors.primary};
+            color: ${this.colors.onPrimary} !important;
+          }
+          
+          .button-tertiary {
+            background: ${this.colors.tertiary};
+            color: ${this.colors.onTertiary} !important;
+          }
+          
           .button:link,
           .button:visited,
           .button:hover,
@@ -157,49 +228,89 @@ export class EmailService {
           a.button:visited,
           a.button:hover,
           a.button:active {
-            color: ${this.colors.white} !important;
+            color: ${this.colors.onSecondary} !important;
             text-decoration: none;
           }
           
           .info-box {
-            background: linear-gradient(145deg, ${this.colors.tealLight}, ${this.colors.white});
-            border: 1px solid ${this.colors.teal}20;
+            background: ${this.colors.neutralVariant}20;
+            border: 1px solid ${this.colors.borderLight};
             padding: 20px;
             border-radius: 8px;
             margin: 20px 0;
           }
           
           .info-box h3 {
-            color: ${this.colors.teal};
-            font-size: 17px;
-            margin: 0 0 10px 0;
+            color: ${this.colors.primary};
+            font-size: 16px;
+            margin: 0 0 12px 0;
             font-weight: 600;
           }
           
           .info-box ul {
             margin: 0;
-            padding-left: 18px;
-            color: ${this.colors.textDark};
+            padding-left: 20px;
+            color: ${this.colors.textPrimary};
           }
           
           .info-box li {
-            margin-bottom: 6px;
+            margin-bottom: 8px;
+            font-family: 'Merriweather', serif;
+            font-size: 14px;
           }
           
-          .viewing-card {
-            background: linear-gradient(145deg, ${this.colors.tealLight}, ${this.colors.white});
-            border: 1px solid ${this.colors.teal}20;
-            padding: 20px;
+          .success-box {
+            background: ${this.colors.success}10;
+            border-left: 4px solid ${this.colors.success};
+            padding: 16px 20px;
             border-radius: 8px;
             margin: 20px 0;
           }
           
+          .success-box p {
+            color: ${this.colors.success};
+            margin: 0;
+          }
+          
+          .warning-box {
+            background: ${this.colors.warning}10;
+            border-left: 4px solid ${this.colors.warning};
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+          }
+          
+          .warning-box p {
+            color: ${this.colors.warning};
+            margin: 0;
+          }
+          
+          .info-badge {
+            display: inline-block;
+            background: ${this.colors.info}10;
+            color: ${this.colors.info};
+            padding: 4px 12px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: 'Montserrat', sans-serif;
+            margin: 6px 0;
+          }
+          
+          .viewing-card {
+            background: ${this.colors.surfaceVariant};
+            border: 1px solid ${this.colors.borderLight};
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+          }
+          
           .viewing-details {
-            background: ${this.colors.white};
-            padding: 14px;
+            background: ${this.colors.surface};
+            padding: 16px;
             border-radius: 8px;
             margin: 14px 0;
-            border-left: 4px solid ${this.colors.teal};
+            border-left: 4px solid ${this.colors.primary};
           }
           
           .viewing-details p {
@@ -207,39 +318,41 @@ export class EmailService {
           }
           
           .property-highlight {
-            font-size: 18px; 
+            font-family: 'Montserrat', sans-serif;
+            font-size: 18px;
             font-weight: 600;
-            color: ${this.colors.teal};
-            margin: 0 0 6px 0;
+            color: ${this.colors.primary};
+            margin: 0 0 8px 0;
           }
           
           .admin-badge {
             display: inline-block;
-            background: linear-gradient(145deg, ${this.colors.goldenYellow}, ${this.colors.goldenYellowLight});
-            color: ${this.colors.tealDark};
-            padding: 3px 10px;
+            background: ${this.colors.tertiary}20;
+            color: ${this.colors.primary};
+            padding: 4px 12px;
             border-radius: 100px;
             font-size: 11px;
             font-weight: 600;
+            font-family: 'Montserrat', sans-serif;
             margin: 6px 0;
           }
           
           .security-alert {
-            background: linear-gradient(145deg, ${this.colors.redLight}, ${this.colors.white});
-            border: 1px solid ${this.colors.red}40;
-            padding: 14px;
+            background: ${this.colors.error}10;
+            border-left: 4px solid ${this.colors.error};
+            padding: 16px 20px;
             border-radius: 8px;
             margin: 20px 0;
           }
           
           .security-alert p {
-            color: ${this.colors.red};
+            color: ${this.colors.error};
             margin: 0;
           }
           
           .device-details {
-            background: linear-gradient(145deg, ${this.colors.grey}, ${this.colors.white});
-            padding: 16px; 
+            background: ${this.colors.neutralVariant}20;
+            padding: 16px;
             border-radius: 8px;
             margin: 20px 0;
             font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
@@ -248,95 +361,139 @@ export class EmailService {
           
           .device-details p {
             margin: 0 0 6px 0;
-            color: ${this.colors.textLight};
+            color: ${this.colors.textSecondary};
           }
           
           .expiry-box {
-            background: linear-gradient(145deg, ${this.colors.grey}, ${this.colors.white});
-            border: 1px solid ${this.colors.teal}20;
+            background: ${this.colors.warning}10;
+            border: 1px solid ${this.colors.warning}30;
             padding: 14px;
             border-radius: 8px;
             margin: 20px 0;
             text-align: center;
-            color: ${this.colors.textLight};
+            color: ${this.colors.textSecondary};
             font-size: 13px;
           }
           
           .link-box {
-            background: linear-gradient(145deg, ${this.colors.grey}, ${this.colors.white});
-            padding: 10px 14px;
+            background: ${this.colors.neutralVariant}20;
+            padding: 12px 16px;
             border-radius: 8px;
             font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
             font-size: 13px;
             word-break: break-all;
-            border: 1px solid ${this.colors.teal}20;
+            border: 1px solid ${this.colors.borderLight};
             margin: 14px 0;
           }
           
           .divider {
             height: 1px;
-            background: linear-gradient(90deg, transparent, ${this.colors.teal}40, transparent);
-            margin: 24px 0;
+            background: linear-gradient(90deg, transparent, ${this.colors.borderMedium}, transparent);
+            margin: 32px 0;
+          }
+          
+          .stats-grid {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            margin: 20px 0;
+          }
+          
+          .stat-card {
+            flex: 1;
+            background: ${this.colors.surfaceVariant};
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+          }
+          
+          .stat-value {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: ${this.colors.primary};
+          }
+          
+          .stat-label {
+            font-family: 'Merriweather', serif;
+            font-size: 12px;
+            color: ${this.colors.textSecondary};
+            margin-top: 4px;
           }
           
           .email-footer {
-            padding: 24px 20px;
-            background: linear-gradient(145deg, ${this.colors.grey}, ${this.colors.white});
+            padding: 32px 24px;
+            background: ${this.colors.neutralVariant}20;
             text-align: center;
-            border-top: 1px solid ${this.colors.teal}20;
+            border-top: 1px solid ${this.colors.borderLight};
           }
           
           .social-links {
-            margin: 0 0 16px 0; 
+            margin: 0 0 20px 0;
           }
           
           .social-link {
             display: inline-block;
-            padding: 4px 10px;
-            margin: 0 4px;
-            color: ${this.colors.teal};
+            padding: 6px 12px;
+            margin: 0 6px;
+            color: ${this.colors.primary};
             text-decoration: none;
             font-size: 12px;
-            border: 1px solid ${this.colors.teal}30;
+            font-family: 'Montserrat', sans-serif;
+            border: 1px solid ${this.colors.borderLight};
             border-radius: 6px;
+            transition: all 0.2s ease;
+          }
+          
+          .social-link:hover {
+            background: ${this.colors.primary}10;
+            border-color: ${this.colors.primary};
           }
           
           .footer-links {
-            margin: 12px 0;
+            margin: 16px 0;
           }
           
           .footer-links a {
-            color: ${this.colors.teal};
+            color: ${this.colors.textSecondary};
             text-decoration: none;
-            margin: 0 8px;
+            margin: 0 10px;
             font-size: 12px;
+            font-family: 'Montserrat', sans-serif;
+          }
+          
+          .footer-links a:hover {
+            color: ${this.colors.primary};
           }
           
           .copyright {
             font-size: 11px;
-            color: ${this.colors.textLight};
+            color: ${this.colors.textHint};
+            font-family: 'Merriweather', serif;
           }
           
           @media screen and (max-width: 600px) {
-            .email-header { padding: 18px 16px; }
-            .email-content { padding: 28px 18px; }
-            .email-footer { padding: 20px 16px; }
-            h1 { font-size: 22px; }
+            .email-header { padding: 24px 20px; }
+            .email-content { padding: 32px 20px; }
+            .email-footer { padding: 24px 20px; }
+            h1 { font-size: 24px; }
             .button { display: block; text-align: center; }
+            .stats-grid { flex-direction: column; }
             .logo-image { max-width: 160px; }
           }
         </style>
       </head>
-      <body style="background-color: ${this.colors.grey}; padding: 16px;"> 
+      <body style="background-color: ${this.colors.background}; padding: 16px;"> 
         <div class="email-wrapper">
           <div class="email-header">
-            <div class="logo-container">
+            <div class="logo-container" style="text-align: center; width: 100%;">
               <img 
-                src="https://pivotaconnect.com/_next/image?url=%2Fpivotaconnectlogo.png&w=256&q=75" 
+                src="https://pivotaconnect.com/logofinale.png" 
                 alt="PivotaConnect" 
+                style="max-width: 200px; height: auto; display: block; margin: 0 auto;"
                 class="logo-image"
-              />
-            </div>
+              /> 
+            </div> 
           </div>
           <div class="email-content">${content}</div>
           <div class="email-footer">
@@ -371,7 +528,7 @@ export class EmailService {
 
     const content = `
       <h1>Welcome to PivotaConnect</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${dto.firstName},</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Hello ${dto.firstName},</p>
       <p>We're delighted to have you join our community. Your journey to discovering new opportunities begins now.</p>
       
       <div class="info-box">
@@ -390,7 +547,7 @@ export class EmailService {
       
       <div class="divider"></div>
       
-      <p style="font-size: 14px; color: ${this.colors.textLight};">
+      <p style="font-size: 14px; color: ${this.colors.textSecondary};">
         Account ID: ${dto.accountId}<br>
         Plan: ${dto.plan || 'Free Forever'}<br>
         Member since: ${joinDate}
@@ -422,7 +579,7 @@ export class EmailService {
 
     const adminContent = `
       <h1>Welcome, ${dto.adminFirstName}</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Your organization <strong>${businessName}</strong> is now registered.</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Your organization <strong>${businessName}</strong> is now registered.</p>
       <p>Thank you for choosing PivotaConnect. You're now part of a growing network of African businesses.</p>
       
       <div class="info-box">
@@ -441,7 +598,7 @@ export class EmailService {
       
       <div class="divider"></div>
       
-      <p style="font-size: 14px; color: ${this.colors.textLight};">
+      <p style="font-size: 14px; color: ${this.colors.textSecondary};">
         Organization: ${businessName}<br>
         Account ID: ${dto.accountId}<br>
         Plan: ${dto.plan || 'Free Business Tier'}<br>
@@ -467,7 +624,7 @@ export class EmailService {
     if (dto.orgEmail && dto.orgEmail.toLowerCase() !== dto.adminEmail.toLowerCase()) {
       const orgContent = `
         <h1>Registration Confirmed</h1>
-        <p style="font-size: 18px; color: ${this.colors.teal};"><strong>${businessName}</strong> is now on PivotaConnect.</p>
+        <p style="font-size: 18px; color: ${this.colors.primary};"><strong>${businessName}</strong> is now on PivotaConnect.</p>
         <p>This confirms your organization's registration, completed by ${dto.adminFirstName}.</p>
         
         <div class="info-box">
@@ -513,7 +670,6 @@ export class EmailService {
     // Build device info
     const deviceInfo = [];
     
-    // Primary Device Info
     if (dto.device) {
       let deviceString = dto.device;
       if (dto.deviceType) {
@@ -522,7 +678,6 @@ export class EmailService {
       deviceInfo.push(`<p><strong>Device:</strong> ${deviceString}</p>`);
     }
     
-    // Operating System
     if (dto.os) {
       let osString = dto.os;
       if (dto.osVersion) {
@@ -531,7 +686,6 @@ export class EmailService {
       deviceInfo.push(`<p><strong>Operating System:</strong> ${osString}</p>`);
     }
     
-    // Browser
     if (dto.browser) {
       let browserString = dto.browser;
       if (dto.browserVersion) {
@@ -540,12 +694,10 @@ export class EmailService {
       deviceInfo.push(`<p><strong>Browser:</strong> ${browserString}</p>`);
     }
     
-    // Network Info
     if (dto.ipAddress) {
       deviceInfo.push(`<p><strong>IP Address:</strong> ${dto.ipAddress}</p>`);
     }
 
-    // Security advice based on login context
     const securityAdvice = [];
     
     if (dto.ipAddress === 'localhost' || dto.ipAddress === '127.0.0.1') {
@@ -578,7 +730,7 @@ export class EmailService {
 
     const content = `
       <h1>${isOrgLogin ? 'Organization Login Alert' : 'New Login Detected'}</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${dto.firstName},</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Hello ${dto.firstName},</p>
       <p>A new login was detected on your ${isOrgLogin ? `organization <strong>${dto.organizationName}</strong>` : 'PivotaConnect'} account.</p>
       
       <div class="security-alert">
@@ -586,14 +738,14 @@ export class EmailService {
       </div>
       
       <div class="device-details">
-        <h3 style="color: ${this.colors.teal}; margin-top: 0; margin-bottom: 15px;">📋 Login Details</h3>
+        <h3 style="color: ${this.colors.primary}; margin-top: 0; margin-bottom: 15px;">Login Details</h3>
         ${deviceInfo.join('')}
         <p><strong>Time:</strong> ${loginTime}</p>
       </div>
       
       ${securityAdvice.length > 0 ? `
-      <div class="info-box" style="background: ${this.colors.goldenYellowLight}; border-left: 4px solid ${this.colors.goldenYellow};">
-        <h3 style="color: ${this.colors.tealDark}; margin-top: 0;">Security Recommendations</h3>
+      <div class="warning-box">
+        <h3 style="color: ${this.colors.warning}; margin-top: 0;">Security Recommendations</h3>
         ${securityAdvice.join('')}
       </div>
       ` : ''} 
@@ -602,7 +754,7 @@ export class EmailService {
         <a href="${this.social.website}/account/security" class="button">Review Security Settings</a>
       </div>
       
-      <div style="margin-top: 20px; font-size: 12px; color: ${this.colors.textLight}; text-align: center;">
+      <div style="margin-top: 20px; font-size: 12px; color: ${this.colors.textSecondary}; text-align: center;">
         <p>This is an automated security notification from PivotaConnect. If you have questions, please contact our support team.</p>
       </div>
     `;
@@ -622,15 +774,14 @@ export class EmailService {
 
     await this.sendEmail(body, dto.to);
 
-    // Also send to organization email if applicable
     if (isOrgLogin && dto.orgEmail && dto.orgEmail.toLowerCase() !== dto.to.toLowerCase()) {
       const orgContent = `
         <h1>Organization Admin Login Alert</h1>
-        <p style="font-size: 18px; color: ${this.colors.teal};">${dto.organizationName}</p>
+        <p style="font-size: 18px; color: ${this.colors.primary};">${dto.organizationName}</p>
         <p>An administrator (${dto.firstName} ${dto.lastName || ''}) has logged into your organization account.</p>
         
         <div class="device-details"> 
-          <h3 style="color: ${this.colors.teal}; margin-top: 0; margin-bottom: 15px;">Login Details</h3>
+          <h3 style="color: ${this.colors.primary}; margin-top: 0; margin-bottom: 15px;">Login Details</h3>
           ${deviceInfo.join('')}
           <p><strong>Time:</strong> ${loginTime}</p>
         </div>
@@ -681,10 +832,10 @@ export class EmailService {
 
     const content = `
       <h1>Verification Code</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Use this code to ${purposeText}</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Use this code to ${purposeText}</p>
       
       <div style="text-align: center; margin: 40px 0;">
-        <div style="font-size: 48px; font-weight: 600; color: ${this.colors.teal}; letter-spacing: 4px; background: ${this.colors.tealLight}; padding: 24px; border-radius: 8px; display: inline-block;">
+        <div style="font-size: 48px; font-weight: 600; color: ${this.colors.secondary}; letter-spacing: 4px; background: ${this.colors.secondary}10; padding: 24px; border-radius: 8px; display: inline-block; border: 1px solid ${this.colors.secondary}20;">
           ${dto.code}
         </div>
       </div>
@@ -695,7 +846,7 @@ export class EmailService {
         This code will expire in 10 minutes. Never share it with anyone.
       </div>
       
-      <p style="font-size: 14px; color: ${this.colors.textLight};">If you didn't request this code, please ignore this email.</p>
+      <p style="font-size: 14px; color: ${this.colors.textSecondary};">If you didn't request this code, please ignore this email.</p>
     `;
 
     const body: SendEmailV3_1.Body = {
@@ -732,7 +883,7 @@ export class EmailService {
 
     const content = `
       <h1>New User Registration</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">A new user has joined PivotaConnect</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">A new user has joined PivotaConnect</p>
       
       <div class="info-box">
         <h3>User Details</h3>
@@ -782,7 +933,7 @@ export class EmailService {
 
     const content = `
       <h1>New Organization Registration</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">A new organization has joined PivotaConnect</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">A new organization has joined PivotaConnect</p>
       
       <div class="info-box">
         <h3>Organization Details</h3>
@@ -803,7 +954,7 @@ export class EmailService {
       
       <p><strong>Registration Date:</strong> ${regDate}</p>
       
-      <p>Welcome them to the platform! 🏢</p>
+      <p>Welcome them to the platform!</p>
     `;
 
     const body: SendEmailV3_1.Body = {
@@ -823,7 +974,7 @@ export class EmailService {
   }
 
   /* ======================================================
-       VIEWING SCHEDULED EMAIL (Viewer - Self Booking) WITH IMAGE
+       VIEWING SCHEDULED EMAIL (Viewer - Self Booking)
   ====================================================== */
   async sendViewingScheduledViewerEmail(data: {
     email: string;
@@ -843,7 +994,7 @@ export class EmailService {
 
     const content = `
       <h1>Viewing Confirmed</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.firstName},</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Hello ${data.firstName},</p>
       <p>Your property viewing has been scheduled successfully.</p>
       
       <div class="viewing-card">
@@ -851,9 +1002,9 @@ export class EmailService {
         <div class="property-highlight">${data.houseTitle}</div>
         
         <div class="viewing-details">
-          <p><strong>📅 Date & Time:</strong> ${data.viewingDate}</p>
-          <p><strong>📍 Location:</strong> ${data.location}</p>
-          ${data.notes ? `<p><strong>📝 Your notes:</strong> ${data.notes}</p>` : ''}
+          <p><strong>Date & Time:</strong> ${data.viewingDate}</p>
+          <p><strong>Location:</strong> ${data.location}</p>
+          ${data.notes ? `<p><strong>Your notes:</strong> ${data.notes}</p>` : ''}
         </div>
       </div>
       
@@ -889,7 +1040,7 @@ export class EmailService {
   }
 
   /* ======================================================
-       VIEWING SCHEDULED EMAIL (Viewer - Admin Booking) WITH IMAGE
+       VIEWING SCHEDULED EMAIL (Viewer - Admin Booking)
   ====================================================== */
   async sendViewingScheduledAdminViewerEmail(data: {
     email: string;
@@ -911,7 +1062,7 @@ export class EmailService {
       <h1>Viewing Scheduled by Support Team</h1>
       <div class="admin-badge">SCHEDULED BY ADMIN</div>
       
-      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.firstName},</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Hello ${data.firstName},</p>
       <p>A property viewing has been scheduled on your behalf by our support team.</p>
       
       <div class="viewing-card">
@@ -919,9 +1070,9 @@ export class EmailService {
         <div class="property-highlight">${data.houseTitle}</div>
         
         <div class="viewing-details">
-          <p><strong>📅 Date & Time:</strong> ${data.viewingDate}</p>
-          <p><strong>📍 Location:</strong> ${data.location}</p>
-          ${data.notes ? `<p><strong>📝 Notes:</strong> ${data.notes}</p>` : ''}
+          <p><strong>Date & Time:</strong> ${data.viewingDate}</p>
+          <p><strong>Location:</strong> ${data.location}</p>
+          ${data.notes ? `<p><strong>Notes:</strong> ${data.notes}</p>` : ''}
         </div>
       </div>
       
@@ -956,7 +1107,7 @@ export class EmailService {
   }
 
   /* ======================================================
-       VIEWING REQUEST EMAIL (Property Owner - Self Booking) WITH IMAGE
+       VIEWING REQUEST EMAIL (Property Owner - Self Booking)
   ====================================================== */
   async sendViewingRequestedOwnerEmail(data: {
     email: string;
@@ -982,7 +1133,7 @@ export class EmailService {
       
     const content = `
       <h1>New Viewing Request</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.ownerName},</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Hello ${data.ownerName},</p>
       <p>A viewing has been scheduled for your property.</p>
       
       <div class="viewing-card">
@@ -990,10 +1141,10 @@ export class EmailService {
         <div class="property-highlight">${data.houseTitle}</div>
         
         <div class="viewing-details">
-          <p><strong>📅 Date & Time:</strong> ${data.viewingDate}</p>
-          <p><strong>📍 Location:</strong> ${data.location}</p>
-          <p><strong>👤 Viewer:</strong> ${viewerInfo}</p>
-          ${data.notes ? `<p><strong>📝 Viewer notes:</strong> ${data.notes}</p>` : ''}
+          <p><strong>Date & Time:</strong> ${data.viewingDate}</p>
+          <p><strong>Location:</strong> ${data.location}</p>
+          <p><strong>Viewer:</strong> ${viewerInfo}</p>
+          ${data.notes ? `<p><strong>Viewer notes:</strong> ${data.notes}</p>` : ''}
         </div>
       </div>
       
@@ -1029,7 +1180,7 @@ export class EmailService {
   }
 
   /* ======================================================
-       VIEWING REQUEST EMAIL (Property Owner - Admin Booking) WITH IMAGE
+       VIEWING REQUEST EMAIL (Property Owner - Admin Booking)
   ====================================================== */
   async sendViewingRequestedAdminOwnerEmail(data: {
     email: string;
@@ -1057,7 +1208,7 @@ export class EmailService {
       <h1>Viewing Scheduled by Admin</h1>
       <div class="admin-badge">ADMIN SCHEDULED</div>
       
-      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.ownerName},</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Hello ${data.ownerName},</p>
       <p>Our support team has scheduled a viewing for your property.</p>
       
       <div class="viewing-card">
@@ -1065,10 +1216,10 @@ export class EmailService {
         <div class="property-highlight">${data.houseTitle}</div>
         
         <div class="viewing-details">
-          <p><strong>📅 Date & Time:</strong> ${data.viewingDate}</p>
-          <p><strong>📍 Location:</strong> ${data.location}</p>
-          <p><strong>👤 Viewer:</strong> ${viewerInfo}</p>
-          ${data.notes ? `<p><strong>📝 Notes:</strong> ${data.notes}</p>` : ''}
+          <p><strong>Date & Time:</strong> ${data.viewingDate}</p>
+          <p><strong>Location:</strong> ${data.location}</p>
+          <p><strong>Viewer:</strong> ${viewerInfo}</p>
+          ${data.notes ? `<p><strong>Notes:</strong> ${data.notes}</p>` : ''}
         </div>
       </div>
       
@@ -1119,7 +1270,7 @@ export class EmailService {
 
     const content = `
       <h1>You're Invited</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Join <strong>${data.organizationName}</strong> on PivotaConnect</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Join <strong>${data.organizationName}</strong> on PivotaConnect</p>
       <p><strong>${data.inviterName}</strong> has invited you to join their organization.</p>
       
       <div class="role-badge">${data.roleName}</div>
@@ -1179,7 +1330,7 @@ export class EmailService {
 
     const content = `
       <h1>Added to Organization</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">You've been added to <strong>${data.organizationName}</strong></p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">You've been added to <strong>${data.organizationName}</strong></p>
       <p><strong>${data.inviterName}</strong> has added you to their organization.</p>
       
       <div class="role-badge">${data.roleName}</div>
@@ -1238,7 +1389,7 @@ export class EmailService {
 
     const content = `
       <h1>Set Up Your Password</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Welcome to ${data.organizationName}, ${data.firstName}</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Welcome to ${data.organizationName}, ${data.firstName}</p>
       <p>Your account has been created. To complete your registration, please set up your password.</p>
       
       <div style="text-align: center;">
@@ -1285,7 +1436,7 @@ export class EmailService {
   }): Promise<void> {
     const content = `
       <h1>Password Setup Complete</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Your password has been successfully set.</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Your password has been successfully set.</p>
       <p>You can now log in to your account using your email and new password.</p>
       
       <div style="text-align: center;">
@@ -1330,7 +1481,7 @@ export class EmailService {
   }): Promise<void> {
     const content = `
       <h1>New Team Member Joined</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.adminName},</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Hello ${data.adminName},</p>
       <p><strong>${data.newMemberName}</strong> has accepted your invitation and joined <strong>${data.organizationName}</strong>.</p>
       
       <div class="info-box">
@@ -1357,7 +1508,7 @@ export class EmailService {
           Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
         },
         To: [{ Email: data.adminEmail, Name: data.adminName }],
-        Subject: `🎉 ${data.newMemberName} joined ${data.organizationName}`,
+        Subject: `${data.newMemberName} joined ${data.organizationName}`,
         HTMLPart: this.getBaseHtmlTemplate(content),
         TextPart: this.stripHtml(content),
       }],
@@ -1378,7 +1529,7 @@ export class EmailService {
 
     const content = `
       <h1>Account Linked Successfully</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Hello,</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Hello,</p>
       <p>Your PivotaConnect account has been successfully linked with <strong>${data.provider}</strong>.</p>
       
       <div class="info-box">
@@ -1390,7 +1541,7 @@ export class EmailService {
         </ul>
       </div>
       
-      <div class="security-alert" style="background: ${this.colors.tealLight}; border-color: ${this.colors.teal};">
+      <div class="info-box" style="border-left-color: ${this.colors.primary};">
         <p><strong>Time of linking:</strong> ${linkTime}</p>
         <p><strong>Provider:</strong> ${data.provider}</p>
       </div>
@@ -1425,7 +1576,7 @@ export class EmailService {
   }): Promise<void> {
     const content = `
       <h1>Complete Your Subscription</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.firstName},</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Hello ${data.firstName},</p>
       <p>Thank you for choosing PivotaConnect. To activate your ${data.plan} plan, please complete the payment process.</p>
       
       <div class="info-box">
@@ -1469,8 +1620,8 @@ export class EmailService {
     accountId: string;
   }): Promise<void> {
     const content = `
-      <h1>Payment Confirmed! 🎉</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Congratulations ${data.firstName},</p>
+      <h1>Payment Confirmed!</h1>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Congratulations ${data.firstName},</p>
       <p>Your payment has been successfully processed. Your ${data.plan} plan is now active.</p>
       
       <div class="info-box">
@@ -1520,7 +1671,7 @@ export class EmailService {
 
     const content = `
       <h1>Welcome to PivotaConnect via Google</h1>
-      <p style="font-size: 18px; color: ${this.colors.teal};">Hello ${data.firstName},</p>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Hello ${data.firstName},</p>
       <p>You've successfully signed up using your Google account. Welcome to our community!</p>
       
       <div class="info-box">
@@ -1538,7 +1689,7 @@ export class EmailService {
       
       <div class="divider"></div>
       
-      <p style="font-size: 14px; color: ${this.colors.textLight};">
+      <p style="font-size: 14px; color: ${this.colors.textSecondary};">
         Account ID: ${data.accountId}<br>
         Member since: ${joinDate}
       </p>
@@ -1552,6 +1703,178 @@ export class EmailService {
         },
         To: [{ Email: data.email, Name: data.firstName }],
         Subject: `Welcome to PivotaConnect, ${data.firstName}`,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.email);
+  }
+
+  /* ======================================================
+     LISTING MILESTONE EMAIL (for internal teams)
+  ====================================================== */
+  async sendListingMilestoneEmail(
+    data: {
+      recipientEmail: string;
+      accountName: string;
+      listingTitle: string;
+      listingPrice: number;
+      locationCity: string;
+      milestone: number;
+      milestoneTier: string;
+      suggestedTeam: string;
+      totalValue: number;
+      averagePrice: number;
+      message: string;
+      priority: string;
+      listingUrl: string;
+      accountDashboardUrl: string;
+      timestamp: string;
+    },
+    subject: string
+  ): Promise<void> {
+    const milestoneTime = format(new Date(data.timestamp), 'MMMM do, yyyy \'at\' h:mm a');
+
+    const content = `
+      <h1>Listing Milestone: ${data.milestone} Listings</h1>
+      <p style="font-size: 18px; color: ${this.colors.primary};">${data.message}</p>
+      
+      <div class="info-box">
+        <h3>Account Details</h3>
+        <ul>
+          <li><strong>Account:</strong> ${data.accountName}</li>
+          <li><strong>Milestone:</strong> ${data.milestone} listings</li>
+          <li><strong>Tier:</strong> ${data.milestoneTier}</li>
+          <li><strong>Suggested Team:</strong> ${data.suggestedTeam}</li>
+          <li><strong>Priority:</strong> ${data.priority}</li>
+        </ul>
+      </div>
+      
+      <div class="info-box">
+        <h3>Latest Listing</h3>
+        <ul>
+          <li><strong>Title:</strong> ${data.listingTitle}</li>
+          <li><strong>Price:</strong> KES ${data.listingPrice.toLocaleString()}</li>
+          <li><strong>Location:</strong> ${data.locationCity}</li>
+        </ul>
+      </div>
+      
+      <div class="info-box">
+        <h3>Account Metrics</h3>
+        <ul>
+          <li><strong>Total Listings:</strong> ${data.milestone}</li>
+          <li><strong>Total Value:</strong> KES ${data.totalValue.toLocaleString()}</li>
+          <li><strong>Average Price:</strong> KES ${data.averagePrice.toLocaleString()}</li>
+        </ul>
+      </div>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${data.listingUrl}" class="button" style="margin-right: 10px;">View Listing</a>
+        <a href="${data.accountDashboardUrl}" class="button">View Account</a>
+      </div>
+      
+      <div class="expiry-box">
+        <p style="margin: 0; font-size: 12px;">Milestone achieved at: ${milestoneTime}</p>
+      </div>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.recipientEmail }],
+        Subject: subject,
+        HTMLPart: this.getBaseHtmlTemplate(content),
+        TextPart: this.stripHtml(content),
+      }],
+    };
+
+    await this.sendEmail(body, data.recipientEmail);
+  }
+
+  /* ======================================================
+     LISTING CREATED EMAIL (to property owner/lister)
+  ====================================================== */
+  async sendListingCreatedEmail(data: {
+    email: string;
+    firstName: string;
+    listingTitle: string;
+    listingId: string;
+    listingUrl: string;
+    listingPrice: number;
+    locationCity: string;
+    listingType: string;
+    status: string;
+    imageUrl?: string;
+  }): Promise<void> {
+    const listingDate = format(new Date(), 'MMMM do, yyyy');
+    
+    const imageHtml = data.imageUrl ? `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <img src="${data.imageUrl}" alt="${data.listingTitle}" 
+             style="max-width: 100%; height: auto; border-radius: 8px; max-height: 300px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+      </div>
+    ` : '';
+
+    const content = `
+      <h1>Listing Posted Successfully</h1>
+      <p style="font-size: 18px; color: ${this.colors.primary};">Hello ${data.firstName},</p>
+      <p>Your property listing has been successfully posted on PivotaConnect and is now live.</p>
+      
+      ${imageHtml}
+      
+      <div class="viewing-card">
+        <div class="property-highlight">${data.listingTitle}</div>
+        
+        <div class="viewing-details">
+          <p><strong>Location:</strong> ${data.locationCity}</p>
+          <p><strong>Price:</strong> KES ${data.listingPrice.toLocaleString()}</p>
+          <p><strong>Type:</strong> ${data.listingType}</p>
+          <p><strong>Posted:</strong> ${listingDate}</p>
+          <p><strong>Status:</strong> ${data.status}</p>
+        </div>
+      </div>
+      
+      <div class="info-box">
+        <h3>What's Next</h3>
+        <ul>
+          <li><strong>Share your listing</strong> - Share the link on social media and with your network</li>
+          <li><strong>Respond to inquiries</strong> - You will be notified when someone contacts you</li>
+          <li><strong>Schedule viewings</strong> - Manage viewing requests from potential buyers and renters</li>
+          <li><strong>Update your listing</strong> - You can edit details or add more photos at any time</li>
+        </ul>
+      </div>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${data.listingUrl}" class="button" style="margin-right: 10px;">View Your Listing</a>
+        <a href="${this.social.website}/my-listings" class="button">Manage Listings</a>
+      </div>
+      
+      <div class="divider"></div>
+      
+      <div style="text-align: center;">
+        <p style="font-size: 14px; color: ${this.colors.textSecondary};">
+          <strong>Pro Tip:</strong> Listings with high-quality photos get three times more views. 
+          <a href="${this.social.website}/help/listing-tips" style="color: ${this.colors.primary};">View our listing tips →</a>
+        </p>
+      </div>
+      
+      <div class="expiry-box">
+        <p style="margin: 0; font-size: 12px;">Listing ID: ${data.listingId}</p>
+      </div>
+    `;
+
+    const body: SendEmailV3_1.Body = {
+      Messages: [{
+        From: {
+          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+        },
+        To: [{ Email: data.email, Name: data.firstName }],
+        Subject: `Your listing "${data.listingTitle}" is now live on PivotaConnect`,
         HTMLPart: this.getBaseHtmlTemplate(content),
         TextPart: this.stripHtml(content),
       }],

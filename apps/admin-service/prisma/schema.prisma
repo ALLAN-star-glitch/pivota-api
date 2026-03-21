@@ -1796,3 +1796,170 @@ model HourlyAuthMetrics {
 
   @@index([hour])
 }
+
+// ======================================================
+// LISTING MILESTONE EVENTS (from Housing Service)
+// ======================================================
+
+model ListingMilestoneEvent {
+  id             String   @id @default(cuid())
+  
+  // Account/User info
+  accountId      String
+  accountName    String
+  creatorId      String
+  creatorName    String?
+  
+  // Listing details
+  listingId      String
+  listingTitle   String
+  listingPrice   Float
+  listingType    String
+  locationCity   String
+  categoryId     String?
+  
+  // Milestone data
+  milestone      Int      // 1, 2, 3, 5, 10, 25, 50, 100
+  milestoneTier  String   // ONBOARDING, ENGAGEMENT, GROWTH, POWER, PROFESSIONAL
+  suggestedTeam  String   // onboarding, success, sales, marketing, partnerships
+  
+  // Calculated metrics
+  totalListings  Int
+  totalValue     Float
+  averagePrice   Float
+  daysSinceFirstListing Int?
+  categories     Json?    // Array of categories used
+  
+  // Message and routing
+  message        String
+  priority       String   // HIGH, MEDIUM, LOW
+  requiresFollowUp Boolean @default(false)
+  
+  // Device context (if available)
+  deviceType     String?
+  os             String?
+  osVersion      String?
+  browser        String?
+  browserVersion String?
+  isBot          Boolean? @default(false)
+  platform       String?  // WEB, MOBILE, API, CLI
+  
+  // Timestamps
+  occurredAt     DateTime // When the milestone was achieved
+  createdAt      DateTime @default(now())
+
+  // Indexes for querying
+  @@index([accountId])
+  @@index([milestone])
+  @@index([milestoneTier])
+  @@index([suggestedTeam])
+  @@index([occurredAt])
+  @@index([createdAt])
+  
+  // Composite indexes for analytics
+  @@index([milestone, occurredAt])
+  @@index([accountId, milestone])
+  @@index([suggestedTeam, milestone])
+}
+
+// ======================================================
+// DAILY LISTING MILESTONE METRICS (Aggregated)
+// ======================================================
+
+model DailyListingMilestoneMetrics {
+  id             String   @id @default(cuid())
+  date           DateTime @unique
+  
+  // Milestone counts by type
+  totalMilestones Int     @default(0)
+  
+  // Breakdown by milestone
+  milestone1Count  Int    @default(0) // First listings
+  milestone2Count  Int    @default(0) // Second listings
+  milestone3Count  Int    @default(0) // Third listings
+  milestone5Count  Int    @default(0) // Fifth listings
+  milestone10Count Int    @default(0) // Tenth listings
+  milestone25Count Int    @default(0) // 25th listings
+  milestone50Count Int    @default(0) // 50th listings
+  milestone100Count Int   @default(0) // 100th listings
+  
+  // Breakdown by tier
+  onboardingMilestones  Int @default(0)
+  engagementMilestones  Int @default(0)
+  growthMilestones      Int @default(0)
+  powerMilestones       Int @default(0)
+  professionalMilestones Int @default(0)
+  
+  // Breakdown by team
+  onboardingTeamNotifications Int @default(0)
+  successTeamNotifications    Int @default(0)
+  salesTeamNotifications      Int @default(0)
+  marketingTeamNotifications  Int @default(0)
+  partnershipsTeamNotifications Int @default(0)
+  
+  // Geographic distribution
+  topLocations     Json?   // {"Nairobi": 45, "Mombasa": 23}
+  
+  // Category distribution
+  topCategories    Json?   // {"apartments": 34, "houses": 28}
+  
+  // Listing type distribution
+  listingTypeBreakdown Json? // {"RENTAL": 67, "SALE": 33}
+  
+  // Financial metrics
+  totalListingValue Float  @default(0)
+  averageListingPrice Float?
+  
+  // Account metrics
+  uniqueAccounts   Int     @default(0)
+  repeatAccounts   Int     @default(0) // Accounts with multiple milestones
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([date])
+}
+
+// ======================================================
+// ACCOUNT MILESTONE SUMMARY (for quick lookups)
+// ======================================================
+
+model AccountMilestoneSummary {
+  id             String   @id @default(cuid())
+  accountId      String   @unique
+  accountName    String?  // Add this for easy identification
+  
+  // Latest milestone
+  currentMilestone Int    @default(0) // Current listing count
+  lastMilestone   Int?     // Last milestone achieved (1,2,3,5,10,etc.)
+  lastMilestoneAt DateTime?
+  
+  // Milestone history
+  milestonesAchieved Json? // [1,2,3,5] - which milestones they've hit
+  
+  // Account metrics
+  totalListings   Int      @default(0)
+  totalValue      Float    @default(0)
+  averagePrice    Float?
+  
+  // First listing date
+  firstListingAt  DateTime?
+  daysActive      Int?     // Days since first listing
+  
+  // Categorization
+  primaryCategory String?
+  primaryLocation String?
+  primaryListingType String?
+  
+  // Status
+  isActive        Boolean  @default(true)
+  lastActiveAt    DateTime?
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([currentMilestone])
+  @@index([lastMilestone])
+  @@index([isActive])
+}

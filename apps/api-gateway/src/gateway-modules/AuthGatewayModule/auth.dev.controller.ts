@@ -113,10 +113,10 @@ export class AuthDevController {
   async loginSuperAdmin(@Res({ passthrough: true }) res: Response): Promise<BaseResponseDto<TokenPairDto>> {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      '69a601b6-fdb9-4333-9c01-8895a8b3af45',
+      'eeafe623-65e7-4fb8-9fd4-b9c17991afd9',
       'allanmathenge67@gmail.com',
       'SuperAdmin',
-      '462908a2-0f23-472a-b2d7-54966d004256', 
+      'e25328b9-1b68-47c4-bb9f-86188f530e88', 
       res,
     );
   }
@@ -210,13 +210,13 @@ export class AuthDevController {
   async loginBusinessSystemAdmin(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      '75249f7d-d2ce-4ad5-b6d1-0b9cf3230f33',
+      '24bbd3d2-6d88-456f-9881-741c38003104',
       'allanmathenge22@gmail.com',
       'BusinessSystemAdmin',
-      'ec46d97e-1fe0-4893-a554-96be8beef377', 
+      '2178edf5-465b-463f-a36e-e9df92ea3e0e', 
       res,
     );
-  }
+  } 
 
   // =========================================================
   // 🛠️ DEV TOOLS - SPECIALIZED ADMINS
@@ -464,10 +464,10 @@ export class AuthDevController {
   async loginGeneralUser(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      '4684c88c-206e-4511-962d-1b45b7fa18cc',
+      '53ebe2fb-da59-4758-a90d-c41b6f38c54e',
       'allanmathenge82@gmail.com',
       'GeneralUser',
-      'd676ec1a-9bf7-4f9a-bd35-626e9379421b',  
+      '04dedb6f-e3f5-4766-9c7c-fb13642a1101',  
       res,
     );
   } 

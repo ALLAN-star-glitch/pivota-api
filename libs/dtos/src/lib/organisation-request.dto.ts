@@ -1,238 +1,45 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { 
-  IsEmail, 
+  IsArray, 
+  IsBoolean, 
   IsNotEmpty, 
-  IsString, 
-  IsUUID, 
   IsOptional, 
+  IsString, 
+  IsEmail, 
+  IsUUID, 
   MinLength,
+  IsDateString,
   IsUrl,
-  IsPhoneNumber,
   Length,
-  IsIn,
-  IsArray,
+  Matches,
+  ValidateIf,
+  IsInt,
+  Min,
+  IsNumber,
+  IsObject,
+  Max,
+  IsIn
 } from 'class-validator';
+import { 
+  EmployerProfileDataDto, 
+  SocialServiceProviderProfileDataDto, 
+  PropertyOwnerProfileDataDto, 
+  SkilledProfessionalProfileDataDto, 
+  IntermediaryAgentProfileDataDto,
+  ProfileToCreateDto,
+  UpdateSocialServiceProviderProfileRequestDto,
+} from './user-request.dto';
+
+import { ACCOUNT_TYPES, AccountType, KENYAN_PHONE_REGEX, ORGANIZATION_PURPOSES, ORGANIZATION_TYPES, OrganizationPurpose, OrganizationType } from '@pivota-api/constants';
 
 
-const ALLOWED_ORG_TYPES = [
-  'PRIVATE_LIMITED', 
-  'NGO', 
-  'SOLE_PROPRIETORSHIP', 
-  'GOVERNMENT', 
-  'PARTNERSHIP'
-];
-
-/* ======================================================
-   1. ORGANISATION SIGNUP REQUEST (AUTH SERVICE)
-   - Used for the public-facing signup API.
-   - Includes Password but NO adminUserUuid.
-====================================================== */
-
-export class OrganisationSignupRequestDto {
-  // --- ORGANIZATION DETAILS ---
-  @ApiProperty({
-    description: 'The registered legal name of the business or organization',
-    example: 'Pivota Tech Solutions',
-    minLength: 3,
-  })
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(3)
-  name!: string;
-  
-
-  @ApiProperty({
-    description: 'General contact email for the business entity',
-    example: 'info@pivotatech.co.ke',
-  })
-  @IsEmail()
-  @IsNotEmpty()
-  officialEmail!: string;
-
-  @ApiProperty({
-    description: 'General company contact number (International format)',
-    example: '+254201234567',
-  })
-  @IsNotEmpty()
-  @IsPhoneNumber(undefined, { message: 'Invalid official company phone number' })
-  officialPhone!: string;
-
-  @ApiProperty({
-    description: 'Physical location or headquarters of the organization',
-    example: 'Waiyaki Way, Nairobi, Kenya',
-  })
-  @IsString()
-  @IsNotEmpty()
-  physicalAddress!: string;
-
-  // --- ADMIN ACCOUNT DETAILS ---
-  @ApiProperty({
-    description: 'Login email for the organization admin. This will be the primary identity.',
-    example: 'admin@pivotatech.co.ke',
-  })
-  @IsEmail()
-  @IsNotEmpty()
-  email!: string;
-
-  @ApiProperty({
-    description: 'Secure password for the admin account',
-    example: 'StrongPass@123',
-    minLength: 8,
-  })
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(8)
-  password!: string;
-
-  @ApiProperty({
-    description: 'International phone number for the admin.',
-    example: '+254711222333',
-  })
-  @IsNotEmpty()
-  @IsPhoneNumber(undefined, { 
-    message: 'Phone number must be valid and include a country code (e.g., +254...)' 
-  })
-  phone!: string;
-
-  @ApiProperty({ description: 'Admin legal first name', example: 'John' })
-  @IsString()
-  @IsNotEmpty()
-  adminFirstName!: string;
-
-  @ApiProperty({ description: 'Admin legal last name', example: 'Doe' })
-  @IsString()
-  @IsNotEmpty()
-  adminLastName!: string;
-
-  @ApiProperty({
-    description: '6-digit OTP verification code sent to the admin email',
-    example: '123456',
-    minLength: 6,
-    maxLength: 6
-  })
-  @IsString()
-  @Length(6, 6, { message: 'Verification code must be exactly 6 digits' })
-  @IsNotEmpty()
-  code!: string;
-
-  @ApiProperty({
-    description: 'The legal structure of the organization',
-    enum: ALLOWED_ORG_TYPES,
-    example: 'PRIVATE_LIMITED',
-  })
-  @IsNotEmpty()
-  @IsString()
-  @IsIn(ALLOWED_ORG_TYPES, {
-    message: `organizationType must be one of: ${ALLOWED_ORG_TYPES.join(', ')}`
-  })
-  organizationType!: string;
-
-  @ApiPropertyOptional({
-    description: 'Target subscription plan. If not the free-plan, signup will return a payment redirect.',
-    example: 'org-premium-tier',
-    default: 'free-plan'
-  })
-  @IsOptional()
-  @IsString()
-  planSlug?: string; 
-}
 
 /* ======================================================
-   2. CREATE ORGANISATION REQUEST (ORGANISATION SERVICE)
-   - Used for internal gRPC/Service communication.
-   - Includes adminUserUuid but NO Password.
+   BASE ORGANIZATION UPDATE DTO (Shared properties)
 ====================================================== */
-export class CreateOrganisationRequestDto {
-  // --- Organization Identity ---
-  @ApiProperty({
-    description: 'The registered legal name of the business or organization',
-    example: 'Pivota Tech Solutions',
-  })
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(3)
-  name!: string;
 
-  @ApiProperty({
-    description: 'General contact email for the business entity',
-    example: 'info@pivotatech.co.ke',
-  })
-  @IsEmail()
-  @IsNotEmpty()
-  officialEmail!: string;
-
-  @ApiProperty({
-    description: 'General company contact number',
-    example: '+254201234567',
-  })
-  @IsNotEmpty()
-  @IsPhoneNumber(undefined)
-  officialPhone!: string;
-
-  @ApiProperty({
-    description: 'Physical location of the primary business office',
-    example: 'Waiyaki Way, Nairobi, Kenya',
-  })
-  @IsString()
-  @IsNotEmpty()
-  physicalAddress!: string;
-
-  // --- Admin Mapping ---
-  @ApiProperty({
-    description: 'The UUID pre-generated by Auth Service to anchor identity',
-    example: 'd9b2b1c0-1234-4a5b-8c9d-0123456789ab',
-  })
-  @IsUUID()
-  @IsNotEmpty()
-  adminUserUuid!: string;
-
-  @ApiProperty({
-    description: 'Login email for the admin (to populate the User table)',
-    example: 'admin@pivotatech.co.ke',
-  })
-  @IsEmail()
-  @IsNotEmpty()
-  email!: string;
-
-  @ApiProperty({ 
-    description: 'Admin phone number', 
-    example: '+254711222333' 
-  })
-  @IsPhoneNumber(undefined)
-  @IsNotEmpty()
-  phone!: string;
-
-  @ApiProperty({ description: 'Admin first name', example: 'John' })
-  @IsString()
-  @IsNotEmpty()
-  adminFirstName!: string;
-
-  @ApiProperty({ description: 'Admin last name', example: 'Doe' })
-  @IsString()
-  @IsNotEmpty()
-  adminLastName!: string;
-
-  @ApiProperty({
-    description: 'The type of organization',
-    example: 'PRIVATE_LIMITED',
-  })
-  @IsNotEmpty()
-  @IsString()
-  @IsIn(ALLOWED_ORG_TYPES)
-  organizationType!: string;
-
-  @ApiPropertyOptional({
-    description: 'The subscription plan for the organization',
-    example: 'free-plan',
-  })
-  @IsString()
-  planSlug!: string;
-}
-
-/* ======================================================
-   3. UPDATE ORGANISATION PROFILE REQUEST
-====================================================== */
-export class UpdateOrgProfileRequestDto {
+export abstract class BaseUpdateOrganizationDto {
   @ApiPropertyOptional({ 
     description: 'Official company website URL',
     example: 'https://pivotatech.co.ke' 
@@ -267,18 +74,432 @@ export class UpdateOrgProfileRequestDto {
 
   @ApiPropertyOptional({ 
     description: 'Update the legal structure',
-    enum: ALLOWED_ORG_TYPES 
+    enum: ORGANIZATION_TYPES 
+  })
+  @IsOptional()
+  @IsIn(ORGANIZATION_TYPES)
+  organizationType?: OrganizationType;
+
+  @ApiPropertyOptional({ 
+    description: 'About the organization',
+    example: 'Leading tech company in East Africa'
   })
   @IsOptional()
   @IsString()
-  @IsIn(ALLOWED_ORG_TYPES)
-  organizationType?: string;
+  about?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Logo URL',
+    example: 'https://cdn.pivota.com/logos/techcorp.png'
+  })
+  @IsOptional()
+  @IsUrl()
+  logo?: string;
 }
 
 /* ======================================================
-   4. ADD ORGANISATION MEMBER REQUEST (Direct Link)
-   - Used for directly adding an existing user to an organization
+   ORGANIZATION SPECIFIC DTOs
 ====================================================== */
+
+/**
+ * Organisation Signup Request (Auth Service)
+ * Used for the public-facing signup API.
+ * Includes Password but NO adminUserUuid.
+ */
+export class OrganisationSignupRequestDto {
+  @ApiProperty({
+    description: 'The registered legal name of the business or organization',
+    example: 'Pivota Tech Solutions',
+    minLength: 3,
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  name!: string;
+
+  @ApiProperty({
+    description: 'General contact email for the business entity',
+    example: 'info@pivotatech.co.ke',
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  officialEmail!: string;
+
+  @ApiProperty({
+    description: 'General company contact number',
+    example: '+254712345678',
+  })
+  @IsNotEmpty()
+  @Matches(KENYAN_PHONE_REGEX, { message: 'Please provide a valid Kenyan phone number' })
+  officialPhone!: string;
+
+  @ApiProperty({
+    description: 'Physical location or headquarters of the organization',
+    example: 'Waiyaki Way, Nairobi, Kenya',
+  })
+  @IsString()
+  @IsNotEmpty()
+  physicalAddress!: string;
+
+  @ApiProperty({
+    description: 'Login email for the organization admin',
+    example: 'admin@pivotatech.co.ke',
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  email!: string;
+
+  @ApiProperty({
+    description: 'Secure password for the admin account',
+    example: 'StrongPass@123',
+    minLength: 8,
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  password!: string;
+
+  @ApiProperty({
+    description: 'Admin phone number',
+    example: '+254711222333',
+  })
+  @IsNotEmpty()
+  @Matches(KENYAN_PHONE_REGEX, { message: 'Please provide a valid Kenyan phone number' })
+  phone!: string;
+
+  @ApiProperty({ description: 'Admin legal first name', example: 'John' })
+  @IsString()
+  @IsNotEmpty()
+  adminFirstName!: string;
+
+  @ApiProperty({ description: 'Admin legal last name', example: 'Doe' })
+  @IsString()
+  @IsNotEmpty()
+  adminLastName!: string;
+
+  @ApiProperty({
+    description: '6-digit OTP verification code sent to the admin email',
+    example: '123456',
+    minLength: 6,
+    maxLength: 6
+  })
+  @IsString()
+  @Length(6, 6, { message: 'Verification code must be exactly 6 digits' })
+  @IsNotEmpty()
+  code!: string;
+
+  @ApiProperty({
+    description: 'The legal structure of the organization',
+    enum: ORGANIZATION_TYPES,
+    example: 'COMPANY',
+  })
+  @IsNotEmpty()
+  @IsIn(ORGANIZATION_TYPES)
+  organizationType!: OrganizationType;
+
+  @ApiPropertyOptional({
+    description: 'Target subscription plan',
+    example: 'free-forever',
+    default: 'free-forever'
+  })
+  @IsOptional()
+  @IsString()
+  planSlug?: string;
+
+  @ApiPropertyOptional({
+    description: 'Government-issued business registration number',
+    example: 'PVT-REG-001',
+  })
+  @IsOptional()
+  @IsString()
+  registrationNo?: string;
+
+  @ApiPropertyOptional({
+    description: 'Kenya Revenue Authority Personal Identification Number (KRA PIN)',
+    example: 'P051234567X',
+  })
+  @IsOptional()
+  @IsString()
+  kraPin?: string;
+
+  @ApiPropertyOptional({
+    description: 'Website URL',
+    example: 'https://pivotatech.co.ke',
+  })
+  @IsOptional()
+  @IsUrl()
+  website?: string;
+
+  @ApiPropertyOptional({
+    description: 'About the organization',
+    example: 'Leading tech company in East Africa',
+  })
+  @IsOptional()
+  @IsString()
+  about?: string;
+
+  @ApiPropertyOptional({
+    description: 'Logo URL',
+    example: 'https://cdn.pivota.com/logos/techcorp.png',
+  })
+  @IsOptional()
+  @IsUrl()
+  logo?: string;
+
+  // --- NEW: Organization Purposes (from UI Screen 7) ---
+  @ApiPropertyOptional({
+    description: 'What the organization will do on the platform',
+    enum: ORGANIZATION_PURPOSES,
+    example: ['hire_employees', 'list_properties'],
+    isArray: true,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsIn(ORGANIZATION_PURPOSES, { each: true })
+  purposes?: OrganizationPurpose[];
+
+  // --- NEW: Purpose-specific profile data (from UI Screen 10) ---
+  @ApiPropertyOptional({
+    description: 'Profile data for each selected purpose',
+    example: {
+      hire_employees: {
+        companyName: 'Tech Corp',
+        industry: 'Technology',
+        companySize: '50-100',
+        preferredSkills: ['JavaScript', 'Python']
+      },
+      list_properties: {
+        companyName: 'Tech Properties',
+        preferredPropertyTypes: ['APARTMENT', 'COMMERCIAL']
+      }
+    },
+  })
+  @IsOptional()
+  @IsObject()
+  profileData?: {
+    hire_employees?: Partial<EmployerProfileDataDto>;
+    list_properties?: Partial<PropertyOwnerProfileDataDto>;
+    offer_skilled_services?: Partial<SkilledProfessionalProfileDataDto>;
+    provide_social_support?: Partial<SocialServiceProviderProfileDataDto>;
+    act_as_agent?: Partial<IntermediaryAgentProfileDataDto>;
+  };
+}
+
+/**
+ * Create Organisation Request (Organisation Service)
+ * Used for internal gRPC/Service communication.
+ * Includes adminUserUuid but NO Password.
+ * This mirrors CreateAccountWithProfilesRequestDto from user-request.dto
+ */
+// In organisation-request.dto.ts
+
+export class CreateOrganisationRequestDto {
+  // --- Account Type (always ORGANIZATION) ---
+  @ApiProperty({ 
+    description: 'Account type',
+    enum: ACCOUNT_TYPES,
+    example: 'ORGANIZATION'
+  })
+  @IsIn(ACCOUNT_TYPES)
+  @IsNotEmpty()
+  accountType!: AccountType;
+
+  // --- Admin User Details ---
+  @ApiProperty({
+    description: 'The UUID pre-generated by Auth Service to anchor identity',
+    example: 'd9b2b1c0-1234-4a5b-8c9d-0123456789ab',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  adminUserUuid!: string;
+
+  @ApiProperty({
+    description: 'Login email for the admin (to populate the User table)',
+    example: 'admin@pivotatech.co.ke',
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  email!: string;
+
+  @ApiProperty({ 
+    description: 'Admin phone number', 
+    example: '+254711222333' 
+  })
+  @Matches(KENYAN_PHONE_REGEX, { message: 'Please provide a valid Kenyan phone number' })
+  @IsNotEmpty()
+  phone!: string;
+
+  @ApiProperty({ description: 'Admin first name', example: 'John' })
+  @IsString()
+  @IsNotEmpty()
+  adminFirstName!: string;
+
+  @ApiProperty({ description: 'Admin last name', example: 'Doe' })
+  @IsString()
+  @IsNotEmpty()
+  adminLastName!: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Admin profile image URL',
+    example: 'https://cdn.pivota.com/profiles/avatar.jpg'
+  })
+  @IsOptional()
+  @IsUrl()
+  adminProfileImage?: string;
+
+  // --- Organization Details ---
+  @ApiProperty({
+    description: 'The registered legal name of the business or organization',
+    example: 'Pivota Tech Solutions',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  organizationName!: string;
+
+  @ApiProperty({
+    description: 'The type of organization',
+    enum: ORGANIZATION_TYPES,
+    example: 'COMPANY',
+  })
+  @IsNotEmpty()
+  @IsIn(ORGANIZATION_TYPES)
+  organizationType!: OrganizationType;
+
+  @ApiProperty({
+    description: 'General contact email for the business entity',
+    example: 'info@pivotatech.co.ke',
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  officialEmail!: string;
+
+  @ApiProperty({
+    description: 'General company contact number',
+    example: '+254712345678',
+  })
+  @IsNotEmpty()
+  @Matches(KENYAN_PHONE_REGEX, { message: 'Please provide a valid Kenyan phone number' })
+  officialPhone!: string;
+
+  @ApiProperty({
+    description: 'Physical location of the primary business office',
+    example: 'Waiyaki Way, Nairobi, Kenya',
+  })
+  @IsString()
+  @IsNotEmpty()
+  physicalAddress!: string;
+
+  @ApiPropertyOptional({
+    description: 'Government-issued business registration number',
+    example: 'PVT-REG-001',
+  })
+  @IsOptional()
+  @IsString()
+  registrationNo?: string;
+
+  @ApiPropertyOptional({
+    description: 'Kenya Revenue Authority Personal Identification Number (KRA PIN)',
+    example: 'P051234567X',
+  })
+  @IsOptional()
+  @IsString()
+  kraPin?: string;
+
+  @ApiPropertyOptional({
+    description: 'Website URL',
+    example: 'https://pivotatech.co.ke',
+  })
+  @IsOptional()
+  @IsUrl()
+  website?: string;
+
+  @ApiPropertyOptional({
+    description: 'About the organization',
+    example: 'Leading tech company in East Africa',
+  })
+  @IsOptional()
+  @IsString()
+  about?: string;
+
+  @ApiPropertyOptional({
+    description: 'Logo URL',
+    example: 'https://cdn.pivota.com/logos/techcorp.png',
+  })
+  @IsOptional()
+  @IsUrl()
+  logo?: string;
+
+  @ApiPropertyOptional({
+    description: 'The subscription plan for the organization',
+    example: 'free-forever',
+  })
+  @IsOptional()
+  @IsString()
+  planSlug?: string;
+
+  // --- Organization Purposes (from UI Screen 7) ---
+  @ApiProperty({
+    description: 'What the organization will do (from UI Screen 7)',
+    enum: ORGANIZATION_PURPOSES,
+    example: ['hire_employees', 'list_properties'],
+    isArray: true,
+  })
+  @IsArray()
+  @IsIn(ORGANIZATION_PURPOSES, { each: true })
+  @IsNotEmpty()
+  purposes!: OrganizationPurpose[];
+
+  // --- Purpose-specific profile data (from UI Screen 10) ---
+  @ApiProperty({
+    description: 'Profile data for each selected purpose (from UI Screen 10)',
+    example: {
+      hire_employees: {
+        companyName: 'Tech Corp',
+        industry: 'Technology',
+        companySize: '50-100',
+        preferredSkills: ['JavaScript', 'Python']
+      },
+      list_properties: {
+        companyName: 'Tech Properties',
+        preferredPropertyTypes: ['APARTMENT', 'COMMERCIAL']
+      }
+    },
+  })
+  @IsObject()
+  @IsNotEmpty()
+  profileData!: {
+    hire_employees?: Partial<EmployerProfileDataDto>;
+    list_properties?: Partial<PropertyOwnerProfileDataDto>;
+    offer_skilled_services?: Partial<SkilledProfessionalProfileDataDto>;
+    provide_social_support?: Partial<SocialServiceProviderProfileDataDto>;
+    act_as_agent?: Partial<IntermediaryAgentProfileDataDto>;
+  };
+}
+
+
+
+/**
+ * Update Organisation Profile Request (Public)
+ * Used by the gateway for updating organization profiles
+ */
+export class UpdateOrgProfileRequestDto extends BaseUpdateOrganizationDto {}
+
+/**
+ * Update Organisation Profile GRPC Request (Internal)
+ * Used for internal gRPC communication
+ */
+export class UpdateOrgProfileGrpcRequestDto extends BaseUpdateOrganizationDto {
+  @ApiProperty({ description: 'Target organization account UUID' })
+  @IsUUID()
+  @IsNotEmpty()
+  accountUuid!: string;
+}
+
+/**
+ * Add Organisation Member Request (Direct Link)
+ * Used for directly adding an existing user to an organization
+ */
 export class AddOrgMemberRequestDto {
   @ApiProperty({
     description: 'Global identifier of the organization',
@@ -297,11 +518,10 @@ export class AddOrgMemberRequestDto {
   userUuid!: string;
 }
 
-/* ======================================================
-   5. INVITE MEMBER REQUEST (Email-Based Invitation)
-   - Public DTO used by the Gateway API
-   - Admin does NOT specify role - system assigns 'GeneralUser' internally
-====================================================== */
+/**
+ * Invite Member Request (Email-Based Invitation)
+ * Public DTO used by the Gateway API
+ */
 export class InviteMemberRequestDto {
   @ApiProperty({
     description: 'The email address of the person being invited',
@@ -320,11 +540,10 @@ export class InviteMemberRequestDto {
   message?: string;
 }
 
-/* ======================================================
-   6. INVITE MEMBER GRPC REQUEST (Profile Service)
-   - Internal gRPC DTO used between Gateway and Profile Service
-   - Extends the public DTO and adds fields extracted from JWT
-====================================================== */
+/**
+ * Invite Member GRPC Request (Profile Service)
+ * Internal gRPC DTO used between Gateway and Profile Service
+ */
 export class InviteMemberGrpcRequestDto extends InviteMemberRequestDto {
   @ApiProperty({
     description: 'UUID of the organization (extracted from JWT context)',
@@ -343,10 +562,10 @@ export class InviteMemberGrpcRequestDto extends InviteMemberRequestDto {
   invitedByUserUuid!: string;
 }
 
-/* ======================================================
-   7. ACCEPT INVITATION REQUEST
-   - Public DTO used when a user clicks the invitation link
-====================================================== */
+/**
+ * Accept Invitation Request
+ * Public DTO used when a user clicks the invitation link
+ */
 export class AcceptInvitationRequestDto {
   @ApiProperty({
     description: 'The unique secret token sent to the users email',
@@ -377,22 +596,22 @@ export class AcceptInvitationRequestDto {
     example: '+254712345678',
   })
   @IsOptional()
-  @IsPhoneNumber(undefined)
+  @Matches(KENYAN_PHONE_REGEX, { message: 'Please provide a valid Kenyan phone number' })
   phone?: string;
 }
 
-/* ======================================================
-   8. ACCEPT INVITATION GRPC REQUEST (Profile Service)
-   - Internal gRPC DTO for accepting invitations
-====================================================== */
+/**
+ * Accept Invitation GRPC Request (Profile Service)
+ * Internal gRPC DTO for accepting invitations
+ */
 export class AcceptInvitationGrpcRequestDto extends AcceptInvitationRequestDto {
   // No additional fields needed - token and user details are sufficient
 }
 
-/* ======================================================
-   9. VERIFY INVITATION REQUEST
-   - Used to check if an invitation token is valid
-====================================================== */
+/**
+ * Verify Invitation Request
+ * Used to check if an invitation token is valid
+ */
 export class VerifyInvitationRequestDto {
   @ApiProperty({
     description: 'The invitation token to verify',
@@ -403,10 +622,10 @@ export class VerifyInvitationRequestDto {
   token!: string;
 }
 
-/* ======================================================
-   10. RESEND INVITATION REQUEST
-    - Public DTO for resending an invitation
-====================================================== */
+/**
+ * Resend Invitation Request
+ * Public DTO for resending an invitation
+ */
 export class ResendInvitationRequestDto {
   @ApiProperty({
     description: 'The ID of the invitation to resend',
@@ -417,11 +636,10 @@ export class ResendInvitationRequestDto {
   invitationId!: string;
 }
 
-/* ======================================================
-   11. RESEND INVITATION GRPC REQUEST (Profile Service)
-    - Internal gRPC DTO for resending invitations
-    - Extends public DTO and adds admin context from JWT
-====================================================== */
+/**
+ * Resend Invitation GRPC Request (Profile Service)
+ * Internal gRPC DTO for resending invitations
+ */
 export class ResendInvitationGrpcRequestDto extends ResendInvitationRequestDto {
   @ApiProperty({
     description: 'UUID of the admin requesting the resend (extracted from JWT)',
@@ -440,10 +658,10 @@ export class ResendInvitationGrpcRequestDto extends ResendInvitationRequestDto {
   organizationUuid!: string;
 }
 
-/* ======================================================
-   12. CANCEL INVITATION REQUEST
-    - Public DTO for cancelling an invitation
-====================================================== */
+/**
+ * Cancel Invitation Request
+ * Public DTO for cancelling an invitation
+ */
 export class CancelInvitationRequestDto {
   @ApiProperty({
     description: 'The ID of the invitation to cancel',
@@ -454,10 +672,10 @@ export class CancelInvitationRequestDto {
   invitationId!: string;
 }
 
-/* ======================================================
-   13. CANCEL INVITATION GRPC REQUEST (Profile Service)
-    - Internal gRPC DTO for cancelling invitations
-====================================================== */
+/**
+ * Cancel Invitation GRPC Request (Profile Service)
+ * Internal gRPC DTO for cancelling invitations
+ */
 export class CancelInvitationGrpcRequestDto extends CancelInvitationRequestDto {
   @ApiProperty({
     description: 'UUID of the admin requesting the cancellation (extracted from JWT)',
@@ -476,10 +694,10 @@ export class CancelInvitationGrpcRequestDto extends CancelInvitationRequestDto {
   organizationUuid!: string;
 }
 
-/* ======================================================
-   14. GET ORGANIZATION INVITATIONS REQUEST
-    - Used to fetch pending invitations for an organization
-====================================================== */
+/**
+ * Get Organization Invitations Request
+ * Used to fetch pending invitations for an organization
+ */
 export class GetOrganizationInvitationsRequestDto {
   @ApiProperty({
     description: 'UUID of the organization',
@@ -498,10 +716,10 @@ export class GetOrganizationInvitationsRequestDto {
   requestingUserUuid!: string;
 }
 
-/* ======================================================
-   15. CHECK INVITATION STATUS REQUEST
-    - Used to quickly check if an email has a pending invitation
-====================================================== */
+/**
+ * Check Invitation Status Request
+ * Used to quickly check if an email has a pending invitation
+ */
 export class CheckInvitationStatusRequestDto {
   @ApiProperty({
     description: 'Email to check',
@@ -520,13 +738,9 @@ export class CheckInvitationStatusRequestDto {
   organizationUuid!: string;
 }
 
-/* ======================================================
-   16. ORGANIZATION SERVICE PROVIDER ONBOARDING
-====================================================== */
-
 /**
- * Public Gateway DTO: Used by the Organization Admin.
- * orgUuid is usually pulled from the context or parameters.
+ * Organization Service Provider Onboarding
+ * Public Gateway DTO
  */
 export class OnboardOrganizationProviderRequestDto {
   @ApiProperty({ 
@@ -536,6 +750,11 @@ export class OnboardOrganizationProviderRequestDto {
   @IsArray()
   @IsString({ each: true })
   @IsNotEmpty({ each: true })
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') return value.split(',').map(s => s.trim());
+    return value;
+  })
   specialties!: string[];
 
   @ApiProperty({ 
@@ -545,11 +764,17 @@ export class OnboardOrganizationProviderRequestDto {
   @IsArray()
   @IsString({ each: true })
   @IsNotEmpty({ each: true })
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') return value.split(',').map(s => s.trim());
+    return value;
+  })
   serviceAreas!: string[];
 }
 
 /**
- * Internal / gRPC DTO: The command sent to OrganisationService.
+ * Organization Service Provider Onboarding GRPC Request
+ * Internal gRPC DTO
  */
 export class OnboardOrgProviderGrpcRequestDto extends OnboardOrganizationProviderRequestDto {
   @ApiProperty({ 
@@ -561,9 +786,13 @@ export class OnboardOrgProviderGrpcRequestDto extends OnboardOrganizationProvide
 }
 
 /* ======================================================
-   SETUP PASSWORD REQUEST DTO
-   - For users who accepted an invitation to set their password
+   PASSWORD SETUP DTOs
 ====================================================== */
+
+/**
+ * Setup Password Request DTO
+ * For users who accepted an invitation to set their password
+ */
 export class SetupPasswordRequestDto {
   @ApiProperty({
     description: 'The password setup token sent via email',
@@ -593,25 +822,245 @@ export class SetupPasswordRequestDto {
   confirmPassword!: string;
 }
 
-/* ======================================================
-   CHECK PASSWORD SETUP STATUS RESPONSE DTO
-====================================================== */
-export class CheckPasswordSetupStatusResponseDto {
+/**
+ * Check Password Setup Status Request
+ */
+export class CheckPasswordSetupStatusRequestDto {
   @ApiProperty({
-    description: 'Whether the token is valid',
-    example: true,
+    description: 'The password setup token',
+    example: '550e8400-e29b-41d4-a716-446655440000',
   })
-  isValid!: boolean;
+  @IsString()
+  @IsNotEmpty()
+  token!: string;
+}
 
-  @ApiPropertyOptional({
-    description: 'Email associated with the token',
-    example: 'user@example.com',
-  })
-  email?: string;
+/* ======================================================
+   MAIN ONBOARDING DTO (Matches UserService pattern)
+====================================================== */
 
-  @ApiPropertyOptional({
-    description: 'When the token expires',
-    example: '2026-03-01T12:00:00Z',
+/**
+ * Create Organization Account With Profiles Request
+ * Used for organization signup with multiple profiles
+ * This matches the pattern from UserService's CreateAccountWithProfilesRequestDto
+ */
+export class CreateOrganizationAccountWithProfilesRequestDto {
+  @ApiProperty({ 
+    description: 'Account type (must be ORGANIZATION)',
+    enum: ACCOUNT_TYPES,
+    example: 'ORGANIZATION'
   })
-  expiresAt?: string;
+  @IsIn(ACCOUNT_TYPES)
+  @IsNotEmpty()
+  accountType!: AccountType;
+
+  @ApiProperty({ 
+    description: 'Email address',
+    example: 'admin@techcorp.com'
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  email!: string;
+
+  @ApiProperty({ 
+    description: 'Password',
+    example: 'StrongPass@123',
+    minLength: 8
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8)
+  password!: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Phone number',
+    example: '+254712345678'
+  })
+  @IsOptional()
+  @Matches(KENYAN_PHONE_REGEX)
+  phone?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Plan slug',
+    example: 'free-forever',
+    default: 'free-forever'
+  })
+  @IsOptional()
+  @IsString()
+  planSlug?: string;
+
+  @ApiProperty({ 
+    description: 'OTP code',
+    example: '123456',
+    minLength: 6,
+    maxLength: 6
+  })
+  @IsString()
+  @Length(6, 6)
+  @IsNotEmpty()
+  otpCode!: string;
+
+  // --- Organization Details ---
+  @ApiProperty({ 
+    description: 'Organization name',
+    example: 'Tech Corp Ltd'
+  })
+  @IsString()
+  @IsNotEmpty()
+  organizationName!: string;
+
+  @ApiProperty({ 
+    description: 'Organization type',
+    enum: ORGANIZATION_TYPES,
+    example: 'COMPANY'
+  })
+  @IsIn(ORGANIZATION_TYPES)
+  @IsNotEmpty()
+  organizationType!: OrganizationType;
+
+  @ApiPropertyOptional({ 
+    description: 'Registration number',
+    example: 'PVT/2023/123456'
+  })
+  @IsOptional()
+  @IsString()
+  registrationNo?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'KRA PIN',
+    example: 'A123456789B'
+  })
+  @IsOptional()
+  @IsString()
+  kraPin?: string;
+
+  @ApiProperty({ 
+    description: 'Official email',
+    example: 'info@techcorp.com'
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  officialEmail!: string;
+
+  @ApiProperty({ 
+    description: 'Official phone',
+    example: '+254712345678'
+  })
+  @Matches(KENYAN_PHONE_REGEX)
+  @IsNotEmpty()
+  officialPhone!: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Physical address',
+    example: '123 Kenyatta Ave, Nairobi'
+  })
+  @IsOptional()
+  @IsString()
+  physicalAddress?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Website URL',
+    example: 'https://techcorp.com'
+  })
+  @IsOptional()
+  @IsUrl()
+  website?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'About the organization',
+    example: 'Leading tech company in East Africa'
+  })
+  @IsOptional()
+  @IsString()
+  about?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Logo URL',
+    example: 'https://cdn.pivota.com/logos/techcorp.png'
+  })
+  @IsOptional()
+  @IsUrl()
+  logo?: string;
+
+  // --- Admin Details ---
+  @ApiProperty({ 
+    description: 'Admin first name',
+    example: 'John'
+  })
+  @IsString()
+  @IsNotEmpty()
+  adminFirstName!: string;
+
+  @ApiProperty({ 
+    description: 'Admin last name',
+    example: 'Smith'
+  })
+  @IsString()
+  @IsNotEmpty()
+  adminLastName!: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Admin profile image URL',
+    example: 'https://cdn.pivota.com/profiles/avatar.jpg'
+  })
+  @IsOptional()
+  @IsUrl()
+  adminProfileImage?: string;
+
+  // --- Profiles to create (matches UserService pattern) ---
+  @ApiProperty({ 
+    description: 'Profiles to create',
+    type: [ProfileToCreateDto],
+    example: [
+      { type: 'EMPLOYER', data: { companyName: 'Tech Corp', industry: 'Technology' } }
+    ]
+  })
+  @IsArray()
+  @IsNotEmpty()
+  profiles!: ProfileToCreateDto[];
+}
+
+/* ======================================================
+   ORGANIZATION PROFILE UPDATE DTOs
+====================================================== */
+
+export class UpdateEmployerProfileRequestDto extends EmployerProfileDataDto {}
+
+
+export class UpdateOrganizationPropertyOwnerProfileRequestDto extends PropertyOwnerProfileDataDto {}
+
+export class UpdateOrganizationSkilledProfessionalProfileRequestDto extends SkilledProfessionalProfileDataDto {}
+
+export class UpdateOrganizationIntermediaryAgentProfileRequestDto extends IntermediaryAgentProfileDataDto {}
+
+/* ======================================================
+   gRPC VERSIONS (with organization UUID)
+====================================================== */
+
+export class UpdateEmployerGrpcRequestDto extends UpdateEmployerProfileRequestDto {
+  @ApiProperty({ description: 'Target organization account UUID' })
+  @IsUUID()
+  @IsNotEmpty()
+  accountUuid!: string;
+}
+
+export class UpdateOrganizationPropertyOwnerGrpcRequestDto extends UpdateOrganizationPropertyOwnerProfileRequestDto {
+  @ApiProperty({ description: 'Target organization account UUID' })
+  @IsUUID()
+  @IsNotEmpty()
+  accountUuid!: string;
+}
+
+export class UpdateOrganizationSkilledProfessionalGrpcRequestDto extends UpdateOrganizationSkilledProfessionalProfileRequestDto {
+  @ApiProperty({ description: 'Target organization account UUID' })
+  @IsUUID()
+  @IsNotEmpty()
+  accountUuid!: string;
+}
+
+export class UpdateOrganizationIntermediaryAgentGrpcRequestDto extends UpdateOrganizationIntermediaryAgentProfileRequestDto {
+  @ApiProperty({ description: 'Target organization account UUID' })
+  @IsUUID()
+  @IsNotEmpty()
+  accountUuid!: string;
 }

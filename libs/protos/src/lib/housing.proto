@@ -185,7 +185,8 @@ message CreateHouseListingRequest {
   repeated string imageUrls = 18;
   optional double latitude = 19;
   optional double longitude = 20;
-  string ownerEmail = 21;  // ADDED - Email of the property owner/agent
+  string ownerEmail = 21;
+  optional ClientInfo clientInfo = 22;  // ADD THIS LINE
 }
 
 message SearchHouseListingsRequest {

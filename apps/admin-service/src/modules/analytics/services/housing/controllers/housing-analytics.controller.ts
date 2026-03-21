@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Controller, Logger, OnModuleInit, UsePipes, ValidationPipe } from '@nestjs/common';
 import { GrpcMethod, EventPattern, Payload } from '@nestjs/microservices';
 import { HousingAnalyticsService } from '../services/housing-analytics.service';
@@ -66,100 +67,107 @@ export class HousingAnalyticsController implements OnModuleInit {
    * Handle all housing AI events from Kafka
    * Routes events to appropriate service methods based on event type
    */
-  @EventPattern('housing.ai.tracking')
-  async handleHousingAIEvent(
-    @Payload() data: HousingViewEvent | HousingSearchEvent | HousingViewingScheduledEvent,
-  ): Promise<void> {
-    // VISIBLE LOGGING
-    console.log('\n');
-    console.log('🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠');
-    console.log('🏠 HOUSING AI EVENT RECEIVED!');
-    console.log('🏠 User:', data?.userId);
-    console.log('🏠 Event Type:', data?.eventType);
-    
-    // Log different details based on event type
-    switch (data.eventType) {
-      case 'VIEW':
-        console.log('🏠 Property:', data?.listingId);
-        console.log('🏠 Location:', data?.metadata?.listingData?.locationCity);
-        console.log('🏠 Price:', data?.metadata?.listingData?.price);
-        break;
-      case 'SEARCH':
-        console.log('🏠 Search Query:', data?.metadata?.searchQuery);
-        console.log('🏠 Results:', (data as HousingSearchEvent)?.metadata?.resultsCount);
-        break;
-      case 'SCHEDULE_VIEWING':
-        console.log('🏠 Property:', data?.listingId);
-        console.log('🏠 Viewing ID:', (data as HousingViewingScheduledEvent)?.metadata?.viewingId);
-        break;
-    }
-    
-    console.log('🏠 Timestamp:', data?.metadata?.timestamp);
-    console.log('🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠');
-    console.log('\n');
-
-    this.logger.log(`📥 [Kafka] Received housing AI event: ${data.eventType} for user ${data.userId}`);
-
-    try {
-      // Validate required fields
-      if (!data?.userId) {
-        throw new Error('Missing userId in event data');
-      }
-
-      let result: BaseResponseDto<null>;
-
-      // Route to appropriate service method based on event type
-      switch (data.eventType) {
-        case 'VIEW': {
-          if (!data?.listingId) throw new Error('Missing listingId in view event');
-          if (!data?.metadata?.listingData) throw new Error('Missing listingData in view event');
-          
-          const viewRequest: HousingViewEventRequest = {
-            key: data.userId,
-            value: data as HousingViewEvent
-          };
-          result = await this.housingAnalyticsService.processHousingView(viewRequest);
-          break;
-        }
-
-        case 'SEARCH': {
-          const searchRequest: HousingSearchEventRequest = {
-            key: data.userId,
-            value: data as HousingSearchEvent
-          };
-          result = await this.housingAnalyticsService.processHousingSearch(searchRequest);
-          break;
-        }
-
-        case 'SCHEDULE_VIEWING': {
-          if (!data?.listingId) throw new Error('Missing listingId in viewing event');
-          
-          const viewingRequest: HousingViewingScheduledEventRequest = {
-            key: data.userId,
-            value: data as HousingViewingScheduledEvent
-          };
-          result = await this.housingAnalyticsService.processHousingViewingScheduled(viewingRequest);
-          break;
-        }
-
-        default: {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          this.logger.warn(`⚠️ Unhandled event type: ${(data as any).eventType}`);
-          return;
-        }
-      }
-      
-      if (!result.success) {
-        throw new Error(`Processing failed: ${result.message} (${result.code})`);
-      }
-      
-      this.logger.debug(`✅ Successfully processed ${data.eventType} event for user ${data.userId}`);
-      
-    } catch (error) {
-      this.logger.error(`❌ Error processing ${data.eventType} event: ${error.message}`);
-      throw error; // Kafka will retry
-    }
+ @EventPattern('housing.ai.tracking')
+async handleHousingAIEvent(
+  @Payload() data: HousingViewEvent | HousingSearchEvent | HousingViewingScheduledEvent,
+): Promise<void> {
+  // VISIBLE LOGGING
+  console.log('\n');
+  console.log('🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠');
+  console.log('🏠 HOUSING AI EVENT RECEIVED!');
+  console.log('🏠 User:', (data as any)?.userId);
+  console.log('🏠 Event Type:', (data as any)?.eventType);
+  
+  // 🚨 TEMPORARY FIX: Skip any LISTING_MILESTONE events that are stuck in the queue
+  // Use 'as any' to access properties that might not exist on the type
+  const anyData = data as any;
+  if (anyData?.eventType === 'LISTING_MILESTONE') {
+    this.logger.warn(`⚠️ Skipping old LISTING_MILESTONE event for account ${anyData?.accountId || 'unknown'}`);
+    return; // Just return, don't throw error
   }
+  
+  // Log different details based on event type
+  switch (data.eventType) {
+    case 'VIEW':
+      console.log('🏠 Property:', data?.listingId);
+      console.log('🏠 Location:', data?.metadata?.listingData?.locationCity);
+      console.log('🏠 Price:', data?.metadata?.listingData?.price);
+      break;
+    case 'SEARCH':
+      console.log('🏠 Search Query:', data?.metadata?.searchQuery);
+      console.log('🏠 Results:', (data as HousingSearchEvent)?.metadata?.resultsCount);
+      break;
+    case 'SCHEDULE_VIEWING':
+      console.log('🏠 Property:', data?.listingId);
+      console.log('🏠 Viewing ID:', (data as HousingViewingScheduledEvent)?.metadata?.viewingId);
+      break;
+  }
+  
+  console.log('🏠 Timestamp:', data?.metadata?.timestamp);
+  console.log('🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠');
+  console.log('\n');
+
+  this.logger.log(`📥 [Kafka] Received housing AI event: ${data.eventType} for user ${data.userId}`);
+
+  try {
+    // Validate required fields
+    if (!data?.userId) {
+      throw new Error('Missing userId in event data');
+    }
+
+    let result: BaseResponseDto<null>;
+
+    // Route to appropriate service method based on event type
+    switch (data.eventType) {
+      case 'VIEW': {
+        if (!data?.listingId) throw new Error('Missing listingId in view event');
+        if (!data?.metadata?.listingData) throw new Error('Missing listingData in view event');
+        
+        const viewRequest: HousingViewEventRequest = {
+          key: data.userId,
+          value: data as HousingViewEvent
+        };
+        result = await this.housingAnalyticsService.processHousingView(viewRequest);
+        break;
+      }
+
+      case 'SEARCH': {
+        const searchRequest: HousingSearchEventRequest = {
+          key: data.userId,
+          value: data as HousingSearchEvent
+        };
+        result = await this.housingAnalyticsService.processHousingSearch(searchRequest);
+        break;
+      }
+
+      case 'SCHEDULE_VIEWING': {
+        if (!data?.listingId) throw new Error('Missing listingId in viewing event');
+        
+        const viewingRequest: HousingViewingScheduledEventRequest = {
+          key: data.userId,
+          value: data as HousingViewingScheduledEvent
+        };
+        result = await this.housingAnalyticsService.processHousingViewingScheduled(viewingRequest);
+        break;
+      }
+
+      default: {
+        this.logger.warn(`⚠️ Unhandled event type: ${(data as any).eventType}`);
+        return;
+      }
+    }
+    
+    if (!result.success) {
+      throw new Error(`Processing failed: ${result.message} (${result.code})`);
+    }
+    
+    this.logger.debug(`✅ Successfully processed ${data.eventType} event for user ${data.userId}`);
+    
+  } catch (error) {
+    this.logger.error(`❌ Error processing ${data.eventType} event: ${error.message}`);
+    throw error; // Kafka will retry
+  }
+}
 
   // ======================================================
   // GRPC METHODS (for AI developer and dashboard)
@@ -278,4 +286,20 @@ export class HousingAnalyticsController implements OnModuleInit {
       return BaseResponseDto.fail('Failed to update label', 'INTERNAL_ERROR');
     }
   }
+
+  @EventPattern('analytics.listing.milestone')
+  async handleListingMilestone(@Payload() data: any) {
+    // Log the entire raw data to see its structure
+    this.logger.log(`📨 RAW KAFKA MESSAGE: ${JSON.stringify(data)}`);
+    
+    // Try to extract event data - it might be directly the event, or wrapped
+    const eventData = data?.value || data;
+    
+    this.logger.log(`📨 Extracted eventData: ${JSON.stringify(eventData)}`);
+    this.logger.log(`🏆 Processing listing milestone: ${eventData?.metadata?.milestone}`);
+     
+    await this.housingAnalyticsService.processListingMilestone(eventData);
+  }
+
+
 }

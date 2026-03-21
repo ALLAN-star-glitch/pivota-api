@@ -160,11 +160,32 @@ export class AuthService {
     return BaseResponseDto.fail(response.message, response.code);
   }
   /** ------------------ Signup ------------------ */
-  async signup(
+async signup(
   signupDto: UserSignupRequestDto,
   clientInfo: AuthClientInfoDto
 ): Promise<BaseResponseDto<UserSignupDataDto>> {
   this.logger.log('📩 Calling Auth microservice for signup');
+
+  // Log which specific data field is being used
+  this.logger.debug(`[gRPC] Primary purpose: ${signupDto.primaryPurpose}`);
+  
+  if (signupDto.jobSeekerData) {
+    this.logger.debug(`[gRPC] Using jobSeekerData: ${JSON.stringify(signupDto.jobSeekerData)}`);
+  } else if (signupDto.skilledProfessionalData) {
+    this.logger.debug(`[gRPC] Using skilledProfessionalData: ${JSON.stringify(signupDto.skilledProfessionalData)}`);
+  } else if (signupDto.intermediaryAgentData) {
+    this.logger.debug(`[gRPC] Using intermediaryAgentData: ${JSON.stringify(signupDto.intermediaryAgentData)}`);
+  } else if (signupDto.housingSeekerData) {
+    this.logger.debug(`[gRPC] Using housingSeekerData: ${JSON.stringify(signupDto.housingSeekerData)}`);
+  } else if (signupDto.supportBeneficiaryData) {
+    this.logger.debug(`[gRPC] Using supportBeneficiaryData: ${JSON.stringify(signupDto.supportBeneficiaryData)}`);
+  } else if (signupDto.employerData) {
+    this.logger.debug(`[gRPC] Using employerData: ${JSON.stringify(signupDto.employerData)}`);
+  } else if (signupDto.propertyOwnerData) {
+    this.logger.debug(`[gRPC] Using propertyOwnerData: ${JSON.stringify(signupDto.propertyOwnerData)}`);
+  } else if (signupDto.profileData) {
+    this.logger.debug(`[gRPC] ⚠️ Deprecated profileData field used: ${JSON.stringify(signupDto.profileData)}`);
+  }
   
   // Log the client info for debugging
   this.logger.debug(`[gRPC] Sending client info with signup: ${JSON.stringify({
@@ -175,18 +196,84 @@ export class AuthService {
     ipAddress: clientInfo.ipAddress
   })}`);
 
-  // Combine both parameters into a single request object
-  const request = {
-    ...signupDto,
-    clientInfo: clientInfo  // Add clientInfo to the request
+  // Build the request with proper oneof mapping
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const request: any = {
+    firstName: signupDto.firstName,
+    lastName: signupDto.lastName,
+    email: signupDto.email,
+    password: signupDto.password,
+    phone: signupDto.phone,
+    planSlug: signupDto.planSlug || 'free-forever',
+    code: signupDto.code,
+    profileImage: signupDto.profileImage,
+    primaryPurpose: signupDto.primaryPurpose,
+    clientInfo: clientInfo
   };
+
+  // Map the specific fields from the DTO to the gRPC request
+  // This ensures the data goes to the correct oneof field
+  if (signupDto.jobSeekerData) {
+    request.jobSeekerData = signupDto.jobSeekerData;
+  } else if (signupDto.skilledProfessionalData) {
+    request.skilledProfessionalData = signupDto.skilledProfessionalData;
+  } else if (signupDto.intermediaryAgentData) {
+    request.intermediaryAgentData = signupDto.intermediaryAgentData;
+  } else if (signupDto.housingSeekerData) {
+    request.housingSeekerData = signupDto.housingSeekerData;
+  } else if (signupDto.supportBeneficiaryData) {
+    request.supportBeneficiaryData = signupDto.supportBeneficiaryData;
+  } else if (signupDto.employerData) {
+    request.employerData = signupDto.employerData;
+  } else if (signupDto.propertyOwnerData) {
+    request.propertyOwnerData = signupDto.propertyOwnerData;
+  } else if (signupDto.profileData) {
+    // Fallback for backward compatibility - map based on primaryPurpose
+    this.logger.debug(`[gRPC] Falling back to deprecated profileData mapping for purpose: ${signupDto.primaryPurpose}`);
+    
+    switch (signupDto.primaryPurpose) {
+      case 'FIND_JOB':
+        request.jobSeekerData = signupDto.profileData;
+        break;
+      case 'OFFER_SKILLED_SERVICES':
+        request.skilledProfessionalData = signupDto.profileData;
+        break;
+      case 'WORK_AS_AGENT':
+        request.intermediaryAgentData = signupDto.profileData;
+        break;
+      case 'FIND_HOUSING':
+        request.housingSeekerData = signupDto.profileData;
+        break;
+      case 'GET_SOCIAL_SUPPORT':
+        request.supportBeneficiaryData = signupDto.profileData;
+        break;
+      case 'HIRE_EMPLOYEES':
+        request.employerData = signupDto.profileData;
+        break;
+      case 'LIST_PROPERTIES':
+        request.propertyOwnerData = signupDto.profileData;
+        break;
+      default:
+        this.logger.warn(`Unknown primary purpose for fallback: ${signupDto.primaryPurpose}`);
+    }
+  }
+
+  // Log what we're sending to help with debugging
+  this.logger.debug(`[gRPC] Final request fields: ${Object.keys(request).join(', ')}`);
+  this.logger.debug(`[gRPC] Has jobSeekerData: ${!!request.jobSeekerData}`);
+  this.logger.debug(`[gRPC] Has skilledProfessionalData: ${!!request.skilledProfessionalData}`);
+  this.logger.debug(`[gRPC] Has intermediaryAgentData: ${!!request.intermediaryAgentData}`);
+  this.logger.debug(`[gRPC] Has housingSeekerData: ${!!request.housingSeekerData}`);
+  this.logger.debug(`[gRPC] Has supportBeneficiaryData: ${!!request.supportBeneficiaryData}`);
+  this.logger.debug(`[gRPC] Has employerData: ${!!request.employerData}`);
+  this.logger.debug(`[gRPC] Has propertyOwnerData: ${!!request.propertyOwnerData}`);
 
   const grcpSignupResponse = await firstValueFrom(this.authGrpc.signup(request));
   this.logger.log(`📩 Received response from Auth microservice: ${JSON.stringify(grcpSignupResponse)}`);
 
   if (grcpSignupResponse.success) {
     return BaseResponseDto.ok(grcpSignupResponse.data, grcpSignupResponse.message, grcpSignupResponse.code);
-  }
+  } 
 
   return BaseResponseDto.fail(grcpSignupResponse.message, grcpSignupResponse.code);
 }

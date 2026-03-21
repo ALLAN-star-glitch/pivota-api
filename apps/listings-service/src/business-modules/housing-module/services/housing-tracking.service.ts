@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // housing-tracking.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { ClientKafka } from '@nestjs/microservices';
+import { ClientKafka, ClientProxy } from '@nestjs/microservices';
 import { Inject } from '@nestjs/common';
 import { 
 
@@ -15,7 +15,8 @@ import {
   HousingSearchEvent,
   HousingSaveEvent,
   HousingViewingScheduledEvent,
-  HousingInquiryEvent
+  HousingInquiryEvent,
+  HousingListingMilestoneEvent  // Add this import
 } from '@pivota-api/interfaces';
 
 // Interface for listing data structure (internal to the service)
@@ -46,13 +47,36 @@ interface HouseListingData {
   [key: string]: unknown;
 }
 
+// Interface for milestone tracking data
+interface MilestoneData {
+  accountId: string;
+  accountName: string;
+  creatorId: string;
+  creatorName?: string;
+  listingId: string;
+  listingTitle: string;
+  listingPrice: number;
+  listingType: string;
+  locationCity: string;
+  categoryId?: string;
+  milestone: number;
+  previousMilestone?: number;
+  daysSinceFirstListing?: number;
+  totalValue?: number;
+  averagePrice?: number;
+  categories?: string[];
+}
+
 @Injectable()
 export class HousingTrackingService {
   private readonly logger = new Logger(HousingTrackingService.name);
 
   constructor(
     @Inject('KAFKA_SERVICE')
-    private readonly kafkaClient: ClientKafka
+    private readonly kafkaClient: ClientKafka,
+     @Inject('NOTIFICATION_EVENT_BUS')  // Add this
+     private readonly notificationBus: ClientProxy,
+
   ) {}
 
   /**
@@ -490,5 +514,202 @@ trackSearch(
     });
 
     this.logger.debug(`📤 Tracked INQUIRY event for listing ${listingId}`);
+  } 
+
+  /**
+   * NEW: Track listing milestones (1st, 2nd, 3rd, 5th, 10th listing)
+   */
+async trackListingMilestone(
+  milestoneData: MilestoneData,
+  context?: ListingViewContextDto
+): Promise<void> {
+  try {
+    const { milestone, accountId, listingId } = milestoneData;
+    
+    // Define milestone thresholds we care about
+    const significantMilestones = [1, 2, 3, 5, 10, 25, 50, 100];
+    
+    if (!significantMilestones.includes(milestone)) {
+      return; // Not a significant milestone
+    }
+
+    // Determine milestone tier for routing
+    let milestoneTier: 'ONBOARDING' | 'ENGAGEMENT' | 'GROWTH' | 'POWER' | 'PROFESSIONAL';
+    let suggestedTeam: 'onboarding' | 'success' | 'sales' | 'marketing' | 'partnerships';
+     
+    if (milestone === 1) {
+      milestoneTier = 'ONBOARDING';
+      suggestedTeam = 'onboarding';
+    } else if (milestone <= 3) {
+      milestoneTier = 'ENGAGEMENT';
+      suggestedTeam = 'success';
+    } else if (milestone <= 10) {
+      milestoneTier = 'GROWTH';
+      suggestedTeam = 'sales';
+    } else if (milestone <= 50) {
+      milestoneTier = 'POWER';
+      suggestedTeam = 'marketing';
+    } else {
+      milestoneTier = 'PROFESSIONAL';
+      suggestedTeam = 'partnerships';
+    }
+
+    // Calculate additional metrics if needed
+    const totalValue = milestoneData.totalValue || (milestoneData.listingPrice * milestone);
+    const averagePrice = milestoneData.averagePrice || milestoneData.listingPrice;
+
+    const event: HousingListingMilestoneEvent = {
+      accountId,
+      listingId,
+      eventType: 'LISTING_MILESTONE',
+      metadata: {
+        // Core tracking
+        timestamp: new Date().toISOString(),
+        sessionId: context?.sessionId,
+        platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
+        
+        // Device context
+        deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
+        os: context?.client?.os,
+        osVersion: context?.client?.osVersion,
+        browser: context?.client?.browser,
+        browserVersion: context?.client?.browserVersion,
+        isBot: context?.client?.isBot,
+        
+        // Milestone specific data
+        milestone,
+        milestoneTier,
+        suggestedTeam,
+        
+        // Account metrics
+        accountId: milestoneData.accountId,
+        accountName: milestoneData.accountName,
+        creatorId: milestoneData.creatorId,
+        creatorName: milestoneData.creatorName,
+        
+        // Listing details
+        listingId: milestoneData.listingId,
+        listingTitle: milestoneData.listingTitle,
+        listingPrice: milestoneData.listingPrice,
+        listingType: milestoneData.listingType,
+        locationCity: milestoneData.locationCity,
+        categoryId: milestoneData.categoryId,
+        
+        // Calculated metrics
+        totalListings: milestone,
+        totalValue,
+        averagePrice,
+        daysSinceFirstListing: milestoneData.daysSinceFirstListing,
+        categories: milestoneData.categories || [milestoneData.categoryId].filter(Boolean),
+        
+        // Milestone-specific messaging
+        message: this.getMilestoneMessage(milestone, milestoneData.accountName),
+        
+        // Routing hints for notification service
+        routing: {
+          primaryTeam: suggestedTeam,
+          priority: milestone <= 3 ? 'HIGH' : (milestone <= 10 ? 'MEDIUM' : 'LOW'),
+          requiresFollowUp: milestone <= 5,
+          notificationTemplate: `listing-milestone-${milestone}`
+        },
+        
+        // Add listingData to satisfy the interface
+        listingData: {
+          price: milestoneData.listingPrice,
+          locationCity: milestoneData.locationCity,
+          listingType: milestoneData.listingType,
+          amenities: [],
+          isFurnished: false,
+          categoryId: milestoneData.categoryId,
+          categorySlug: undefined,
+          bedrooms: null,
+          bathrooms: null,
+          locationNeighborhood: null,
+          accountId: milestoneData.accountId,
+          creatorId: milestoneData.creatorId,
+          imagesCount: 0
+        },
+        
+        userContext: {}
+      }
+    };
+
+    this.logger.log(`📤 Emitting to analytics.listing.milestone for account ${accountId}, milestone ${milestone}`);
+
+    // Send to Kafka for analytics storage (all milestones)
+    this.kafkaClient.emit('analytics.listing.milestone', {
+      key: event.accountId,
+      value: {
+        ...event,
+        notificationType: 'LISTING_MILESTONE'
+      }
+    });
+
+    // Send to RabbitMQ for email notifications (only for first 10 milestones)
+    try {
+      // Only send emails for milestones 1,2,3,5,10 (the ones teams care about)
+      const emailMilestones = [1, 2, 3, 5, 10];
+      
+      if (emailMilestones.includes(milestone)) {
+        // Use a single email for all milestone notifications (production-ready)
+        const recipientEmail = process.env.MILESTONE_NOTIFICATIONS_EMAIL || 'allanmathenge82@gmail.com';
+        
+        const emailData = {
+          recipientEmail,
+          accountId: milestoneData.accountId,
+          accountName: milestoneData.accountName,
+          creatorId: milestoneData.creatorId,
+          creatorName: milestoneData.creatorName,
+          listingId: milestoneData.listingId,
+          listingTitle: milestoneData.listingTitle,
+          listingPrice: milestoneData.listingPrice,
+          listingType: milestoneData.listingType,
+          locationCity: milestoneData.locationCity,
+          milestone,
+          milestoneTier,
+          suggestedTeam,
+          totalValue,
+          averagePrice,
+          message: this.getMilestoneMessage(milestone, milestoneData.accountName),
+          timestamp: new Date().toISOString(),
+          priority: milestone <= 3 ? 'HIGH' : 'MEDIUM'
+        };
+
+        // Emit to RabbitMQ for email service
+        if (this.notificationBus) {
+          this.notificationBus.emit('admin.listing.milestone', emailData);
+          this.logger.log(`📧 Milestone email notification sent to ${recipientEmail} for milestone ${milestone}`);
+        } else {
+          this.logger.debug(`📧 Milestone email would be sent to ${recipientEmail} for milestone ${milestone} (notificationBus not configured)`);
+        }
+      }
+    } catch (emailError) {
+      // Don't fail the whole tracking if email fails
+      this.logger.error(`Failed to send milestone email: ${emailError.message}`);
+    }
+
+    this.logger.log(`🎯 Tracked LISTING_MILESTONE ${milestone} for account ${accountId}`);
+    
+  } catch (error) {
+    this.logger.error(`Failed to track listing milestone: ${error.message}`);
+  }
+}
+
+  /**
+   * Helper to generate milestone-specific messages
+   */
+  private getMilestoneMessage(milestone: number, accountName: string): string {
+    const messages = {
+      1: `🎉 ${accountName} just posted their FIRST listing! Welcome to PivotaConnect!`,
+      2: `📈 ${accountName} is getting engaged - posted their SECOND listing!`,
+      3: `🔥 ${accountName} is on a roll with their THIRD listing!`,
+      5: `⭐ ${accountName} has posted 5 listings - becoming a serious seller!`,
+      10: `🏆 ${accountName} hit 10 listings - power user alert!`,
+      25: `🚀 ${accountName} is a top seller with 25 listings!`,
+      50: `💎 ${accountName} joined the 50+ listings club - partnership opportunity!`,
+      100: `👑 ${accountName} reached 100 listings - our elite seller!`
+    };
+    
+    return messages[milestone] || `${accountName} reached ${milestone} listings!`;
   }
 }

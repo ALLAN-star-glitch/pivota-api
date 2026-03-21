@@ -15,6 +15,7 @@ import {
   HousingViewingScheduledEvent 
 } from '@pivota-api/interfaces';
 import { HousingStorageService } from './housing-storage.service';
+import { PrismaService } from '../../../../../prisma/prisma.service';
 
 export interface HousingViewedEvent {
   key: string;
@@ -42,6 +43,7 @@ export class HousingAnalyticsService {
 
   constructor(
     private readonly housingStorage: HousingStorageService,
+    private readonly prisma: PrismaService, 
   ) {}
 
   /**
@@ -742,4 +744,234 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
       .slice(0, 5)
       .map(([name]) => name);
   }
+
+async processListingMilestone(data: any): Promise<void> {
+  try {
+    // Handle both flattened and nested structures
+    const rootData = data;
+    
+    // The milestone value might be at root OR inside metadata
+    const milestone = rootData.milestone ?? rootData.metadata?.milestone;
+    const accountId = rootData.accountId ?? rootData.metadata?.accountId;
+    
+    this.logger.log(`🏆 Processing listing milestone ${milestone} for account ${accountId}`);
+
+    // Helper to get value from root or metadata
+    const getValue = (field: string) => {
+      return rootData[field] ?? rootData.metadata?.[field];
+    };
+
+    await this.prisma.listingMilestoneEvent.create({
+      data: {
+        accountId: getValue('accountId'),
+        accountName: getValue('accountName'),
+        creatorId: getValue('creatorId'),
+        creatorName: getValue('creatorName'),
+        listingId: getValue('listingId'),
+        listingTitle: getValue('listingTitle'),
+        listingPrice: getValue('listingPrice'),
+        listingType: getValue('listingType'),
+        locationCity: getValue('locationCity'),
+        categoryId: getValue('categoryId'),
+        milestone: getValue('milestone'),
+        milestoneTier: getValue('milestoneTier'),
+        suggestedTeam: getValue('suggestedTeam'),
+        totalListings: getValue('totalListings'),
+        totalValue: getValue('totalValue'),
+        averagePrice: getValue('averagePrice'),
+        message: getValue('message'),
+        priority: rootData.routing?.priority ?? rootData.metadata?.routing?.priority ?? 'MEDIUM',
+        requiresFollowUp: (getValue('milestone') ?? 0) <= 5,
+        deviceType: getValue('deviceType'),
+        os: getValue('os'),
+        osVersion: getValue('osVersion'),
+        browser: getValue('browser'),
+        browserVersion: getValue('browserVersion'),
+        isBot: getValue('isBot'),
+        platform: getValue('platform'),
+        occurredAt: new Date(getValue('timestamp') || Date.now())
+      }
+    });
+
+    // Update daily metrics
+    await this.updateDailyMilestoneMetrics(rootData);
+
+    // Update account summary
+    await this.updateAccountMilestoneSummary(rootData);
+
+    this.logger.log(`✅ Milestone ${milestone} stored for account ${accountId}`);
+  } catch (error) {
+    this.logger.error(`Failed to process milestone: ${error.message}`);
+  }
+}
+
+/**
+ * Update or create account milestone summary
+ */
+private async updateAccountMilestoneSummary(metadata: any): Promise<void> {
+  try {
+    const accountId = metadata.accountId ?? metadata.metadata?.accountId;
+    const accountName = metadata.accountName ?? metadata.metadata?.accountName; // Add this
+    const milestone = metadata.milestone ?? metadata.metadata?.milestone;
+    const totalListings = metadata.totalListings ?? metadata.metadata?.totalListings;
+    const totalValue = metadata.totalValue ?? metadata.metadata?.totalValue;
+    const averagePrice = metadata.averagePrice ?? metadata.metadata?.averagePrice;
+    const categoryId = metadata.categoryId ?? metadata.metadata?.categoryId;
+    const locationCity = metadata.locationCity ?? metadata.metadata?.locationCity;
+    const listingType = metadata.listingType ?? metadata.metadata?.listingType;
+    
+    if (!accountId || !milestone) {
+      this.logger.warn(`⚠️ Cannot update account summary: missing accountId or milestone`);
+      return;
+    }
+    
+    // Check if account summary exists
+    const existing = await this.prisma.accountMilestoneSummary.findUnique({
+      where: { accountId }
+    });
+    
+    // Calculate days since first listing if this is first milestone
+    let daysActive: number | undefined;
+    if (milestone === 1) {
+      daysActive = 0; // First day
+    } else if (existing?.firstListingAt) {
+      const firstListingDate = new Date(existing.firstListingAt);
+      const now = new Date();
+      daysActive = Math.floor((now.getTime() - firstListingDate.getTime()) / (1000 * 60 * 60 * 24));
+    }
+    
+    if (existing) {
+      // Get existing milestones array
+      const existingMilestones = (existing.milestonesAchieved as number[]) || [];
+      
+      // Add new milestone if not already present
+      const updatedMilestones = existingMilestones.includes(milestone) 
+        ? existingMilestones 
+        : [...existingMilestones, milestone].sort((a, b) => a - b);
+      
+      // Update existing record
+      await this.prisma.accountMilestoneSummary.update({
+        where: { accountId },
+        data: {
+          accountName: accountName || existing.accountName, // Add this
+          currentMilestone: totalListings || existing.currentMilestone,
+          lastMilestone: milestone,
+          lastMilestoneAt: new Date(),
+          milestonesAchieved: updatedMilestones,
+          totalListings: totalListings || existing.totalListings,
+          totalValue: totalValue || existing.totalValue,
+          averagePrice: averagePrice || existing.averagePrice,
+          primaryCategory: categoryId || existing.primaryCategory,
+          primaryLocation: locationCity || existing.primaryLocation,
+          primaryListingType: listingType || existing.primaryListingType,
+          daysActive: daysActive ?? existing.daysActive,
+          lastActiveAt: new Date(),
+          isActive: true
+        }
+      });
+    } else {
+      // Create new record
+      await this.prisma.accountMilestoneSummary.create({
+        data: {
+          accountId,
+          accountName: accountName || 'Unknown', // Add this
+          currentMilestone: totalListings || milestone,
+          lastMilestone: milestone,
+          lastMilestoneAt: new Date(),
+          milestonesAchieved: [milestone],
+          totalListings: totalListings || milestone,
+          totalValue: totalValue || 0,
+          averagePrice: averagePrice || 0,
+          primaryCategory: categoryId,
+          primaryLocation: locationCity,
+          primaryListingType: listingType,
+          firstListingAt: milestone === 1 ? new Date() : undefined,
+          daysActive: milestone === 1 ? 0 : undefined,
+          lastActiveAt: new Date(),
+          isActive: true
+        }
+      });
+    }
+    
+    this.logger.debug(`📊 Updated account milestone summary for ${accountId}`);
+  } catch (error) {
+    this.logger.error(`Failed to update account milestone summary: ${error.message}`);
+  }
+}
+
+/**
+ * Update daily aggregated milestone metrics
+ */
+private async updateDailyMilestoneMetrics(metadata: any): Promise<void> {
+  try {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    
+    const milestone = metadata.milestone ?? metadata.metadata?.milestone;
+    const listingPrice = metadata.listingPrice ?? metadata.metadata?.listingPrice;
+    
+    // Don't proceed if we don't have required data
+    if (!milestone || !listingPrice) {
+      this.logger.warn(`⚠️ Cannot update daily metrics: missing milestone or listingPrice`);
+      return;
+    }
+
+    const updateData: any = { 
+      totalMilestones: { increment: 1 },
+      totalListingValue: { increment: listingPrice }
+    };
+    
+    // Count by milestone value
+    if (milestone === 1) updateData.milestone1Count = { increment: 1 };
+    else if (milestone === 2) updateData.milestone2Count = { increment: 1 };
+    else if (milestone === 3) updateData.milestone3Count = { increment: 1 };
+    else if (milestone === 5) updateData.milestone5Count = { increment: 1 };
+    else if (milestone === 10) updateData.milestone10Count = { increment: 1 };
+    else if (milestone === 25) updateData.milestone25Count = { increment: 1 };
+    else if (milestone === 50) updateData.milestone50Count = { increment: 1 };
+    else if (milestone === 100) updateData.milestone100Count = { increment: 1 };
+    
+    // Count by tier
+    const milestoneTier = metadata.milestoneTier ?? metadata.metadata?.milestoneTier;
+    if (milestoneTier === 'ONBOARDING') {
+      updateData.onboardingMilestones = { increment: 1 };
+    } else if (milestoneTier === 'ENGAGEMENT') {
+      updateData.engagementMilestones = { increment: 1 };
+    } else if (milestoneTier === 'GROWTH') {
+      updateData.growthMilestones = { increment: 1 };
+    } else if (milestoneTier === 'POWER') {
+      updateData.powerMilestones = { increment: 1 };
+    } else if (milestoneTier === 'PROFESSIONAL') {
+      updateData.professionalMilestones = { increment: 1 };
+    }
+    
+    await this.prisma.dailyListingMilestoneMetrics.upsert({
+      where: { date },
+      update: updateData,
+      create: {
+        date,
+        totalMilestones: 1,
+        totalListingValue: listingPrice,
+        milestone1Count: milestone === 1 ? 1 : 0,
+        milestone2Count: milestone === 2 ? 1 : 0,
+        milestone3Count: milestone === 3 ? 1 : 0,
+        milestone5Count: milestone === 5 ? 1 : 0,
+        milestone10Count: milestone === 10 ? 1 : 0,
+        milestone25Count: milestone === 25 ? 1 : 0,
+        milestone50Count: milestone === 50 ? 1 : 0,
+        milestone100Count: milestone === 100 ? 1 : 0,
+        onboardingMilestones: milestoneTier === 'ONBOARDING' ? 1 : 0,
+        engagementMilestones: milestoneTier === 'ENGAGEMENT' ? 1 : 0,
+        growthMilestones: milestoneTier === 'GROWTH' ? 1 : 0,
+        powerMilestones: milestoneTier === 'POWER' ? 1 : 0,
+        professionalMilestones: milestoneTier === 'PROFESSIONAL' ? 1 : 0,
+      }
+    });
+    
+    this.logger.debug(`📊 Updated daily milestone metrics for ${date.toISOString()}`);
+    
+  } catch (error) {
+    this.logger.error(`Failed to update daily metrics: ${error.message}`);
+  }
+}
 }

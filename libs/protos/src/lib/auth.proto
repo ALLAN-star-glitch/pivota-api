@@ -30,36 +30,348 @@ service AuthService {
   rpc GetActiveSessions(GetActiveSessionsRequest) returns (GetActiveSessionsResponse);
 }
 
-// ------------------ Forgot Password Messages ------------------
+// ======================================================
+// PROFILE DATA TYPES (Matches NestJS DTOs)
+// ======================================================
 
-message ResetPasswordRequest {
-  string email = 1;
-  string code = 2;         // The OTP verification code
-  string newPassword = 3;  // The new hashed/plain password to be set
-  ClientInfo clientInfo = 4; // Add client info
+// ------------------ Individual Profile Data ------------------
+
+message JobSeekerProfileData {
+  optional string headline = 1;
+  optional bool isActivelySeeking = 2;
+  repeated string skills = 3;
+  repeated string industries = 4;
+  repeated string jobTypes = 5;
+  optional string seniorityLevel = 6;
+  optional string noticePeriod = 7;
+  optional double expectedSalary = 8;
+  repeated string workAuthorization = 9;
+  optional string cvUrl = 10;
+  repeated string portfolioImages = 11;
+  optional string linkedInUrl = 12;
+  optional string githubUrl = 13;
+  optional string portfolioUrl = 14;
+  optional bool hasAgent = 15;
+  optional string agentUuid = 16;
 }
 
-// ------------------ MFA / Login Stage 2 Message ------------------
+message SkilledProfessionalProfileData {
+  optional string title = 1;
+  optional string profession = 2;
+  repeated string specialties = 3;
+  repeated string serviceAreas = 4;
+  optional int32 yearsExperience = 5;
+  optional string licenseNumber = 6;
+  optional string insuranceInfo = 7;
+  optional double hourlyRate = 8;
+  optional double dailyRate = 9;
+  optional string paymentTerms = 10;
+  optional bool availableToday = 11;
+  optional bool availableWeekends = 12;
+  optional bool emergencyService = 13;
+  repeated string portfolioImages = 14;
+  repeated string certifications = 15;
+}
+
+message IntermediaryAgentProfileData {
+  string agentType = 1;  // HOUSING_AGENT, RECRUITMENT_AGENT, etc.
+  repeated string specializations = 2;
+  repeated string serviceAreas = 3;
+  optional string licenseNumber = 4;
+  optional string licenseBody = 5;
+  optional int32 yearsExperience = 6;
+  optional string agencyName = 7;
+  optional string agencyUuid = 8;
+  optional double commissionRate = 9;
+  optional string feeStructure = 10;
+  optional double minimumFee = 11;
+  optional string typicalFee = 12;
+  optional string about = 13;
+  optional string profileImage = 14;
+  optional string contactEmail = 15;
+  optional string contactPhone = 16;
+  optional string website = 17;
+  map<string, string> socialLinks = 18;
+  repeated string clientTypes = 19;
+}
+
+message HousingSeekerProfileData {
+  optional int32 minBedrooms = 1;
+  optional int32 maxBedrooms = 2;
+  optional double minBudget = 3;
+  optional double maxBudget = 4;
+  repeated string preferredTypes = 5;
+  repeated string preferredCities = 6;
+  repeated string preferredNeighborhoods = 7;
+  optional string moveInDate = 8;
+  optional string leaseDuration = 9;
+  optional int32 householdSize = 10;
+  optional bool hasPets = 11;
+  optional string petDetails = 12;
+  optional double latitude = 13;
+  optional double longitude = 14;
+  optional int32 searchRadiusKm = 15;
+  optional bool hasAgent = 16;
+  optional string agentUuid = 17;
+}
+
+message SupportBeneficiaryProfileData {
+  repeated string needs = 1;
+  repeated string urgentNeeds = 2;
+  optional int32 familySize = 3;
+  optional int32 dependents = 4;
+  optional string householdComposition = 5;
+  repeated string vulnerabilityFactors = 6;
+  optional string city = 7;
+  optional string neighborhood = 8;
+  optional double latitude = 9;
+  optional double longitude = 10;
+  optional string landmark = 11;
+  optional bool prefersAnonymity = 12;
+  repeated string languagePreference = 13;
+  optional bool consentToShare = 14;
+  optional string referredBy = 15;
+  optional string referredByUuid = 16;
+  optional string caseWorkerUuid = 17;
+}
+
+// UPDATED: Added individual fields for PropertyOwnerProfileData
+message PropertyOwnerProfileData {
+  optional bool isProfessional = 1;
+  optional string licenseNumber = 2;
+  optional string companyName = 3;
+  optional int32 yearsInBusiness = 4;
+  repeated string preferredPropertyTypes = 5;
+  repeated string serviceAreas = 6;
+  optional bool usesAgent = 7;
+  optional string managingAgentUuid = 8;
+  
+  // --- Fields for INDIVIDUAL accounts ---
+  optional int32 propertyCount = 9;
+  repeated string propertyTypes = 10;
+  optional string propertyPurpose = 11;  // "PRIMARY", "INVESTMENT", "BOTH"
+}
+
+// ------------------ Organization Profile Data ------------------
+
+// UPDATED: Added individual fields for EmployerProfileData
+message EmployerProfileData {
+  optional string companyName = 1;
+  optional string industry = 2;
+  optional string companySize = 3;
+  optional int32 foundedYear = 4;
+  optional string description = 5;
+  optional string logo = 6;
+  repeated string preferredSkills = 7;
+  optional string remotePolicy = 8;
+  optional bool worksWithAgents = 9;
+  repeated string preferredAgents = 10;
+  
+  // --- Fields for INDIVIDUAL accounts ---
+  optional string businessName = 11;
+  optional bool isRegistered = 12;
+  optional int32 yearsExperience = 13;
+}
+
+// UPDATED: Added individual fields for SocialServiceProviderProfileData
+message SocialServiceProviderProfileData {
+  string providerType = 1;  // NGO, SOCIAL_ENTERPRISE, etc.
+  repeated string servicesOffered = 2;
+  repeated string targetBeneficiaries = 3;
+  repeated string serviceAreas = 4;
+  optional string about = 5;
+  optional string website = 6;
+  optional string contactEmail = 7;
+  optional string contactPhone = 8;
+  optional string officeHours = 9;
+  optional string physicalAddress = 10;
+  optional int32 peopleServed = 11;
+  optional int32 yearEstablished = 12;
+  optional bool acceptsDonations = 13;
+  optional bool needsVolunteers = 14;
+  optional string donationInfo = 15;
+  optional string volunteerNeeds = 16;
+  
+  // --- Fields for INDIVIDUAL accounts ---
+  optional string operatingName = 17;
+  optional int32 yearsExperience = 18;
+  repeated string qualifications = 19;
+  optional string availability = 20;
+}
+
+// ======================================================
+// REQUEST MESSAGES
+// ======================================================
+
+// ------------------ Signup Messages ------------------
+
+/**
+ * Individual Signup - Single primary purpose (UI Screen 6A - Radio Buttons)
+ * Individuals typically have one primary goal
+ */
+message SignupRequest {
+  // Basic user info
+  string firstName = 1;
+  string lastName = 2;
+  string email = 3;
+  string password = 4;
+  string phone = 5;
+  string planSlug = 6;
+  string code = 7;                    // OTP code
+  ClientInfo clientInfo = 8;
+  
+  // UI Screen 9/9B fields
+  optional string profileImage = 9;
+  
+  // UI Screen 6A - SINGLE primary purpose (radio selection)
+  string primaryPurpose = 10;  // Required - FIND_JOB, OFFER_SKILLED_SERVICES, etc.
+  
+  // UI Screen 10 - Profile data based on primary purpose (oneof)
+  // UPDATED: Added employerData and propertyOwnerData for HIRE_EMPLOYEES and LIST_PROPERTIES
+  oneof profileData {
+    JobSeekerProfileData jobSeekerData = 11;
+    SkilledProfessionalProfileData skilledProfessionalData = 12;
+    IntermediaryAgentProfileData intermediaryAgentData = 13;
+    HousingSeekerProfileData housingSeekerData = 14;
+    SupportBeneficiaryProfileData supportBeneficiaryData = 15;
+    EmployerProfileData employerData = 16;                    // ADDED for HIRE_EMPLOYEES
+    PropertyOwnerProfileData propertyOwnerData = 17;          // ADDED for LIST_PROPERTIES
+  }
+}
+
+/**
+ * Organization Signup - Multiple purposes (UI Screen 7 - Checkboxes)
+ * Organizations often have multiple functions (hire, list properties, provide services)
+ */
+message OrganisationSignupRequest {
+  // --- BUSINESS ENTITY DETAILS ---
+  string name = 1;                      // Legal name
+  string officialEmail = 2;             // General business email
+  string officialPhone = 3;             // General business phone
+  string physicalAddress = 4;           // Headquarters location
+  string organizationType = 5;          // COMPANY, NGO, GOVERNMENT, etc.
+  
+  // Optional business details (UI Screen 9B)
+  optional string registrationNo = 14;   // Government-issued business registration number
+  optional string kraPin = 15;           // Kenya Revenue Authority PIN
+  optional string website = 16;          // Organization website
+  optional string about = 17;            // About the organization
+  optional string logo = 18;             // Logo URL
+
+  // --- ADMIN ACCOUNT DETAILS ---
+  string email = 6;                      // Admin Login email
+  string password = 7;                   // Admin Password
+  string phone = 8;                      // Admin personal phone (for MFA)
+  string adminFirstName = 9;
+  string adminLastName = 10;
+  
+  // --- VERIFICATION ---
+  string code = 11;                      // 6-digit OTP code
+  string planSlug = 12;                  // Subscription plan for the organization
+  ClientInfo clientInfo = 13;            // Client info for analytics
+
+  // UI Screen 7 - MULTIPLE purposes allowed (checkboxes)
+  // Organizations can select multiple: hire_employees, list_properties, offer_skilled_services, provide_social_support, act_as_agent
+  repeated string purposes = 19;         // List of selected purposes
+  
+  // UI Screen 10 - Profile data for EACH selected purpose
+  map<string, OrganizationProfileDataEntry> profileData = 20;
+}
+
+/**
+ * Organization profile data entry for a specific purpose
+ * UPDATED: Added propertyOwnerData field
+ */
+message OrganizationProfileDataEntry {
+  oneof data {
+    EmployerProfileData employerData = 1;
+    PropertyOwnerProfileData propertyOwnerData = 2;        // ADDED
+    SkilledProfessionalProfileData skilledProfessionalData = 3;
+    SocialServiceProviderProfileData socialServiceProviderData = 4;
+    IntermediaryAgentProfileData intermediaryAgentData = 5;
+  }
+}
+
+// ======================================================
+// LOGIN & MFA MESSAGES
+// ======================================================
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+  ClientInfo clientInfo = 3;
+}
 
 message VerifyMfaLoginRequest {
   string email = 1;
   string code = 2;
-  ClientInfo clientInfo = 3; 
-} 
+  ClientInfo clientInfo = 3;
+}
+
+message GoogleLoginRequest {
+  string token = 1;
+  ClientInfo clientInfo = 2;
+}
+
+message RefreshRequest { 
+  string refreshToken = 1;
+  ClientInfo clientInfo = 2;
+}
 
 // ------------------ OTP Messages ------------------
 
 message RequestOtpRequest {
   string email = 1;
-  string purpose = 2; // e.g., "SIGNUP", "2FA", "PASSWORD_RESET"
-  ClientInfo clientInfo = 3; // Add client info
+  string purpose = 2; // SIGNUP, 2FA, PASSWORD_RESET, ORGANIZATION_SIGNUP
+  ClientInfo clientInfo = 3;
 }
 
 message VerifyOtpRequest {
   string email = 1;
   string code = 2;
   string purpose = 3;
-  ClientInfo clientInfo = 4; // Add client info
+  ClientInfo clientInfo = 4;
+}
+
+// ------------------ Password Reset Messages ------------------
+
+message ResetPasswordRequest {
+  string email = 1;
+  string code = 2;         // OTP verification code
+  string newPassword = 3;  // New password
+  ClientInfo clientInfo = 4;
+}
+
+// ------------------ Session Management Messages ------------------
+
+message GetActiveSessionsRequest {
+  string userUuid = 1;
+}
+
+message RevokeSessionRequest {
+  string userUuid = 1;
+  optional string tokenId = 2;
+  ClientInfo clientInfo = 3;
+}
+
+// ------------------ Development Messages ------------------
+
+message GenerateDevTokenRequest {
+  string userUuid = 1;
+  string email = 2;
+  string role = 3;
+  string accountId = 4; 
+  ClientInfo clientInfo = 5;
+}
+
+// ======================================================
+// RESPONSE MESSAGES
+// ======================================================
+
+message BaseResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
 }
 
 message BaseOtpResponse {
@@ -79,42 +391,61 @@ message VerifyOtpData {
   bool verified = 1;
 }
 
-// ------------------ Signup Messages ------------------
+// ------------------ Signup Responses ------------------
 
-message SignupRequest {
-  string firstName = 1;
-  string lastName = 2;
-  string email = 3;
-  string password = 4;
-  string phone = 5;
-  string planSlug = 6;
-  string code = 7;
-  ClientInfo clientInfo = 8; // Add client info
+message SignupResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  UserSignupData data = 4; 
+  ErrorPayload error = 5;
 }
 
-message OrganisationSignupRequest {
-  // --- BUSINESS ENTITY DETAILS ---
-  // Mirrors NestJS OrganisationSignupRequestDto
-  string name = 1;                // Legal name
-  string officialEmail = 2;       // General business email
-  string officialPhone = 3;       // General business phone
-  string physicalAddress = 4;     // Headquarters location
-  string organizationType = 5;    // PRIVATE_LIMITED, NGO, etc.
-
-  // --- ADMIN ACCOUNT DETAILS ---
-  string email = 6;               // Admin Login email
-  string password = 7;            // Admin Password
-  string phone = 8;               // Admin personal phone (for MFA)
-  string adminFirstName = 9;
-  string adminLastName = 10;
-  
-  // --- VERIFICATION ---
-  string code = 11;               // 6-digit OTP code
-  string planSlug = 12;           // Subscription plan for the organization
-  ClientInfo clientInfo = 13;     // Add client info
+message OrganisationSignupResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  OrganisationSignupData data = 4;
+  ErrorPayload error = 5;
 }
 
-// ------------------ Auth / Login Flow ------------------
+// ------------------ Login Response ------------------
+
+message LoginResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  AuthUserResponse data = 4; 
+  ErrorPayload error = 5;
+}
+
+message BaseRefreshTokenResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  RefreshTokenResponse tokens = 4;
+  ErrorPayload error = 5;
+}
+
+message BaseDevTokenResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  RefreshTokenResponse data = 4; 
+  ErrorPayload error = 5;
+}
+
+message GetActiveSessionsResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  repeated SessionDto data = 4;
+  ErrorPayload error = 5;
+}
+
+// ======================================================
+// DATA MESSAGES (Response DTOs)
+// ======================================================
 
 message AuthUserResponse {
   string id = 1;
@@ -147,53 +478,60 @@ message OrgContext {
   string verificationStatus = 4;
 }
 
-message LoginResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  AuthUserResponse data = 4; 
-  ErrorPayload error = 5;
-}
-
-// ------------------ Response Data Wrappers ------------------
-
-message BaseResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-}
-
-message SignupResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  UserSignupData data = 4; 
-  ErrorPayload error = 5;
-}
-
-message OrganisationSignupResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  OrganisationSignupData data = 4;
-  ErrorPayload error = 5;
-  string organizationType = 6;
-}
-
 message UserSignupData {
   AccountBase account = 1;
   UserBase user = 2;
   UserProfileBase profile = 3; 
   CompletionBase completion = 4;
+  optional string redirectUrl = 5;
+  optional string merchantReference = 6;
 }
 
 message OrganisationSignupData {
   OrgBase organization = 1;
   AdminUserResponse admin = 2;
   AccountBase account = 3;
+  optional string redirectUrl = 4;
+  optional string merchantReference = 5;
 }
 
-// ------------------ Shared Objects ------------------
+message RefreshTokenResponse {
+  string accessToken = 1;
+  string refreshToken = 2;
+}
+
+message SessionDto {
+  int32 id = 1;
+  string tokenId = 2;
+  string device = 3;
+  string ipAddress = 4;
+  string userAgent = 5;
+  string os = 6;
+  string lastActiveAt = 7;
+  string expiresAt = 8;
+  string createdAt = 9;
+  bool revoked = 10;
+}
+
+// ======================================================
+// SHARED MESSAGES
+// ======================================================
+
+message ClientInfo {
+  string device = 1;
+  string deviceType = 2;      // "MOBILE", "TABLET", "DESKTOP", "BOT", "UNKNOWN"
+  string ipAddress = 3;
+  string userAgent = 4;
+  string os = 5;
+  string osVersion = 6;
+  string browser = 7;
+  string browserVersion = 8;
+  bool isMobile = 9;
+  bool isTablet = 10;
+  bool isDesktop = 11;
+  bool isBot = 12;
+  string timestamp = 13;
+}
 
 message AccountBase {
   string uuid = 1;
@@ -244,104 +582,8 @@ message OrgBase {
   string verificationStatus = 5;
 }
 
-message ClientInfo {
-  string device = 1;
-  string deviceType = 2;      // "MOBILE", "TABLET", "DESKTOP", "BOT", "UNKNOWN"
-  string ipAddress = 3;
-  string userAgent = 4;
-  string os = 5;
-  string osVersion = 6;
-  string browser = 7;
-  string browserVersion = 8;
-  bool isMobile = 9;
-  bool isTablet = 10;
-  bool isDesktop = 11;
-  bool isBot = 12;
-  string timestamp = 13;      // Add timestamp
-}
-
-message LoginRequest {
-  string email = 1;
-  string password = 2;
-  ClientInfo clientInfo = 3;  // Add client info
-}
-
-message GoogleLoginRequest {
-  string token = 1;
-  ClientInfo clientInfo = 2;
-}
-
-message RefreshRequest { 
-  string refreshToken = 1;
-  ClientInfo clientInfo = 2;  // Add client info
-}
-
-message BaseRefreshTokenResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  RefreshTokenResponse tokens = 4;
-  ErrorPayload error = 5;
-}
-
-message RefreshTokenResponse {
-  string accessToken = 1;
-  string refreshToken = 2;
-}
-
-message GenerateDevTokenRequest {
-  string userUuid = 1;
-  string email = 2;
-  string role = 3;
-  string accountId = 4; 
-  ClientInfo clientInfo = 5;  // Add client info
-}
-
-message BaseDevTokenResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  RefreshTokenResponse data = 4; 
-  ErrorPayload error = 5;
-}
-
 message ErrorPayload {
   string message = 1;
   string code = 2;
   string details = 3;  
-}
-
-// ------------------ Session Management Messages ------------------
-
-message GetActiveSessionsRequest {
-  string userUuid = 1;
-}
-
-message GetActiveSessionsResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  repeated SessionDto data = 4; // The list of active devices
-  ErrorPayload error = 5;
-}
-
-message SessionDto {
-  int32 id = 1;
-  string tokenId = 2;
-  string device = 3;
-  string ipAddress = 4;
-  string userAgent = 5;
-  string os = 6;
-  string lastActiveAt = 7;
-  string expiresAt = 8;
-  string createdAt = 9;
-  bool revoked = 10;
-}
-
-// Update your existing RevokeSessionRequest to make tokenId optional
-// This allows you to revoke one session OR all sessions for a user.
-message RevokeSessionRequest {
-  string userUuid = 1;
-  optional string tokenId = 2;
-  ClientInfo clientInfo = 3; // Add client info
 }

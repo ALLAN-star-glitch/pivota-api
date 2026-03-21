@@ -3,16 +3,25 @@ import { GrpcMethod, Payload } from '@nestjs/microservices';
 import { UserService } from '../services/user.service';
 import {
   BaseResponseDto,
-  CreateUserRequestDto,
+  CreateAccountWithProfilesRequestDto,
   GetUserByUserUuidDto,
   UpdateFullUserProfileDto,
   UserProfileResponseDto,
-  UserSignupDataDto,
-  OnboardProviderGrpcRequestDto,
-  ContractorProfileResponseDto,
-  UpdateJobSeekerGrpcRequestDto,
+  AccountResponseDto,
   JobSeekerProfileResponseDto,
+  SkilledProfessionalProfileResponseDto,
+  HousingSeekerProfileResponseDto,
+  PropertyOwnerProfileResponseDto,
+  SupportBeneficiaryProfileResponseDto,
+  IntermediaryAgentProfileResponseDto,
+  JobSeekerProfileDataDto,
+  SkilledProfessionalProfileDataDto,
+  HousingSeekerProfileDataDto,
+  PropertyOwnerProfileDataDto,
+  SupportBeneficiaryProfileDataDto,
+  IntermediaryAgentProfileDataDto,
 } from '@pivota-api/dtos';
+import { ProfileType } from '@pivota-api/constants';
 
 @Controller()
 export class UserController {
@@ -20,28 +29,110 @@ export class UserController {
 
   constructor(private readonly userService: UserService) {}
 
-  /** ------------------ Update Job Seeker Profile ------------------ 
-   * Handles professional metadata, CV links, and "Open to Jobs" status.
-   * Crucial for the Recommender System engine.
+  // ======================================================
+  // MAIN ONBOARDING
+  // ======================================================
+
+  /** 
+   * Create Individual Account with Multiple Profiles
+   * Used for new individual user signup with multiple profile types
    */
-  @GrpcMethod('ProfileService', 'UpdateJobSeekerProfile')
-  async handleUpdateJobSeekerProfile(
-    @Payload() dto: UpdateJobSeekerGrpcRequestDto,
+  @GrpcMethod('ProfileService', 'CreateIndividualAccountWithProfiles')
+  async handleCreateIndividualAccountWithProfiles(
+    @Payload() dto: CreateAccountWithProfilesRequestDto,
+  ): Promise<BaseResponseDto<AccountResponseDto>> {
+    this.logger.log(`[gRPC] Creating individual account for email: ${dto.email}`);
+    return this.userService.createIndividualAccountWithProfiles(dto);
+  }
+
+  // ======================================================
+  // INDIVIDUAL PROFILE CREATION
+  // ======================================================
+
+  /**
+   * Create Job Seeker Profile
+   */
+  @GrpcMethod('ProfileService', 'CreateJobSeekerProfile')
+  async handleCreateJobSeekerProfile(
+    @Payload() data: { accountUuid: string; data: JobSeekerProfileDataDto },
   ): Promise<BaseResponseDto<JobSeekerProfileResponseDto>> {
-    this.logger.log(`[gRPC] UpdateJobSeekerProfile requested for: ${dto.userUuid}`);
-    return this.userService.updateJobSeekerProfile(dto);
+    this.logger.log(`[gRPC] Creating job seeker profile for account: ${data.accountUuid}`);
+    return this.userService.createJobSeekerProfile(data.accountUuid, data.data);
   }
 
-  /** ------------------ Onboard Individual Service Provider ------------------ */
-  @GrpcMethod('ProfileService', 'OnboardIndividualProvider')
-  async handleOnboardIndividualProvider(
-    @Payload() dto: OnboardProviderGrpcRequestDto,
-  ): Promise<BaseResponseDto<ContractorProfileResponseDto>> {
-    this.logger.log(`[gRPC] Onboarding individual service provider: ${dto.userUuid}`);
-    return this.userService.onboardIndividualProvider(dto);
+  /**
+   * Create Skilled Professional Profile
+   */
+  @GrpcMethod('ProfileService', 'CreateSkilledProfessionalProfile')
+  async handleCreateSkilledProfessionalProfile(
+    @Payload() data: { accountUuid: string; data: SkilledProfessionalProfileDataDto },
+  ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+    this.logger.log(`[gRPC] Creating skilled professional profile for account: ${data.accountUuid}`);
+    return this.userService.createSkilledProfessionalProfile(data.accountUuid, data.data);
   }
 
-  /** ------------------ Get My Profile (Own Account) ------------------ */
+  /**
+   * Create Intermediary Agent Profile
+   */
+  @GrpcMethod('ProfileService', 'CreateIntermediaryAgentProfile')
+  async handleCreateIntermediaryAgentProfile(
+    @Payload() data: { accountUuid: string; data: IntermediaryAgentProfileDataDto },
+  ): Promise<BaseResponseDto<IntermediaryAgentProfileResponseDto>> {
+    this.logger.log(`[gRPC] Creating intermediary agent profile for account: ${data.accountUuid}`);
+    return this.userService.createIntermediaryAgentProfile(data.accountUuid, data.data);
+  }
+
+  /**
+   * Create Housing Seeker Profile
+   */
+  @GrpcMethod('ProfileService', 'CreateHousingSeekerProfile')
+  async handleCreateHousingSeekerProfile(
+    @Payload() data: { accountUuid: string; data: HousingSeekerProfileDataDto },
+  ): Promise<BaseResponseDto<HousingSeekerProfileResponseDto>> {
+    this.logger.log(`[gRPC] Creating housing seeker profile for account: ${data.accountUuid}`);
+    return this.userService.createHousingSeekerProfile(data.accountUuid, data.data);
+  }
+
+  /**
+   * Create Property Owner Profile
+   */
+  @GrpcMethod('ProfileService', 'CreatePropertyOwnerProfile')
+  async handleCreatePropertyOwnerProfile(
+    @Payload() data: { accountUuid: string; data: PropertyOwnerProfileDataDto },
+  ): Promise<BaseResponseDto<PropertyOwnerProfileResponseDto>> {
+    this.logger.log(`[gRPC] Creating property owner profile for account: ${data.accountUuid}`);
+    return this.userService.createPropertyOwnerProfile(data.accountUuid, data.data);
+  }
+
+  /**
+   * Create Support Beneficiary Profile
+   */
+  @GrpcMethod('ProfileService', 'CreateSupportBeneficiaryProfile')
+  async handleCreateSupportBeneficiaryProfile(
+    @Payload() data: { accountUuid: string; data: SupportBeneficiaryProfileDataDto },
+  ): Promise<BaseResponseDto<SupportBeneficiaryProfileResponseDto>> {
+    this.logger.log(`[gRPC] Creating support beneficiary profile for account: ${data.accountUuid}`);
+    return this.userService.createSupportBeneficiaryProfile(data.accountUuid, data.data);
+  }
+
+  // ======================================================
+  // FETCH METHODS
+  // ======================================================
+
+  /**
+   * Get Account by UUID
+   */
+  @GrpcMethod('ProfileService', 'GetAccountByUuid')
+  async handleGetAccountByUuid(
+    @Payload() data: { accountUuid: string },
+  ): Promise<BaseResponseDto<AccountResponseDto>> {
+    this.logger.log(`[gRPC] Fetching account by UUID: ${data.accountUuid}`);
+    return this.userService.getAccountByUuid(data.accountUuid);
+  }
+
+  /**
+   * Get My Profile (Own Account)
+   */
   @GrpcMethod('ProfileService', 'GetMyProfile')
   async handleGetMyProfile(
     @Payload() data: { userUuid: string },
@@ -50,8 +141,34 @@ export class UserController {
     return this.userService.getMyProfile(data.userUuid);
   }
 
-  /** * ------------------ Update Full User Profile ------------------ 
-   * Used by standard users to update their own account information.
+  /**
+   * Get User Profile by Email
+   */
+  @GrpcMethod('ProfileService', 'GetUserProfileByEmail')
+  async handleGetUserProfileByEmail(
+    @Payload() data: { email: string },
+  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`Fetching user profile by email: ${data.email}`);
+    return this.userService.getUserProfileByEmail(data);
+  }
+
+  /**
+   * Get User Profile by UUID
+   */
+  @GrpcMethod('ProfileService', 'GetUserProfileByUuid')
+  async handleGetUserProfileByUuid(
+    @Payload() data: GetUserByUserUuidDto,
+  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
+    this.logger.log(`Fetching user profile by UUID: ${data.userUuid}`);
+    return this.userService.getUserProfileByUuid(data);
+  }
+
+  // ======================================================
+  // UPDATE METHODS
+  // ======================================================
+
+  /**
+   * Update User Profile (Self)
    */
   @GrpcMethod('ProfileService', 'UpdateUserProfile')
   async handleUpdateUserProfile(
@@ -61,57 +178,84 @@ export class UserController {
     return this.userService.updateProfile(dto);
   }
 
-  /** * ------------------ Update Admin User Profile ------------------ 
-   * Used by admins to update any user profile with elevated permissions.
+  /**
+   * Update Job Seeker Profile
    */
-  @GrpcMethod('ProfileService', 'UpdateAdminUserProfile')
-  async handleUpdateAdminUserProfile(
-    @Payload() dto: UpdateFullUserProfileDto,
-  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
-    this.logger.log(`[gRPC] Admin override update for: ${dto.userUuid}`);
-    return this.userService.updateAdminProfile(dto);
-  }
-  
-  /** ------------------ Signup / Create User Profile ------------------ */
-  @GrpcMethod('ProfileService', 'CreateUserProfile')
-  async handleCreateUserProfile(
-    @Payload() dto: CreateUserRequestDto,
-  ): Promise<BaseResponseDto<UserSignupDataDto>> {
-    this.logger.log(`Creating user profile for email: ${dto.email}`);
-    return this.userService.createUserProfile(dto);
+  @GrpcMethod('ProfileService', 'UpdateJobSeekerProfile')
+  async handleUpdateJobSeekerProfile(
+    @Payload() data: { accountUuid: string; data: JobSeekerProfileDataDto },
+  ): Promise<BaseResponseDto<JobSeekerProfileResponseDto>> {
+    this.logger.log(`[gRPC] UpdateJobSeekerProfile for account: ${data.accountUuid}`);
+    return this.userService.updateJobSeekerProfile(data.accountUuid, data.data);
   }
 
-  /** ------------------ Get User Profile by Email ------------------ */
-  @GrpcMethod('ProfileService', 'GetUserProfileByEmail')
-  async handleGetUserProfileByEmail(
-    @Payload() data: { email: string },
-  ): Promise<BaseResponseDto<UserProfileResponseDto> | null> {
-    this.logger.log(`Fetching user profile by email: ${data.email}`);
-    return this.userService.getUserProfileByEmail(data);
+  /**
+   * Update Skilled Professional Profile
+   */
+  @GrpcMethod('ProfileService', 'UpdateSkilledProfessionalProfile')
+  async handleUpdateSkilledProfessionalProfile(
+    @Payload() data: { accountUuid: string; data: SkilledProfessionalProfileDataDto },
+  ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+    this.logger.log(`[gRPC] UpdateSkilledProfessionalProfile for account: ${data.accountUuid}`);
+    return this.userService.updateSkilledProfessionalProfile(data.accountUuid, data.data);
   }
 
-  /** ------------------ Get User Profile by UserCode ------------------ */
-  @GrpcMethod('ProfileService', 'GetUserProfileByUserCode')
-  async handleGetUserProfileByUserCode(
-    @Payload() data: { userCode: string },
-  ): Promise<BaseResponseDto<UserProfileResponseDto> | null> {
-    this.logger.log(`Fetching user profile by userCode: ${data.userCode}`);
-    return this.userService.getUserProfileByUserCode(data);
+  /**
+   * Update Intermediary Agent Profile
+   */
+  @GrpcMethod('ProfileService', 'UpdateIntermediaryAgentProfile')
+  async handleUpdateIntermediaryAgentProfile(
+    @Payload() data: { accountUuid: string; data: IntermediaryAgentProfileDataDto },
+  ): Promise<BaseResponseDto<IntermediaryAgentProfileResponseDto>> {
+    this.logger.log(`[gRPC] UpdateIntermediaryAgentProfile for account: ${data.accountUuid}`);
+    return this.userService.updateIntermediaryAgentProfile(data.accountUuid, data.data);
   }
 
-  /** ------------------ Get User Profile by UUID ------------------ */
-  @GrpcMethod('ProfileService', 'GetUserProfileByUuid')
-  async handleGetUserProfileByUuid(
-    @Payload() data: GetUserByUserUuidDto,
-  ): Promise<BaseResponseDto<UserProfileResponseDto> | null> {
-    this.logger.log(`Fetching user profile by UUID: ${data.userUuid}`);
-    return this.userService.getUserProfileByUuid(data);
+  /**
+   * Update Housing Seeker Profile
+   */
+  @GrpcMethod('ProfileService', 'UpdateHousingSeekerProfile')
+  async handleUpdateHousingSeekerProfile(
+    @Payload() data: { accountUuid: string; data: HousingSeekerProfileDataDto },
+  ): Promise<BaseResponseDto<HousingSeekerProfileResponseDto>> {
+    this.logger.log(`[gRPC] UpdateHousingSeekerProfile for account: ${data.accountUuid}`);
+    return this.userService.updateHousingSeekerProfile(data.accountUuid, data.data);
   }
-  
-  /** ------------------ Get All Users ------------------ */
-  @GrpcMethod('ProfileService', 'GetAllUsers')
-  async handleGetAllUsers(): Promise<BaseResponseDto<UserProfileResponseDto[]>> {
-    this.logger.log('Fetching all users');
-    return this.userService.getAllUsers();
+
+  /**
+   * Update Property Owner Profile
+   */
+  @GrpcMethod('ProfileService', 'UpdatePropertyOwnerProfile')
+  async handleUpdatePropertyOwnerProfile(
+    @Payload() data: { accountUuid: string; data: PropertyOwnerProfileDataDto },
+  ): Promise<BaseResponseDto<PropertyOwnerProfileResponseDto>> {
+    this.logger.log(`[gRPC] UpdatePropertyOwnerProfile for account: ${data.accountUuid}`);
+    return this.userService.updatePropertyOwnerProfile(data.accountUuid, data.data);
+  }
+
+  /**
+   * Update Support Beneficiary Profile
+   */
+  @GrpcMethod('ProfileService', 'UpdateSupportBeneficiaryProfile')
+  async handleUpdateSupportBeneficiaryProfile(
+    @Payload() data: { accountUuid: string; data: SupportBeneficiaryProfileDataDto },
+  ): Promise<BaseResponseDto<SupportBeneficiaryProfileResponseDto>> {
+    this.logger.log(`[gRPC] UpdateSupportBeneficiaryProfile for account: ${data.accountUuid}`);
+    return this.userService.updateSupportBeneficiaryProfile(data.accountUuid, data.data);
+  }
+
+  // ======================================================
+  // DELETE / REMOVE METHODS
+  // ======================================================
+
+  /**
+   * Remove Profile from Account
+   */
+  @GrpcMethod('ProfileService', 'RemoveProfile')
+  async handleRemoveProfile(
+    @Payload() data: { accountUuid: string; profileType: ProfileType },
+  ): Promise<BaseResponseDto<null>> {
+    this.logger.log(`[gRPC] Removing profile ${data.profileType} from account: ${data.accountUuid}`);
+    return this.userService.removeProfile(data.accountUuid, data.profileType);
   }
 }

@@ -8,10 +8,11 @@ datasource db {
 }
 
 model Credential {
-  id            Int       @id @default(autoincrement())
+  id            String    @id @default(cuid())  // CHANGED: from Int to String with cuid()
+  uuid          String    @unique @default(uuid())
   userUuid      String    @unique
   email         String    @unique
-  passwordHash String?  
+  passwordHash  String?  
 
   mfaSecret     String?
   mfaEnabled    Boolean   @default(true)
@@ -31,66 +32,75 @@ model Credential {
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  @@index([userUuid])
+  @@index([email])
 }
 
 model Session {
-  id           Int       @id @default(autoincrement())
-  userUuid     String
-  tokenId      String    @unique @default(uuid())
-  hashedToken  String
+  id            String    @id @default(cuid())  // CHANGED: from Int to String with cuid()
+  uuid          String    @unique @default(uuid())
+  userUuid      String
+  tokenId       String    @unique @default(uuid())
+  hashedToken   String
   
   // Contextual Data (Already present)
-  device       String?
-  ipAddress    String?
-  userAgent    String?
-  os           String?
+  device        String?
+  ipAddress     String?
+  userAgent     String?
+  os            String?
   
   // --- NEW RICH CLIENT INFO FIELDS ---
-  deviceType   String?   // "MOBILE", "TABLET", "DESKTOP", "BOT", "UNKNOWN"
-  osVersion    String?
-  browser      String?
+  deviceType    String?   // "MOBILE", "TABLET", "DESKTOP", "BOT", "UNKNOWN"
+  osVersion     String?
+  browser       String?
   browserVersion String?
-  isMobile     Boolean?
-  isTablet     Boolean?
-  isDesktop    Boolean?
-  isBot        Boolean?
+  isMobile      Boolean?
+  isTablet      Boolean?
+  isDesktop     Boolean?
+  isBot         Boolean?
   
   // --- RECOMMENDED ADDITION ---
-  lastActiveAt DateTime  @default(now()) // Update this on every refresh/authorized request
+  lastActiveAt  DateTime  @default(now()) // Update this on every refresh/authorized request
   
-  revoked      Boolean   @default(false)
-  deletedAt    DateTime?
-  createdAt    DateTime  @default(now())
-  expiresAt    DateTime
+  revoked       Boolean   @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
 
   @@index([userUuid])
   @@index([revoked])
   @@index([expiresAt])
+  @@index([tokenId])
 }
 
 model Otp {
-  id        String   @id @default(cuid())
-  email     String
-  code      String   
-  purpose   String   @default("SIGNUP") 
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  id            String    @id @default(cuid())
+  uuid          String    @unique @default(uuid())
+  email         String
+  code          String   
+  purpose       String    @default("SIGNUP") 
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
 
   @@index([email, code])
+  @@index([purpose])
+  @@index([expiresAt])
 }
 
 // ======================================================
 // NEW: Password Setup Tokens for Invitation Flow
 // ======================================================
 model PasswordSetupToken {
-  id        String   @id @default(cuid())
-  userUuid  String
-  credential Credential @relation(fields: [userUuid], references: [userUuid], onDelete: Cascade)
-  token     String   @unique
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String    @id @default(cuid())
+  uuid          String    @unique @default(uuid())
+  userUuid      String
+  credential    Credential @relation(fields: [userUuid], references: [userUuid], onDelete: Cascade)
+  token         String    @unique
+  expiresAt     DateTime
+  used          Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([token])
   @@index([expiresAt])
@@ -101,16 +111,19 @@ model PasswordSetupToken {
 // OPTIONAL: Track invitation events for audit
 // ======================================================
 model InvitationAudit {
-  id            String   @id @default(cuid())
-  email         String
-  userUuid      String?  // Will be null until user accepts
-  organizationUuid String
+  id                String    @id @default(cuid())
+  uuid              String    @unique @default(uuid())
+  email             String
+  userUuid          String?   // Will be null until user accepts
+  organizationUuid  String
   invitedByUserUuid String
-  status        String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED
-  acceptedAt    DateTime?
-  createdAt     DateTime @default(now())
+  status            String    @default("PENDING") // PENDING, ACCEPTED, EXPIRED
+  acceptedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([email])
   @@index([organizationUuid])
   @@index([status])
+  @@index([invitedByUserUuid])
 }

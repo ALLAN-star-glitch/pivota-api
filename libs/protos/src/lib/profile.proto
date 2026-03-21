@@ -7,96 +7,588 @@ package profile;
 // ======================================================
 
 service ProfileService {
-  // CREATE
-  rpc CreateUserProfile(CreateUserProfileRequest) returns (UserProfileResponse);
-  rpc CreateOrganizationProfile(CreateOrgProfileRequest) returns (OrgProfileResponse);
-
-  // ONBOARDING (SERVICE PROVIDERS)
-  rpc OnboardIndividualProvider(OnboardIndividualProviderRequest) returns (ContractorProfileResponse);
-  rpc OnboardOrganizationProvider(OnboardOrgProviderRequest) returns (ContractorProfileResponse);
+  // CREATE - INDIVIDUAL
+  rpc CreateIndividualAccountWithProfiles(CreateIndividualAccountWithProfilesRequest) returns (AccountResponse);
+  rpc CreateJobSeekerProfile(CreateJobSeekerProfileRequest) returns (JobSeekerProfileResponse);
+  rpc CreateSkilledProfessionalProfile(CreateSkilledProfessionalProfileRequest) returns (SkilledProfessionalProfileResponse);
+  rpc CreateIntermediaryAgentProfile(CreateIntermediaryAgentProfileRequest) returns (IntermediaryAgentProfileResponse);
+  rpc CreateHousingSeekerProfile(CreateHousingSeekerProfileRequest) returns (HousingSeekerProfileResponse);
+  rpc CreatePropertyOwnerProfile(CreatePropertyOwnerProfileRequest) returns (PropertyOwnerProfileResponse);
+  rpc CreateSupportBeneficiaryProfile(CreateSupportBeneficiaryProfileRequest) returns (SupportBeneficiaryProfileResponse);
+  
+  // CREATE - ORGANIZATION
+  rpc CreateOrganizationAccountWithProfiles(CreateOrganizationAccountWithProfilesRequest) returns (OrgProfileResponse);
+  rpc CreateEmployerProfile(CreateEmployerProfileRequest) returns (EmployerProfileResponse);
+  rpc CreateSocialServiceProviderProfile(CreateSocialServiceProviderProfileRequest) returns (SocialServiceProviderProfileResponse);
+  rpc CreateOrganizationPropertyOwnerProfile(CreateOrganizationPropertyOwnerProfileRequest) returns (PropertyOwnerProfileResponse);
+  rpc CreateOrganizationSkilledProfessionalProfile(CreateOrganizationSkilledProfessionalProfileRequest) returns (SkilledProfessionalProfileResponse);
+  rpc CreateOrganizationIntermediaryAgentProfile(CreateOrganizationIntermediaryAgentProfileRequest) returns (IntermediaryAgentProfileResponse);
 
   // READ (Identity & Profile)
   rpc GetMyProfile(GetMyProfileRequest) returns (UserProfileResponse);
   rpc GetUserProfileByUuid(GetUserByUuidRequest) returns (UserProfileResponse);
   rpc GetUserProfileByUserCode(GetUserByUserCodeRequest) returns (UserProfileResponse);
   rpc GetUserProfileByEmail(GetUserByEmailRequest) returns (UserProfileResponse);
+  rpc GetAccountByUuid(GetAccountByUuidRequest) returns (AccountResponse);
   rpc GetAllUsers(Empty) returns (UserListResponse);
   
   // READ (Organizations)
-  rpc GetOrganisationsByType(GetOrganisationsByTypeRequest) returns (OrgListResponse);
-  rpc GetOrganisationByUuid(GetOrgByUuidRequest) returns (OrgProfileResponse);
+  rpc GetOrganizationsByType(GetOrganizationsByTypeRequest) returns (OrgListResponse);
+  rpc GetOrganizationByUuid(GetOrgByUuidRequest) returns (OrgProfileResponse);
+  rpc GetOrganizationByAccountUuid(GetOrgByAccountUuidRequest) returns (OrgProfileResponse);
 
-  // UPDATE
-  rpc UpdateUserProfile (UpdateFullUserProfileRequest) returns (UserProfileResponse);
-  rpc UpdateAdminUserProfile (UpdateFullUserProfileRequest) returns (UserProfileResponse);
+  // UPDATE - INDIVIDUAL
+  rpc UpdateUserProfile(UpdateFullUserProfileRequest) returns (UserProfileResponse);
+  rpc UpdateJobSeekerProfile(UpdateJobSeekerProfileRequest) returns (JobSeekerProfileResponse);
+  rpc UpdateSkilledProfessionalProfile(UpdateSkilledProfessionalProfileRequest) returns (SkilledProfessionalProfileResponse);
+  rpc UpdateHousingSeekerProfile(UpdateHousingSeekerProfileRequest) returns (HousingSeekerProfileResponse);
+  rpc UpdatePropertyOwnerProfile(UpdatePropertyOwnerProfileRequest) returns (PropertyOwnerProfileResponse);
+  rpc UpdateSupportBeneficiaryProfile(UpdateSupportBeneficiaryProfileRequest) returns (SupportBeneficiaryProfileResponse);
+  rpc UpdateIntermediaryAgentProfile(UpdateIntermediaryAgentProfileRequest) returns (IntermediaryAgentProfileResponse);
+  
+  // UPDATE - ORGANIZATION
+  rpc UpdateOrganizationProfile(UpdateOrgProfileRequest) returns (OrgProfileResponse);
+  rpc UpdateEmployerProfile(UpdateEmployerProfileRequest) returns (EmployerProfileResponse);
+  rpc UpdateSocialServiceProviderProfile(UpdateSocialServiceProviderProfileRequest) returns (SocialServiceProviderProfileResponse);
+  rpc UpdateOrganizationPropertyOwnerProfile(UpdateOrganizationPropertyOwnerProfileRequest) returns (PropertyOwnerProfileResponse);
+  rpc UpdateOrganizationSkilledProfessionalProfile(UpdateOrganizationSkilledProfessionalProfileRequest) returns (SkilledProfessionalProfileResponse);
+  rpc UpdateOrganizationIntermediaryAgentProfile(UpdateOrganizationIntermediaryAgentProfileRequest) returns (IntermediaryAgentProfileResponse);
+
+  // REMOVE PROFILE
+  rpc RemoveProfile(RemoveProfileRequest) returns (BaseResponse);
 
   // MEMBERSHIP
-  rpc AddOrganisationMember(AddOrgMemberRequest) returns (BaseResponse);
+  rpc AddOrganizationMember(AddOrgMemberRequest) returns (BaseResponse);
   
   // ======================================================
   // INVITATION MANAGEMENT
   // ======================================================
-  
-  // INVITE MEMBER - Send email invitation
   rpc InviteMember(InviteMemberRequest) returns (InviteMemberResponse);
-  
-  // VERIFY INVITATION - Check if token is valid
   rpc VerifyInvitation(VerifyInvitationRequest) returns (InvitationVerificationResponse);
-  
-  // ACCEPT INVITATION - Complete the invitation flow
   rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse);
-  
-  // GET ORGANIZATION INVITATIONS - List pending invites
   rpc GetOrganizationInvitations(GetOrganizationInvitationsRequest) returns (InvitationListResponse);
-  
-  // RESEND INVITATION - Generate new token
   rpc ResendInvitation(ResendInvitationRequest) returns (BaseResponse);
-  
-  // CANCEL INVITATION - Remove pending invitation
   rpc CancelInvitation(CancelInvitationRequest) returns (BaseResponse);
-  
-  // CHECK INVITATION STATUS - Quick check for UI
   rpc CheckInvitationStatus(CheckInvitationStatusRequest) returns (CheckInvitationStatusResponse);
-
-  // JOB SEEKER PROFILE MANAGEMENT  
-  rpc UpdateJobSeekerProfile (UpdateJobSeekerRequest) returns (JobSeekerProfileResponse);
 }
 
 // ======================================================
-// CONTRACTOR / PROVIDER MESSAGES
+// INDIVIDUAL PROFILE DATA TYPES
 // ======================================================
 
-message OnboardIndividualProviderRequest {
-  string userUuid = 1;
-  repeated string specialties = 2;
-  repeated string serviceAreas = 3;
-  int32 yearsExperience = 4;
+message JobSeekerProfileData {
+  optional string headline = 1;
+  optional bool isActivelySeeking = 2;
+  repeated string skills = 3;
+  repeated string industries = 4;
+  repeated string jobTypes = 5;
+  optional string seniorityLevel = 6;
+  optional string noticePeriod = 7;           // Add this
+  optional double expectedSalary = 8;
+  repeated string workAuthorization = 9;
+  optional string cvUrl = 10;
+  repeated string portfolioImages = 11;
+  optional string linkedInUrl = 12;
+  optional string githubUrl = 13;
+  optional string portfolioUrl = 14;
+  optional bool hasAgent = 15;
+  optional string agentUuid = 16;
 }
 
-message OnboardOrgProviderRequest {
-  string orgUuid = 1;
-  repeated string specialties = 2;
-  repeated string serviceAreas = 3;
-}
-
-message ContractorProfileResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  ContractorData data = 4;
-  ErrorPayload error = 5;
-}
-
-message ContractorData {
-  string uuid = 1;
-  string accountId = 2;
+message SkilledProfessionalProfileData {
+  optional string title = 1;
+  optional string profession = 2;
   repeated string specialties = 3;
   repeated string serviceAreas = 4;
-  int32 yearsExperience = 5;
-  bool isVerified = 6;
-  float averageRating = 7;
-  int32 totalReviews = 8;
-  string createdAt = 9;
+  optional int32 yearsExperience = 5;
+  optional string licenseNumber = 6;
+  optional string insuranceInfo = 7;
+  optional double hourlyRate = 8;
+  optional double dailyRate = 9;
+  optional string paymentTerms = 10;
+  optional bool availableToday = 11;
+  optional bool availableWeekends = 12;
+  optional bool emergencyService = 13;
+  repeated string portfolioImages = 14;
+  repeated string certifications = 15;
+}
+
+message IntermediaryAgentProfileData {
+  string agentType = 1;
+  repeated string specializations = 2;
+  repeated string serviceAreas = 3;
+  optional string licenseNumber = 4;
+  optional string licenseBody = 5;
+  optional int32 yearsExperience = 6;
+  optional string agencyName = 7;
+  optional string agencyUuid = 8;
+  optional double commissionRate = 9;
+  optional string feeStructure = 10;
+  optional double minimumFee = 11;
+  optional string typicalFee = 12;
+  optional string about = 13;
+  optional string profileImage = 14;
+  optional string contactEmail = 15;
+  optional string contactPhone = 16;
+  optional string website = 17;
+  map<string, string> socialLinks = 18;
+  repeated string clientTypes = 19;
+}
+
+message HousingSeekerProfileData {
+  optional int32 minBedrooms = 1;
+  optional int32 maxBedrooms = 2;
+  optional double minBudget = 3;
+  optional double maxBudget = 4;
+  repeated string preferredTypes = 5;
+  repeated string preferredCities = 6;
+  repeated string preferredNeighborhoods = 7;
+  optional string moveInDate = 8;
+  optional string leaseDuration = 9;
+  optional int32 householdSize = 10;
+  optional bool hasPets = 11;
+  optional string petDetails = 12;
+  optional double latitude = 13;
+  optional double longitude = 14;
+  optional int32 searchRadiusKm = 15;
+  optional bool hasAgent = 16;
+  optional string agentUuid = 17;
+}
+
+message SupportBeneficiaryProfileData {
+  repeated string needs = 1;
+  repeated string urgentNeeds = 2;
+  optional int32 familySize = 3;
+  optional int32 dependents = 4;
+  optional string householdComposition = 5;
+  repeated string vulnerabilityFactors = 6;
+  optional string city = 7;
+  optional string neighborhood = 8;
+  optional double latitude = 9;
+  optional double longitude = 10;
+  optional string landmark = 11;
+  optional bool prefersAnonymity = 12;
+  repeated string languagePreference = 13;
+  optional bool consentToShare = 14;
+  optional string referredBy = 15;
+  optional string referredByUuid = 16;
+  optional string caseWorkerUuid = 17;
+}
+
+
+message PropertyOwnerProfileData {
+  optional bool isProfessional = 1;
+  optional string licenseNumber = 2;
+  optional string companyName = 3;
+  optional int32 yearsInBusiness = 4;
+  repeated string preferredPropertyTypes = 5;
+  repeated string serviceAreas = 6;
+  optional bool usesAgent = 7;
+  optional string managingAgentUuid = 8;
+  
+  // --- Fields for INDIVIDUAL accounts ---
+  optional int32 propertyCount = 9;
+  repeated string propertyTypes = 10;
+  optional string propertyPurpose = 11;  // "PRIMARY", "INVESTMENT", "BOTH"
+}
+
+// ======================================================
+// ORGANIZATION PROFILE DATA TYPES
+// ======================================================
+
+message EmployerProfileData {
+  optional string companyName = 1;
+  optional string industry = 2;
+  optional string companySize = 3;
+  optional int32 foundedYear = 4;
+  optional string description = 5;
+  optional string logo = 6;
+  repeated string preferredSkills = 7;
+  optional string remotePolicy = 8;
+  optional bool worksWithAgents = 9;
+  repeated string preferredAgents = 10;
+  
+  // --- Fields for INDIVIDUAL accounts ---
+  optional string businessName = 11;
+  optional bool isRegistered = 12;
+  optional int32 yearsExperience = 13;
+}
+
+message SocialServiceProviderProfileData {
+  string providerType = 1;
+  repeated string servicesOffered = 2;
+  repeated string targetBeneficiaries = 3;
+  repeated string serviceAreas = 4;
+  optional string about = 5;
+  optional string website = 6;
+  optional string contactEmail = 7;
+  optional string contactPhone = 8;
+  optional string officeHours = 9;
+  optional string physicalAddress = 10;
+  optional int32 peopleServed = 11;
+  optional int32 yearEstablished = 12;
+  optional bool acceptsDonations = 13;
+  optional bool needsVolunteers = 14;
+  optional string donationInfo = 15;
+  optional string volunteerNeeds = 16;
+  
+  // --- Fields for INDIVIDUAL accounts ---
+  optional string operatingName = 17;
+  optional int32 yearsExperience = 18;
+  repeated string qualifications = 19;
+  optional string availability = 20;
+}
+
+// ======================================================
+// REQUEST MESSAGES
+// ======================================================
+
+/**
+ * Individual Signup - Single primary purpose (UI Screen 6A)
+ */
+message CreateIndividualAccountWithProfilesRequest {
+  string accountType = 1;
+  string email = 2;
+  string password = 3;
+  optional string phone = 4;
+  optional string planSlug = 5;
+  string otpCode = 6;
+  string firstName = 7;
+  string lastName = 8;
+  optional string profileImage = 9;
+  optional string primaryPurpose = 10;
+  oneof profileData {
+    JobSeekerProfileData jobSeekerData = 11;
+    SkilledProfessionalProfileData skilledProfessionalData = 12;
+    IntermediaryAgentProfileData intermediaryAgentData = 13;
+    HousingSeekerProfileData housingSeekerData = 14;
+    SupportBeneficiaryProfileData supportBeneficiaryData = 15;
+    EmployerProfileData employerData = 16;                    // ADD THIS for HIRE_EMPLOYEES
+    PropertyOwnerProfileData propertyOwnerData = 17;          // ADD THIS for LIST_PROPERTIES
+  }
+  repeated ProfileToCreate profiles = 18;                     // Update number from 16 to 18
+}
+
+message ProfileToCreate {
+  string type = 1;
+  string data = 2;
+}
+
+// Individual Profile Creation Requests
+message CreateJobSeekerProfileRequest {
+  string accountUuid = 1;
+  JobSeekerProfileData data = 2;
+}
+
+message CreateSkilledProfessionalProfileRequest {
+  string accountUuid = 1;
+  SkilledProfessionalProfileData data = 2;
+}
+
+message CreateIntermediaryAgentProfileRequest {
+  string accountUuid = 1;
+  IntermediaryAgentProfileData data = 2;
+}
+
+message CreateHousingSeekerProfileRequest {
+  string accountUuid = 1;
+  HousingSeekerProfileData data = 2;
+}
+
+message CreatePropertyOwnerProfileRequest {
+  string accountUuid = 1;
+  PropertyOwnerProfileData data = 2;
+}
+
+message CreateSupportBeneficiaryProfileRequest {
+  string accountUuid = 1;
+  SupportBeneficiaryProfileData data = 2;
+}
+
+// Organization Profile Creation Requests
+message CreateEmployerProfileRequest {
+  string accountUuid = 1;
+  EmployerProfileData data = 2;
+}
+
+message CreateSocialServiceProviderProfileRequest {
+  string accountUuid = 1;
+  SocialServiceProviderProfileData data = 2;
+}
+
+message CreateOrganizationPropertyOwnerProfileRequest {
+  string accountUuid = 1;
+  PropertyOwnerProfileData data = 2;
+}
+
+message CreateOrganizationSkilledProfessionalProfileRequest {
+  string accountUuid = 1;
+  SkilledProfessionalProfileData data = 2;
+}
+
+message CreateOrganizationIntermediaryAgentProfileRequest {
+  string accountUuid = 1;
+  IntermediaryAgentProfileData data = 2;
+}
+
+/**
+ * Organization Signup - Multiple purposes (UI Screen 7 - Checkboxes)
+ */
+message CreateOrganizationAccountWithProfilesRequest {
+  string accountType = 1;
+  string adminUserUuid = 2;
+  string email = 3;
+  string phone = 4;
+  string adminFirstName = 5;
+  string adminLastName = 6;
+  optional string adminProfileImage = 7;
+  string organizationName = 8;
+  string organizationType = 9;
+  string officialEmail = 10;
+  string officialPhone = 11;
+  string physicalAddress = 12;
+  optional string registrationNo = 13;
+  optional string kraPin = 14;
+  optional string website = 15;
+  optional string about = 16;
+  optional string logo = 17;
+  optional string planSlug = 18;
+  repeated string purposes = 19;
+  map<string, OrganizationProfileDataEntry> profileData = 20;
+}
+
+message OrganizationProfileDataEntry {
+  oneof data {
+    EmployerProfileData employerData = 1;
+    PropertyOwnerProfileData propertyOwnerData = 2;
+    SkilledProfessionalProfileData skilledProfessionalData = 3;
+    SocialServiceProviderProfileData socialServiceProviderData = 4;
+    IntermediaryAgentProfileData intermediaryAgentData = 5;
+  }
+}
+
+// ======================================================
+// UPDATE REQUEST MESSAGES
+// ======================================================
+
+message UpdateJobSeekerProfileRequest {
+  string accountUuid = 1;
+  optional string headline = 2;
+  optional bool isActivelySeeking = 3;
+  repeated string skills = 4;
+  repeated string industries = 5;
+  repeated string jobTypes = 6;
+  optional string seniorityLevel = 7;
+  optional string noticePeriod = 8;
+  optional double expectedSalary = 9;
+  repeated string workAuthorization = 10;
+  optional string cvUrl = 11;
+  repeated string portfolioImages = 12;
+  optional string linkedInUrl = 13;
+  optional string githubUrl = 14;
+  optional string portfolioUrl = 15;
+  optional bool hasAgent = 16;
+  optional string agentUuid = 17;
+}
+
+message UpdateSkilledProfessionalProfileRequest {
+  string accountUuid = 1;
+  optional string title = 2;
+  optional string profession = 3;
+  repeated string specialties = 4;
+  repeated string serviceAreas = 5;
+  optional int32 yearsExperience = 6;
+  optional string licenseNumber = 7;
+  optional string insuranceInfo = 8;
+  optional double hourlyRate = 9;
+  optional double dailyRate = 10;
+  optional string paymentTerms = 11;
+  optional bool availableToday = 12;
+  optional bool availableWeekends = 13;
+  optional bool emergencyService = 14;
+  repeated string portfolioImages = 15;
+  repeated string certifications = 16;
+}
+
+message UpdateHousingSeekerProfileRequest {
+  string accountUuid = 1;
+  optional int32 minBedrooms = 2;
+  optional int32 maxBedrooms = 3;
+  optional double minBudget = 4;
+  optional double maxBudget = 5;
+  repeated string preferredTypes = 6;
+  repeated string preferredCities = 7;
+  repeated string preferredNeighborhoods = 8;
+  optional string moveInDate = 9;
+  optional string leaseDuration = 10;
+  optional int32 householdSize = 11;
+  optional bool hasPets = 12;
+  optional string petDetails = 13;
+  optional double latitude = 14;
+  optional double longitude = 15;
+  optional int32 searchRadiusKm = 16;
+  optional bool hasAgent = 17;
+  optional string agentUuid = 18;
+}
+
+message UpdatePropertyOwnerProfileRequest {
+  string accountUuid = 1;
+  optional bool isProfessional = 2;
+  optional string licenseNumber = 3;
+  optional string companyName = 4;
+  optional int32 yearsInBusiness = 5;
+  repeated string preferredPropertyTypes = 6;
+  repeated string serviceAreas = 7;
+  optional bool usesAgent = 8;
+  optional string managingAgentUuid = 9;
+}
+
+message UpdateSupportBeneficiaryProfileRequest {
+  string accountUuid = 1;
+  repeated string needs = 2;
+  repeated string urgentNeeds = 3;
+  optional int32 familySize = 4;
+  optional int32 dependents = 5;
+  optional string householdComposition = 6;
+  repeated string vulnerabilityFactors = 7;
+  optional string city = 8;
+  optional string neighborhood = 9;
+  optional double latitude = 10;
+  optional double longitude = 11;
+  optional string landmark = 12;
+  optional bool prefersAnonymity = 13;
+  repeated string languagePreference = 14;
+  optional bool consentToShare = 15;
+  optional string referredBy = 16;
+  optional string referredByUuid = 17;
+  optional string caseWorkerUuid = 18;
+}
+
+message UpdateIntermediaryAgentProfileRequest {
+  string accountUuid = 1;
+  string agentType = 2;
+  repeated string specializations = 3;
+  repeated string serviceAreas = 4;
+  optional string licenseNumber = 5;
+  optional string licenseBody = 6;
+  optional int32 yearsExperience = 7;
+  optional string agencyName = 8;
+  optional string agencyUuid = 9;
+  optional double commissionRate = 10;
+  optional string feeStructure = 11;
+  optional double minimumFee = 12;
+  optional string typicalFee = 13;
+  optional string about = 14;
+  optional string profileImage = 15;
+  optional string contactEmail = 16;
+  optional string contactPhone = 17;
+  optional string website = 18;
+  map<string, string> socialLinks = 19;
+  repeated string clientTypes = 20;
+}
+
+message UpdateEmployerProfileRequest {
+  string accountUuid = 1;
+  optional string companyName = 2;
+  optional string industry = 3;
+  optional string companySize = 4;
+  optional int32 foundedYear = 5;
+  optional string description = 6;
+  optional string logo = 7;
+  repeated string preferredSkills = 8;
+  optional string remotePolicy = 9;
+  optional bool worksWithAgents = 10;
+  repeated string preferredAgents = 11;
+}
+
+message UpdateSocialServiceProviderProfileRequest {
+  string accountUuid = 1;
+  string providerType = 2;
+  repeated string servicesOffered = 3;
+  repeated string targetBeneficiaries = 4;
+  repeated string serviceAreas = 5;
+  optional string about = 6;
+  optional string website = 7;
+  optional string contactEmail = 8;
+  optional string contactPhone = 9;
+  optional string officeHours = 10;
+  optional string physicalAddress = 11;
+  optional int32 peopleServed = 12;
+  optional int32 yearEstablished = 13;
+  optional bool acceptsDonations = 14;
+  optional bool needsVolunteers = 15;
+  optional string donationInfo = 16;
+  optional string volunteerNeeds = 17;
+}
+
+message UpdateOrganizationPropertyOwnerProfileRequest {
+  string accountUuid = 1;
+  optional bool isProfessional = 2;
+  optional string licenseNumber = 3;
+  optional string companyName = 4;
+  optional int32 yearsInBusiness = 5;
+  repeated string preferredPropertyTypes = 6;
+  repeated string serviceAreas = 7;
+  optional bool usesAgent = 8;
+  optional string managingAgentUuid = 9;
+}
+
+message UpdateOrganizationSkilledProfessionalProfileRequest {
+  string accountUuid = 1;
+  optional string title = 2;
+  optional string profession = 3;
+  repeated string specialties = 4;
+  repeated string serviceAreas = 5;
+  optional int32 yearsExperience = 6;
+  optional string licenseNumber = 7;
+  optional string insuranceInfo = 8;
+  optional double hourlyRate = 9;
+  optional double dailyRate = 10;
+  optional string paymentTerms = 11;
+  optional bool availableToday = 12;
+  optional bool availableWeekends = 13;
+  optional bool emergencyService = 14;
+  repeated string portfolioImages = 15;
+  repeated string certifications = 16;
+}
+
+message UpdateOrganizationIntermediaryAgentProfileRequest {
+  string accountUuid = 1;
+  string agentType = 2;
+  repeated string specializations = 3;
+  repeated string serviceAreas = 4;
+  optional string licenseNumber = 5;
+  optional string licenseBody = 6;
+  optional int32 yearsExperience = 7;
+  optional string agencyName = 8;
+  optional string agencyUuid = 9;
+  optional double commissionRate = 10;
+  optional string feeStructure = 11;
+  optional double minimumFee = 12;
+  optional string typicalFee = 13;
+  optional string about = 14;
+  optional string profileImage = 15;
+  optional string contactEmail = 16;
+  optional string contactPhone = 17;
+  optional string website = 18;
+  map<string, string> socialLinks = 19;
+  repeated string clientTypes = 20;
+}
+
+message UpdateOrgProfileRequest {
+  string accountUuid = 1;
+  optional string website = 2;
+  optional string registrationNo = 3;
+  optional string kraPin = 4;
+  optional string physicalAddress = 5;
+  optional string organizationType = 6;
+  optional string about = 7;
+  optional string logo = 8;
+}
+
+message RemoveProfileRequest {
+  string accountUuid = 1;
+  string profileType = 2;
 }
 
 // ======================================================
@@ -119,7 +611,13 @@ message UserProf {
   string updatedAt = 5;
   CompletionResponse completion = 6;
   OrganizationBase organization = 7; 
-  optional ContractorData contractor = 8; // Detection for Shared Nav
+  optional ContractorData contractor = 8;
+  optional JobSeekerProfileData jobSeekerProfile = 9;
+  optional SkilledProfessionalProfileData skilledProfessionalProfile = 10;
+  optional HousingSeekerProfileData housingSeekerProfile = 11;
+  optional PropertyOwnerProfileData propertyOwnerProfile = 12;
+  optional SupportBeneficiaryProfileData supportBeneficiaryProfile = 13;
+  optional IntermediaryAgentProfileData intermediaryAgentProfile = 14;
 }
 
 message UserBase {
@@ -142,6 +640,51 @@ message UserProfileMetadata {
 }
 
 // ======================================================
+// ACCOUNT MESSAGES
+// ======================================================
+
+message AccountResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  AccountData data = 4;
+  ErrorPayload error = 5;
+}
+
+message AccountData {
+  string uuid = 1;
+  string accountCode = 2;
+  optional string name = 3;
+  string type = 4;
+  string status = 5;
+  string userRole = 6;
+  repeated string activeProfiles = 7;
+  bool isVerified = 8;
+  repeated string verifiedFeatures = 9;
+  optional IndividualProfileData individualProfile = 10;
+  optional JobSeekerProfileData jobSeekerProfile = 11;
+  optional SkilledProfessionalProfileData skilledProfessionalProfile = 12;
+  optional HousingSeekerProfileData housingSeekerProfile = 13;
+  optional PropertyOwnerProfileData propertyOwnerProfile = 14;
+  optional SupportBeneficiaryProfileData supportBeneficiaryProfile = 15;
+  optional IntermediaryAgentProfileData intermediaryAgentProfile = 16;
+  CompletionResponse completion = 17;
+  string createdAt = 18;
+  string updatedAt = 19;
+}
+
+message IndividualProfileData {
+  string accountUuid = 1;
+  string firstName = 2;
+  string lastName = 3;
+  optional string bio = 4;
+  optional string gender = 5;
+  optional string dateOfBirth = 6;
+  optional string nationalId = 7;
+  optional string profileImage = 8;
+}
+
+// ======================================================
 // ORGANIZATION MESSAGES
 // ======================================================
 
@@ -152,20 +695,6 @@ message OrganizationBase {
   string orgCode = 4;
   string verificationStatus = 5;
   string officialEmail = 6; 
-}
-
-message CreateOrgProfileRequest {
-  string name = 1;              
-  string officialEmail = 2;     
-  string officialPhone = 3;     
-  string physicalAddress = 4;   
-  string adminUserUuid = 5;     
-  string email = 6;             
-  string phone = 7;             
-  string adminFirstName = 8;    
-  string adminLastName = 9;  
-  string organizationType = 10; 
-  string planSlug = 11; 
 }
 
 message OrgProfileResponse {
@@ -179,19 +708,29 @@ message OrgProfileResponse {
 message OrgProfileData {
   string id = 1;
   string uuid = 2;
-  string name = 3;
-  string orgCode = 4;
-  string verificationStatus = 5;
-  string officialEmail = 6;
-  string officialPhone = 7;
-  string physicalAddress = 8;
-  string organizationType = 9; 
-  AccountBase account = 10;      
-  AdminResponse admin = 11;     
-  CompletionResponse completion = 12; 
-  string createdAt = 13;        
-  string updatedAt = 14;
-  optional ContractorData contractor = 15; // Detection for Shared Nav
+  string orgCode = 3;
+  string name = 4;
+  string type = 5;
+  string verificationStatus = 6;
+  optional string registrationNo = 7;
+  optional string kraPin = 8;
+  optional string officialEmail = 9;
+  optional string officialPhone = 10;
+  optional string website = 11;
+  optional string about = 12;
+  optional string logo = 13;
+  optional string physicalAddress = 14;
+  AccountBase account = 15;      
+  AdminResponse admin = 16;     
+  CompletionResponse completion = 17; 
+  string createdAt = 18;        
+  string updatedAt = 19;
+  optional ContractorData contractor = 20;
+  optional EmployerProfileData employerProfile = 21;
+  optional SocialServiceProviderProfileData socialServiceProviderProfile = 22;
+  optional PropertyOwnerProfileData propertyOwnerProfile = 23;
+  optional SkilledProfessionalProfileData skilledProfessionalProfile = 24;
+  optional IntermediaryAgentProfileData intermediaryAgentProfile = 25;
 }
 
 // ======================================================
@@ -218,6 +757,271 @@ message CompletionResponse {
   int32 percentage = 1;
   repeated string missingFields = 2;
   bool isComplete = 3;
+}
+
+message ContractorData {
+  string uuid = 1;
+  string accountId = 2;
+  repeated string specialties = 3;
+  repeated string serviceAreas = 4;
+  int32 yearsExperience = 5;
+  bool isVerified = 6;
+  float averageRating = 7;
+  int32 totalReviews = 8;
+  string createdAt = 9;
+}
+
+// ======================================================
+// PROFILE RESPONSE MESSAGES
+// ======================================================
+
+message JobSeekerProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  JobSeekerData data = 4;
+  ErrorPayload error = 5;
+}
+
+message JobSeekerData {
+  string id = 1;
+  optional string headline = 2;
+  bool isActivelySeeking = 3;
+  repeated string skills = 4;
+  optional string seniorityLevel = 5;
+  optional string cvUrl = 6;
+  optional string cvLastUpdated = 7;
+  int32 matchScoreWeight = 8;
+  
+  // Add missing fields
+  repeated string industries = 9;
+  repeated string jobTypes = 10;
+  optional string noticePeriod = 11;
+  optional double expectedSalary = 12;
+  repeated string workAuthorization = 13;
+  repeated string portfolioImages = 14;
+  optional string linkedInUrl = 15;
+  optional string githubUrl = 16;
+  optional string portfolioUrl = 17;
+  optional bool hasAgent = 18;
+  optional string agentUuid = 19;
+}
+
+message SkilledProfessionalProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  SkilledProfessionalData data = 4;
+  ErrorPayload error = 5;
+}
+
+message SkilledProfessionalData {
+  string id = 1;
+  string uuid = 2;
+  optional string title = 3;
+  optional string profession = 4;
+  repeated string specialties = 5;
+  repeated string serviceAreas = 6;
+  optional int32 yearsExperience = 7;
+  optional string licenseNumber = 8;
+  optional double hourlyRate = 9;
+  optional double dailyRate = 10;
+  bool isVerified = 11;
+  float averageRating = 12;
+  int32 totalReviews = 13;
+  repeated string portfolioImages = 14;
+}
+
+message HousingSeekerProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  HousingSeekerData data = 4;
+  ErrorPayload error = 5;
+}
+
+message HousingSeekerData {
+  string id = 1;
+  optional int32 minBedrooms = 2;
+  optional int32 maxBedrooms = 3;
+  optional double minBudget = 4;
+  optional double maxBudget = 5;
+  repeated string preferredTypes = 6;
+  repeated string preferredCities = 7;
+  optional string moveInDate = 8;
+  optional bool hasAgent = 9;
+  
+  // Add missing fields
+  repeated string preferredNeighborhoods = 10;
+  optional string leaseDuration = 11;
+  optional int32 householdSize = 12;
+  optional bool hasPets = 13;
+  optional string petDetails = 14;
+  optional double latitude = 15;
+  optional double longitude = 16;
+  optional int32 searchRadiusKm = 17;
+  optional string agentUuid = 18;
+}
+
+message PropertyOwnerProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  PropertyOwnerData data = 4;
+  ErrorPayload error = 5;
+}
+
+message PropertyOwnerData {
+  string id = 1;
+  bool isProfessional = 2;
+  optional string licenseNumber = 3;
+  optional string companyName = 4;
+  optional int32 yearsInBusiness = 5;
+  repeated string preferredPropertyTypes = 6;
+  repeated string serviceAreas = 7;
+  bool isVerifiedOwner = 8;
+  optional bool usesAgent = 9;
+  optional string managingAgentUuid = 10;
+  
+  // --- Fields for INDIVIDUAL accounts ---
+  optional int32 propertyCount = 11;
+  repeated string propertyTypes = 12;
+  optional string propertyPurpose = 13;
+}
+
+message SupportBeneficiaryProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  SupportBeneficiaryData data = 4;
+  ErrorPayload error = 5;
+}
+
+message SupportBeneficiaryData {
+  string id = 1;
+  repeated string needs = 2;
+  repeated string urgentNeeds = 3;
+  optional int32 familySize = 4;
+  optional string city = 5;
+  optional string neighborhood = 6;
+  bool prefersAnonymity = 7;
+  bool consentToShare = 8;
+  
+  // Add missing fields
+  optional int32 dependents = 9;
+  optional string householdComposition = 10;
+  repeated string vulnerabilityFactors = 11;
+  optional double latitude = 12;
+  optional double longitude = 13;
+  optional string landmark = 14;
+  repeated string languagePreference = 15;
+  optional string referredBy = 16;
+  optional string referredByUuid = 17;
+  optional string caseWorkerUuid = 18;
+  optional string consentGivenAt = 19;
+}
+
+message IntermediaryAgentProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  IntermediaryAgentData data = 4;
+  ErrorPayload error = 5;
+}
+
+message IntermediaryAgentData {
+  string id = 1;
+  string uuid = 2;
+  string agentType = 3;
+  repeated string specializations = 4;
+  repeated string serviceAreas = 5;
+  optional string licenseNumber = 6;
+  optional int32 yearsExperience = 7;
+  optional string agencyName = 8;
+  optional double commissionRate = 9;
+  bool isVerified = 10;
+  float averageRating = 11;
+  int32 totalReviews = 12;
+  optional string about = 13;
+  optional string profileImage = 14;
+  
+  // Add missing fields
+  optional string licenseBody = 15;
+  optional string agencyUuid = 16;
+  optional string feeStructure = 17;
+  optional double minimumFee = 18;
+  optional string typicalFee = 19;
+  optional string verifiedBy = 20;
+  optional string verifiedAt = 21;
+  int32 completedDeals = 22;
+  optional double successRate = 23;
+  optional string contactEmail = 24;
+  optional string contactPhone = 25;
+  optional string website = 26;
+  map<string, string> socialLinks = 27;
+  repeated string clientTypes = 28;
+}
+
+message EmployerProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  EmployerData data = 4;
+  ErrorPayload error = 5;
+}
+
+message EmployerData {
+  string id = 1;
+  optional string companyName = 2;
+  optional string industry = 3;
+  optional string companySize = 4;
+  optional string description = 5;
+  optional string logo = 6;
+  repeated string preferredSkills = 7;
+  optional string remotePolicy = 8;
+  bool isVerifiedEmployer = 9;
+  optional bool worksWithAgents = 10;
+  repeated string preferredAgents = 11;
+  
+  // --- Fields for INDIVIDUAL accounts ---
+  optional string businessName = 12;
+  optional bool isRegistered = 13;
+  optional int32 yearsExperience = 14;
+}
+
+message SocialServiceProviderProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  SocialServiceProviderData data = 4;
+  ErrorPayload error = 5;
+}
+
+message SocialServiceProviderData {
+  string id = 1;
+  string providerType = 2;
+  repeated string servicesOffered = 3;
+  repeated string targetBeneficiaries = 4;
+  repeated string serviceAreas = 5;
+  bool isVerified = 6;
+  optional string about = 7;
+  optional string website = 8;
+  optional string contactEmail = 9;
+  optional string contactPhone = 10;
+  optional int32 peopleServed = 11;
+  bool acceptsDonations = 12;
+  bool needsVolunteers = 13;
+  optional string officeHours = 14;
+  optional string physicalAddress = 15;
+  optional int32 yearEstablished = 16;
+  optional string donationInfo = 17;
+  optional string volunteerNeeds = 18;
+  
+  // --- Fields for INDIVIDUAL accounts ---
+  optional string operatingName = 19;
+  optional int32 yearsExperience = 20;
+  repeated string qualifications = 21;
+  optional string availability = 22;
 }
 
 // ======================================================
@@ -247,7 +1051,6 @@ message VerifyInvitationRequest {
   string token = 1;
 }
 
-// FIXED: Added standard wrapper
 message InvitationVerificationResponse {
   bool success = 1;
   string message = 2;
@@ -273,7 +1076,6 @@ message AcceptInvitationRequest {
   optional string phone = 4;
 }
 
-//  FIXED: Added standard wrapper
 message AcceptInvitationResponse {
   bool success = 1;
   string message = 2;
@@ -307,7 +1109,6 @@ message InvitationDetails {
   optional string message = 9;
 }
 
-//  This one was already correct
 message InvitationListResponse {
   bool success = 1;
   string message = 2;
@@ -322,26 +1123,10 @@ message ResendInvitationRequest {
   string organizationUuid = 3;
 }
 
-// Uses BaseResponse pattern (success/message/code)
-message ResendInvitationResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  ErrorPayload error = 4;
-}
-
 message CancelInvitationRequest {
   string invitationId = 1;
   string requestedByUserUuid = 2;
   string organizationUuid = 3;
-}
-
-// Uses BaseResponse pattern (success/message/code)
-message CancelInvitationResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  ErrorPayload error = 4;
 }
 
 message CheckInvitationStatusRequest {
@@ -349,7 +1134,6 @@ message CheckInvitationStatusRequest {
   string organizationUuid = 2;
 }
 
-// FIXED: Added standard wrapper
 message CheckInvitationStatusResponse {
   bool success = 1;
   string message = 2;
@@ -368,15 +1152,6 @@ message CheckInvitationStatusData {
 // REQUEST / RESPONSE PAYLOADS
 // ======================================================
 
-message CreateUserProfileRequest {
-  string userUuid = 1;
-  string firstName = 2;
-  string lastName = 3;
-  string email = 4;
-  string phone = 5;
-  string planSlug = 6; 
-}
-
 message GetMyProfileRequest {
   string userUuid = 1;
 }
@@ -385,6 +1160,8 @@ message GetUserByUuidRequest { string userUuid = 1; }
 message GetUserByUserCodeRequest { string userCode = 1; }
 message GetUserByEmailRequest { string email = 1; }
 message GetOrgByUuidRequest { string orgUuid = 1; }
+message GetOrgByAccountUuidRequest { string accountUuid = 1; }
+message GetAccountByUuidRequest { string accountUuid = 1; }
 
 message UpdateFullUserProfileRequest {
   string userUuid = 1;              
@@ -397,9 +1174,10 @@ message UpdateFullUserProfileRequest {
   optional string dateOfBirth = 8;
   optional string nationalId = 9;
   optional string profileImage = 10;
+  optional string oldImageUrl = 11;
 }
 
-message GetOrganisationsByTypeRequest {
+message GetOrganizationsByTypeRequest {
   string typeSlug = 1;
 }
 
@@ -437,37 +1215,3 @@ message ErrorPayload {
 }
 
 message Empty {}
-
-// ======================================================
-// JOB SEEKER MESSAGES
-// ======================================================
-
-message UpdateJobSeekerRequest {
-  string userUuid = 1;
-  optional string headline = 2;
-  bool isActivelySeeking = 3;
-  repeated string skills = 4;
-  repeated string industries = 5;
-  optional string seniorityLevel = 6;
-  repeated string jobTypes = 7;
-  optional string cvUrl = 8;
-}
-
-message JobSeekerProfileResponse {
-  bool success = 1;
-  string message = 2;
-  string code = 3;
-  JobSeekerData data = 4;
-  ErrorPayload error = 5;
-}
-
-message JobSeekerData {
-  string id = 1;
-  optional string headline = 2;
-  bool isActivelySeeking = 3;
-  repeated string skills = 4;
-  optional string seniorityLevel = 5;
-  optional string cvUrl = 6;
-  optional string cvLastUpdated = 7;
-  int32 matchScoreWeight = 8;
-}

@@ -169,63 +169,96 @@ export class HousingService {
     return this.executeCreate(dto);
   }
 
-  private async executeCreate(dto: CreateHouseListingGrpcRequestDto): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
+private async executeCreate(dto: CreateHouseListingGrpcRequestDto): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
+  try {
+    const categoryExists = await this.prisma.category.count({
+      where: { id: dto.categoryId, vertical: 'HOUSING' },
+    });
+
+    if (categoryExists === 0)
+      return BaseResponseDto.fail('Invalid category for Housing pillar', 'CATEGORY_NOT_FOUND'); 
+
+    const created = await this.prisma.houseListing.create({
+      data: {
+        creatorId: dto.creatorId,
+        creatorName: dto.creatorName || 'Unknown Agent',
+        accountId: dto.accountId,
+        accountName: dto.accountName || 'Independent',
+        title: dto.title,
+        description: dto.description,
+        categoryId: dto.categoryId,
+        subCategoryId: dto.subCategoryId,
+        listingType: dto.listingType,
+        price: dto.price,
+        ownerEmail: dto.ownerEmail,
+        currency: dto.currency ?? 'KES',
+        bedrooms: dto.bedrooms,
+        bathrooms: dto.bathrooms,
+        amenities: dto.amenities ?? [],
+        isFurnished: dto.isFurnished ?? false,
+        locationCity: dto.locationCity,
+        locationNeighborhood: dto.locationNeighborhood,
+        address: dto.address,
+        status: 'AVAILABLE',
+        images: dto.imageUrls
+          ? {
+              create: dto.imageUrls.map((url, index) => ({
+                url,
+                isMain: index === 0,
+              })),
+            }
+          : undefined,
+      },
+      select: { id: true, status: true, createdAt: true },
+    });
+
+    // 🔥 ADD THIS: Send email to the lister/owner
     try {
-      const categoryExists = await this.prisma.category.count({
-        where: { id: dto.categoryId, vertical: 'HOUSING' },
+      const mainImageUrl = dto.imageUrls && dto.imageUrls.length > 0 ? dto.imageUrls[0] : undefined;
+      
+      this.notificationBus.emit('listing.created.owner', {
+        email: dto.ownerEmail,
+        firstName: dto.creatorName?.split(' ')[0] || 'User',
+        listingTitle: dto.title,
+        listingId: created.id,
+        listingPrice: dto.price,
+        locationCity: dto.locationCity,
+        listingType: dto.listingType,
+        status: created.status,
+        imageUrl: mainImageUrl
       });
-
-      if (categoryExists === 0)
-        return BaseResponseDto.fail('Invalid category for Housing pillar', 'CATEGORY_NOT_FOUND'); 
-
-      const created = await this.prisma.houseListing.create({
-        data: {
-          creatorId: dto.creatorId,
-          creatorName: dto.creatorName || 'Unknown Agent',
-          accountId: dto.accountId,
-          accountName: dto.accountName || 'Independent',
-          title: dto.title,
-          description: dto.description,
-          categoryId: dto.categoryId,
-          subCategoryId: dto.subCategoryId,
-          listingType: dto.listingType,
-          price: dto.price,
-          ownerEmail: dto.ownerEmail,
-          currency: dto.currency ?? 'KES',
-          bedrooms: dto.bedrooms,
-          bathrooms: dto.bathrooms,
-          amenities: dto.amenities ?? [],
-          isFurnished: dto.isFurnished ?? false,
-          locationCity: dto.locationCity,
-          locationNeighborhood: dto.locationNeighborhood,
-          address: dto.address,
-          status: 'AVAILABLE',
-          images: dto.imageUrls
-            ? {
-                create: dto.imageUrls.map((url, index) => ({
-                  url,
-                  isMain: index === 0,
-                })),
-              }
-            : undefined,
-        },
-        select: { id: true, status: true, createdAt: true },
-      });
-
-      return BaseResponseDto.ok(
-        {
-          id: created.id,
-          status: created.status,
-          createdAt: created.createdAt.toISOString(),
-        },
-        'House Posted successfully',
-        'CREATED',
-      );
-    } catch (error) {
-      this.logger.error(`Create Error: ${error.message}`);
-      return BaseResponseDto.fail('Creation failed', 'ERROR');
+      
+      this.logger.log(`📧 Listing created email notification sent to ${dto.ownerEmail}`);
+    } catch (emailError) {
+      // Don't fail the listing creation if email fails
+      this.logger.error(`Failed to send listing created email: ${emailError.message}`);
     }
+
+    // Track listing milestone (non-blocking)
+    this.trackListingMilestone(
+      dto.accountId,
+      dto.accountName || 'Independent',
+      dto.creatorId,
+      created.id,
+      dto
+    ).catch(error => {
+      this.logger.error(`Milestone tracking error: ${error.message}`);
+    });
+
+    return BaseResponseDto.ok(
+      {
+        id: created.id,
+        status: created.status,
+        createdAt: created.createdAt.toISOString(),
+      },
+      'House Posted successfully',
+      'CREATED',
+    );
+  } catch (error) {
+    this.logger.error(`Create Error: ${error.message}`);
+    return BaseResponseDto.fail('Creation failed', 'ERROR');
   }
+}
 
 
   // ======================================================
@@ -1173,4 +1206,67 @@ private isTransientError(error: unknown): error is Prisma.PrismaClientKnownReque
       },
     };
   }
+
+  /**
+ * Track listing milestones for account (1st, 2nd, 3rd, 5th, 10th listing)
+ */
+private async trackListingMilestone(
+  accountId: string,
+  accountName: string,
+  creatorId: string,
+  listingId: string,
+  dto: CreateHouseListingGrpcRequestDto
+): Promise<void> {
+  try {
+    // Count total listings for this account
+    const listingCount = await this.prisma.houseListing.count({
+      where: { accountId }
+    });
+
+    this.logger.debug(`📊 Account ${accountId} now has ${listingCount} listings`);
+
+    // Only track significant milestones
+    const significantMilestones = [1, 2, 3, 5, 10, 25, 50, 100];
+    
+    if (significantMilestones.includes(listingCount)) {
+      // Calculate total value of all listings for this account
+      const allListings = await this.prisma.houseListing.findMany({
+        where: { accountId },
+        select: { price: true }
+      });
+      
+      const totalValue = allListings.reduce((sum, listing) => sum + listing.price, 0);
+      const averagePrice = totalValue / listingCount;
+
+      // Prepare milestone data
+      const milestoneData = {
+        accountId,
+        accountName,
+        creatorId,
+        creatorName: dto.creatorName,
+        listingId,
+        listingTitle: dto.title,
+        listingPrice: dto.price,
+        listingType: dto.listingType,
+        locationCity: dto.locationCity,
+        categoryId: dto.categoryId,
+        milestone: listingCount,
+        totalValue,
+        averagePrice
+      };
+
+      // Track via analytics service (non-blocking)
+      setTimeout(() => {
+        this.trackingService.trackListingMilestone(milestoneData).catch(error => {
+          this.logger.error(`Failed to track milestone: ${error.message}`);
+        });
+      }, 0);
+
+      this.logger.log(`🎯 Milestone ${listingCount} tracked for account ${accountId}`);
+    }
+  } catch (error) {
+    // Don't fail the listing creation if milestone tracking fails
+    this.logger.error(`Failed to track listing milestone: ${error.message}`);
+  }
+}
 }

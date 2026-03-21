@@ -917,7 +917,7 @@ async viewHouseListing(
         message: 'Invalid file format. Only images are allowed',
         code: 'INVALID_FILE_TYPE'
       }
-    }
+    }  
   })
   @ApiResponse({ 
     status: 500, 
@@ -930,51 +930,61 @@ async viewHouseListing(
       }
     }
   })
-  async createOwn(
-    @Body() dto: CreateHouseListingDto,
-    @Req() req: JwtRequest,
-    @UploadedFiles() files: Array<Express.Multer.File>, 
-  ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
-    const requesterUuid = req.user.userUuid;
-    const storagePath = `houses/${req.user.accountId}`;
-    
-    this.logger.log(`🏠 Creating new house listing for user ${requesterUuid}`);
+ async createOwn(
+  @Body() dto: CreateHouseListingDto,
+  @Req() req: JwtRequest,
+  @ClientInfo() clientInfo: AuthClientInfoDto, // ADD THIS
+  @UploadedFiles() files: Array<Express.Multer.File>, 
+): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
+  const requesterUuid = req.user.userUuid;
+  const storagePath = `houses/${req.user.accountId}`;
+  
+  // Log client info for debugging
+  this.logger.log(`🏠 Creating new house listing for user ${requesterUuid}`);
+  this.logger.debug(`📱 Client info: ${JSON.stringify({
+    device: clientInfo?.device,
+    deviceType: clientInfo?.deviceType,
+    os: clientInfo?.os,
+    browser: clientInfo?.browser,
+    ipAddress: clientInfo?.ipAddress
+  })}`);
 
-    const imageUrls = await this.housingService.uploadMultipleToStorage(
-      files, 
-      storagePath, 
-      'pivota-public'
-    );
+  const imageUrls = await this.housingService.uploadMultipleToStorage(
+    files, 
+    storagePath, 
+    'pivota-public'
+  );
+ 
+  try {
+    const sanitizedDto: CreateHouseListingGrpcRequestDto = {
+      ...dto,
+      subCategoryId: dto.subCategoryId,
+      creatorId: requesterUuid,
+      accountId: req.user.accountId,
+      creatorName: req.user.userName,
+      accountName: req.user.accountName,
+      imageUrls: imageUrls,
+      ownerEmail: req.user.email,
+      clientInfo: clientInfo, // ADD THIS - pass client info to the service
+    };
 
-    try {
-      const sanitizedDto: CreateHouseListingGrpcRequestDto = {
-        ...dto,
-        subCategoryId: dto.subCategoryId,
-        creatorId: requesterUuid,
-        accountId: req.user.accountId,
-        creatorName: req.user.userName,
-        accountName: req.user.accountName,
-        imageUrls: imageUrls,
-        ownerEmail: req.user.email, 
-      };
+    const response = await this.executeHousingCreation(sanitizedDto, requesterUuid, false);
 
-      const response = await this.executeHousingCreation(sanitizedDto, requesterUuid, false);
-
-      if (!response.success) {
-        this.logger.warn(`Housing creation failed: ${response.message}. Cleaning up uploaded images...`);
-        await this.housingService.deleteFromStorage(imageUrls, 'pivota-public');
-        return response;
-      }
-
-      this.logger.log(`✅ House listing created successfully with ID: ${response.data?.id}`);
-      return response;
-
-    } catch (error) {
-      this.logger.error(`❌ Critical error during housing creation. Rolling back uploaded images.`);
+    if (!response.success) {
+      this.logger.warn(`Housing creation failed: ${response.message}. Cleaning up uploaded images...`);
       await this.housingService.deleteFromStorage(imageUrls, 'pivota-public');
-      throw error;
+      return response;
     }
+
+    this.logger.log(`✅ House listing created successfully with ID: ${response.data?.id}`);
+    return response;
+
+  } catch (error) {
+    this.logger.error(`❌ Critical error during housing creation. Rolling back uploaded images.`);
+    await this.housingService.deleteFromStorage(imageUrls, 'pivota-public');
+    throw error;
   }
+}
 
   @Permissions('houses.read')
   @Version('1')

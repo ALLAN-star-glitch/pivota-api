@@ -1,5 +1,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
+import { ProfileType } from '@pivota-api/constants';
 import { 
   BaseResponseDto, 
   OrganizationProfileResponseDto,
@@ -20,62 +21,143 @@ import {
   CancelInvitationRequestDto,
   CheckInvitationStatusRequestDto,
   CheckInvitationStatusResponseDto,
+  // Organization Profile Update DTOs
+  UpdateOrgProfileRequestDto,
+  UpdateEmployerProfileRequestDto,
+  UpdateSocialServiceProviderProfileRequestDto,
+  UpdateOrganizationPropertyOwnerProfileRequestDto,
+  UpdateOrganizationSkilledProfessionalProfileRequestDto,
+  UpdateOrganizationIntermediaryAgentProfileRequestDto,
+  // Profile Data DTOs
+  EmployerProfileDataDto,
+  SocialServiceProviderProfileDataDto,
+  PropertyOwnerProfileDataDto,
+  SkilledProfessionalProfileDataDto,
+  IntermediaryAgentProfileDataDto,
+  // Response DTOs
+  EmployerProfileResponseDto,
+  SocialServiceProviderProfileResponseDto,
+  PropertyOwnerProfileResponseDto,
+  SkilledProfessionalProfileResponseDto,
+  IntermediaryAgentProfileResponseDto,
 } from '@pivota-api/dtos';
 import { firstValueFrom, Observable } from 'rxjs';
 
 // ---------------- gRPC Interface ----------------
 interface OrganisationServiceGrpc {
-  // Existing methods
-  GetOrganisationByUuid(
+  // Organization Onboarding
+  CreateOrganizationAccountWithProfiles(
+    data: any // CreateOrganisationRequestDto
+  ): Observable<BaseResponseDto<OrganizationProfileResponseDto>>;
+  
+  // Organization Profile Creation
+  CreateEmployerProfile(
+    data: { accountUuid: string; data: EmployerProfileDataDto }
+  ): Observable<BaseResponseDto<EmployerProfileResponseDto>>;
+  
+  CreateSocialServiceProviderProfile(
+    data: { accountUuid: string; data: SocialServiceProviderProfileDataDto }
+  ): Observable<BaseResponseDto<SocialServiceProviderProfileResponseDto>>;
+  
+  CreateOrganizationPropertyOwnerProfile(
+    data: { accountUuid: string; data: PropertyOwnerProfileDataDto }
+  ): Observable<BaseResponseDto<PropertyOwnerProfileResponseDto>>;
+  
+  CreateOrganizationSkilledProfessionalProfile(
+    data: { accountUuid: string; data: SkilledProfessionalProfileDataDto }
+  ): Observable<BaseResponseDto<SkilledProfessionalProfileResponseDto>>;
+  
+  CreateOrganizationIntermediaryAgentProfile(
+    data: { accountUuid: string; data: IntermediaryAgentProfileDataDto }
+  ): Observable<BaseResponseDto<IntermediaryAgentProfileResponseDto>>;
+  
+  // Organization Retrieval
+  GetOrganizationByUuid(
     data: { orgUuid: string },
   ): Observable<BaseResponseDto<OrganizationProfileResponseDto>>;
-
-  GetOrganisationsByType(
+  
+  GetOrganizationByAccountUuid(
+    data: { accountUuid: string },
+  ): Observable<BaseResponseDto<OrganizationProfileResponseDto>>;
+  
+  GetOrganizationsByType(
     data: { typeSlug: string },
   ): Observable<BaseResponseDto<OrganizationProfileResponseDto[]>>;
-
-  AddOrganisationMember(
+  
+  // Organization Profile Updates
+  UpdateOrganizationProfile(
+    data: UpdateOrgProfileRequestDto & { accountUuid: string }
+  ): Observable<BaseResponseDto<OrganizationProfileResponseDto>>;
+  
+  UpdateEmployerProfile(
+    data: UpdateEmployerProfileRequestDto & { accountUuid: string }
+  ): Observable<BaseResponseDto<EmployerProfileResponseDto>>;
+  
+  UpdateSocialServiceProviderProfile(
+    data: UpdateSocialServiceProviderProfileRequestDto & { accountUuid: string }
+  ): Observable<BaseResponseDto<SocialServiceProviderProfileResponseDto>>;
+  
+  UpdateOrganizationPropertyOwnerProfile(
+    data: UpdateOrganizationPropertyOwnerProfileRequestDto & { accountUuid: string }
+  ): Observable<BaseResponseDto<PropertyOwnerProfileResponseDto>>;
+  
+  UpdateOrganizationSkilledProfessionalProfile(
+    data: UpdateOrganizationSkilledProfessionalProfileRequestDto & { accountUuid: string }
+  ): Observable<BaseResponseDto<SkilledProfessionalProfileResponseDto>>;
+  
+  UpdateOrganizationIntermediaryAgentProfile(
+    data: UpdateOrganizationIntermediaryAgentProfileRequestDto & { accountUuid: string }
+  ): Observable<BaseResponseDto<IntermediaryAgentProfileResponseDto>>;
+  
+  // Remove Profile
+  RemoveProfile(
+    data: { accountUuid: string; profileType: ProfileType }
+  ): Observable<BaseResponseDto<null>>;
+  
+  // Membership
+  AddOrganizationMember(
     data: AddOrgMemberRequestDto,
   ): Observable<BaseResponseDto<null>>;
-
+  
+  // Provider Onboarding
   OnboardOrganizationProvider(
     data: OnboardOrgProviderGrpcRequestDto
   ): Observable<BaseResponseDto<ContractorProfileResponseDto>>;
-
-  // New Invitation Methods
+  
+  // Invitation Methods
   InviteMember(
     data: InviteMemberRequestDto & { 
       organizationUuid: string; 
       invitedByUserUuid: string;
     }
   ): Observable<BaseResponseDto<InviteMemberResponseDto>>;
-
+  
   VerifyInvitation(
     data: VerifyInvitationRequestDto
   ): Observable<BaseResponseDto<InvitationVerificationResponseDto>>;
-
+  
   AcceptInvitation(
     data: AcceptInvitationRequestDto
   ): Observable<BaseResponseDto<AcceptInvitationResponseDto>>;
-
+  
   GetOrganizationInvitations(
     data: GetOrganizationInvitationsRequestDto
   ): Observable<BaseResponseDto<InvitationDetailsResponseDto[]>>;
-
+  
   ResendInvitation(
     data: ResendInvitationRequestDto & {
       requestedByUserUuid: string;
       organizationUuid: string;
     }
   ): Observable<BaseResponseDto<null>>;
-
+  
   CancelInvitation(
     data: CancelInvitationRequestDto & {
       requestedByUserUuid: string;
       organizationUuid: string;
     }
   ): Observable<BaseResponseDto<null>>;
-
+  
   CheckInvitationStatus(
     data: CheckInvitationStatusRequestDto
   ): Observable<BaseResponseDto<CheckInvitationStatusResponseDto>>;
@@ -92,9 +174,401 @@ export class OrganisationGatewayService {
     this.grpcService = this.grpcClient.getService<OrganisationServiceGrpc>('ProfileService');
   }
 
-  /* ======================================================
-     ONBOARD ORGANIZATION AS SERVICE PROVIDER
-  ====================================================== */
+  // ======================================================
+  // ORGANIZATION ONBOARDING
+  // ======================================================
+
+  async createOrganizationAccountWithProfiles(
+    data: any
+  ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
+    this.logger.log(`Gateway → Creating organization account: ${data.organizationName}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.CreateOrganizationAccountWithProfiles(data)
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(
+        res.message || 'Organization creation failed',
+        res.code || 'INTERNAL_ERROR'
+      );
+    } catch (error) {
+      this.logger.error(`gRPC Error during organization creation: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  // ======================================================
+  // ORGANIZATION PROFILE CREATION
+  // ======================================================
+
+  async createEmployerProfile(
+    accountUuid: string,
+    data: EmployerProfileDataDto
+  ): Promise<BaseResponseDto<EmployerProfileResponseDto>> {
+    this.logger.log(`Gateway → Creating employer profile for account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.CreateEmployerProfile({ accountUuid, data })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(
+        res.message || 'Employer profile creation failed',
+        res.code || 'INTERNAL_ERROR'
+      );
+    } catch (error) {
+      this.logger.error(`gRPC Error creating employer profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  async createSocialServiceProviderProfile(
+    accountUuid: string,
+    data: SocialServiceProviderProfileDataDto
+  ): Promise<BaseResponseDto<SocialServiceProviderProfileResponseDto>> {
+    this.logger.log(`Gateway → Creating social service provider profile for account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.CreateSocialServiceProviderProfile({ accountUuid, data })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(
+        res.message || 'Social service provider profile creation failed',
+        res.code || 'INTERNAL_ERROR'
+      );
+    } catch (error) {
+      this.logger.error(`gRPC Error creating social service provider profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  async createOrganizationPropertyOwnerProfile(
+    accountUuid: string,
+    data: PropertyOwnerProfileDataDto
+  ): Promise<BaseResponseDto<PropertyOwnerProfileResponseDto>> {
+    this.logger.log(`Gateway → Creating property owner profile for account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.CreateOrganizationPropertyOwnerProfile({ accountUuid, data })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(
+        res.message || 'Property owner profile creation failed',
+        res.code || 'INTERNAL_ERROR'
+      );
+    } catch (error) {
+      this.logger.error(`gRPC Error creating property owner profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  async createOrganizationSkilledProfessionalProfile(
+    accountUuid: string,
+    data: SkilledProfessionalProfileDataDto
+  ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+    this.logger.log(`Gateway → Creating skilled professional profile for account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.CreateOrganizationSkilledProfessionalProfile({ accountUuid, data })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(
+        res.message || 'Skilled professional profile creation failed',
+        res.code || 'INTERNAL_ERROR'
+      );
+    } catch (error) {
+      this.logger.error(`gRPC Error creating skilled professional profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  async createOrganizationIntermediaryAgentProfile(
+    accountUuid: string,
+    data: IntermediaryAgentProfileDataDto
+  ): Promise<BaseResponseDto<IntermediaryAgentProfileResponseDto>> {
+    this.logger.log(`Gateway → Creating intermediary agent profile for account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.CreateOrganizationIntermediaryAgentProfile({ accountUuid, data })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(
+        res.message || 'Intermediary agent profile creation failed',
+        res.code || 'INTERNAL_ERROR'
+      );
+    } catch (error) {
+      this.logger.error(`gRPC Error creating intermediary agent profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  // ======================================================
+  // ORGANIZATION RETRIEVAL
+  // ======================================================
+
+  async getOrganizationByUuid(orgUuid: string): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
+    this.logger.log(`Gateway → Fetching organization: ${orgUuid}`);
+    
+    try {
+      const res = await firstValueFrom(this.grpcService.GetOrganizationByUuid({ orgUuid }));
+      
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+      return BaseResponseDto.fail(res.message || 'Organization not found', res.code || 'NOT_FOUND');
+    } catch (error) {
+      this.logger.error(`Error connecting to Profile Service for UUID: ${orgUuid}`, error);
+      return BaseResponseDto.fail('Profile Service unavailable', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  async getOrganizationByAccountUuid(accountUuid: string): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
+    this.logger.log(`Gateway → Fetching organization by account UUID: ${accountUuid}`);
+    
+    try {
+      const res = await firstValueFrom(this.grpcService.GetOrganizationByAccountUuid({ accountUuid }));
+      
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+      return BaseResponseDto.fail(res.message || 'Organization not found', res.code || 'NOT_FOUND');
+    } catch (error) {
+      this.logger.error(`Error connecting to Profile Service for account UUID: ${accountUuid}`, error);
+      return BaseResponseDto.fail('Profile Service unavailable', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  async getOrganizationsByType(typeSlug: string): Promise<BaseResponseDto<OrganizationProfileResponseDto[]>> {
+    this.logger.log(`Gateway → Filtering organizations by type: ${typeSlug}`);
+    
+    try {
+      const res = await firstValueFrom(this.grpcService.GetOrganizationsByType({ typeSlug }));
+      
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data || [], res.message, res.code);
+      }
+      return BaseResponseDto.fail(res.message, res.code);
+    } catch (error) {
+      this.logger.error(`Error filtering organizations by type: ${typeSlug}`, error);
+      return BaseResponseDto.fail('Communication failure with Profile Service', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  // ======================================================
+  // ORGANIZATION PROFILE UPDATES
+  // ======================================================
+
+  async updateOrganizationProfile(
+    accountUuid: string,
+    data: UpdateOrgProfileRequestDto
+  ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
+    this.logger.log(`Gateway → Updating organization profile for account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.UpdateOrganizationProfile({ ...data, accountUuid })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res.message || 'Update failed', res.code || 'INTERNAL');
+    } catch (error) {
+      this.logger.error(`gRPC Error updating organization profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  async updateEmployerProfile(
+    accountUuid: string,
+    data: UpdateEmployerProfileRequestDto
+  ): Promise<BaseResponseDto<EmployerProfileResponseDto>> {
+    this.logger.log(`Gateway → Updating employer profile for account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.UpdateEmployerProfile({ ...data, accountUuid })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res.message || 'Update failed', res.code || 'INTERNAL');
+    } catch (error) {
+      this.logger.error(`gRPC Error updating employer profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  async updateSocialServiceProviderProfile(
+    accountUuid: string,
+    data: UpdateSocialServiceProviderProfileRequestDto
+  ): Promise<BaseResponseDto<SocialServiceProviderProfileResponseDto>> {
+    this.logger.log(`Gateway → Updating social service provider profile for account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.UpdateSocialServiceProviderProfile({ ...data, accountUuid })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res.message || 'Update failed', res.code || 'INTERNAL');
+    } catch (error) {
+      this.logger.error(`gRPC Error updating social service provider profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  async updateOrganizationPropertyOwnerProfile(
+    accountUuid: string,
+    data: UpdateOrganizationPropertyOwnerProfileRequestDto
+  ): Promise<BaseResponseDto<PropertyOwnerProfileResponseDto>> {
+    this.logger.log(`Gateway → Updating property owner profile for account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.UpdateOrganizationPropertyOwnerProfile({ ...data, accountUuid })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res.message || 'Update failed', res.code || 'INTERNAL');
+    } catch (error) {
+      this.logger.error(`gRPC Error updating property owner profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  async updateOrganizationSkilledProfessionalProfile(
+    accountUuid: string,
+    data: UpdateOrganizationSkilledProfessionalProfileRequestDto
+  ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+    this.logger.log(`Gateway → Updating skilled professional profile for account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.UpdateOrganizationSkilledProfessionalProfile({ ...data, accountUuid })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res.message || 'Update failed', res.code || 'INTERNAL');
+    } catch (error) {
+      this.logger.error(`gRPC Error updating skilled professional profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  async updateOrganizationIntermediaryAgentProfile(
+    accountUuid: string,
+    data: UpdateOrganizationIntermediaryAgentProfileRequestDto
+  ): Promise<BaseResponseDto<IntermediaryAgentProfileResponseDto>> {
+    this.logger.log(`Gateway → Updating intermediary agent profile for account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.UpdateOrganizationIntermediaryAgentProfile({ ...data, accountUuid })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res.message || 'Update failed', res.code || 'INTERNAL');
+    } catch (error) {
+      this.logger.error(`gRPC Error updating intermediary agent profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  // ======================================================
+  // REMOVE PROFILE
+  // ======================================================
+
+  async removeProfile(
+    accountUuid: string,
+    profileType: ProfileType
+  ): Promise<BaseResponseDto<null>> {
+    this.logger.log(`Gateway → Removing profile ${profileType} from account: ${accountUuid}`);
+
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.RemoveProfile({ accountUuid, profileType })
+      );
+
+      if (res && res.success) {
+        return BaseResponseDto.ok(null, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res.message || 'Failed to remove profile', res.code || 'INTERNAL_ERROR');
+    } catch (error) {
+      this.logger.error(`gRPC Error removing profile: ${error.message}`);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
+    }
+  }
+
+  // ======================================================
+  // MEMBERSHIP
+  // ======================================================
+
+  async addMember(dto: AddOrgMemberRequestDto): Promise<BaseResponseDto<null>> {
+    this.logger.log(`Gateway → Adding member ${dto.userUuid} to org ${dto.orgUuid}`);
+    
+    try {
+      const res = await firstValueFrom(this.grpcService.AddOrganizationMember(dto));
+      
+      if (res && res.success) {
+        return BaseResponseDto.ok(null, res.message, res.code);
+      }
+      return BaseResponseDto.fail(res.message, res.code);
+    } catch (error) {
+      this.logger.error(`Failed to add member to organization ${dto.orgUuid}`, error);
+      return BaseResponseDto.fail('Request could not be processed', 'INTERNAL_SERVER_ERROR');
+    }
+  }
+
+  // ======================================================
+  // PROVIDER ONBOARDING
+  // ======================================================
+
   async onboardOrganizationProvider(
     dto: OnboardOrgProviderGrpcRequestDto
   ): Promise<BaseResponseDto<ContractorProfileResponseDto>> {
@@ -119,125 +593,40 @@ export class OrganisationGatewayService {
     }
   }
 
-  /* ======================================================
-     GET ORGANIZATION BY UUID
-  ====================================================== */
-  async getOrganisationByUuid(orgUuid: string): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
-    this.logger.log(`Gateway → Fetching organization: ${orgUuid}`);
-    
+  // ======================================================
+  // INVITATION MANAGEMENT
+  // ======================================================
+
+  async inviteMember(
+    dto: InviteMemberRequestDto,
+    organizationUuid: string,
+    invitedByUserUuid: string
+  ): Promise<BaseResponseDto<InviteMemberResponseDto>> {
+    this.logger.log(`Gateway → Inviting ${dto.email} to org ${organizationUuid}`);
+
     try {
-      const res = await firstValueFrom(this.grpcService.GetOrganisationByUuid({ orgUuid }));
-      
+      const res = await firstValueFrom(
+        this.grpcService.InviteMember({
+          ...dto,
+          organizationUuid,
+          invitedByUserUuid
+        })
+      );
+
       if (res && res.success) {
         return BaseResponseDto.ok(res.data, res.message, res.code);
       }
-      return BaseResponseDto.fail(res.message || 'Organization not found', res.code || 'NOT_FOUND');
-    } catch (error) {
-      this.logger.error(`Error connecting to Profile Service for UUID: ${orgUuid}`, error);
-      return BaseResponseDto.fail('Profile Service unavailable', 'SERVICE_UNAVAILABLE');
-    }
-  }
 
-  /* ======================================================
-     GET ORGANIZATIONS BY TYPE
-  ====================================================== */
-  async getOrganisationsByType(typeSlug: string): Promise<BaseResponseDto<OrganizationProfileResponseDto[]>> {
-    this.logger.log(`Gateway → Filtering organizations by type: ${typeSlug}`);
-    
-    try {
-      const res = await firstValueFrom(this.grpcService.GetOrganisationsByType({ typeSlug }));
-      
-      if (res && res.success) {
-        return BaseResponseDto.ok(res.data || [], res.message, res.code);
-      }
-      return BaseResponseDto.fail(res.message, res.code);
-    } catch (error) {
-      this.logger.error(`Error filtering organizations by type: ${typeSlug}`, error);
-      return BaseResponseDto.fail('Communication failure with Profile Service', 'SERVICE_UNAVAILABLE');
-    }
-  }
-
-  /* ======================================================
-     ADD ORGANIZATION MEMBER (Direct Add)
-  ====================================================== */
-  async addMember(dto: AddOrgMemberRequestDto): Promise<BaseResponseDto<null>> {
-    this.logger.log(`Gateway → Adding member ${dto.userUuid} to org ${dto.orgUuid}`);
-    
-    try {
-      const res = await firstValueFrom(this.grpcService.AddOrganisationMember(dto));
-      
-      if (res && res.success) {
-        return BaseResponseDto.ok(null, res.message, res.code);
-      }
-      return BaseResponseDto.fail(res.message, res.code);
-    } catch (error) {
-      this.logger.error(`Failed to add member to organization ${dto.orgUuid}`, error);
-      return BaseResponseDto.fail('Request could not be processed', 'INTERNAL_SERVER_ERROR');
-    }
-  } 
-  
-
-  /* ======================================================
-     INVITE MEMBER - Send email invitation
-     - Extracts organizationUuid and invitedByUserUuid from JWT context
-  ====================================================== */
-  // In gateway/src/modules/organisation-gateway/organisation-gateway.service.ts
-
-async inviteMember(
-  dto: InviteMemberRequestDto,
-  organizationUuid: string,
-  invitedByUserUuid: string
-): Promise<BaseResponseDto<InviteMemberResponseDto>> {
-  this.logger.log(`Gateway → Inviting ${dto.email} to org ${organizationUuid}`);
-
-  try {
-    this.logger.debug(`Sending gRPC request with data: ${JSON.stringify({
-      ...dto,
-      organizationUuid,
-      invitedByUserUuid
-    })}`);
-    
-    const res = await firstValueFrom(
-      this.grpcService.InviteMember({
-        ...dto,
-        organizationUuid,
-        invitedByUserUuid
-      })
-    );
-
-    // ✅ Log the raw response from gRPC
-    this.logger.log(`Gateway ← Raw gRPC response: ${JSON.stringify(res)}`);
-
-    if (res && res.success) {
-      this.logger.log(`✅ Invitation successful: ${JSON.stringify(res.data)}`);
-      return BaseResponseDto.ok(res.data, res.message, res.code);
-    }
-
-    this.logger.error(`❌ Invitation failed: ${res.message}`);
-    return BaseResponseDto.fail(
-      res.message || 'Failed to send invitation',
-      res.code || 'INTERNAL_ERROR'
-    );
-  } catch (error) {
-    this.logger.error(`🔥 gRPC Error during invitation for ${dto.email}:`, error);
-    
-    // Check for gRPC specific error
-    if (error && typeof error === 'object' && 'code' in error) {
-      const grpcError = error as { code: number; details: string; message: string };
-      this.logger.error(`gRPC error code: ${grpcError.code}, details: ${grpcError.details}`);
       return BaseResponseDto.fail(
-        grpcError.details || grpcError.message || 'gRPC service error',
-        'INTERNAL_ERROR'
+        res.message || 'Failed to send invitation',
+        res.code || 'INTERNAL_ERROR'
       );
+    } catch (error) {
+      this.logger.error(`gRPC Error during invitation for ${dto.email}:`, error);
+      return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
     }
-    
-    return BaseResponseDto.fail('Profile Service communication error', 'SERVICE_UNAVAILABLE');
   }
-}
 
-  /* ======================================================
-     VERIFY INVITATION - Check if token is valid
-  ====================================================== */
   async verifyInvitation(
     dto: VerifyInvitationRequestDto
   ): Promise<BaseResponseDto<InvitationVerificationResponseDto>> {
@@ -262,9 +651,6 @@ async inviteMember(
     }
   }
 
-  /* ======================================================
-     ACCEPT INVITATION - Complete the invitation flow
-  ====================================================== */
   async acceptInvitation(
     dto: AcceptInvitationRequestDto
   ): Promise<BaseResponseDto<AcceptInvitationResponseDto>> {
@@ -289,10 +675,6 @@ async inviteMember(
     }
   }
 
-  /* ======================================================
-     GET ORGANIZATION INVITATIONS - List pending invites
-     - Extracts organizationUuid and requestingUserUuid from JWT context
-  ====================================================== */
   async getOrganizationInvitations(
     organizationUuid: string,
     requestingUserUuid: string
@@ -321,10 +703,6 @@ async inviteMember(
     }
   }
 
-  /* ======================================================
-     RESEND INVITATION - Generate new token
-     - Extracts organizationUuid and requestedByUserUuid from JWT context
-  ====================================================== */
   async resendInvitation(
     dto: ResendInvitationRequestDto,
     organizationUuid: string,
@@ -355,10 +733,6 @@ async inviteMember(
     }
   }
 
-  /* ======================================================
-     CANCEL INVITATION - Remove pending invitation
-     - Extracts organizationUuid and requestedByUserUuid from JWT context
-  ====================================================== */
   async cancelInvitation(
     dto: CancelInvitationRequestDto,
     organizationUuid: string,
@@ -389,9 +763,6 @@ async inviteMember(
     }
   }
 
-  /* ======================================================
-     CHECK INVITATION STATUS - Quick check for UI
-  ====================================================== */
   async checkInvitationStatus(
     dto: CheckInvitationStatusRequestDto
   ): Promise<BaseResponseDto<CheckInvitationStatusResponseDto>> {

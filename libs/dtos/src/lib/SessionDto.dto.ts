@@ -1,6 +1,6 @@
 // Session DTO - matches your database schema
 export class SessionDto {
-  id!: number;
+  id!: string;
   tokenId!: string;
   
   // Client info fields
