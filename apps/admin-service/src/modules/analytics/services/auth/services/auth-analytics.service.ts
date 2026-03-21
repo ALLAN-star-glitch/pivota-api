@@ -19,6 +19,9 @@ export class AuthAnalyticsService {
     email: string;
     accountId: string;
     plan: string;
+    primaryPurpose?: string;
+    profileType?: string;
+    hasProfileData?: boolean;
     registrationMethod?: string;
     signupSource: {
       device: string;
@@ -32,6 +35,7 @@ export class AuthAnalyticsService {
     };
   }): Promise<void> {
     this.logger.debug(`Processing user.registered for ${data.email}`);
+    this.logger.debug(`Profile Type: ${data.profileType || 'none'}, Primary Purpose: ${data.primaryPurpose || 'none'}`);
 
     try {
       // Store raw event
@@ -60,6 +64,28 @@ export class AuthAnalyticsService {
           : { freeSignups: { increment: 1 } }
         ),
         ...this.getDeviceCounters(data.signupSource),
+        
+        // Profile type counters
+        ...(data.profileType === 'JOB_SEEKER' ? { jobSeekerSignups: { increment: 1 } } : {}),
+        ...(data.profileType === 'SKILLED_PROFESSIONAL' ? { skilledProfessionalSignups: { increment: 1 } } : {}),
+        ...(data.profileType === 'INTERMEDIARY_AGENT' ? { agentSignups: { increment: 1 } } : {}),
+        ...(data.profileType === 'HOUSING_SEEKER' ? { housingSeekerSignups: { increment: 1 } } : {}),
+        ...(data.profileType === 'SUPPORT_BENEFICIARY' ? { supportBeneficiarySignups: { increment: 1 } } : {}),
+        ...(data.profileType === 'EMPLOYER' ? { employerSignups: { increment: 1 } } : {}),
+        ...(data.profileType === 'PROPERTY_OWNER' ? { propertyOwnerSignups: { increment: 1 } } : {}),
+        
+        // Primary purpose counters (for legacy tracking)
+        ...(data.primaryPurpose === 'FIND_JOB' ? { purposeFindJob: { increment: 1 } } : {}),
+        ...(data.primaryPurpose === 'OFFER_SKILLED_SERVICES' ? { purposeOfferServices: { increment: 1 } } : {}),
+        ...(data.primaryPurpose === 'WORK_AS_AGENT' ? { purposeWorkAsAgent: { increment: 1 } } : {}),
+        ...(data.primaryPurpose === 'FIND_HOUSING' ? { purposeFindHousing: { increment: 1 } } : {}),
+        ...(data.primaryPurpose === 'GET_SOCIAL_SUPPORT' ? { purposeGetSupport: { increment: 1 } } : {}),
+        ...(data.primaryPurpose === 'HIRE_EMPLOYEES' ? { purposeHireEmployees: { increment: 1 } } : {}),
+        ...(data.primaryPurpose === 'LIST_PROPERTIES' ? { purposeListProperties: { increment: 1 } } : {}),
+        ...(data.primaryPurpose === 'JUST_EXPLORING' ? { purposeJustExploring: { increment: 1 } } : {}),
+        
+        // Profile completion indicator
+        ...(data.hasProfileData ? { signupsWithProfileData: { increment: 1 } } : {}),
       });
 
       // Update hourly metrics
@@ -124,96 +150,222 @@ export class AuthAnalyticsService {
     }
   }
 
-  /**
-   * Handle user.signup.failed event
-   * Emitted when signup fails (invalid OTP or profile creation failed)
-   */
-  async handleUserSignupFailed(data: {
-    email: string;
-    reason: string;
-    error?: string;
-    clientInfo?: {
-      device: string;
-      deviceType: string;
-      os: string;
-      osVersion: string;
-      browser: string;
-      browserVersion: string;
-      isBot: boolean;
-      timestamp: string;
+/**
+ * Handle user.signup.failed event
+ * Emitted when signup fails (invalid OTP or profile creation failed)
+ */
+async handleUserSignupFailed(data: {
+  email: string;
+  reason: string;
+  primaryPurpose?: string;  // ← Add this
+  profileType?: string;     // ← Add this
+  error?: string;
+  clientInfo?: {
+    device: string;
+    deviceType: string;
+    os: string;
+    osVersion: string;
+    browser: string;
+    browserVersion: string;
+    isBot: boolean;
+    timestamp: string;
+  };
+}): Promise<void> {
+  this.logger.debug(`Processing user.signup.failed for ${data.email}: ${data.reason}`);
+  this.logger.debug(`Failed signup context - Profile Type: ${data.profileType || 'none'}, Primary Purpose: ${data.primaryPurpose || 'none'}`);
+
+  try {
+    // Store raw event
+    await this.prisma.authEventLog.create({
+      data: {
+        eventType: 'user.signup.failed',
+        email: data.email,
+        emailHash: this.hashEmail(data.email),
+        payload: data as any,
+        clientInfo: data.clientInfo as any,
+        occurredAt: new Date(data.clientInfo?.timestamp || new Date()),
+      },
+    });
+
+    // Update daily metrics
+    const increments: Record<string, any> = {
+      failedSignups: { increment: 1 },
+      ...(data.reason === 'INVALID_OTP' ? { invalidOtpSignups: { increment: 1 } } : {}),
+      ...(data.reason === 'PROFILE_CREATION_FAILED' ? { profileFailedSignups: { increment: 1 } } : {}),
     };
-  }): Promise<void> {
-    this.logger.debug(`Processing user.signup.failed for ${data.email}: ${data.reason}`);
 
-    try {
-      // Store raw event
-      await this.prisma.authEventLog.create({
-        data: {
-          eventType: 'user.signup.failed',
-          email: data.email,
-          emailHash: this.hashEmail(data.email),
-          payload: data as any,
-          clientInfo: data.clientInfo as any,
-          occurredAt: new Date(data.clientInfo?.timestamp || new Date()),
-        },
-      });
-
-      // Update daily metrics
-      await this.updateDailyAuthMetrics(
-        data.clientInfo?.timestamp || new Date().toISOString(),
-        {
-          failedSignups: { increment: 1 },
-          ...(data.reason === 'INVALID_OTP' ? { invalidOtpSignups: { increment: 1 } } : {}),
-          ...(data.reason === 'PROFILE_CREATION_FAILED' ? { profileFailedSignups: { increment: 1 } } : {}),
-        }
-      );
-
-    } catch (error) {
-      this.logger.error(`Failed to process user.signup.failed: ${error.message}`);
+    // Increment profile type failure counters
+    if (data.profileType) {
+      switch (data.profileType) {
+        case 'JOB_SEEKER':
+          increments.failedJobSeekerSignups = { increment: 1 };
+          break;
+        case 'SKILLED_PROFESSIONAL':
+          increments.failedSkilledProfessionalSignups = { increment: 1 };
+          break;
+        case 'INTERMEDIARY_AGENT':
+          increments.failedAgentSignups = { increment: 1 };
+          break;
+        case 'HOUSING_SEEKER':
+          increments.failedHousingSeekerSignups = { increment: 1 };
+          break;
+        case 'SUPPORT_BENEFICIARY':
+          increments.failedSupportBeneficiarySignups = { increment: 1 };
+          break;
+        case 'EMPLOYER':
+          increments.failedEmployerSignups = { increment: 1 };
+          break;
+        case 'PROPERTY_OWNER':
+          increments.failedPropertyOwnerSignups = { increment: 1 };
+          break;
+      }
     }
-  }
 
-  /**
-   * Handle user.signup.error event
-   * Emitted when unexpected error occurs during signup
-   */
-  async handleUserSignupError(data: {
-    email: string;
-    error: string;
-    clientInfo?: {
-      device: string;
-      deviceType: string;
-      os: string;
-      browser: string;
-      isBot: boolean;
-      timestamp: string;
+    // Increment primary purpose failure counters
+    if (data.primaryPurpose) {
+      switch (data.primaryPurpose) {
+        case 'FIND_JOB':
+          increments.failedPurposeFindJob = { increment: 1 };
+          break;
+        case 'OFFER_SKILLED_SERVICES':
+          increments.failedPurposeOfferServices = { increment: 1 };
+          break;
+        case 'WORK_AS_AGENT':
+          increments.failedPurposeWorkAsAgent = { increment: 1 };
+          break;
+        case 'FIND_HOUSING':
+          increments.failedPurposeFindHousing = { increment: 1 };
+          break;
+        case 'GET_SOCIAL_SUPPORT':
+          increments.failedPurposeGetSupport = { increment: 1 };
+          break;
+        case 'HIRE_EMPLOYEES':
+          increments.failedPurposeHireEmployees = { increment: 1 };
+          break;
+        case 'LIST_PROPERTIES':
+          increments.failedPurposeListProperties = { increment: 1 };
+          break;
+        case 'JUST_EXPLORING':
+          increments.failedPurposeJustExploring = { increment: 1 };
+          break;
+      }
+    }
+
+    await this.updateDailyAuthMetrics(
+      data.clientInfo?.timestamp || new Date().toISOString(),
+      increments
+    );
+
+  } catch (error) {
+    this.logger.error(`Failed to process user.signup.failed: ${error.message}`);
+  }
+}
+
+/**
+ * Handle user.signup.error event
+ * Emitted when unexpected error occurs during signup
+ */
+async handleUserSignupError(data: {
+  email: string;
+  error: string;
+  primaryPurpose?: string;  // ← Add this
+  profileType?: string;     // ← Add this
+  clientInfo?: {
+    device: string;
+    deviceType: string;
+    os: string;
+    browser: string;
+    isBot: boolean;
+    timestamp: string;
+  };
+}): Promise<void> {
+  this.logger.debug(`Processing user.signup.error for ${data.email}`);
+  this.logger.debug(`Error context - Profile Type: ${data.profileType || 'none'}, Primary Purpose: ${data.primaryPurpose || 'none'}`);
+
+  try {
+    // Store raw event
+    await this.prisma.authEventLog.create({
+      data: {
+        eventType: 'user.signup.error',
+        email: data.email,
+        emailHash: this.hashEmail(data.email),
+        payload: data as any,
+        clientInfo: data.clientInfo as any,
+        occurredAt: new Date(data.clientInfo?.timestamp || new Date()),
+      },
+    });
+
+    // Update daily metrics
+    const increments: Record<string, any> = {
+      failedSignups: { increment: 1 },
     };
-  }): Promise<void> {
-    this.logger.debug(`Processing user.signup.error for ${data.email}`);
 
-    try {
-      // Store raw event
-      await this.prisma.authEventLog.create({
-        data: {
-          eventType: 'user.signup.error',
-          email: data.email,
-          emailHash: this.hashEmail(data.email),
-          payload: data as any,
-          clientInfo: data.clientInfo as any,
-          occurredAt: new Date(data.clientInfo?.timestamp || new Date()),
-        },
-      });
-
-      // Update daily metrics
-      await this.updateDailyAuthMetrics(
-        data.clientInfo?.timestamp || new Date().toISOString(),
-        { failedSignups: { increment: 1 } }
-      );
-
-    } catch (error) {
-      this.logger.error(`Failed to process user.signup.error: ${error.message}`);
+    // Increment profile type failure counters
+    if (data.profileType) {
+      switch (data.profileType) {
+        case 'JOB_SEEKER':
+          increments.failedJobSeekerSignups = { increment: 1 };
+          break;
+        case 'SKILLED_PROFESSIONAL':
+          increments.failedSkilledProfessionalSignups = { increment: 1 };
+          break;
+        case 'INTERMEDIARY_AGENT':
+          increments.failedAgentSignups = { increment: 1 };
+          break;
+        case 'HOUSING_SEEKER':
+          increments.failedHousingSeekerSignups = { increment: 1 };
+          break;
+        case 'SUPPORT_BENEFICIARY':
+          increments.failedSupportBeneficiarySignups = { increment: 1 };
+          break;
+        case 'EMPLOYER':
+          increments.failedEmployerSignups = { increment: 1 };
+          break;
+        case 'PROPERTY_OWNER':
+          increments.failedPropertyOwnerSignups = { increment: 1 };
+          break;
+      }
     }
+
+    // Increment primary purpose failure counters
+    if (data.primaryPurpose) {
+      switch (data.primaryPurpose) {
+        case 'FIND_JOB':
+          increments.failedPurposeFindJob = { increment: 1 };
+          break;
+        case 'OFFER_SKILLED_SERVICES':
+          increments.failedPurposeOfferServices = { increment: 1 };
+          break;
+        case 'WORK_AS_AGENT':
+          increments.failedPurposeWorkAsAgent = { increment: 1 };
+          break;
+        case 'FIND_HOUSING':
+          increments.failedPurposeFindHousing = { increment: 1 };
+          break;
+        case 'GET_SOCIAL_SUPPORT':
+          increments.failedPurposeGetSupport = { increment: 1 };
+          break;
+        case 'HIRE_EMPLOYEES':
+          increments.failedPurposeHireEmployees = { increment: 1 };
+          break;
+        case 'LIST_PROPERTIES':
+          increments.failedPurposeListProperties = { increment: 1 };
+          break;
+        case 'JUST_EXPLORING':
+          increments.failedPurposeJustExploring = { increment: 1 };
+          break;
+      }
+    }
+
+    await this.updateDailyAuthMetrics(
+      data.clientInfo?.timestamp || new Date().toISOString(),
+      increments
+    );
+
+  } catch (error) {
+    this.logger.error(`Failed to process user.signup.error: ${error.message}`);
   }
+}
 
   /**
    * Handle user.signup.premium event
@@ -223,6 +375,8 @@ export class AuthAnalyticsService {
     userUuid: string;
     email: string;
     plan: string;
+    primaryPurpose?: string;
+    profileType?: string;
     clientInfo?: {
       device: string;
       deviceType: string;
@@ -232,6 +386,7 @@ export class AuthAnalyticsService {
     };
   }): Promise<void> {
     this.logger.debug(`Processing user.signup.premium for ${data.email}: ${data.plan}`);
+    this.logger.debug(`Premium signup - Profile Type: ${data.profileType || 'none'}, Primary Purpose: ${data.primaryPurpose || 'none'}`);
 
     try {
       // Store raw event
@@ -247,7 +402,17 @@ export class AuthAnalyticsService {
         },
       });
 
-      // This is just for tracking payment initiation - premium signups already counted in user.registered
+      // Update daily metrics for premium intent
+      await this.updateDailyAuthMetrics(
+        data.clientInfo?.timestamp || new Date().toISOString(),
+        {
+          premiumIntentSignups: { increment: 1 },
+          ...(data.profileType === 'JOB_SEEKER' ? { premiumJobSeekerIntent: { increment: 1 } } : {}),
+          ...(data.profileType === 'SKILLED_PROFESSIONAL' ? { premiumSkilledProfessionalIntent: { increment: 1 } } : {}),
+          ...(data.profileType === 'EMPLOYER' ? { premiumEmployerIntent: { increment: 1 } } : {}),
+          ...(data.profileType === 'PROPERTY_OWNER' ? { premiumPropertyOwnerIntent: { increment: 1 } } : {}),
+        }
+      );
 
     } catch (error) {
       this.logger.error(`Failed to process user.signup.premium: ${error.message}`);
@@ -414,6 +579,11 @@ export class AuthAnalyticsService {
         },
       });
 
+      await this.updateDailyAuthMetrics(
+        data.clientInfo?.timestamp || new Date().toISOString(),
+        { premiumIntentSignups: { increment: 1 } }
+      );
+
     } catch (error) {
       this.logger.error(`Failed to process organization.signup.premium: ${error.message}`);
     }
@@ -469,6 +639,7 @@ export class AuthAnalyticsService {
     adminEmail: string;
     accountId: string;
     plan: string;
+    purposes?: string[];
     signupSource: {
       device: string;
       deviceType: string;
@@ -481,6 +652,7 @@ export class AuthAnalyticsService {
     };
   }): Promise<void> {
     this.logger.debug(`Processing organization.registered for ${data.organizationName}`);
+    this.logger.debug(`Organization Purposes: ${data.purposes?.join(', ') || 'none'}`);
 
     try {
       await this.prisma.authEventLog.create({
@@ -495,6 +667,7 @@ export class AuthAnalyticsService {
         },
       });
 
+      // Update daily metrics
       await this.updateDailyAuthMetrics(data.signupSource.timestamp, {
         organizationSignups: { increment: 1 },
         totalSignups: { increment: 1 },
@@ -503,6 +676,13 @@ export class AuthAnalyticsService {
           : { freeSignups: { increment: 1 } }
         ),
         ...this.getDeviceCounters(data.signupSource),
+        
+        // Organization purpose counters
+        ...(data.purposes?.includes('hire_employees') ? { orgPurposeHireEmployees: { increment: 1 } } : {}),
+        ...(data.purposes?.includes('list_properties') ? { orgPurposeListProperties: { increment: 1 } } : {}),
+        ...(data.purposes?.includes('offer_skilled_services') ? { orgPurposeOfferServices: { increment: 1 } } : {}),
+        ...(data.purposes?.includes('provide_social_support') ? { orgPurposeProvideSupport: { increment: 1 } } : {}),
+        ...(data.purposes?.includes('act_as_agent') ? { orgPurposeActAsAgent: { increment: 1 } } : {}),
       });
 
       await this.updateHourlyAuthMetrics(data.signupSource.timestamp, {

@@ -160,7 +160,8 @@ export class OrganizationAdminResponseDto {
    ORGANIZATION PROFILE RESPONSE (FULL)
 ====================================================== */
 
-export class OrganizationProfileResponseDto extends OrganizationBaseDto {
+export class 
+OrganizationProfileResponseDto extends OrganizationBaseDto {
   @ApiProperty({ type: AccountBaseDto })
   account!: AccountBaseDto;
 

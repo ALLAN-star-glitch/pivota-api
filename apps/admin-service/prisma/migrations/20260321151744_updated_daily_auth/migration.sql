@@ -1,0 +1,16 @@
+-- AlterTable
+ALTER TABLE "DailyAuthMetrics" ADD COLUMN     "failedAgentSignups" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedEmployerSignups" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedHousingSeekerSignups" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedJobSeekerSignups" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedPropertyOwnerSignups" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedPurposeFindHousing" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedPurposeFindJob" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedPurposeGetSupport" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedPurposeHireEmployees" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedPurposeJustExploring" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedPurposeListProperties" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedPurposeOfferServices" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedPurposeWorkAsAgent" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedSkilledProfessionalSignups" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "failedSupportBeneficiarySignups" INTEGER NOT NULL DEFAULT 0;

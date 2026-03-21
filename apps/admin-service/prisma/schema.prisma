@@ -1772,6 +1772,60 @@ model DailyAuthMetrics {
   safariLogins    Int      @default(0)
   firefoxLogins   Int      @default(0)
   
+  // ========== PROFILE TYPE METRICS (Individual) ==========
+  jobSeekerSignups           Int @default(0)
+  skilledProfessionalSignups Int @default(0)
+  agentSignups               Int @default(0)
+  housingSeekerSignups       Int @default(0)
+  supportBeneficiarySignups  Int @default(0)
+  employerSignups            Int @default(0)
+  propertyOwnerSignups       Int @default(0)
+  
+  // ========== PRIMARY PURPOSE METRICS (Legacy Tracking) ==========
+  purposeFindJob         Int @default(0)
+  purposeOfferServices   Int @default(0)
+  purposeWorkAsAgent     Int @default(0)
+  purposeFindHousing     Int @default(0)
+  purposeGetSupport      Int @default(0)
+  purposeHireEmployees   Int @default(0)
+  purposeListProperties  Int @default(0)
+  purposeJustExploring   Int @default(0)
+  
+  // ========== ORGANIZATION PURPOSE METRICS ==========
+  orgPurposeHireEmployees    Int @default(0)
+  orgPurposeListProperties   Int @default(0)
+  orgPurposeOfferServices    Int @default(0)
+  orgPurposeProvideSupport   Int @default(0)
+  orgPurposeActAsAgent       Int @default(0)
+  
+  // ========== PREMIUM INTENT METRICS ==========
+  premiumIntentSignups              Int @default(0)
+  premiumJobSeekerIntent            Int @default(0)
+  premiumSkilledProfessionalIntent  Int @default(0)
+  premiumEmployerIntent             Int @default(0)
+  premiumPropertyOwnerIntent        Int @default(0)
+
+    // Add these to your DailyAuthMetrics model
+  failedJobSeekerSignups           Int @default(0)
+  failedSkilledProfessionalSignups Int @default(0)
+  failedAgentSignups               Int @default(0)
+  failedHousingSeekerSignups       Int @default(0)
+  failedSupportBeneficiarySignups  Int @default(0)
+  failedEmployerSignups            Int @default(0)
+  failedPropertyOwnerSignups       Int @default(0)
+
+  failedPurposeFindJob             Int @default(0)
+  failedPurposeOfferServices       Int @default(0)
+  failedPurposeWorkAsAgent         Int @default(0)
+  failedPurposeFindHousing         Int @default(0)
+  failedPurposeGetSupport          Int @default(0)
+  failedPurposeHireEmployees       Int @default(0)
+  failedPurposeListProperties      Int @default(0)
+  failedPurposeJustExploring       Int @default(0)
+  
+  // ========== PROFILE COMPLETION METRICS ==========
+  signupsWithProfileData Int @default(0)
+  
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

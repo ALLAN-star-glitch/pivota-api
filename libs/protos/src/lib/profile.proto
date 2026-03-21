@@ -671,6 +671,7 @@ message AccountData {
   CompletionResponse completion = 17;
   string createdAt = 18;
   string updatedAt = 19;
+  repeated UserBase users = 20;  // ← ADD THIS - users array for the account
 }
 
 message IndividualProfileData {

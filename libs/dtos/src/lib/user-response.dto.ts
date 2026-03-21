@@ -679,8 +679,11 @@ export class AccountResponseDto {
   @ApiPropertyOptional({ type: EmployerProfileResponseDto })
   employerProfile?: EmployerProfileResponseDto;
 
+  @ApiPropertyOptional({ type: UserBaseDto })
+  user?: UserBaseDto;  // Single user
+
   @ApiPropertyOptional({ type: [UserBaseDto] })
-  users?: UserBaseDto[];
+  users?: UserBaseDto[];  // Array for organizations
 
   @ApiPropertyOptional({ type: ProfileCompletionDto })
   completion?: ProfileCompletionDto;

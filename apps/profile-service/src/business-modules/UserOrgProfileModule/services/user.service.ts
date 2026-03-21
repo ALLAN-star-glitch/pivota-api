@@ -61,6 +61,7 @@ type AccountWithIndividualProfiles = Account & {
   propertyOwnerProfile: PropertyOwnerProfile | null;
   supportBeneficiaryProfile: SupportBeneficiaryProfile | null;
   intermediaryAgentProfile: IntermediaryAgentProfile | null;
+  users: User[];
 
 };
 
@@ -548,6 +549,7 @@ async createIndividualAccountWithProfiles(
     this.logger.debug(`Mapping primary purpose "${data.primaryPurpose}" to profile type: ${profileType}`);
     
     // Extract profile data from the appropriate oneof field
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let profileData: any = null;
     
     switch (data.primaryPurpose) {
@@ -1306,126 +1308,150 @@ private async createProfileInTransaction(
   // FETCH METHODS
   // ======================================================
 
-  /**
-   * Get account by UUID with individual profiles
-   */
-  async getAccountByUuid(
-    accountUuid: string
-  ): Promise<BaseResponseDto<AccountResponseDto>> {
-    try {
-      const account = await this.prisma.account.findUnique({
-        where: { uuid: accountUuid },
-        include: {
-          individualProfile: true,
-          jobSeekerProfile: true,
-          skilledProfessionalProfile: true,
-          housingSeekerProfile: true,
-          propertyOwnerProfile: true,
-          supportBeneficiaryProfile: true,
-          intermediaryAgentProfile: true,
-          users: true,
-        },
-      });
 
-      if (!account) {
-        return BaseResponseDto.fail('Account not found', 'NOT_FOUND');
-      }
+/**
+ * Get account by UUID with individual profiles
+ */
+async getAccountByUuid(accountUuid: string): Promise<BaseResponseDto<AccountResponseDto>> {
+  try {
+    const account = await this.prisma.account.findUnique({
+      where: { uuid: accountUuid },
+      include: {
+        individualProfile: true,
+        jobSeekerProfile: true,
+        skilledProfessionalProfile: true,
+        housingSeekerProfile: true,
+        propertyOwnerProfile: true,
+        supportBeneficiaryProfile: true,
+        intermediaryAgentProfile: true,
+        users: true,  // ← ADD THIS - include the users relation
+      },
+    });
 
-      // Only return if it's an individual account
-      if (account.type !== "INDIVIDUAL") {
-        return BaseResponseDto.fail('Account is not an individual account', 'BAD_REQUEST');
-      }
-
-      return BaseResponseDto.ok(
-        this.mapToAccountResponse(account),
-        'Account retrieved',
-        'OK'
-      );
-    } catch (error) {
-      this.logger.error(`Failed to get account: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
+    if (!account) {
+      return BaseResponseDto.fail('Account not found', 'NOT_FOUND');
     }
+
+    // Only return if it's an individual account
+    if (account.type !== "INDIVIDUAL") {
+      return BaseResponseDto.fail('Account is not an individual account', 'BAD_REQUEST');
+    }
+
+    // Debug: Log the number of users found
+    this.logger.debug(`[GET ACCOUNT] Found account: uuid=${account.uuid}, accountCode=${account.accountCode}`);
+    this.logger.debug(`[GET ACCOUNT] Number of users: ${account.users?.length || 0}`);
+    if (account.users && account.users.length > 0) {
+      this.logger.debug(`[GET ACCOUNT] First user UUID: ${account.users[0].uuid}`);
+      this.logger.debug(`[GET ACCOUNT] First user code: ${account.users[0].userCode}`);
+    }
+
+    const mappedResponse = this.mapToAccountResponse(account);
+    
+    this.logger.debug(`[GET ACCOUNT] Mapped response has accountCode: ${!!mappedResponse.accountCode}`);
+    this.logger.debug(`[GET ACCOUNT] Mapped response has user: ${!!mappedResponse.user}`);
+
+    return BaseResponseDto.ok(
+      mappedResponse,
+      'Account retrieved',
+      'OK'
+    );
+  } catch (error) {
+    this.logger.error(`Failed to get account: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
   }
+}
 
-  /**
-   * Get user by UUID with all profiles
-   */
-  async getUserProfileByUuid(
-    data: GetUserByUserUuidDto
-  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
-    this.logger.log(`Fetching user profile for: ${data.userUuid}`);
+/**
+ * Get user by UUID with all profiles
+ */
+async getUserProfileByUuid(
+  data: GetUserByUserUuidDto
+): Promise<BaseResponseDto<UserProfileResponseDto>> {
+  this.logger.log(`Fetching user profile for: ${data.userUuid}`);
 
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: { uuid: data.userUuid },
-        include: {
-          account: {
-            include: {
-              individualProfile: true,
-              jobSeekerProfile: true,
-              skilledProfessionalProfile: true,
-              housingSeekerProfile: true,
-              propertyOwnerProfile: true,
-              supportBeneficiaryProfile: true,
-              intermediaryAgentProfile: true,
+  try {
+    const user = await this.prisma.user.findUnique({
+      where: { uuid: data.userUuid },
+      include: {
+        account: {
+          include: {
+            individualProfile: true, 
+            jobSeekerProfile: true,
+            skilledProfessionalProfile: true,
+            housingSeekerProfile: true,
+            propertyOwnerProfile: true,
+            supportBeneficiaryProfile: true,
+            intermediaryAgentProfile: true,
+            users: {
+              take: 1,  // Include the users in the account
             },
           },
         },
-      });
+      },
+    });
 
-      if (!user) {
-        return BaseResponseDto.fail('User not found', 'NOT_FOUND');
-      }
-
-      return BaseResponseDto.ok(
-        this.mapToUserProfileResponse(user),
-        'User retrieved',
-        'OK'
-      );
-    } catch (error) {
-      this.logger.error(`Error fetching user: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
+    if (!user) {
+      return BaseResponseDto.fail('User not found', 'NOT_FOUND');
     }
+
+    // Cast to the correct type - the account now includes users
+    const userWithAccount = user as unknown as UserWithAccount;
+
+    return BaseResponseDto.ok(
+      this.mapToUserProfileResponse(userWithAccount),
+      'User retrieved',
+      'OK'
+    );
+  } catch (error) {
+    this.logger.error(`Error fetching user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
   }
+}
 
   /**
    * Get user by email
    */
-  async getUserProfileByEmail(
-    data: { email: string }
-  ): Promise<BaseResponseDto<UserProfileResponseDto>> {
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: { email: data.email.toLowerCase().trim() },
-        include: {
-          account: {
-            include: {
-              individualProfile: true,
-              jobSeekerProfile: true,
-              skilledProfessionalProfile: true,
-              housingSeekerProfile: true,
-              propertyOwnerProfile: true,
-              supportBeneficiaryProfile: true,
-              intermediaryAgentProfile: true,
+ async getUserProfileByEmail(
+  data: { email: string }
+): Promise<BaseResponseDto<UserProfileResponseDto>> {
+  try {
+    const user = await this.prisma.user.findUnique({
+      where: { email: data.email.toLowerCase().trim() },
+      include: {
+        account: {
+          include: {
+            individualProfile: true,
+            jobSeekerProfile: true,
+            skilledProfessionalProfile: true,
+            housingSeekerProfile: true,
+            propertyOwnerProfile: true,
+            supportBeneficiaryProfile: true,
+            intermediaryAgentProfile: true,
+            users: {
+              take: 1,  // Include the users in the account
             },
           },
-        },
-      });
+        }, 
+      },
+    });
 
-      if (!user) {
-        throw new RpcException({ code: 5, message: 'User not found' });
-      }
-
-      return BaseResponseDto.ok(
-        this.mapToUserProfileResponse(user),
-        'User retrieved',
-        'OK'
-      );
-    } catch (error) {
-      this.logger.error(`Error fetching user by email: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      throw new RpcException({ code: 13, message: error instanceof Error ? error.message : 'Unknown error' });
+    if (!user) {
+      throw new RpcException({ code: 5, message: 'User not found' });
     }
+
+    // Cast to the correct type
+    const userWithAccount = user as unknown as UserWithAccount;
+
+    return BaseResponseDto.ok(
+      this.mapToUserProfileResponse(userWithAccount),
+      'User retrieved',
+      'OK'
+    );
+  } catch (error) {
+    this.logger.error(`Error fetching user by email: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new RpcException({ code: 13, message: error instanceof Error ? error.message : 'Unknown error' });
   }
+}
 
   /**
    * Get my profile (for authenticated user)
@@ -1923,6 +1949,21 @@ private mapToAccountResponse(account: AccountWithIndividualProfiles): AccountRes
   // Calculate account completion
   const completion = this.calculateAccountCompletion(account);
 
+  // Map users to UserBaseDto array - get firstName/lastName from individualProfile
+  const users = account.users?.map(user => ({
+    uuid: user.uuid,
+    userCode: user.userCode,
+    firstName: account.individualProfile?.firstName ?? '',  // Get from individualProfile
+    lastName: account.individualProfile?.lastName ?? '',    // Get from individualProfile
+    email: user.email,
+    phone: user.phone || '',
+    status: user.status,
+    roleName: user.roleName,
+  })) || [];
+
+  // Get the first user (for convenience)
+  const firstUser = users[0];
+
   return {
     uuid: account.uuid,
     accountCode: account.accountCode,
@@ -2028,8 +2069,11 @@ private mapToAccountResponse(account: AccountWithIndividualProfiles): AccountRes
         )
       ) : undefined,
 
-    // Remove the users array - not needed for individual accounts
-    // users: [],
+    // Include the users array
+    users: users,
+    
+    // For backward compatibility/single user access
+    user: firstUser,
 
     completion: {
       percentage: completion.percentage,
@@ -2043,6 +2087,7 @@ private mapToAccountResponse(account: AccountWithIndividualProfiles): AccountRes
 }
 
 private mapToUserProfileResponse(user: UserWithAccount): UserProfileResponseDto {
+  // Map the account response - this will now have access to user.account.users
   const accountResponse = this.mapToAccountResponse(user.account);
 
   return {
