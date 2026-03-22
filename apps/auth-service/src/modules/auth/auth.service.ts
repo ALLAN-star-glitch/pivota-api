@@ -300,11 +300,9 @@ async signup(
 ): Promise<BaseResponseDto<UserSignupDataDto>> {
   const profileGrpcService = this.getProfileGrpcService();
   
-  // Declare profileType outside try block so it's accessible in catch
   let profileType: string | null = null;
   let profileDataForEmail: any = null;
 
-  // Log registration with device info
   this.logger.log(`📝 Signup attempt: ${signupDto.email} from ${clientInfo?.device || 'Unknown'}`);
 
   try {
@@ -345,7 +343,7 @@ async signup(
       );
     }
 
-    // 2. Build the CreateAccountWithProfilesRequestDto with proper oneof mapping
+    // 2. Build the CreateAccountWithProfilesRequestDto
     const createAccountDto: any = {
       accountType: 'INDIVIDUAL',
       email: signupDto.email,
@@ -370,7 +368,6 @@ async signup(
         expectedSalary: signupDto.jobSeekerData.expectedSalary,
         headline: signupDto.jobSeekerData.headline,
       };
-      this.logger.debug(`Mapped jobSeekerData for FIND_JOB`);
     } else if (signupDto.skilledProfessionalData) {
       createAccountDto.skilledProfessionalData = signupDto.skilledProfessionalData;
       profileType = 'SKILLED_PROFESSIONAL';
@@ -380,7 +377,6 @@ async signup(
         serviceAreas: signupDto.skilledProfessionalData.serviceAreas,
         yearsExperience: signupDto.skilledProfessionalData.yearsExperience,
       }; 
-      this.logger.debug(`Mapped skilledProfessionalData: ${JSON.stringify(signupDto.skilledProfessionalData)}`);
     } else if (signupDto.intermediaryAgentData) {
       createAccountDto.intermediaryAgentData = signupDto.intermediaryAgentData;
       profileType = 'INTERMEDIARY_AGENT';
@@ -390,7 +386,6 @@ async signup(
         serviceAreas: signupDto.intermediaryAgentData.serviceAreas,
         yearsExperience: signupDto.intermediaryAgentData.yearsExperience,
       };
-      this.logger.debug(`Mapped intermediaryAgentData`);
     } else if (signupDto.housingSeekerData) {
       createAccountDto.housingSeekerData = signupDto.housingSeekerData;
       profileType = 'HOUSING_SEEKER';
@@ -399,10 +394,7 @@ async signup(
         preferredCities: signupDto.housingSeekerData.preferredCities,
         minBudget: signupDto.housingSeekerData.minBudget,
         maxBudget: signupDto.housingSeekerData.maxBudget,
-        minBedrooms: signupDto.housingSeekerData.minBedrooms,
-        maxBedrooms: signupDto.housingSeekerData.maxBedrooms,
       };
-      this.logger.debug(`Mapped housingSeekerData`);
     } else if (signupDto.supportBeneficiaryData) {
       createAccountDto.supportBeneficiaryData = signupDto.supportBeneficiaryData;
       profileType = 'SUPPORT_BENEFICIARY';
@@ -412,7 +404,6 @@ async signup(
         city: signupDto.supportBeneficiaryData.city,
         familySize: signupDto.supportBeneficiaryData.familySize,
       };
-      this.logger.debug(`Mapped supportBeneficiaryData`);
     } else if (signupDto.employerData) {
       createAccountDto.employerData = signupDto.employerData;
       profileType = 'EMPLOYER';
@@ -422,7 +413,6 @@ async signup(
         companySize: signupDto.employerData.companySize,
         isRegistered: signupDto.employerData.isRegistered,
       };
-      this.logger.debug(`Mapped employerData`);
     } else if (signupDto.propertyOwnerData) {
       createAccountDto.propertyOwnerData = signupDto.propertyOwnerData;
       profileType = 'PROPERTY_OWNER';
@@ -432,27 +422,13 @@ async signup(
         propertyPurpose: signupDto.propertyOwnerData.propertyPurpose,
         isProfessional: signupDto.propertyOwnerData.isProfessional,
       };
-      this.logger.debug(`Mapped propertyOwnerData`);
     }
 
-    if (profileType) {
-      this.logger.debug(`✅ Profile data mapped successfully for type: ${profileType}`);
-    } else {
-      this.logger.debug(`ℹ️ No profile data provided for purpose: ${signupDto.primaryPurpose}`);
-    }
-
-    // Log what we're sending to Profile Service
-    this.logger.debug(`Sending to Profile Service with purpose: ${signupDto.primaryPurpose}`);
-    this.logger.debug(`Has jobSeekerData: ${!!createAccountDto.jobSeekerData}`);
-    this.logger.debug(`Has skilledProfessionalData: ${!!createAccountDto.skilledProfessionalData}`);
-    this.logger.debug(`Has housingSeekerData: ${!!createAccountDto.housingSeekerData}`);
-
-    // 3. Call Profile Service with the new method
+    // 3. Call Profile Service (no timeout)
     const profileResponse = await firstValueFrom(
-      profileGrpcService.createIndividualAccountWithProfiles(createAccountDto),
+      profileGrpcService.createIndividualAccountWithProfiles(createAccountDto)
     );
 
-    // Validate response structure
     if (!profileResponse.success || !profileResponse.data) {
       this.logger.error(`[PROFILE FAIL] ${signupDto.email}: ${profileResponse.message}`);
       
@@ -479,10 +455,7 @@ async signup(
       );
     }
 
-    // The response data is AccountResponseDto, which contains the account fields directly
     const accountData = profileResponse.data;
-    
-    // Extract the user from the account data
     const userData = accountData.users?.[0];
     
     if (!userData) {
@@ -490,28 +463,26 @@ async signup(
       return BaseResponseDto.fail('Invalid response from profile service', 'INTERNAL_ERROR');
     }
 
-    this.logger.debug(`[PROFILE RESPONSE] Account UUID: ${accountData.uuid}`);
-    this.logger.debug(`[PROFILE RESPONSE] Account Code: ${accountData.accountCode}`);
-    this.logger.debug(`[PROFILE RESPONSE] User UUID: ${userData.uuid}`);
-    this.logger.debug(`[PROFILE RESPONSE] User Code: ${userData.userCode}`);
-
-    // 4. Save Credentials Locally - Use the user UUID from profile service
+    // 4. Save Credentials Locally (parallelize with OTP cleanup)
     const hashedPassword = await bcrypt.hash(signupDto.password, 10);
-    await this.prisma.credential.create({
-      data: {
-        userUuid: userData.uuid,  // Use the UUID from profile service
-        passwordHash: hashedPassword,
-        email: signupDto.email,
-        mfaEnabled: true,
-      },
-    });
+    
+    // Run credential creation and OTP cleanup in parallel
+    await Promise.all([
+      this.prisma.credential.create({
+        data: {
+          userUuid: userData.uuid,
+          passwordHash: hashedPassword,
+          email: signupDto.email,
+          mfaEnabled: true,
+        },
+      }),
+      this.prisma.otp.deleteMany({
+        where: { email: signupDto.email, purpose: 'SIGNUP' },
+      }),
+    ]);
 
-    // 5. CLEANUP OTP
-    await this.prisma.otp.deleteMany({
-      where: { email: signupDto.email, purpose: 'SIGNUP' },
-    });
-
-    // 6. SEND WELCOME EMAIL WITH PROFILE DATA
+    // 5. FIRE-AND-FORGET NOTIFICATIONS
+    // Welcome email
     const welcomeEmailPayload: any = {
       accountId: accountData.accountCode,
       firstName: signupDto.firstName,
@@ -520,13 +491,10 @@ async signup(
       profileType: profileType,
       profileData: profileDataForEmail,
     };
-     
     this.notificationBus.emit('user.onboarded', welcomeEmailPayload);
-    this.logger.log(`📧 Welcome email queued for ${signupDto.email} with profile type: ${profileType || 'none'}`);
 
-    // 7. SEND ADMIN NOTIFICATION
+    // Admin notification
     const adminEmail = process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com';
-    
     const adminPayload = {
       adminEmail: adminEmail,
       userEmail: signupDto.email,
@@ -534,15 +502,13 @@ async signup(
       accountType: 'INDIVIDUAL',
       registrationMethod: 'EMAIL',
       registrationDate: new Date().toISOString(),
-      userCount: await this.getTotalUserCount(),
       plan: signupDto.planSlug || 'Free Forever',
       primaryPurpose: signupDto.primaryPurpose || 'JUST_EXPLORING',
       profileType: profileType,
     };
-    
     this.notificationBus.emit('admin.new.registration', adminPayload);
 
-    // 8. SEND ANALYTICS VIA KAFKA
+    // Analytics
     this.kafkaClient.emit('user.registered', {
       userUuid: userData.uuid,
       email: signupDto.email,
@@ -563,7 +529,7 @@ async signup(
       }
     });
 
-    // Build the UserSignupDataDto from the account data
+    // Build response
     const userSignupData: UserSignupDataDto = {
       account: {
         uuid: accountData.uuid,
@@ -590,7 +556,6 @@ async signup(
       completion: accountData.completion,
     };
 
-    // Return success response
     return BaseResponseDto.ok(
       userSignupData,
       'Signup successful',
@@ -601,12 +566,11 @@ async signup(
     const errorMessage = err instanceof Error ? err.message : 'Unexpected failure';
     this.logger.error(`[AUTH SIGNUP CRASH] ${errorMessage}`);
 
-    // In the catch block - now profileType is accessible
     this.kafkaClient.emit('user.signup.error', {
       email: signupDto.email,
       error: errorMessage,
       primaryPurpose: signupDto.primaryPurpose,
-      profileType: profileType,  // Now accessible
+      profileType: profileType,
       clientInfo: clientInfo ? {
         device: clientInfo.device,
         deviceType: clientInfo.deviceType,
@@ -622,17 +586,6 @@ async signup(
     );
   }
 }
-
-// Optional helper method to get total user count
-private async getTotalUserCount(): Promise<number> {
-  try {
-    return await this.prisma.credential.count();
-  } catch (error) {
-    this.logger.error(`Failed to get user count: ${error.message}`);
-    return 0;
-  }
-}
-
 
 // ------------------ Organisation Signup ------------------
 /* ======================================================

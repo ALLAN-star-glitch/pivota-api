@@ -30,14 +30,17 @@
  *   timestamp: '2026-03-21T10:00:00Z'
  * }
  * 
- * // Event payload for admin.new.registration
+ * // Event payload for admin.new.registration (UPDATED)
  * {
  *   adminEmail: 'admin@pivota.com',
  *   userEmail: 'user@example.com',
  *   userName: 'John Doe',
  *   accountType: 'INDIVIDUAL',
+ *   registrationMethod: 'EMAIL',
  *   registrationDate: '2026-03-21T10:00:00Z',
- *   plan: 'Free Forever'
+ *   plan: 'Free Forever',
+ *   primaryPurpose: 'FIND_JOB',        // NEW - User's primary purpose
+ *   profileType: 'JOB_SEEKER'          // NEW - Profile type created
  * }
  * 
  * // Event payload for admin.listing.milestone
@@ -85,7 +88,7 @@ interface AccountLinkedDto {
   timestamp: string;
 }
 
-// Admin New User Registration DTO (from auth service)
+// Admin New User Registration DTO (UPDATED - removed userCount, added profileType and primaryPurpose)
 interface AdminNewRegistrationFromAuthDto {
   adminEmail: string;
   userEmail: string;
@@ -93,8 +96,9 @@ interface AdminNewRegistrationFromAuthDto {
   accountType: string;
   registrationMethod?: string;
   registrationDate: string;
-  userCount?: number;
   plan: string;
+  primaryPurpose?: string;    // NEW - User's selected purpose
+  profileType?: string;       // NEW - Profile type created
 }
 
 // Admin New Organization Registration DTO
@@ -144,7 +148,7 @@ export class SecurityEmailController {
     @Payload() data: PasswordSetupRequiredDto,
     @Ctx() context: RmqContext
   ) {
-    this.logger.debug(`[RMQ] Password setup required for: ${data.email}`);
+    this.logger.debug(`[RMQ] Password setup required for: ${data?.email}`);
     
     if (!data || !data.email) {
       this.logger.error('❌ user.password.setup.required event missing email');
@@ -169,7 +173,7 @@ export class SecurityEmailController {
     @Payload() data: PasswordSetupCompletedDto,
     @Ctx() context: RmqContext
   ) {
-    this.logger.debug(`[RMQ] Password setup completed for: ${data.email}`);
+    this.logger.debug(`[RMQ] Password setup completed for: ${data?.email}`);
     
     if (!data || !data.email) {
       this.logger.error('❌ user.password.setup.completed event missing email');
@@ -194,7 +198,7 @@ export class SecurityEmailController {
     @Payload() data: AccountLinkedDto,
     @Ctx() context: RmqContext
   ) {
-    this.logger.debug(`[RMQ] Account linked for: ${data.email} with ${data.provider}`);
+    this.logger.debug(`[RMQ] Account linked for: ${data?.email} with ${data?.provider}`);
     
     if (!data || !data.email) {
       this.logger.error('❌ user.account.linked event missing email');
@@ -213,6 +217,7 @@ export class SecurityEmailController {
 
   /**
    * Handle admin new user registration event - Send admin notification
+   * UPDATED: Removed userCount dependency, added profileType and primaryPurpose
    */
   @EventPattern('admin.new.registration')
   async handleAdminNewRegistration(
@@ -221,7 +226,7 @@ export class SecurityEmailController {
   ) {
     this.logger.debug(`[RMQ] New user registration notification for admin: ${data?.adminEmail}`);
     
-    // Validate that we have an admin email
+    // Validate required fields
     if (!data || !data.adminEmail) {
       this.logger.error('❌ admin.new.registration event missing adminEmail field');
       const channel = context.getChannelRef();
@@ -238,11 +243,12 @@ export class SecurityEmailController {
       accountType: data.accountType,
       registrationMethod: data.registrationMethod,
       registrationDate: data.registrationDate,
-      userCount: data.userCount,
-      plan: data.plan
+      plan: data.plan,
+      primaryPurpose: data.primaryPurpose,     // NEW - Pass through
+      profileType: data.profileType,           // NEW - Pass through
     };
     
-    this.logger.debug(`[MAPPED] Service data: ${JSON.stringify(serviceData)}`);
+    this.logger.debug(`[MAPPED] Service data: user=${data.userEmail}, purpose=${data.primaryPurpose || 'none'}, profile=${data.profileType || 'none'}`);
     
     await this.processEvent(
       context,
@@ -284,7 +290,7 @@ export class SecurityEmailController {
     @Payload() data: ListingMilestoneEmailDto,
     @Ctx() context: RmqContext
   ) {
-    this.logger.log(`🏆 [RMQ] Received listing milestone event: ${data.milestone} for account ${data.accountName}`);
+    this.logger.log(`🏆 [RMQ] Received listing milestone event: ${data?.milestone} for account ${data?.accountName}`);
     
     if (!data || !data.recipientEmail) {
       this.logger.error('❌ admin.listing.milestone event missing recipientEmail');

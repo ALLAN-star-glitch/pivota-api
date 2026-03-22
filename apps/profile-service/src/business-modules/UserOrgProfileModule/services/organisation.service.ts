@@ -63,10 +63,12 @@ import { ClientProxy, RpcException, ClientGrpc, ClientKafka } from '@nestjs/micr
 import { randomUUID } from 'crypto';
 import { lastValueFrom, Observable, catchError, timeout, throwError } from 'rxjs';
 import { BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
-import { AccountType, AgentType, OrganizationPurpose, OrganizationType, ProfileType, PropertyType, ServiceProviderType } from '@pivota-api/constants';
+import { ProfileType, OrganizationPurpose, OrganizationType, AccountType, ServiceProviderType, PropertyType, AgentType } from '@pivota-api/constants';
+import { StringUtils, PhoneUtils } from '@pivota-api/utils';
+import { createBusinessProfile, BusinessProfileType } from '../../utils/business-profiles-creator.utils';
+
 
 // ==================== Type Definitions ====================
-
 
 type OrganizationWithDetails = OrganizationProfile & {
   account: Account & {
@@ -174,18 +176,8 @@ export class OrganisationService implements OnModuleInit {
   }
 
   // ======================================================
-  // HELPER METHODS (Same as UserService)
+  // HELPER METHODS
   // ======================================================
-
-  /**
-   * Kenyan phone number normalization
-   */
-  private normalizeKenyanPhone(phone?: string | null): string | null {
-    if (!phone) return null;
-    const KENYAN_REGEX = /^(?:254|\+254|0)?((?:7|1|2)\d{8})$/;
-    const match = phone.trim().match(KENYAN_REGEX);
-    return match ? `+254${match[1]}` : phone;
-  }
 
   /**
    * Parse JSON field safely
@@ -200,18 +192,6 @@ export class OrganisationService implements OnModuleInit {
         return field as unknown as T;
       }
       return defaultValue;
-    } catch {
-      return defaultValue;
-    }
-  }
-
-  /**
-   * Stringify JSON field safely
-   */
-  private stringifyJsonField(data: unknown, defaultValue = '[]'): string {
-    if (!data) return defaultValue;
-    try {
-      return typeof data === 'string' ? data : JSON.stringify(data);
     } catch {
       return defaultValue;
     }
@@ -244,7 +224,7 @@ export class OrganisationService implements OnModuleInit {
 
       await tx.account.update({
         where: { uuid: accountUuid },
-        data: { activeProfiles: this.stringifyJsonField(updatedProfiles) }
+        data: { activeProfiles: StringUtils.stringifyJsonField(updatedProfiles) }
       });
     });
   }
@@ -487,8 +467,6 @@ export class OrganisationService implements OnModuleInit {
     return mappedType;
   }
 
-
-
   // ======================================================
   // MAIN ONBOARDING - CREATE ORGANIZATION ACCOUNT WITH PROFILES
   // ======================================================
@@ -509,12 +487,11 @@ export class OrganisationService implements OnModuleInit {
     // Generate codes
     const userCode = `USR-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
     const accountCode = `ACC-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-    const orgCode = `ORG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
     
-    const normalizedEmail = data.email.toLowerCase().trim();
-    const normalizedPhone = this.normalizeKenyanPhone(data.phone);
-    const normalizedOfficialEmail = data.officialEmail.toLowerCase().trim();
-    const normalizedOfficialPhone = this.normalizeKenyanPhone(data.officialPhone);
+    const normalizedEmail = StringUtils.normalizeEmail(data.email);
+    const normalizedPhone = PhoneUtils.normalize(data.phone || '');
+    const normalizedOfficialEmail = StringUtils.normalizeEmail(data.officialEmail);
+    const normalizedOfficialPhone = PhoneUtils.normalize(data.officialPhone || '');
     
     // Convert purposes to profiles
     const profilesToCreate = data.purposes.map(purpose => ({
@@ -567,12 +544,12 @@ export class OrganisationService implements OnModuleInit {
             name: data.organizationName,
             status: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
             userRole: roleType,
-            activeProfiles: this.stringifyJsonField([
+            activeProfiles: StringUtils.stringifyJsonField([
               'ORGANIZATION_PROFILE',
               ...(profilesToCreate.map(p => p.type))
             ]),
             isVerified: false,
-            verifiedFeatures: this.stringifyJsonField([]),
+            verifiedFeatures: StringUtils.stringifyJsonField([]),
           },
         });
 
@@ -600,8 +577,6 @@ export class OrganisationService implements OnModuleInit {
           },
         });
 
-        const orgCode = `ORG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-
         // Create Organization Profile
         await tx.organizationProfile.create({
           data: {
@@ -616,7 +591,7 @@ export class OrganisationService implements OnModuleInit {
             website: data.website,
             about: data.about,
             logo: data.logo,
-            orgCode,
+            orgCode: `ORG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
             verificationStatus: 'PENDING',
           },
         });
@@ -630,17 +605,15 @@ export class OrganisationService implements OnModuleInit {
           },
         });
 
-        // Create each selected profile
+        // Create each selected profile using shared utility
         for (const profile of profilesToCreate) {
-          await this.createProfileInTransaction(
+          await createBusinessProfile(
             tx, 
             account.uuid, 
-            profile.type, 
+            profile.type as BusinessProfileType, 
             profile.data
           );
         }
-
-        return { account, user };
       });
 
       // 3. POST-DB: External Syncing (RBAC, Subscription)
@@ -723,178 +696,8 @@ export class OrganisationService implements OnModuleInit {
     }
   }
 
-  /**
-   * Helper to create profile within transaction - calls specific profile creation methods
-   */
-  private async createProfileInTransaction(
-    tx: Prisma.TransactionClient,
-    accountUuid: string,
-    profileType: ProfileType,
-    data: any
-  ): Promise<void> {
-    switch (profileType) {
-      case 'EMPLOYER':
-        await this.createEmployerProfileInTransaction(tx, accountUuid, data as EmployerProfileDataDto);
-        break;
-
-      case 'SOCIAL_SERVICE_PROVIDER':
-        await this.createSocialServiceProviderProfileInTransaction(tx, accountUuid, data as SocialServiceProviderProfileDataDto);
-        break;
-
-      case 'PROPERTY_OWNER':
-        await this.createPropertyOwnerProfileInTransaction(tx, accountUuid, data as PropertyOwnerProfileDataDto);
-        break;
-
-      case 'SKILLED_PROFESSIONAL':
-        await this.createSkilledProfessionalProfileInTransaction(tx, accountUuid, data as SkilledProfessionalProfileDataDto);
-        break;
-
-      case 'INTERMEDIARY_AGENT':
-        await this.createIntermediaryAgentProfileInTransaction(tx, accountUuid, data as IntermediaryAgentProfileDataDto);
-        break;
-
-      default:
-        this.logger.warn(`Unknown profile type for organization: ${profileType}`);
-    }
-  }
-
-  private async createEmployerProfileInTransaction(
-    tx: Prisma.TransactionClient,
-    accountUuid: string,
-    data: EmployerProfileDataDto
-  ): Promise<void> {
-    await tx.employerProfile.create({
-      data: {
-        accountUuid,
-        companyName: data.companyName,
-        industry: data.industry,
-        companySize: data.companySize,
-        foundedYear: data.foundedYear,
-        description: data.description,
-        logo: data.logo,
-        preferredSkills: this.stringifyJsonField(data.preferredSkills ?? []),
-        remotePolicy: data.remotePolicy,
-        isVerifiedEmployer: false,
-        worksWithAgents: data.worksWithAgents ?? false,
-        preferredAgents: this.stringifyJsonField(data.preferredAgents ?? []),
-      },
-    });
-  }
-
-  private async createSocialServiceProviderProfileInTransaction(
-    tx: Prisma.TransactionClient,
-    accountUuid: string,
-    data: SocialServiceProviderProfileDataDto
-  ): Promise<void> {
-    await tx.socialServiceProviderProfile.create({
-      data: {
-        accountUuid,
-        providerType: data.providerType,
-        servicesOffered: this.stringifyJsonField(data.servicesOffered ?? []),
-        targetBeneficiaries: this.stringifyJsonField(data.targetBeneficiaries ?? []),
-        serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
-        isVerified: false,
-        about: data.about,
-        website: data.website,
-        contactEmail: data.contactEmail,
-        contactPhone: this.normalizeKenyanPhone(data.contactPhone),
-        officeHours: data.officeHours,
-        physicalAddress: data.physicalAddress,
-        peopleServed: data.peopleServed,
-        yearEstablished: data.yearEstablished,
-        acceptsDonations: data.acceptsDonations ?? false,
-        needsVolunteers: data.needsVolunteers ?? false,
-        donationInfo: data.donationInfo,
-        volunteerNeeds: data.volunteerNeeds,
-      },
-    });
-  }
-
-  private async createPropertyOwnerProfileInTransaction(
-    tx: Prisma.TransactionClient,
-    accountUuid: string,
-    data: PropertyOwnerProfileDataDto
-  ): Promise<void> {
-    await tx.propertyOwnerProfile.create({
-      data: {
-        accountUuid,
-        isProfessional: data.isProfessional ?? false,
-        licenseNumber: data.licenseNumber,
-        companyName: data.companyName,
-        yearsInBusiness: data.yearsInBusiness,
-        preferredPropertyTypes: this.stringifyJsonField(data.preferredPropertyTypes ?? []),
-        serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
-        isVerifiedOwner: false,
-        usesAgent: data.usesAgent ?? false,
-        managingAgentUuid: data.managingAgentUuid,
-      },
-    });
-  }
-
-  private async createSkilledProfessionalProfileInTransaction(
-    tx: Prisma.TransactionClient,
-    accountUuid: string,
-    data: SkilledProfessionalProfileDataDto
-  ): Promise<void> {
-    await tx.skilledProfessionalProfile.create({
-      data: {
-        accountUuid,
-        uuid: randomUUID(),
-        title: data.title,
-        profession: data.profession,
-        specialties: this.stringifyJsonField(data.specialties ?? []),
-        serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
-        yearsExperience: data.yearsExperience,
-        licenseNumber: data.licenseNumber,
-        insuranceInfo: data.insuranceInfo,
-        hourlyRate: data.hourlyRate,
-        dailyRate: data.dailyRate,
-        paymentTerms: data.paymentTerms,
-        availableToday: data.availableToday ?? false,
-        availableWeekends: data.availableWeekends ?? true,
-        emergencyService: data.emergencyService ?? false,
-        portfolioImages: this.stringifyJsonField(data.portfolioImages ?? []),
-        certifications: this.stringifyJsonField(data.certifications ?? []),
-      },
-    });
-  }
-
-  private async createIntermediaryAgentProfileInTransaction(
-    tx: Prisma.TransactionClient,
-    accountUuid: string,
-    data: IntermediaryAgentProfileDataDto
-  ): Promise<void> {
-    await tx.intermediaryAgentProfile.create({
-      data: {
-        accountUuid,
-        uuid: randomUUID(),
-        agentType: data.agentType,
-        specializations: this.stringifyJsonField(data.specializations ?? []),
-        serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
-        licenseNumber: data.licenseNumber,
-        licenseBody: data.licenseBody,
-        yearsExperience: data.yearsExperience,
-        agencyName: data.agencyName,
-        agencyUuid: data.agencyUuid,
-        commissionRate: data.commissionRate,
-        feeStructure: data.feeStructure,
-        minimumFee: data.minimumFee,
-        typicalFee: data.typicalFee,
-        isVerified: false,
-        about: data.about,
-        profileImage: data.profileImage,
-        contactEmail: data.contactEmail,
-        contactPhone: this.normalizeKenyanPhone(data.contactPhone),
-        website: data.website,
-        socialLinks: this.stringifyJsonField(data.socialLinks ?? {}),
-        clientTypes: this.stringifyJsonField(data.clientTypes ?? []),
-      },
-    });
-  }
-
   // ======================================================
   // ORGANIZATION PROFILE CREATION METHODS
-  // (Same pattern as UserService)
   // ======================================================
 
   async createEmployerProfile(
@@ -911,11 +714,11 @@ export class OrganisationService implements OnModuleInit {
           foundedYear: data.foundedYear,
           description: data.description,
           logo: data.logo,
-          preferredSkills: this.stringifyJsonField(data.preferredSkills ?? []),
+          preferredSkills: StringUtils.stringifyJsonField(data.preferredSkills ?? []),
           remotePolicy: data.remotePolicy,
           isVerifiedEmployer: false,
           worksWithAgents: data.worksWithAgents ?? false,
-          preferredAgents: this.stringifyJsonField(data.preferredAgents ?? []),
+          preferredAgents: StringUtils.stringifyJsonField(data.preferredAgents ?? []),
         }
       });
 
@@ -944,14 +747,14 @@ export class OrganisationService implements OnModuleInit {
         data: {
           accountUuid,
           providerType: data.providerType,
-          servicesOffered: this.stringifyJsonField(data.servicesOffered ?? []),
-          targetBeneficiaries: this.stringifyJsonField(data.targetBeneficiaries ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          servicesOffered: StringUtils.stringifyJsonField(data.servicesOffered ?? []),
+          targetBeneficiaries: StringUtils.stringifyJsonField(data.targetBeneficiaries ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           isVerified: false,
           about: data.about,
           website: data.website,
           contactEmail: data.contactEmail,
-          contactPhone: this.normalizeKenyanPhone(data.contactPhone),
+          contactPhone: PhoneUtils.normalize(data.contactPhone || ''),
           officeHours: data.officeHours,
           physicalAddress: data.physicalAddress,
           peopleServed: data.peopleServed,
@@ -991,8 +794,8 @@ export class OrganisationService implements OnModuleInit {
           licenseNumber: data.licenseNumber,
           companyName: data.companyName,
           yearsInBusiness: data.yearsInBusiness,
-          preferredPropertyTypes: this.stringifyJsonField(data.preferredPropertyTypes ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          preferredPropertyTypes: StringUtils.stringifyJsonField(data.preferredPropertyTypes ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           isVerifiedOwner: false,
           usesAgent: data.usesAgent ?? false,
           managingAgentUuid: data.managingAgentUuid,
@@ -1026,8 +829,8 @@ export class OrganisationService implements OnModuleInit {
           uuid: randomUUID(),
           title: data.title,
           profession: data.profession,
-          specialties: this.stringifyJsonField(data.specialties ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           yearsExperience: data.yearsExperience,
           licenseNumber: data.licenseNumber,
           insuranceInfo: data.insuranceInfo,
@@ -1037,8 +840,8 @@ export class OrganisationService implements OnModuleInit {
           availableToday: data.availableToday ?? false,
           availableWeekends: data.availableWeekends ?? true,
           emergencyService: data.emergencyService ?? false,
-          portfolioImages: this.stringifyJsonField(data.portfolioImages ?? []),
-          certifications: this.stringifyJsonField(data.certifications ?? []),
+          portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
+          certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
         }
       });
 
@@ -1068,8 +871,8 @@ export class OrganisationService implements OnModuleInit {
           accountUuid,
           uuid: randomUUID(),
           agentType: data.agentType,
-          specializations: this.stringifyJsonField(data.specializations ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          specializations: StringUtils.stringifyJsonField(data.specializations ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           licenseNumber: data.licenseNumber,
           licenseBody: data.licenseBody,
           yearsExperience: data.yearsExperience,
@@ -1083,10 +886,10 @@ export class OrganisationService implements OnModuleInit {
           about: data.about,
           profileImage: data.profileImage,
           contactEmail: data.contactEmail,
-          contactPhone: this.normalizeKenyanPhone(data.contactPhone),
+          contactPhone: PhoneUtils.normalize(data.contactPhone || ''),
           website: data.website,
-          socialLinks: this.stringifyJsonField(data.socialLinks ?? {}),
-          clientTypes: this.stringifyJsonField(data.clientTypes ?? []),
+          socialLinks: StringUtils.stringifyJsonField(data.socialLinks ?? {}),
+          clientTypes: StringUtils.stringifyJsonField(data.clientTypes ?? []),
         }
       });
 
@@ -1107,7 +910,7 @@ export class OrganisationService implements OnModuleInit {
   }
 
   // ======================================================
-  // FETCH METHODS (Same as UserService)
+  // FETCH METHODS
   // ======================================================
 
   async getOrganizationByUuid(
@@ -1233,99 +1036,94 @@ export class OrganisationService implements OnModuleInit {
   }
 
   // ======================================================
-  // UPDATE METHODS (Same pattern as UserService)
+  // UPDATE METHODS
   // ======================================================
 
-async updateOrganizationProfile(
-  accountUuid: string,
-  data: UpdateOrgProfileRequestDto
-): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
-  try {
-    // Build update data object with proper typing
-    const updateData: {
-      website?: string;
-      registrationNo?: string;
-      kraPin?: string;
-      physicalAddress?: string;
-      type?: string;
-      about?: string;
-      logo?: string;
-    } = {};
-    
-    if (data.website !== undefined) updateData.website = data.website;
-    if (data.registrationNo !== undefined) updateData.registrationNo = data.registrationNo;
-    if (data.kraPin !== undefined) updateData.kraPin = data.kraPin;
-    if (data.physicalAddress !== undefined) updateData.physicalAddress = data.physicalAddress;
-    if (data.organizationType !== undefined) updateData.type = data.organizationType;
-    if (data.about !== undefined) updateData.about = data.about;
-    if (data.logo !== undefined) updateData.logo = data.logo;
+  async updateOrganizationProfile(
+    accountUuid: string,
+    data: UpdateOrgProfileRequestDto
+  ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
+    try {
+      const updateData: {
+        website?: string;
+        registrationNo?: string;
+        kraPin?: string;
+        physicalAddress?: string;
+        type?: string;
+        about?: string;
+        logo?: string;
+      } = {};
+      
+      if (data.website !== undefined) updateData.website = data.website;
+      if (data.registrationNo !== undefined) updateData.registrationNo = data.registrationNo;
+      if (data.kraPin !== undefined) updateData.kraPin = data.kraPin;
+      if (data.physicalAddress !== undefined) updateData.physicalAddress = data.physicalAddress;
+      if (data.organizationType !== undefined) updateData.type = data.organizationType;
+      if (data.about !== undefined) updateData.about = data.about;
+      if (data.logo !== undefined) updateData.logo = data.logo;
 
-    // Only update if there are changes
-    if (Object.keys(updateData).length > 0) {
-      await this.prisma.organizationProfile.update({
+      if (Object.keys(updateData).length > 0) {
+        await this.prisma.organizationProfile.update({
+          where: { accountUuid },
+          data: updateData,
+        });
+      }
+
+      const organization = await this.prisma.organizationProfile.findFirst({
         where: { accountUuid },
-        data: updateData,
+        include: {
+          account: {
+            include: {
+              individualProfile: true,
+              users: true,
+              employerProfile: true,
+              socialServiceProviderProfile: true,
+              propertyOwnerProfile: true,
+              skilledProfessionalProfile: true,
+              intermediaryAgentProfile: true,
+            },
+          },
+          members: {
+            include: { user: true },
+            where: { roleName: 'ADMIN' },
+            take: 1,
+          },
+        },
       });
-    }
 
-    // Fetch the updated organization with all relations
-    const organization = await this.prisma.organizationProfile.findFirst({
-      where: { accountUuid },
-      include: {
-        account: {
-          include: {
-            individualProfile: true, // This is correct - individualProfile is on Account
-            users: true,
-            employerProfile: true,
-            socialServiceProviderProfile: true,
-            propertyOwnerProfile: true,
-            skilledProfessionalProfile: true,
-            intermediaryAgentProfile: true,
-          },
-        },
-        members: {
-          include: { 
-            user: true, // User doesn't have individualProfile directly
-          },
-          where: { roleName: 'ADMIN' },
-          take: 1,
-        },
-      },
-    });
+      if (!organization) {
+        return BaseResponseDto.fail('Organization not found', 'NOT_FOUND');
+      }
 
-    if (!organization) {
-      return BaseResponseDto.fail('Organization not found', 'NOT_FOUND');
-    }
-
-    return BaseResponseDto.ok(
-      this.mapToOrganizationProfileResponse(organization as OrganizationWithDetails),
-      'Organization profile updated',
-      'OK'
-    );
-  } catch (error) {
-    this.logger.error(`Failed to update organization profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') {
-        const target = error.meta?.target as string[];
-        if (target?.includes('registrationNo')) {
-          return BaseResponseDto.fail('Registration number already exists', 'ALREADY_EXISTS');
-        }
-        if (target?.includes('kraPin')) {
-          return BaseResponseDto.fail('KRA PIN already exists', 'ALREADY_EXISTS');
-        }
-        if (target?.includes('officialEmail')) {
-          return BaseResponseDto.fail('Official email already exists', 'ALREADY_EXISTS');
-        }
-        if (target?.includes('officialPhone')) {
-          return BaseResponseDto.fail('Official phone already exists', 'ALREADY_EXISTS');
+      return BaseResponseDto.ok(
+        this.mapToOrganizationProfileResponse(organization as OrganizationWithDetails),
+        'Organization profile updated',
+        'OK'
+      );
+    } catch (error) {
+      this.logger.error(`Failed to update organization profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          const target = error.meta?.target as string[];
+          if (target?.includes('registrationNo')) {
+            return BaseResponseDto.fail('Registration number already exists', 'ALREADY_EXISTS');
+          }
+          if (target?.includes('kraPin')) {
+            return BaseResponseDto.fail('KRA PIN already exists', 'ALREADY_EXISTS');
+          }
+          if (target?.includes('officialEmail')) {
+            return BaseResponseDto.fail('Official email already exists', 'ALREADY_EXISTS');
+          }
+          if (target?.includes('officialPhone')) {
+            return BaseResponseDto.fail('Official phone already exists', 'ALREADY_EXISTS');
+          }
         }
       }
+      
+      return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
     }
-    
-    return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
   }
-}
 
   async updateEmployerProfile(
     accountUuid: string,
@@ -1341,10 +1139,10 @@ async updateOrganizationProfile(
           foundedYear: data.foundedYear,
           description: data.description,
           logo: data.logo,
-          preferredSkills: this.stringifyJsonField(data.preferredSkills ?? []),
+          preferredSkills: StringUtils.stringifyJsonField(data.preferredSkills ?? []),
           remotePolicy: data.remotePolicy,
           worksWithAgents: data.worksWithAgents,
-          preferredAgents: this.stringifyJsonField(data.preferredAgents ?? []),
+          preferredAgents: StringUtils.stringifyJsonField(data.preferredAgents ?? []),
         },
         create: {
           accountUuid,
@@ -1354,11 +1152,11 @@ async updateOrganizationProfile(
           foundedYear: data.foundedYear,
           description: data.description,
           logo: data.logo,
-          preferredSkills: this.stringifyJsonField(data.preferredSkills ?? []),
+          preferredSkills: StringUtils.stringifyJsonField(data.preferredSkills ?? []),
           remotePolicy: data.remotePolicy,
           isVerifiedEmployer: false,
           worksWithAgents: data.worksWithAgents ?? false,
-          preferredAgents: this.stringifyJsonField(data.preferredAgents ?? []),
+          preferredAgents: StringUtils.stringifyJsonField(data.preferredAgents ?? []),
         },
       });
 
@@ -1387,13 +1185,13 @@ async updateOrganizationProfile(
         where: { accountUuid },
         update: {
           providerType: data.providerType,
-          servicesOffered: this.stringifyJsonField(data.servicesOffered ?? []),
-          targetBeneficiaries: this.stringifyJsonField(data.targetBeneficiaries ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          servicesOffered: StringUtils.stringifyJsonField(data.servicesOffered ?? []),
+          targetBeneficiaries: StringUtils.stringifyJsonField(data.targetBeneficiaries ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           about: data.about,
           website: data.website,
           contactEmail: data.contactEmail,
-          contactPhone: this.normalizeKenyanPhone(data.contactPhone),
+          contactPhone: PhoneUtils.normalize(data.contactPhone || ''),
           officeHours: data.officeHours,
           physicalAddress: data.physicalAddress,
           peopleServed: data.peopleServed,
@@ -1406,14 +1204,14 @@ async updateOrganizationProfile(
         create: {
           accountUuid,
           providerType: data.providerType,
-          servicesOffered: this.stringifyJsonField(data.servicesOffered ?? []),
-          targetBeneficiaries: this.stringifyJsonField(data.targetBeneficiaries ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          servicesOffered: StringUtils.stringifyJsonField(data.servicesOffered ?? []),
+          targetBeneficiaries: StringUtils.stringifyJsonField(data.targetBeneficiaries ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           isVerified: false,
           about: data.about,
           website: data.website,
           contactEmail: data.contactEmail,
-          contactPhone: this.normalizeKenyanPhone(data.contactPhone),
+          contactPhone: PhoneUtils.normalize(data.contactPhone || ''),
           officeHours: data.officeHours,
           physicalAddress: data.physicalAddress,
           peopleServed: data.peopleServed,
@@ -1453,8 +1251,8 @@ async updateOrganizationProfile(
           licenseNumber: data.licenseNumber,
           companyName: data.companyName,
           yearsInBusiness: data.yearsInBusiness,
-          preferredPropertyTypes: this.stringifyJsonField(data.preferredPropertyTypes ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          preferredPropertyTypes: StringUtils.stringifyJsonField(data.preferredPropertyTypes ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           usesAgent: data.usesAgent,
           managingAgentUuid: data.managingAgentUuid,
         },
@@ -1464,8 +1262,8 @@ async updateOrganizationProfile(
           licenseNumber: data.licenseNumber,
           companyName: data.companyName,
           yearsInBusiness: data.yearsInBusiness,
-          preferredPropertyTypes: this.stringifyJsonField(data.preferredPropertyTypes ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          preferredPropertyTypes: StringUtils.stringifyJsonField(data.preferredPropertyTypes ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           isVerifiedOwner: false,
           usesAgent: data.usesAgent ?? false,
           managingAgentUuid: data.managingAgentUuid,
@@ -1498,8 +1296,8 @@ async updateOrganizationProfile(
         update: {
           title: data.title,
           profession: data.profession,
-          specialties: this.stringifyJsonField(data.specialties ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           yearsExperience: data.yearsExperience,
           licenseNumber: data.licenseNumber,
           insuranceInfo: data.insuranceInfo,
@@ -1509,16 +1307,16 @@ async updateOrganizationProfile(
           availableToday: data.availableToday,
           availableWeekends: data.availableWeekends,
           emergencyService: data.emergencyService,
-          portfolioImages: this.stringifyJsonField(data.portfolioImages ?? []),
-          certifications: this.stringifyJsonField(data.certifications ?? []),
+          portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
+          certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
         },
         create: {
           accountUuid,
           uuid: randomUUID(),
           title: data.title,
           profession: data.profession,
-          specialties: this.stringifyJsonField(data.specialties ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           yearsExperience: data.yearsExperience,
           licenseNumber: data.licenseNumber,
           insuranceInfo: data.insuranceInfo,
@@ -1528,8 +1326,8 @@ async updateOrganizationProfile(
           availableToday: data.availableToday ?? false,
           availableWeekends: data.availableWeekends ?? true,
           emergencyService: data.emergencyService ?? false,
-          portfolioImages: this.stringifyJsonField(data.portfolioImages ?? []),
-          certifications: this.stringifyJsonField(data.certifications ?? []),
+          portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
+          certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
         },
       });
 
@@ -1558,8 +1356,8 @@ async updateOrganizationProfile(
         where: { accountUuid },
         update: {
           agentType: data.agentType,
-          specializations: this.stringifyJsonField(data.specializations ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          specializations: StringUtils.stringifyJsonField(data.specializations ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           licenseNumber: data.licenseNumber,
           licenseBody: data.licenseBody,
           yearsExperience: data.yearsExperience,
@@ -1572,17 +1370,17 @@ async updateOrganizationProfile(
           about: data.about,
           profileImage: data.profileImage,
           contactEmail: data.contactEmail,
-          contactPhone: this.normalizeKenyanPhone(data.contactPhone),
+          contactPhone: PhoneUtils.normalize(data.contactPhone || ''),
           website: data.website,
-          socialLinks: this.stringifyJsonField(data.socialLinks ?? {}),
-          clientTypes: this.stringifyJsonField(data.clientTypes ?? []),
+          socialLinks: StringUtils.stringifyJsonField(data.socialLinks ?? {}),
+          clientTypes: StringUtils.stringifyJsonField(data.clientTypes ?? []),
         },
         create: {
           accountUuid,
           uuid: randomUUID(),
           agentType: data.agentType,
-          specializations: this.stringifyJsonField(data.specializations ?? []),
-          serviceAreas: this.stringifyJsonField(data.serviceAreas ?? []),
+          specializations: StringUtils.stringifyJsonField(data.specializations ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           licenseNumber: data.licenseNumber,
           licenseBody: data.licenseBody,
           yearsExperience: data.yearsExperience,
@@ -1596,10 +1394,10 @@ async updateOrganizationProfile(
           about: data.about,
           profileImage: data.profileImage,
           contactEmail: data.contactEmail,
-          contactPhone: this.normalizeKenyanPhone(data.contactPhone),
+          contactPhone: PhoneUtils.normalize(data.contactPhone || ''),
           website: data.website,
-          socialLinks: this.stringifyJsonField(data.socialLinks ?? {}),
-          clientTypes: this.stringifyJsonField(data.clientTypes ?? []),
+          socialLinks: StringUtils.stringifyJsonField(data.socialLinks ?? {}),
+          clientTypes: StringUtils.stringifyJsonField(data.clientTypes ?? []),
         },
       });
 
@@ -1619,7 +1417,7 @@ async updateOrganizationProfile(
     }
   }
 
-  // ======================================================
+// ======================================================
   // TEAM MANAGEMENT METHODS (All invitation methods)
   // ======================================================
 
@@ -2156,8 +1954,9 @@ async updateOrganizationProfile(
     }
   }
 
+
   // ======================================================
-  // DELETE / REMOVE METHODS (Same as UserService)
+  // DELETE / REMOVE METHODS
   // ======================================================
 
   async removeProfile(
@@ -2165,10 +1964,8 @@ async updateOrganizationProfile(
     profileType: ProfileType
   ): Promise<BaseResponseDto<null>> {
     try {
-      // Collect files to delete before removing the profile
       const filesToDelete = await this.collectProfileFilesForDeletion(accountUuid, profileType);
 
-      // Delete the profile
       switch (profileType) {
         case 'EMPLOYER':
           await this.prisma.employerProfile.delete({ where: { accountUuid } });
@@ -2189,19 +1986,17 @@ async updateOrganizationProfile(
           return BaseResponseDto.fail('Unsupported profile type', 'BAD_REQUEST');
       }
 
-      // Update active profiles
       await this.updateActiveProfiles(accountUuid, profileType, 'remove');
-
-      // Emit file deletion events
       this.emitFileDeletionEvents(filesToDelete);
 
       return BaseResponseDto.ok(null, 'Profile removed successfully', 'OK');
-
     } catch (error) {
       this.logger.error(`Failed to remove profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
     }
   }
+
+
 
   // ======================================================
   // MAPPER METHODS (Same pattern as UserService)

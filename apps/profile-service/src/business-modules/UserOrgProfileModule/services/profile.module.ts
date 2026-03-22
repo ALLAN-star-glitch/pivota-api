@@ -3,14 +3,12 @@ import { UserController } from '../controllers/user.controller';
 import { UserService } from './user.service';
 import { PrismaModule } from '../../../prisma/prisma.module';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { 
-  PLANS_PROTO_PATH, 
-  RBAC_PROTO_PATH, 
-  SUBSCRIPTIONS_PROTO_PATH 
-} from '@pivota-api/protos';
+
 import { OrganisationService } from './organisation.service';
 import { OrganisationController } from '../controllers/organisation.controller';
 import { SharedStorageModule } from '@pivota-api/shared-storage';
+import { RBAC_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH, PLANS_PROTO_PATH } from '@pivota-api/protos';
+
 
 @Module({
   imports: [

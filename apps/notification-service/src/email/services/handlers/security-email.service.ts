@@ -199,54 +199,92 @@ export class SecurityEmailService {
   /**
    * Send admin notification for new user registration
    */
-  async sendAdminNewUser(data: {
-    recipientEmail: string;
-    userEmail: string;
-    userName: string;
-    accountType: string;
-    registrationMethod?: string;
-    registrationDate: string;
-    userCount?: number;
-    plan: string;
-  }): Promise<void> {
-    const regDate = this.template.formatDateTime(data.registrationDate);
-    const method = data.registrationMethod || 'Email/Password';
+async sendAdminNewUser(data: {
+  recipientEmail: string;
+  userEmail: string;
+  userName: string;
+  accountType: string;
+  registrationMethod?: string;
+  registrationDate: string;
+  plan: string;
+  primaryPurpose?: string;   // NEW
+  profileType?: string;       // NEW
+}): Promise<void> {
+  const regDate = this.template.formatDateTime(data.registrationDate);
+  const method = data.registrationMethod || 'Email/Password';
 
-    const content = `
-      <h1>New User Registration</h1>
-      <p style="font-size: 18px; color: ${this.template.getColors().primary};">A new user has joined PivotaConnect</p>
-      
-      <div class="info-box">
-        <h3>User Details</h3>
-        <ul>
-          <li><strong>Name:</strong> ${data.userName}</li>
-          <li><strong>Email:</strong> ${data.userEmail}</li>
-          <li><strong>Account Type:</strong> ${data.accountType}</li>
-          <li><strong>Registration Method:</strong> ${method}</li>
-          <li><strong>Plan:</strong> ${data.plan}</li>
-          <li><strong>Date:</strong> ${regDate}</li>
-          ${data.userCount ? `<li><strong>Total Users:</strong> ${data.userCount}</li>` : ''}
-        </ul>
-      </div>
-      
-      <p>Welcome them to the community! 🎉</p>
-    `;
+  // Map profile type to readable name
+  const profileTypeMap: Record<string, string> = {
+    'JOB_SEEKER': 'Job Seeker',
+    'SKILLED_PROFESSIONAL': 'Skilled Professional',
+    'INTERMEDIARY_AGENT': 'Agent',
+    'HOUSING_SEEKER': 'Housing Seeker',
+    'SUPPORT_BENEFICIARY': 'Support Beneficiary',
+    'EMPLOYER': 'Employer',
+    'PROPERTY_OWNER': 'Property Owner',
+    'SOCIAL_SERVICE_PROVIDER': 'Social Service Provider',
+  };
+  
+  const profileTypeDisplay = data.profileType ? profileTypeMap[data.profileType] || data.profileType : 'Not specified';
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.recipientEmail }],
-        Subject: `New User Registration: ${data.userName}`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+  // Map primary purpose to readable name
+  const purposeMap: Record<string, string> = {
+    'FIND_JOB': 'Find Job',
+    'OFFER_SKILLED_SERVICES': 'Offer Skilled Services',
+    'WORK_AS_AGENT': 'Work as Agent',
+    'FIND_HOUSING': 'Find Housing',
+    'GET_SOCIAL_SUPPORT': 'Get Social Support',
+    'HIRE_EMPLOYEES': 'Hire Employees',
+    'LIST_PROPERTIES': 'List Properties',
+    'JUST_EXPLORING': 'Just Exploring',
+  };
+  
+  const purposeDisplay = data.primaryPurpose ? purposeMap[data.primaryPurpose] || data.primaryPurpose : 'Not specified';
 
-    await this.emailClient.sendEmail(body, data.recipientEmail);
+  // Build subject with profile type for better filtering
+  let subject: string;
+  if (data.profileType && profileTypeDisplay !== 'Not specified') {
+    subject = `New ${profileTypeDisplay}: ${data.userName} joined PivotaConnect`;
+  } else {
+    subject = `New User Registration: ${data.userName} joined PivotaConnect`;
   }
+
+  const content = `
+    <h1>New User Registration</h1>
+    <p style="font-size: 18px; color: ${this.template.getColors().primary};">A new user has joined PivotaConnect</p>
+    
+    <div class="info-box">
+      <h3>User Details</h3>
+      <ul>
+        <li><strong>Name:</strong> ${data.userName}</li>
+        <li><strong>Email:</strong> ${data.userEmail}</li>
+        <li><strong>Account Type:</strong> ${data.accountType}</li>
+        <li><strong>Registration Method:</strong> ${method}</li>
+        <li><strong>Plan:</strong> ${data.plan}</li>
+        <li><strong>Date:</strong> ${regDate}</li>
+        <li><strong>Primary Purpose:</strong> ${purposeDisplay}</li>
+        <li><strong>Profile Type:</strong> ${profileTypeDisplay}</li>
+      </ul>
+    </div>
+    
+    <p>Welcome them to the community! </p>
+  `;
+
+  const body: SendEmailV3_1.Body = {
+    Messages: [{
+      From: {
+        Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+        Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+      },
+      To: [{ Email: data.recipientEmail }],
+      Subject: subject,
+      HTMLPart: this.template.render(content),
+      TextPart: this.template.stripHtml(content),
+    }],
+  };
+
+  await this.emailClient.sendEmail(body, data.recipientEmail);
+}
 
   /**
    * Send admin notification for new organization registration

@@ -10,7 +10,8 @@ import {
   Req,
   Get,
   Query,
-  Delete, 
+  Delete,
+  UseInterceptors, 
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
@@ -53,6 +54,7 @@ import { Roles } from '../../decorators/roles.decorator';
 import { ThrottlerGuard, Throttle} from '@nestjs/throttler';
 import { Headers } from '@nestjs/common';
 import { ALLOWED_OTP_PURPOSES } from '@pivota-api/constants';
+import { TimeoutInterceptor } from '@pivota-api/interceptors';
 
 @ApiTags('Auth') // Main module tag
 @ApiExtraModels(
@@ -70,6 +72,7 @@ import { ALLOWED_OTP_PURPOSES } from '@pivota-api/constants';
   RevokeSessionDto
 )
 @Controller('auth-module')
+@UseInterceptors(TimeoutInterceptor)
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
@@ -339,7 +342,168 @@ export class AuthController {
       }
     }
   }
-}) 
+})
+@ApiResponse({ 
+  status: 201, 
+  description: 'Registration successful - Account and profiles created',
+  schema: {
+    example: {
+      success: true,
+      message: 'Signup successful',
+      code: 'CREATED',
+      data: {
+        account: {
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+          accountCode: 'ACC123456789',
+          type: 'INDIVIDUAL'
+        },
+        user: {
+          uuid: '123e4567-e89b-12d3-a456-426614174001',
+          userCode: 'USR123456789',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          email: 'jane.doe@example.com',
+          phone: '0712345678',
+          status: 'ACTIVE',
+          roleName: 'GeneralUser'
+        },
+        profile: {
+          bio: null,
+          gender: null,
+          dateOfBirth: null,
+          nationalId: null,
+          profileImage: null
+        },
+        completion: {
+          accountCompleted: true,
+          profileCompleted: 30,
+          documentsCompleted: 0
+        }
+      },
+      error: null
+    }
+  }
+})
+@ApiResponse({ 
+  status: 400, 
+  description: 'Bad Request - Validation errors',
+  schema: {
+    example: {
+      success: false,
+      message: 'Validation failed',
+      code: 'BAD_REQUEST',
+      data: null,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid input data',
+        details: [
+          'email must be a valid email address',
+          'password must be at least 8 characters'
+        ]
+      }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 401, 
+  description: 'Unauthorized - Invalid or expired OTP',
+  schema: {
+    example: {
+      success: false,
+      message: 'Invalid or expired verification code.',
+      code: 'UNAUTHORIZED',
+      data: null,
+      error: {
+        code: 'INVALID_OTP',
+        message: 'The provided OTP code is invalid or has expired'
+      }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 409, 
+  description: 'Conflict - Email already registered',
+  schema: {
+    example: {
+      success: false,
+      message: 'This email is already registered.',
+      code: 'CONFLICT',
+      data: null,
+      error: {
+        code: 'EMAIL_EXISTS',
+        message: 'An account with this email already exists'
+      }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 422, 
+  description: 'Unprocessable Entity - Profile creation failed in Profile Service',
+  schema: {
+    example: {
+      success: false,
+      message: 'Failed to create user profile: Duplicate national ID',
+      code: 'UNPROCESSABLE_ENTITY',
+      data: null,
+      error: {
+        code: 'PROFILE_CREATION_FAILED',
+        message: 'Duplicate national ID detected',
+        details: 'National ID already registered with another account'
+      }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 429, 
+  description: 'Too Many Requests - OTP rate limit exceeded',
+  schema: {
+    example: {
+      success: false,
+      message: 'Too many verification attempts. Please try again in 10 minutes.',
+      code: 'TOO_MANY_REQUESTS',
+      data: null,
+      error: {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Maximum OTP attempts exceeded',
+        retryAfter: 600
+      }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 500, 
+  description: 'Internal Server Error - Unexpected system error',
+  schema: {
+    example: {
+      success: false,
+      message: 'An unexpected error occurred during signup',
+      code: 'INTERNAL_ERROR',
+      data: null,
+      error: {
+        code: 'INTERNAL',
+        message: 'Database connection error',
+        details: 'Unable to complete registration at this time'
+      }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 503, 
+  description: 'Service Unavailable - Profile or RBAC service unavailable',
+  schema: {
+    example: {
+      success: false,
+      message: 'Profile service communication failure',
+      code: 'SERVICE_UNAVAILABLE',
+      data: null,
+      error: {
+        code: 'GRPC_UNAVAILABLE',
+        message: 'Unable to reach profile service',
+        details: 'Service temporarily unavailable'
+      }
+    }
+  }
+})
 async signup(
   @Body() signupDto: UserSignupRequestDto,
   @ClientInfo() clientInfo: AuthClientInfoDto,
