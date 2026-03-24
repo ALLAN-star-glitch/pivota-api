@@ -82,3 +82,6 @@ export * from './lib/listing-registry.dto';
 export * from './lib/PurposeDto.dto';
 export * from './lib/get-listing-query.dto';
 export * from './lib/auth-client-info.dto';
+export * from './lib/housing-training-data.base.dto';
+export * from './lib/housing-training-data.http.dto';
+export * from './lib/housing-training-data.response.dto';

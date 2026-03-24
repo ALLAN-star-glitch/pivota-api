@@ -32,5 +32,6 @@ export * from './lib/BaseTokenResponseGrpc.interface';
 export * from './lib/PesapalTransactionStatus.interface';
 export * from './lib/events-interfaces.interface';
 export * from './lib/housing-ai-event.interface'; 
-export * from './lib/email.interface'  
+export * from './lib/email.interface';
+export * from './lib/housing-training-data.params';
 

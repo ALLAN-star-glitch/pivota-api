@@ -30,7 +30,7 @@
       "@pivota-api/protos": ["libs/protos/src/index.ts"],
       "@pivota-api/shared-storage": ["libs/shared-storage/src/index.ts"],
       "@pivota-api/types": ["libs/types/src/index.ts"],
-      "@pivota-api/utils": ["libs/utils/src/index.ts"] 
+      "@pivota-api/utils": ["libs/utils/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
