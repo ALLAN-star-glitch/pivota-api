@@ -28,11 +28,13 @@ async function bootstrap() {
   Logger.log(`JWT_SECRET (via ConfigService) = ${configService.get<string>('JWT_SECRET')}`);
   Logger.log(`RABBITMQ_URL (via ConfigService) = ${configService.get<string>('RABBITMQ_URL')}`);
 
-  // ---------------- Kafka Microservice ----------------
+  // ---------------- Kafka Microservice - GENERAL EVENTS (Consumer) ----------------
+  // For general events that the profile service needs to consume
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.KAFKA,
     options: {
       client: {
+        clientId: 'profile-service-general',
         brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
       },
       consumer: {
@@ -41,6 +43,26 @@ async function bootstrap() {
       subscribe: { fromBeginning: false },
     },
   });
+
+  // ---------------- Kafka Microservice - STORAGE EVENTS (Consumer) ----------------
+  // For consuming file deletion events from storage service
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.KAFKA,
+    options: {
+      client: {
+        clientId: 'profile-service-storage',
+        brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+      },
+      consumer: {
+        groupId: 'profile-service-storage-consumer',
+      },
+      subscribe: { fromBeginning: false },
+    },
+  });
+
+  // ---------------- Kafka Microservice - ANALYTICS EVENTS (Producer Only) ----------------
+  // Note: This is a producer-only client for emitting analytics events
+  // No consumer group needed - configured in ProfileModule with producerOnlyMode: true
 
   // ---------------- gRPC Microservice ----------------
   app.connectMicroservice<MicroserviceOptions>({
@@ -65,27 +87,14 @@ async function bootstrap() {
     },
   });
 
-  // This is needed to ensure the Kafka producer is connected before we start processing requests. It makes the shared service act as a connection manager for Kafka, which is important for emitting events from the UserService.  
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.KAFKA,
-    options: {
-      client: {
-        brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
-      },
-      consumer: {
-        // Use the same group ID you put in the ProfileModule
-        groupId: 'profile-service-storage-consumer', 
-      },
-    },
-  });
-
   await app.startAllMicroservices();
+  
   Logger.log(`🚀 Profile service is running (Kafka + gRPC + RabbitMQ)`);
-  Logger.log(`✅ Kafka connected to ${process.env.KAFKA_BROKERS} || 'localhost:9092'`);
-  Logger.log(`✅ gRPC listening on ${process.env.PROFILE_GRPC_URL || ' 0.0.0.0:50052'}`);
-
-
-
+  Logger.log(`✅ Kafka General Consumer connected to ${process.env.KAFKA_BROKERS || 'localhost:9092'} (groupId: profile-service-consumer-v2)`);
+  Logger.log(`✅ Kafka Storage Consumer connected to ${process.env.KAFKA_BROKERS || 'localhost:9092'} (groupId: profile-service-storage-consumer)`);
+  Logger.log(`✅ Kafka Analytics Producer ready for emitting events`);
+  Logger.log(`✅ gRPC listening on ${process.env.PROFILE_GRPC_URL || '0.0.0.0:50052'}`);
+  Logger.log(`✅ RabbitMQ connected to ${process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672'}`);
 }
 
 bootstrap();

@@ -6,7 +6,7 @@ import { RbacModule } from '../modules/rbac-and-security/rbac/rbac.module';
 import { PlanModule } from '../modules/plans/plan.module';
 import { SubscriptionModule } from '../modules/subscriptions/subscription.module';
 import { HttpModule } from '@nestjs/axios';
-import { AnalyticsModule } from '../modules/analytics/analytics.module';
+import { AnalyticsModule } from '../modules/analytics.module';
 
 
 @Module({

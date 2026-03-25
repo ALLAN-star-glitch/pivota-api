@@ -4,8 +4,6 @@ import { GrpcMethod, EventPattern, Payload } from '@nestjs/microservices';
 import { HousingAnalyticsService } from '../services/housing-analytics.service';
 import { 
   BaseResponseDto, 
-  UserHousingStatsResponseDto,
-  HousingTrainingDataResponseDto,
   LabelUpdateResponseDto
 } from '@pivota-api/dtos';
 import { 
@@ -233,38 +231,6 @@ async handleHousingAIEvent(
     }
   }
 
-  @GrpcMethod('HousingAnalyticsService', 'GetUserHousingStats')
-  async getUserHousingStats(
-    request: GetUserStatsRequest,
-  ): Promise<BaseResponseDto<UserHousingStatsResponseDto>> {
-    this.logger.log(`📊 gRPC: Getting housing stats for user ${request.userUuid}`);
-    
-    try {
-      const result = await this.housingAnalyticsService.getUserHousingStats(request.userUuid);
-      return result;
-    } catch (error) {
-      this.logger.error(`❌ Error getting user stats: ${error.message}`);
-      return BaseResponseDto.fail('Failed to get user stats', 'INTERNAL_ERROR');
-    }
-  }
-
-  @GrpcMethod('HousingAnalyticsService', 'GetHousingTrainingData')
-  async getHousingTrainingData(
-    request: GetTrainingDataRequest,
-  ): Promise<BaseResponseDto<HousingTrainingDataResponseDto>> {
-    this.logger.log(`📚 gRPC: Getting housing training data for AI (days: ${request.days || 30})`);
-    
-    try {
-      const result = await this.housingAnalyticsService.getHousingTrainingData(
-        request.days || 30,
-        request.limit || 10000
-      );
-      return result;
-    } catch (error) {
-      this.logger.error(`❌ Error getting training data: ${error.message}`);
-      return BaseResponseDto.fail('Failed to get training data', 'INTERNAL_ERROR');
-    }
-  }
 
   @GrpcMethod('HousingAnalyticsService', 'UpdateHousingLabel')
   async updateHousingLabel(

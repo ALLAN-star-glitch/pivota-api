@@ -20,7 +20,7 @@ interface AuthServiceUserResponse {
     roleName: string;
     status: string;
   };
-  organization?: {  // ← Add this if it exists in the response
+  organization?: {
     uuid: string;
     name: string;
   };
@@ -63,33 +63,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const dbAccount = response.account;
     const dbOrganization = response.organization;
 
-    // Now these won't be undefined in your logs!
     this.logger.debug(
       `✅ Authenticated user (${dbUser.firstName} ${dbUser.lastName}) ${dbUser.email} (UUID: ${payload.userUuid}) with role: ${dbUser.roleName}`,
     );
 
     const rawRole = dbUser.roleName || payload.role;
-
-    // Remove spaces to turn "General User" into "GeneralUser" 
-    // so it matches your RolePermissionsMap keys.
     const normalizedRole = rawRole.replace(/\s+/g, '');
 
     // 3. Return the flat object your Guards and Controllers expect
     return {
-      ...dbUser, // Spreads firstName, lastName, etc.
+      ...dbUser,
       userUuid: payload.userUuid,
+      tokenId: payload.tokenId,  
       email: dbUser.email || payload.email,
-      
-      // Use the role name from the database (e.g., "SuperAdmin" or "General User")
-      role: normalizedRole, 
-      
-      // Fixes your 'Account: undefined' bug in the controller
+      role: normalizedRole,
       accountId: dbAccount?.uuid || payload.accountId,
-      
       organizationUuid: dbOrganization?.uuid || payload.organizationUuid,
-      
-      userName: `${dbUser.firstName} ${dbUser.lastName}`,       
-      accountName: dbAccount?.name || payload.accountName, 
+      userName: `${dbUser.firstName} ${dbUser.lastName}`,
+      accountName: dbAccount?.name || payload.accountName,
       accountType: dbAccount?.type || payload.accountType,
       planSlug: payload.planSlug,
     };

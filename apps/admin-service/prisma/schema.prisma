@@ -750,460 +750,370 @@ model TrustMetrics {
   @@index([date])
 }
 
-// ===================== USER INTERACTION EVENTS (For AI SmartMatch™) =====================
-// This is the raw event stream for ML training and real-time personalization
-
-model UserEvent {
-  id           String   @id @default(cuid())
-  userUuid     String?  // References User.uuid in Profile Service
-  sessionId    String?  // References Session.tokenId in Auth Service
-  
-  // ==================== CONTEXT ====================
-  platform     String   @default("MOBILE") // MOBILE, WEB, or SYSTEM
-  eventType    String   // VIEW, CLICK, SAVE, SHARE, APPLY, CONTACT, etc.
-  vertical     String   // "HOUSING", "JOBS", "SOCIAL_SUPPORT", "SERVICES"
-  
-  // Event classification
-  eventCategory String  // "VIEW", "INTERACTION", "CONVERSION", "PREFERENCE"
-  eventAction   String  // Specific action within category
-  
-  // ==================== TARGET ====================
-  targetId     String?  // externalId of Job, House, Service, or Program
-  targetType   String?  // "JOB", "HOUSING", "SERVICE", "SUPPORT"
-  targetOwnerId String? // UUID of listing owner (for trust signals)
-  
-  // Category info (denormalized for speed)
-  categorySlug String?  // Category of the target
-  subCategorySlug String?
-  
-  // ==================== ENGAGEMENT METRICS ====================
-  dwellTime    Int?     // Seconds spent on this interaction
-  swipeCount   Int?     // Number of swipes in this session/event
-  scrollDepth  Int?     // % of page scrolled (0-100)
-  photoIndices Int[]    // Which photos they viewed (order)
-  videoWatched Boolean? @default(false)
-  videoDuration Int?    // Seconds of video watched
-  
-  // ==================== SEARCH CONTEXT ====================
-  searchId     String?  // Group events from same search
-  searchQuery  String?  // What they searched for
-  searchResultsCount Int? // Number of results shown
-  searchPosition Int?   // Position of clicked item (1-based)
-  filters      Json?    // Active filters during interaction
-  sortBy       String?  // How results were sorted
-  
-  // ==================== SMARTMATCH™ CONTEXT ====================
-  recommendationId String? // ID of the recommendation if shown
-  recommendationType String? // "AI_MATCH", "POPULAR", "NEARBY", "TRENDING"
-  recommendationScore Float? // Match score if applicable
-  userAcceptedSuggestion Boolean? // Did they accept AI suggestion
-  
-  // ==================== LOCATION CONTEXT ====================
-  locationLat   Float?
-  locationLng   Float?
-  locationCity  String?
-  locationCounty String?
-  locationAccuracy Int?   // Meters
-  
-  // ==================== PRICING CONTEXT ====================
-  priceViewed   Float?   // Price shown to user
-  priceCurrency String?  @default("KES")
-  comparedToAvg Float?   // How this price compares to category avg (-0.2 = 20% below avg)
-  
-  // ==================== USER STATE ====================
-  userType      String?  // "PROVIDER", "BENEFICIARY", "BOTH"
-  userTrustScore Float?  // User's trust score at time of event
-  userVerificationLevel String? // "NONE", "BASIC", "VERIFIED"
-  
-  // Session info
-  sessionNumber Int?     // User's nth session
-  eventsInSession Int?   // Total events in this session
-  timeInSession Int?     // Seconds into session
-  
-  // ==================== DEVICE INFO ====================
-  os           String?  
-  osVersion    String?
-  deviceModel  String?  
-  deviceBrand  String?
-  browser      String?
-  browserVersion String?
-  appVersion   String?  // Mobile app version
-  screenSize   String?  // e.g., "375x812"
-  networkType  String?  // "WIFI", "4G", "5G"
-  
-  // ==================== METADATA ====================
-  metadata     Json     // Flexible catch-all for AI training
-  
-  // Referrer info
-  referrerUrl  String?  // Where they came from
-  referrerType String?  // "DIRECT", "SEARCH", "SOCIAL", "EMAIL"
-  
-  // A/B testing
-  experimentId String?
-  experimentVariant String?
-  
-  createdAt    DateTime @default(now())
-
-  // Comprehensive indexes for AI queries
-  @@index([userUuid, createdAt])
-  @@index([sessionId])
-  @@index([eventType, vertical, createdAt])
-  @@index([targetId, targetType])
-  @@index([searchId])
-  @@index([recommendationId])
-  @@index([locationCity, eventType])
-  @@index([categorySlug, eventType])
-  @@index([createdAt])
-  
-  // Compound indexes for common AI patterns
-  @@index([userUuid, eventType, targetType])
-  @@index([userUuid, vertical, createdAt])
-  @@index([targetId, eventType])
-}
 
 // ===================== SMARTMATCH™ FEATURE STORE =====================
-// This model directly answers the AI developer's 28 feature requirements
-// Pre-computed features for ML training and inference
+// Unified data store for AI/ML training across all verticals
+// Stores RAW data for AI experimentation + SIMPLE pre-computed scores for real-time features
+// AI developers get raw data, platform gets basic ranking capabilities
 
-model SmartMatchy {
+model SmartMatchyBase {
   id              String   @id @default(cuid())
   
-  // ==================== COMPOSITE IDENTIFIERS ====================
-  userUuid        String   // The user
-  listingId       String   // The listing (house, job, service, program)
-  vertical        String   // "HOUSING", "JOBS", "SOCIAL_SUPPORT", "SERVICES"
-  interactionId   String?  // Link to specific UserEvent if applicable
-  
-  // Timestamp for time-based features
+  // ==================== CORE IDENTIFIERS ====================
+  userUuid        String
+  listingId       String
+  vertical        String   // "EMPLOYMENT", "HOUSING", "SOCIAL_SUPPORT", "PROFESSIONAL_SERVICES"
   timestamp       DateTime @default(now())
-  featureSetVersion String  // Version of feature engineering pipeline
+  featureSetVersion String  // "1.0" for MVP, will increment as we add features
   
-  // ==================== USER PREFERENCES (Features 1-8) ====================
+  // ==================== RAW LOCATION DATA ====================
+  userLat         Float?
+  userLng         Float?
+  listingLat      Float?
+  listingLng      Float?
+  locationDistance Float?   // Simple Haversine formula for real-time sorting
   
-  /// Budget Features
-  userMaxBudget   Float?   // Feature 1: Maximum budget user is willing to spend
-  userMinBudget   Float?   // User's minimum budget (if specified)
-  userBudgetMidpoint Float? // Feature 2: Middle value of user's budget range
-  userBudgetFlexibility Float? // 0-1 indicating how flexible on price
+  // ==================== RAW PRICING DATA ====================
+  listingPrice    Float?
+  listingCurrency String?  @default("KES")
   
-  /// Bedroom Preferences
-  userMinBedrooms Int?     // Feature 3: Minimum number of bedrooms
-  userMaxBedrooms Int?     // Feature 4: Maximum number of bedrooms
-  userPreferredBathrooms Int? // Preferred number of bathrooms
+  // ==================== RAW SESSION DATA ====================
+  sessionDevice   String?
+  sessionPlatform String?   // "MOBILE", "WEB", "APP"
+  deviceType      String?
+  os              String?
+  browser         String?
+  isBot           Boolean?  @default(false)
   
-  /// Property Preferences
-  userPropertyType String? // Feature 5: Type of property preferred (apartment, house, etc.)
-  userPreferredPropertyTypes Json? // ["APARTMENT", "HOUSE"]
-  
-  /// Location Preferences
-  userPreferredNeighborhood String? // Feature 6: Preferred neighborhood or area
-  userPreferredLat     Float?       // Feature 7: Preferred location latitude
-  userPreferredLng     Float?       // Feature 8: Preferred location longitude
-  userPreferredRadius  Float?       // Search radius in km
-  userPreferredLocations Json?      // Array of preferred neighborhoods/cities
-  
-  /// Amenity Preferences
-  userFavoriteAmenities Json?       // Array of amenities user prefers
-  userPreferredAmenities Json?      // Weighted amenities: {"wifi": 0.9, "parking": 0.8}
-  
-  /// Listing Type Preferences
-  userPreferredListingTypes Json?   // ["RENTAL", "SALE"]
-  
-  /// User Context from Profile (Enriched by analytics)
-  userPreviousSearches Json?        // Array of recent search queries
-  userPreviousViewings Json?        // Array of recently viewed listing IDs
-  
-  // ==================== LISTING FEATURES (Features 9-18) ====================
-  
-  /// Price Features
-  listingPrice        Float?        // Feature 9: Price of the house
-  listingPriceCurrency String?       @default("KES")
-  
-  /// Property Details
-  listingBedrooms     Int?           // Feature 10: Number of bedrooms
-  listingBathrooms    Int?           // Feature 11: Number of bathrooms
-  listingPropertyType String?        // Feature 12: Type of property
-  listingSquareFootage Int?          // Square footage of property
-  listingYearBuilt    Int?           // Year property was built
-  
-  /// Location Details
-  listingNeighborhood String?        // Feature 13: Neighborhood or area
-  listingLat          Float?         // Feature 14: Latitude
-  listingLng          Float?         // Feature 15: Longitude
-  listingLatitude     Float?         // Exact latitude
-  listingLongitude    Float?         // Exact longitude
-  
-  /// Listing Metadata
-  listingAge          Int?           // Feature 16: Days since posted
-  listingPhotoCount   Int?           // Feature 17: Number of photos
-  listingVerified     Boolean?       @default(false) // Feature 18: Whether verified
-  listingStatus       String?        // "ACTIVE", "PENDING", "COMPLETED"
-  listingCategoryId   String?        // Category ID
-  listingCategorySlug String?        // Category slug
-  listingAmenities    Json?          // Array of amenities
-  listingIsFurnished  Boolean?       @default(false) // Whether furnished
-  
-  // ==================== SESSION CONTEXT (Features 19-22) ====================
-  
-  /// Referrer Information
-  sessionReferrer     String?        // Feature 19: Where user came from
-  sessionReferrerType String?        // "HOME", "SEARCH", "SIMILAR", "SAVED"
-  
-  /// Device Information - ENHANCED with all AuthClientInfoDto fields
-  sessionDevice       String?        // Feature 20: Device being used (model name)
-  sessionPlatform     String?        // "MOBILE", "WEB", "APP"
-  deviceType          String?        // "MOBILE", "TABLET", "DESKTOP", "BOT"
-  os                  String?        // Operating system name (iOS, Android, Windows)
-  osVersion           String?        // Operating system version
-  browser             String?        // Browser name (Chrome, Safari, Firefox)
-  browserVersion      String?        // Browser version
-  appVersion          String?        // App version if applicable
-  isBot               Boolean?       @default(false) // Whether the request is from a bot
-  
-  /// Search Context
-  sessionSearchId     String?        // Search session ID
-  sessionSearchQuery  String?        // Search query text
-  sessionSearchMaxBudget Float?      // Feature 21: Max budget in current search
-  sessionSearchNeighborhood String?  // Feature 22: Neighborhood selected in current search
-  sessionSearchFilters Json?         // All active filters
-  searchPosition      Int?           // Position in search results
-  
-  /// Interaction Context
-  interactionType     String?        // "CLICK", "SCROLL", "DWELL"
-  scrollDepth         Int?           // % scrolled (0-100)
-  viewDuration        Int?           // How long viewed in seconds
-  timeSpent           Int?           // Time spent in seconds
-  
-  // ==================== USER-LISTING MATCH FEATURES (Features 23-28) ====================
-  
-  /// Budget Match
-  isWithinBudget      Boolean?       // Feature 23: Whether house is within user's budget
-  priceToBudgetDiff   Float?         // Feature 24: Difference from budget midpoint (negative = under)
-  priceToBudgetRatio  Float?         // Feature 25: Price / Max Budget (0.0-1.0+)
-  priceVsCategoryAvg  Float?         // Price compared to category average
-  priceVsNeighborhoodAvg Float?      // Price compared to neighborhood average
-  
-  /// Bedroom Match
-  bedroomDiff         Int?           // Feature 26: Difference from preferred bedrooms
-  meetsBedroomRequirement Boolean?    // Whether within min/max range
-  bathroomDiff        Int?           // Difference from preferred bathrooms
-  
-  /// Location Match
-  locationDistance    Float?         // Feature 27: Distance in km between user pref and listing
-  isPreferredNeighborhood Boolean?    // Feature 28: Whether in same preferred neighborhood
-  locationMatchScore  Float?         // Composite location score
-  isExactNeighborhoodMatch Boolean?   // Whether exact neighborhood match
-  isCityMatch         Boolean?       // Whether same city
-  distanceFromPreferred Float?       // Distance from preferred location
-  
-  /// Amenity Match
-  amenityMatchScore   Float?         // How well amenities match user preferences
-  amenityMatchCount   Int?           // Number of matching amenities
-  
-  /// Property Type Match
-  propertyTypeMatch   Boolean?       // Whether property type matches preference
-  propertyTypeMatchScore Float?      // 0-1 score for property type match
+  // ==================== RAW INTERACTION DATA ====================
+  interactionType String?   // "CLICK", "SCROLL", "DWELL", "APPLY"
+  scrollDepth     Int?
+  viewDuration    Int?
+  dwellTime       Int?
   
   // ==================== TEMPORAL FEATURES ====================
+  hourOfDay       Int?
+  dayOfWeek       Int?
+  isWeekend       Boolean?
   
-  hourOfDay           Int?            // Hour when event occurred (0-23)
-  dayOfWeek           Int?            // Day of week (0-6, 0=Sunday)
-  isWeekend           Boolean?        // Whether event on weekend
-  daysSinceListingPosted Int?         // Age of listing at time of event
-  timeToViewing       Int?            // For scheduled viewings: days until viewing
+  // ==================== SIMPLE PRE-COMPUTED SCORES (For Real-time) ====================
+  // Basic calculations for instant filtering and sorting
+  // AI developers should use raw data for advanced scores
+  overallMatchScore Float?   // Simple weighted average for basic ranking
+  locationScore   Float?     // Normalized distance (1 - distance/maxRadius)
+  priceScore      Float?     // Normalized price match (1 - |price - budget|/budget)
+  recencyScore    Float?     // Normalized recency (newer = higher)
   
-  // ==================== VIEWING-SPECIFIC FEATURES ====================
+  // ==================== LABELS (For AI Training) ====================
+  userClicked     Boolean?  @default(false)
+  userSaved       Boolean?  @default(false)
+  userContacted   Boolean?  @default(false)
+  userConverted   Boolean?  @default(false)
+  engagementScore Float?     // Simple engagement calculation for baseline
   
-  /// Viewing Details (Added for SCHEDULE_VIEWING events)
-  viewingDate         DateTime?       // When the viewing is scheduled - helps with time-based analysis
-  isAdminBooking      Boolean?        @default(false) // Distinguish between user vs admin initiated
-  viewingDuration     Int?            // Expected duration in minutes - indicates commitment level
-  viewingParticipants Int?            // Number of people attending - indicates scale of interest
+  // ==================== AI METADATA ====================
+  aiEventType     String?
+  recommendationId String?
+  experimentId    String?
+  experimentVariant String?
   
-  // ==================== AI EVENT METADATA ====================
+  // ==================== VERTICAL RELATIONS ====================
+  employment      SmartMatchyEmployment?
+  housing         SmartMatchyHousing?
+  socialSupport   SmartMatchySocialSupport?
+  professional    SmartMatchyProfessional?
   
-  aiEventType         String?        // "VIEW", "SEARCH", "SAVE", "SCHEDULE_VIEWING", etc.
-  aiEventId           String?        // Reference to original event if needed
-  aiEventTimestamp    DateTime?      // When the original event occurred
+  // ==================== TIMESTAMPS ====================
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
   
-  // ==================== ADDITIONAL MATCH SCORES ====================
-  
-  // Composite scores
-  overallMatchScore   Float?         // Final ranking score
-  priceScore          Float?         // Normalized price match (0-1)
-  locationScore       Float?         // Normalized location match (0-1)
-  propertyScore       Float?         // Normalized property match (0-1)
-  recencyScore        Float?         // Normalized recency match (0-1)
-  
-  // ==================== LABELS (For Training) ====================
-  userClicked         Boolean?       @default(false) // Did user click/view
-  userSaved           Boolean?       @default(false) // Did user save
-  userContacted       Boolean?       @default(false) // Did user contact/apply
-  userConverted       Boolean?       @default(false) // Did user complete transaction
-  dwellTime           Int?           // If clicked, how long they viewed
-  
-  // Enhanced conversion labels
-  userScheduledViewing Boolean?       @default(false) // Did they schedule viewing
-  userCompletedViewing Boolean?       @default(false) // Did they complete viewing
-  viewingCompletedAt  DateTime?       // When viewing actually occurred
-  viewingFeedback     Json?           // Feedback from completed viewing
-  
-  // ==================== METADATA ====================
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  
-  // ==================== ENHANCED INDEXES ====================
-  
-  // Existing indexes
+  // ==================== INDEXES ====================
+  @@index([userUuid, listingId])
   @@index([userUuid, timestamp])
   @@index([listingId, timestamp])
   @@index([vertical, timestamp])
   @@index([overallMatchScore])
   @@index([userClicked])
-  @@index([userConverted])
-  
-  // Composite indexes for training batches
-  @@index([timestamp, vertical, userClicked])
-  @@index([vertical, isWithinBudget, userConverted])
-  
-  // NEW INDEXES for AI queries
-  @@index([aiEventType, timestamp])
-  @@index([listingPropertyType])
-  @@index([listingSquareFootage])
-  @@index([interactionType])
-  @@index([hourOfDay])
-  @@index([dayOfWeek])
   @@index([deviceType])
-  @@index([os])
-  @@index([browser])
   @@index([isBot])
-  @@index([distanceFromPreferred])
-  @@index([amenityMatchScore])
-  @@index([userScheduledViewing])
-  @@index([userCompletedViewing])
-  @@index([listingNeighborhood, userPreferredNeighborhood])
-  @@index([priceVsCategoryAvg])
-  @@index([sessionSearchId])
-  
-  // New indexes for viewing-specific features
-  @@index([viewingDate])
-  @@index([isAdminBooking])
-  @@index([viewingDuration])
+  @@index([hourOfDay])
 }
 
-// ===================== SMARTMATCH™ INSIGHTS (User Profiles) =====================
-// Pre-computed user profiles for personalization
+// ===================== EMPLOYMENT VERTICAL =====================
 
-model SmartMatchInsight {
-  id           String   @id @default(cuid())
-  userUuid     String   @unique // One insight profile per user
+model SmartMatchyEmployment {
+  id              String   @id @default(cuid())
+  baseId          String   @unique
   
-  // ==================== USER SNAPSHOT ====================
-  userType     String?  // "PROVIDER", "BENEFICIARY", "BOTH"
-  accountAge   Int?     // Days since signup
-  trustScore   Float?   // User's trust score
-  isVerified   Boolean? @default(false)
+  // ==================== RELATION ====================
+  base            SmartMatchyBase @relation(fields: [baseId], references: [id], onDelete: Cascade)
   
-  // ==================== EXPLICIT PREFERENCES ====================
-  explicitPrefs Json    // Snapshot of stated preferences from:
-                        // - HousingPreference (budget, bedrooms, neighborhood)
-                        // - JobSeekerProfile (skills, job types)
-                        // - UserProfile
+  // ==================== LISTING FEATURES (Job Post) ====================
+  jobType         String?  // "FORMAL", "INFORMAL", "GIG", "INTERNSHIP"
+  jobSalaryMin    Float?
+  jobSalaryMax    Float?
+  jobSalaryPeriod String?  // "MONTHLY", "WEEKLY", "DAILY", "HOURLY"
+  jobSkillsReq    Json?
+  jobExperienceReq String?
+  jobWorkMode     String?  // "REMOTE", "HYBRID", "ONSITE"
+  jobEducationReq String?
+  jobUrgency      String?
+  jobIsFormal     Boolean? @default(false)
+  jobIsInformal   Boolean? @default(false)
   
-  explicitPrefsUpdatedAt DateTime?
+  // ==================== SIMPLE PRE-COMPUTED MATCH SCORES ====================
+  salaryMatchRatio Float?   // jobSalary / userExpectedSalary (simple ratio)
+  skillsMatchScore Float?   // % of required skills user has
+  experienceMatch Boolean?  // User experience >= job requirement
+  educationMatch  Boolean?  // User education >= job requirement
   
-  // ==================== IMPLICIT SIGNALS ====================
-  implicitPrefs Json    // Derived preferences from behavior:
-                        // {
-                        //   "preferredNeighborhoods": [
-                        //     {"name": "Kilimani", "weight": 0.85},
-                        //     {"name": "Lavington", "weight": 0.72}
-                        //   ],
-                        //   "priceRange": {
-                        //     "min": 15000, 
-                        //     "max": 45000,
-                        //     "preferred": 25000,
-                        //     "flexibility": 0.3
-                        //   },
-                        //   "preferredBedrooms": 2,
-                        //   "bedroomFlexibility": 1
-                        // }
+  // ==================== LABELS ====================
+  userApplied     Boolean? @default(false)
   
-  // ==================== ENGAGEMENT PATTERNS ====================
-  avgSessionDuration Float? // Average time per session
-  totalSessions     Int     @default(0)
-  totalEvents       Int     @default(0)
-  
-  // Time patterns
-  peakActivityHours  Int[]  // Hours when most active (0-23)
-  peakActivityDays   Int[]  // Days of week (0-6, 0=Sunday)
-  
-  // Interaction patterns
-  avgSwipeRate      Float? // Swipes per minute
-  photoPreference   Float? // % of listings where they view photos
-  mapUsageRate      Float? // % of sessions with map
-  
-  // ==================== CATEGORY AFFINITIES ====================
-  categoryAffinities Json  // Weighted preferences by category:
-                          // {
-                          //   "apartments": 0.95,
-                          //   "plumbing": 0.45,
-                          //   "food-aid": 0.20
-                          // }
-  
-  verticalAffinities Json // By vertical: {"HOUSING": 0.8, "JOBS": 0.3}
-  
-  // ==================== CONVERSION PREDICTORS ====================
-  conversionProbability Json // ML model output:
-                            // {
-                            //   "application": 0.45,
-                            //   "contact": 0.67,
-                            //   "booking": 0.23
-                            // }
-  
-  // ==================== RECOMMENDATION HISTORY ====================
-  recommendationsShown Int @default(0)
-  recommendationsClicked Int @default(0)
-  recommendationsConverted Int @default(0)
-  ctrByType         Json?   // Click-through rate by recommendation type
-  
-  // ==================== FEEDBACK LOOP ====================
-  positiveFeedback  Json?   // Things user liked (saved, contacted)
-  negativeFeedback  Json?   // Things user dismissed/ignored
-  feedbackUpdatedAt DateTime?
-  
-  // ==================== MATCH SCORES (Cached) ====================
-  lastComputed  DateTime @updatedAt
-  matchVersion  String   // Version of matching algorithm
-  confidenceScore Float? // Confidence in this user profile (0-1)
-  
-  // Pre-computed matches (for performance)
-  topHousingMatches   Json?   // Top 10 housing recommendations
-  
-  // ==================== USER STATS ====================
-  totalInteractions Int @default(0)
-  uniqueListingsViewed Int @default(0)
-  savedListingsCount Int @default(0)
-  applicationCount Int @default(0)
-  contactCount    Int @default(0)
-  
-  // ==================== LIFECYCLE STAGE ====================
-  userStage       String? // "NEW", "ACTIVE", "ENGAGED", "DORMANT", "CHURNED"
-  stageLastUpdated DateTime?
-  
-  // Churn risk
-  churnRisk       Float?  // 0-1 probability of churn
-  
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  @@index([baseId])
+  @@index([jobType])
+  @@index([skillsMatchScore])
+  @@index([userApplied])
+}
 
-  // Comprehensive indexes
+// ===================== HOUSING VERTICAL =====================
+
+model SmartMatchyHousing {
+  id              String   @id @default(cuid())
+  baseId          String   @unique
+  
+  // ==================== RELATION ====================
+  base            SmartMatchyBase @relation(fields: [baseId], references: [id], onDelete: Cascade)
+  
+  // ==================== LISTING FEATURES ====================
+  housingType     String?
+  housingBedrooms Int?
+  housingBathrooms Int?
+  housingPropertyType String?
+  housingNeighborhood String?
+  housingIsFurnished Boolean? @default(false)
+  housingAmenities Json?
+  housingMinimumStay String?
+  housingSquareFootage Int?
+  housingYearBuilt Int?
+  housingPetPolicy String?
+  
+  // ==================== LISTING OWNER ====================
+  creatorId       String?   // ID of the user who created/owns the listing
+  
+  // ==================== SIMPLE PRE-COMPUTED MATCH SCORES ====================
+  priceToBudgetRatio Float?
+  isWithinBudget  Boolean?
+  bedroomsMatch   Boolean?
+  bathroomsMatch  Boolean?
+  propertyTypeMatch Boolean?
+  furnishedMatch  Boolean?
+  
+  // ==================== VIEWER & SCHEDULER TRACKING ====================
+  viewerId        String?
+  lastViewedAt    DateTime?
+  schedulerId     String?
+  scheduledAt     DateTime?
+  scheduledFor    DateTime?
+  viewingStatus   String?
+  
+  // ==================== LABELS ====================
+  userScheduledViewing Boolean? @default(false)
+  userCompletedViewing Boolean? @default(false)
+  
+  @@index([baseId])
+  @@index([housingType])
+  @@index([housingNeighborhood])
+  @@index([isWithinBudget])
+  @@index([viewerId])
+  @@index([schedulerId])
+  @@index([viewingStatus])
+  @@index([creatorId])  // ← NEW INDEX
+}
+
+// ===================== USER HOUSING PREFERENCES =====================
+// Separate table for user preferences - one record per user
+// Not tied to any listing interaction
+
+model UserHousingPreferences {
+  id              String   @id @default(cuid())
+  userUuid        String   @unique
+  
+  // ==================== BUDGET ====================
+  minBudget       Float?
+  maxBudget       Float?
+  budgetMidpoint  Float?
+  
+  // ==================== BEDROOMS ====================
+  minBedrooms     Int?
+  
+  // ==================== LOCATION ====================
+  preferredNeighborhood String?
+  preferredLocations     Json?    // Array of preferred locations
+  preferredNeighborhoods Json?    // Array of preferred neighborhoods
+  preferredLat    Float?
+  preferredLng    Float?
+  searchRadiusKm  Float?
+  
+  // ==================== PROPERTY ====================
+  preferredPropertyType String?
+  preferredPropertyTypes Json?    // Array of preferred property types
+  preferredHousingType  String?   // "RENTAL", "SALE", "SHORT_STAY"
+  
+  // ==================== AMENITIES ====================
+  prefersFurnished Boolean?
+  hasPets         Boolean?
+  petDetails      String?
+  
+  // ==================== MOVE-IN ====================
+  preferredMoveInDate DateTime?
+  preferredLeaseDuration String?
+  
+  // ==================== TIMESTAMPS ====================
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
   @@index([userUuid])
-  @@index([lastComputed])
-  @@index([userStage])
-  @@index([churnRisk])
-  @@index([userType])
 }
+
+// ===================== USER EMPLOYMENT PREFERENCES =====================
+
+model UserEmploymentPreferences {
+  id              String   @id @default(cuid())
+  userUuid        String   @unique
+  
+  // ==================== JOB PREFERENCES ====================
+  preferredJobType String?  // "FULL_TIME", "PART_TIME", "GIG", "CONTRACT"
+  minSalary       Float?
+  maxSalary       Float?
+  skills          Json?
+  experienceLevel String?   // "ENTRY", "MID", "SENIOR"
+  preferredWorkMode String? // "REMOTE", "HYBRID", "ONSITE"
+  educationLevel  String?
+  isFormal        Boolean?  @default(false)
+  isInformal      Boolean?  @default(false)
+  
+  // ==================== TIMESTAMPS ====================
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userUuid])
+}
+
+// ===================== SOCIAL SUPPORT VERTICAL =====================
+
+model SmartMatchySocialSupport {
+  id              String   @id @default(cuid())
+  baseId          String   @unique
+  
+  // ==================== RELATION ====================
+  base            SmartMatchyBase @relation(fields: [baseId], references: [id], onDelete: Cascade)
+  
+  // ==================== LISTING FEATURES (Support Program) ====================
+  supportType     String?  // "FOOD", "CASH", "HEALTH", "EDUCATION", "SHELTER", "COUNSELING"
+  supportProvider String?  // "NGO", "GOVERNMENT", "CHURCH", "CORPORATE", "INDIVIDUAL"
+  supportAmount   Float?
+  supportItems    Json?
+  supportEligibility Json?
+  supportCapacity Int?
+  supportIsUrgent Boolean? @default(false)
+  supportLocation String?
+  
+  // ==================== SIMPLE PRE-COMPUTED MATCH SCORES ====================
+  needMatchScore  Float?   // % of user needs that program addresses
+  urgencyMatch    Boolean? // User urgent needs match urgent program
+  eligibilityMatch Boolean? // User meets eligibility criteria
+  locationMatch   Boolean? // User in service area
+  
+  // ==================== LABELS ====================
+  userApplied     Boolean? @default(false)
+  userReceived    Boolean? @default(false)
+  
+  @@index([baseId])
+  @@index([supportType])
+  @@index([supportIsUrgent])
+  @@index([userApplied])
+}
+
+// ===================== USER SOCIAL SUPPORT PREFERENCES =====================
+
+model UserSocialSupportPreferences {
+  id              String   @id @default(cuid())
+  userUuid        String   @unique
+  
+  // ==================== NEEDS ====================
+  needs           Json?    // ["food", "shelter", "medical", "cash", "education"]
+  urgentNeeds     Json?
+  
+  // ==================== DEMOGRAPHICS ====================
+  familySize      Int?
+  incomeLevel     String?  // "NO_INCOME", "BELOW_POVERTY", "LOW", "MIDDLE"
+  vulnerability   Json?    // ["disabled", "elderly", "single_parent", "refugee"]
+  location        String?
+  
+  // ==================== TIMESTAMPS ====================
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userUuid])
+}
+
+// ===================== PROFESSIONAL SERVICES VERTICAL =====================
+
+model SmartMatchyProfessional {
+  id              String   @id @default(cuid())
+  baseId          String   @unique
+  
+  // ==================== RELATION ====================
+  base            SmartMatchyBase @relation(fields: [baseId], references: [id], onDelete: Cascade)
+  
+  // ==================== LISTING FEATURES (Professional) ====================
+  serviceType     String?  // "ELECTRICIAN", "PLUMBER", "TRAINER", "COUNSELOR", "MOVER"
+  serviceHourlyRate Float?
+  serviceFixedPrice Float?
+  serviceAreas    Json?
+  serviceExperience Int?
+  serviceVerified Boolean? @default(false)
+  serviceRating   Float?
+  serviceAvailability Json?
+  
+  // ==================== SIMPLE PRE-COMPUTED MATCH SCORES ====================
+  priceMatchRatio Float?   // userBudget / serviceRate
+  locationMatch   Boolean? // User location in service area
+  experienceMatch Boolean? // Service experience >= user expectation
+  availabilityMatch Boolean? // Available when user needs
+  
+  // ==================== LABELS ====================
+  userBooked      Boolean? @default(false)
+  userCompleted   Boolean? @default(false)
+  userRating      Int?
+  userReview      String?
+  
+  @@index([baseId])
+  @@index([serviceType])
+  @@index([userBooked])
+  @@index([serviceRating])
+}
+
+// ===================== USER PROFESSIONAL SERVICES PREFERENCES =====================
+
+model UserProfessionalServicesPreferences {
+  id              String   @id @default(cuid())
+  userUuid        String   @unique
+  
+  // ==================== SERVICE PREFERENCES ====================
+  preferredServices Json?   // ["electrician", "plumber", "trainer", "counselor", "mover"]
+  budget          Float?
+  location        String?
+  urgency         String?  // "IMMEDIATE", "URGENT", "NORMAL", "FUTURE"
+  
+  // ==================== TIMESTAMPS ====================
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userUuid])
+}
+
 
 // ===================== VERTICAL-SPECIFIC METRICS =====================
 // These models are kept but deduplicated - they reference common metrics

@@ -238,13 +238,13 @@ export class SearchContextDto {
  * Complete context for a listing view event
  */
 export class ListingViewContextDto {
-  @ApiPropertyOptional({
-    description: 'User UUID (if authenticated)',
+  @ApiProperty({
+    description: 'UUID of the authenticated user viewing the listing',
     example: 'user_123'
   })
-  @IsOptional()
   @IsString()
-  userId?: string;
+  @IsNotEmpty()
+  viewingUserId!: string;
 
   @ApiProperty({
     description: 'Session identifier from JWT or generated',
@@ -1376,7 +1376,15 @@ export abstract class BaseViewingDto {
   notes?: string;
 }
 
-export class ScheduleViewingDto extends BaseViewingDto {}
+export class ScheduleViewingDto extends BaseViewingDto {
+  @ApiPropertyOptional({ 
+    description: 'Optional: ID of the user who will attend the viewing (if different from caller)',
+    example: 'user_789abc'
+  })
+  @IsOptional()
+  @IsString()
+  attendingUserId?: string;
+}
 
 export class AdminScheduleViewingDto extends BaseViewingDto {
   @ApiProperty({ 
@@ -1406,29 +1414,29 @@ export class AdminScheduleViewingDto extends BaseViewingDto {
 }
 
 export class BaseViewingGrpcRequestDto extends BaseViewingDto {
-  @ApiProperty({ 
-    description: 'ID of the user making the request (from JWT)',
+  @ApiPropertyOptional({ 
+    description: 'ID of the user making the request (from JWT) - optional, will be extracted from authenticated context if not provided',
     example: 'user_123abc'
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  callerId!: string;
+  callerId?: string;  // ← Made optional
 
-  @ApiProperty({ 
-    description: 'Email of the user making the request (from JWT)',
+  @ApiPropertyOptional({ 
+    description: 'Email of the user making the request (from JWT) - optional, will be extracted from authenticated context if not provided',
     example: 'user@example.com'
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  callerEmail!: string;
+  callerEmail?: string;  // ← Made optional
 
-  @ApiProperty({ 
-    description: 'Name of the user making the request (from JWT)',
+  @ApiPropertyOptional({ 
+    description: 'Name of the user making the request (from JWT) - optional, will be extracted from authenticated context if not provided',
     example: 'John Doe'
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  callerName!: string;
+  callerName?: string;  // ← Made optional
 
   @ApiProperty({ 
     description: 'ID of the property to view',
@@ -1438,13 +1446,13 @@ export class BaseViewingGrpcRequestDto extends BaseViewingDto {
   @IsNotEmpty()
   houseId!: string;
 
-  @ApiProperty({ 
-    description: 'Role of the user making the request (from JWT)',
+  @ApiPropertyOptional({ 
+    description: 'Role of the user making the request (from JWT) - optional, will be extracted from authenticated context if not provided',
     example: 'GeneralUser'
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  userRole!: string;
+  userRole?: string;  // ← Made optional
 
   @ApiPropertyOptional({
     description: 'Context information for analytics tracking',
@@ -1458,12 +1466,12 @@ export class BaseViewingGrpcRequestDto extends BaseViewingDto {
 
 export class ScheduleViewingGrpcRequestDto extends BaseViewingGrpcRequestDto {
   @ApiPropertyOptional({ 
-    description: 'Optional: ID of a different person who will attend the viewing',
+    description: 'Optional: ID of the user who will attend the viewing (if different from caller)',
     example: 'user_789abc'
   })
   @IsOptional()
   @IsString()
-  targetViewerId?: string;
+  attendingUserId?: string;
 }
 
 export class ScheduleAdminViewingGrpcRequestDto extends BaseViewingGrpcRequestDto {

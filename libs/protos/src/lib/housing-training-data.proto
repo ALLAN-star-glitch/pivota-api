@@ -35,19 +35,19 @@ message TrainingDataParams {
   optional double min_overall_match_score = 10;
   repeated string listing_types = 11;
   repeated string property_types = 12;
-  string account_uuid = 13; // Required: Account UUID from JWT
+  string account_uuid = 13;
 }
 
 message StatsParams {
   optional string start_date = 1;
   optional string end_date = 2;
-  string account_uuid = 3; // Required: Account UUID from JWT
+  string account_uuid = 3;
 }
 
 message SampleParams {
   optional int32 size = 1;
   optional bool include_labels = 2;
-  string account_uuid = 3; // Required: Account UUID from JWT
+  string account_uuid = 3;
 }
 
 message ExportRequest {
@@ -110,14 +110,14 @@ message DateRange {
 
 message FeatureSet {
   repeated string names = 1;
-  map<string, string> types = 2; // numeric, categorical, boolean, datetime
+  map<string, string> types = 2;
   map<string, string> description = 3;
   repeated google.protobuf.Struct data = 4;
 }
 
 message LabelSet {
   repeated string names = 1;
-  map<string, string> types = 2; // binary, continuous, multiclass
+  map<string, string> types = 2;
   map<string, string> description = 3;
   repeated google.protobuf.Struct data = 4;
 }
@@ -146,6 +146,8 @@ message DatasetStats {
   map<string, int32> temporal_distribution = 10;
   map<int32, int32> hour_distribution = 11;
   map<int32, int32> day_distribution = 12;
+  // NEW: Tracking statistics
+  optional TrackingStats tracking_stats = 13;
 }
 
 message LabelDistribution {
@@ -166,8 +168,20 @@ message PriceRange {
 message MatchScores {
   double avg_overall_match_score = 1;
   double avg_price_to_budget_ratio = 2;
-  double avg_amenity_match_score = 3;
-  double avg_location_distance = 4;
+  double avg_location_distance = 3;
+}
+
+// ==================== NEW: TRACKING STATS ====================
+message TrackingStats {
+  int32 total_views = 1;
+  int32 total_scheduled_viewings = 2;
+  int32 total_completed_viewings = 3;
+  int32 unique_viewers = 4;
+  int32 unique_schedulers = 5;
+  int32 unique_attending_users = 6;
+  double avg_view_duration = 7;
+  double avg_scroll_depth = 8;
+  map<string, int32> viewing_status_distribution = 9;  // SCHEDULED, COMPLETED, CANCELLED, NO_SHOW
 }
 
 // ==================== EXPORT STRUCTURES ====================

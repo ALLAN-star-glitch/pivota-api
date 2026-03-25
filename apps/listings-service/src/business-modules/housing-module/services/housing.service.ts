@@ -390,7 +390,38 @@ async getHouseListingById(
 ): Promise<HouseListingWithRelations | null> {
   return this.prisma.houseListing.findUnique({
     where: { id },
-    include: { images: true, category: true },
+    select: {
+      id: true,
+      externalId: true,
+      creatorId: true,        
+      creatorName: true,
+      accountId: true,
+      accountName: true,
+      title: true,
+      description: true,
+      listingType: true,
+      price: true,
+      currency: true,
+      bedrooms: true,
+      bathrooms: true,
+      amenities: true,
+      isFurnished: true,
+      locationCity: true,
+      locationNeighborhood: true,
+      address: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      latitude: true,
+      longitude: true,
+      categoryId: true,
+      squareFootage: true,
+      yearBuilt: true,
+      propertyType: true,
+      ownerEmail: true,
+      images: true,
+      category: true,
+    },
   }) as unknown as HouseListingWithRelations | null;
 }
 
@@ -403,18 +434,18 @@ async getHouseListingWithTracking(
     if (!listing) return BaseResponseDto.fail('Listing not found', 'NOT_FOUND');
 
     // Track view using the tracking service (fire and forget)
-    if (dto.context?.userId) {
+    if (dto.context?.viewingUserId) {
       // Use setTimeout to make it truly non-blocking
       setTimeout(() => {
         try {
           this.trackingService.trackView(
-            dto.context.userId,
-            listing.id,
+            dto.context.viewingUserId,  // viewingUserId - who is viewing
+            listing.id,                  // listingId
             {
               ...listing,
-              // Ensure propertyType is properly typed
               propertyType: listing.propertyType as 'APARTMENT' | 'HOUSE' | 'CONDO' | 'TOWNHOUSE' | 'VILLA' | 'STUDIO' | undefined,
-              images: listing.images
+              images: listing.images,
+              creatorId: listing.creatorId  // listing owner ID
             },
             dto.context
           );
@@ -485,11 +516,11 @@ async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<House
     });
 
     // Track search event (fire and forget)
-    if (dto.context?.userId) {
+    if (dto.context?.viewingUserId) {
       setTimeout(() => {
         try {
           this.trackingService.trackSearch(
-            dto.context.userId,
+            dto.context.viewingUserId,
             dto,
             listings.length,
             dto.context
@@ -602,6 +633,30 @@ async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<House
 async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseDto<HouseViewingResponseDto>> {
   const MAX_RETRIES = 3;
   
+  // Extract user ID from context (which comes from the authenticated user)
+  const userId = dto.context?.viewingUserId;
+  
+  // Validate required fields
+  if (!userId) {
+    this.logger.error('❌ No user ID found in context');
+    return BaseResponseDto.fail('Authentication required. User ID is missing.', 'UNAUTHORIZED');
+  }
+  
+  if (!dto.houseId) {
+    this.logger.error('❌ houseId is missing from request');
+    return BaseResponseDto.fail('House ID is required.', 'BAD_REQUEST');
+  }
+  
+  if (!dto.viewingDate) {
+    this.logger.error('❌ viewingDate is missing from request');
+    return BaseResponseDto.fail('Viewing date is required.', 'BAD_REQUEST');
+  }
+  
+  // Determine who will attend the viewing
+  const attendingUserId = dto.attendingUserId || userId;
+  
+  this.logger.log(`📅 ScheduleViewing - User: ${userId}, House: ${dto.houseId}, Attending: ${attendingUserId}`);
+  
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       // Check if house exists with all required details
@@ -616,7 +671,6 @@ async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseD
           creatorId: true,
           locationCity: true,
           ownerEmail: true,
-          // Get more house details for tracking
           price: true,
           bedrooms: true,
           bathrooms: true,
@@ -631,12 +685,12 @@ async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseD
           squareFootage: true,
           yearBuilt: true,
           propertyType: true,
-          images: {  // Get the main image with isMain field
+          images: {
             where: { isMain: true },
             take: 1,
             select: { 
               url: true,
-              isMain: true // Add isMain to match the expected type
+              isMain: true
             }
           }
         }
@@ -647,8 +701,8 @@ async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseD
       }
 
       // PREVENT SELF-VIEWING: Check if user is trying to view their own property
-      if (house.creatorId === dto.callerId || house.accountId === dto.callerId) {
-        this.logger.warn(`🚫 User ${dto.callerId} attempted to schedule viewing for their own property ${dto.houseId}`);
+      if (house.creatorId === userId || house.accountId === userId) {
+        this.logger.warn(`🚫 User ${userId} attempted to schedule viewing for their own property ${dto.houseId}`);
         return BaseResponseDto.fail(
           'You cannot schedule a viewing for your own property',
           'FORBIDDEN'
@@ -693,16 +747,19 @@ async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseD
         );
       }
 
+      // Log the create data for debugging
+      this.logger.debug(`Creating viewing with: houseId=${dto.houseId}, viewerId=${attendingUserId}, bookedById=${userId}`);
+
       // Create viewing in transaction
       const result = await this.prisma.$transaction(async (tx) => {
         const viewing = await tx.houseViewing.create({
           data: {
             houseId: dto.houseId,
-            viewerId: dto.targetViewerId || dto.callerId,
+            viewerId: attendingUserId,
             viewingDate: viewingDate,
             status: 'SCHEDULED',
             notes: dto.notes || '',
-            bookedById: dto.callerId,
+            bookedById: userId,  // ← Use userId from context
           },
         });
         return viewing;
@@ -711,47 +768,49 @@ async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseD
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable
       });
 
+      // TRACK VIEWING SCHEDULED EVENT (fire and forget)
+      setTimeout(() => {
+        try {
+          const formattedImages = house.images?.map(img => ({
+            url: img.url,
+            isMain: img.isMain
+          }));
 
-     // TRACK VIEWING SCHEDULED EVENT (fire and forget)
-    setTimeout(() => {
-      try {
-        // Format images to match HouseListingData interface
-        const formattedImages = house.images?.map(img => ({
-          url: img.url,
-          isMain: img.isMain
-        }));
-
-        this.trackingService.trackViewingScheduled(
-          dto.callerId,
-          house.id,
-          result.id,
-          viewingDate,
-          {
-            id: house.id, // Add the missing id property
-            price: house.price,
-            bedrooms: house.bedrooms,
-            bathrooms: house.bathrooms,
-            locationCity: house.locationCity,
-            locationNeighborhood: house.locationNeighborhood,
-            listingType: house.listingType,
-            amenities: house.amenities || [],
-            isFurnished: house.isFurnished || false,
-            categoryId: house.categoryId,
-            category: house.category ? { slug: house.category.slug } : null,
-            squareFootage: house.squareFootage,
-            yearBuilt: house.yearBuilt,
-            propertyType: house.propertyType as 'APARTMENT' | 'HOUSE' | 'CONDO' | 'TOWNHOUSE' | 'VILLA' | 'STUDIO' | undefined,
-            images: formattedImages
-          },
-         dto.context
-        );
-      } catch (error) {
-        this.logger.error(`Viewing tracking failed: ${error.message}`);
-      }
-    }, 0);
+          this.trackingService.trackViewingScheduled(
+            attendingUserId,
+            house.id,
+            result.id,
+            viewingDate,
+            {
+              id: house.id,
+              price: house.price,
+              bedrooms: house.bedrooms,
+              bathrooms: house.bathrooms,
+              locationCity: house.locationCity,
+              locationNeighborhood: house.locationNeighborhood,
+              listingType: house.listingType,
+              amenities: house.amenities || [],
+              isFurnished: house.isFurnished || false,
+              categoryId: house.categoryId,
+              category: house.category ? { slug: house.category.slug } : null,
+              squareFootage: house.squareFootage,
+              yearBuilt: house.yearBuilt,
+              propertyType: house.propertyType as 'APARTMENT' | 'HOUSE' | 'CONDO' | 'TOWNHOUSE' | 'VILLA' | 'STUDIO' | undefined,
+              images: formattedImages,
+              creatorId: house.creatorId
+            },
+            dto.context,
+            false,
+            undefined,
+            userId  // schedulerId - who made the booking
+          );
+        } catch (error) {
+          this.logger.error(`Viewing tracking failed: ${error.message}`);
+        }
+      }, 0);
 
       // Send notifications (user flow)
-      await this.sendUserViewingNotifications(result, house, dto);
+      await this.sendUserViewingNotifications(result, house, dto, attendingUserId);
       
       this.logger.log(`✅ Viewing scheduled successfully: ${result.id}`);
       
@@ -770,6 +829,16 @@ async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseD
             'CONFLICT'
           );
         }
+        if (error.code === 'P2003') {
+          this.logger.error(`Foreign key constraint failed: ${error.message}`);
+          return BaseResponseDto.fail('Invalid house ID or user ID', 'BAD_REQUEST');
+        }
+      }
+
+      // Log the full error for debugging
+      this.logger.error(`ScheduleViewing error (attempt ${attempt}): ${error.message}`);
+      if (error.stack) {
+        this.logger.debug(error.stack);
       }
 
       // Retry on transient errors
@@ -938,12 +1007,19 @@ async scheduleAdminViewing(dto: ScheduleAdminViewingGrpcRequestDto): Promise<Bas
  */
 private async sendUserViewingNotifications(
   viewing: HouseViewing,
-  house: HouseWithFullInfo & { images?: { url: string }[] }, // Update type
-  dto: ScheduleViewingGrpcRequestDto
+  house: HouseWithFullInfo & { images?: { url: string }[] },
+  dto: ScheduleViewingGrpcRequestDto,
+  attendingUserId: string  // ← ADD THIS PARAMETER
 ): Promise<void> {
-  const viewerId = dto.callerId;
-  const viewerEmail = dto.callerEmail;
-  const viewerName = dto.callerName;
+  // Determine who will attend and who booked
+  const attendingUserIdValue = attendingUserId;
+  const attendingUserEmail = attendingUserId === dto.callerId ? dto.callerEmail : undefined;
+  const attendingUserName = attendingUserId === dto.callerId ? dto.callerName : undefined;
+  
+  const bookingUserId = dto.callerId;
+  const bookingUserEmail = dto.callerEmail;
+  const bookingUserName = dto.callerName;
+  
   const viewingDateStr = viewing.viewingDate.toLocaleString();
   
   // Get the main image URL
@@ -954,12 +1030,12 @@ private async sendUserViewingNotifications(
     viewingId: viewing.id,
     houseId: viewing.houseId,
     houseTitle: house.title,
-    viewerId: viewerId,
-    viewerEmail: viewerEmail,
-    viewerName: viewerName,
-    bookedById: dto.callerId,
-    bookedByEmail: dto.callerEmail,
-    bookedByName: dto.callerName,
+    attendingUserId: attendingUserIdValue,
+    attendingUserEmail: attendingUserEmail,
+    attendingUserName: attendingUserName,
+    bookedById: bookingUserId,
+    bookedByEmail: bookingUserEmail,
+    bookedByName: bookingUserName,
     viewingDate: viewing.viewingDate.toISOString(),
     location: house.locationCity,
     notes: viewing.notes || undefined,
@@ -968,12 +1044,12 @@ private async sendUserViewingNotifications(
     isAdminBooking: false
   });
 
-  // Email to viewer
-  const viewerEmailData: NotificationEmailData = {
+  // Email to attending user (the person who will attend)
+  const attendingUserEmailData: NotificationEmailData = {
     type: 'VIEWING_SCHEDULED',
-    recipientId: viewerId,
-    recipientEmail: viewerEmail,
-    recipientName: viewerName,
+    recipientId: attendingUserIdValue,
+    recipientEmail: attendingUserEmail || bookingUserEmail,
+    recipientName: attendingUserName || bookingUserName,
     template: 'viewing-scheduled-viewer',
     data: {
       houseTitle: house.title,
@@ -981,10 +1057,10 @@ private async sendUserViewingNotifications(
       viewingDate: viewingDateStr,
       location: house.locationCity,
       notes: viewing.notes || undefined,
-      bookedBy: 'You'
+      bookedBy: attendingUserId === bookingUserId ? 'You' : bookingUserName
     }
   };
-  this.notificationBus.emit('notification.email', viewerEmailData);
+  this.notificationBus.emit('notification.email', attendingUserEmailData);
 
   // Email to property owner
   if (house.accountId && house.ownerEmail) {
@@ -1000,9 +1076,9 @@ private async sendUserViewingNotifications(
         viewingDate: viewingDateStr,
         location: house.locationCity,
         notes: viewing.notes || undefined,
-        viewerName: viewerName,
-        viewerEmail: viewerEmail,
-        bookedById: dto.callerId,
+        viewerName: attendingUserName || bookingUserName,
+        viewerEmail: attendingUserEmail || bookingUserEmail,
+        bookedById: bookingUserId,
         isAdminBooking: false
       }
     };
@@ -1015,10 +1091,10 @@ private async sendUserViewingNotifications(
     eventType: 'viewing_scheduled',
     viewingId: viewing.id,
     houseId: viewing.houseId,
-    userId: viewerId,
-    userEmail: viewerEmail,
-    bookedById: dto.callerId,
-    bookedByEmail: dto.callerEmail,
+    attendingUserId: attendingUserIdValue,
+    attendingUserEmail: attendingUserEmail || bookingUserEmail,
+    bookedById: bookingUserId,
+    bookedByEmail: bookingUserEmail,
     userRole: dto.userRole,
     isAdminBooking: false,
     timestamp: new Date().toISOString()

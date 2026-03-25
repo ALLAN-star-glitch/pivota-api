@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // housing-training-data.grpc.controller.ts
 import { Controller, Logger } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
@@ -7,8 +8,9 @@ import {
   DatasetStatsResponseDto,
   ExportDataDto,
 } from '@pivota-api/dtos';
-import { HousingTrainingDataService } from '../services/housing-training-data.service';
+
 import { TrainingDataParams } from '@pivota-api/interfaces';
+import { HousingTrainingDataService } from '../services/housing-training-data.service';
 
 @Controller('housing-training-data')
 export class HousingTrainingDataController {

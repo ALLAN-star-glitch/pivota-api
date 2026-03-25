@@ -723,26 +723,25 @@ async viewHouseListing(
   @Query() query: GetListingQueryDto,
 ): Promise<BaseResponseDto<HouseListingResponseDto>> {
   
+  // Use tokenId from JWT for session tracking
   const sessionId = req.user?.tokenId;
   
   // Log rich device info for debugging
   this.logger.debug(`📱 Device: ${clientInfo.device} (${clientInfo.deviceType})`);
   this.logger.debug(`💻 OS: ${clientInfo.os} ${clientInfo.osVersion || ''}`);
   this.logger.debug(`🌐 Browser: ${clientInfo.browser} ${clientInfo.browserVersion || ''}`);
-  this.logger.debug(`📊 Classification: ${[
-    clientInfo.isBot ? 'Bot' : ''
-  ].filter(Boolean).join(', ') || 'Unknown'}`);
+  this.logger.debug(`📊 Classification: ${clientInfo.isBot ? 'Bot' : 'User'}`);
   
-  this.logger.debug(`📱 Listing view - User: ${req.user?.userUuid || 'anonymous'}, Listing: ${id}`);
+  this.logger.debug(`📱 Listing view - User: ${req.user?.userUuid}, Listing: ${id}`);
 
   const context = new ListingViewContextDto();
   
-  // Set user and session info
-  context.userId = req.user?.userUuid;
-  context.sessionId = sessionId || this.generateAnonymousId(clientInfo);
+  // Set user and session info from JWT
+  context.viewingUserId = req.user?.userUuid;
+  context.sessionId = sessionId;  // Use tokenId from JWT (no fallback needed for authenticated users)
   
-  // Set client/device info - now using AuthClientInfoDto directly
-  context.client = clientInfo; // No need to create a new DTO, just assign directly
+  // Set client/device info
+  context.client = clientInfo;
   
   // Set platform and referrer
   context.platform = (headers['x-platform'] as 'WEB' | 'MOBILE' | 'API' | 'CLI') || 
@@ -1263,34 +1262,57 @@ async scheduleViewing(
   @Param('id', ParseCuidPipe) listingId: string,
   @Body() body: ScheduleViewingDto,
   @Req() req: JwtRequest,
-  @ClientInfo() clientInfo: AuthClientInfoDto, // Add this
+  @ClientInfo() clientInfo: AuthClientInfoDto,
   @Headers('x-platform') platform?: string,
-  @Headers('x-session-id') sessionId?: string,
   @Headers('referer') referer?: string,
 ): Promise<BaseResponseDto<HouseViewingResponseDto>> {
-  this.logger.log(`📅 User ${req.user.userUuid} scheduling viewing for listing ${listingId}`);
   
-  // Log device info for debugging
+  // Check if user is authenticated
+  if (!req.user) {
+    this.logger.error('❌ No user object found in request');
+    throw BaseResponseDto.fail('Unauthorized. Please login.', 'UNAUTHORIZED');
+  }
+  
+  // Extract user info from req.user (populated by JwtStrategy)
+  const userId = req.user.userUuid;
+  const sessionId = req.user.tokenId;
+  const userEmail = req.user.email;
+  const userName = req.user.userName;
+  const userRole = req.user.role;
+  
+  // Validate required fields
+  if (!userId) {
+    this.logger.error(`❌ No userUuid found in req.user. Available fields: ${Object.keys(req.user).join(', ')}`);
+    throw BaseResponseDto.fail('User identification missing.', 'UNAUTHORIZED');
+  }
+  
+  if (!sessionId) {
+    this.logger.warn(`⚠️ No tokenId found for user ${userId}, using generated session ID`);
+  }
+  
+  this.logger.log(`📅 User ${userId} scheduling viewing for listing ${listingId}`);
   this.logger.debug(`📱 Scheduling from Device: ${clientInfo.device} (${clientInfo.deviceType})`);
 
-  // Build context object for tracking with full client info
+  // Build context object for tracking
   const context = new ListingViewContextDto();
-  context.userId = req.user.userUuid;
+  context.viewingUserId = userId;
   context.sessionId = sessionId || this.generateAnonymousId(clientInfo);
   context.platform = (platform?.toUpperCase() as 'WEB' | 'MOBILE' | 'API' | 'CLI') || 
                      this.determinePlatform(clientInfo);
   context.referrer = referer || 'DIRECT';
-  context.client = clientInfo; // Now using AuthClientInfoDto directly
+  context.client = clientInfo;
 
   const grpcDto: ScheduleViewingGrpcRequestDto = {
     ...body,
     houseId: listingId,
-    callerId: req.user.userUuid,
-    userRole: req.user.role,
-    callerEmail: req.user.email,
-    callerName: req.user.userName,
+    userRole: userRole || 'USER',
+    callerEmail: userEmail,
+    callerName: userName,
+    attendingUserId: body.attendingUserId || userId,
     context: context
   };
+  
+  this.logger.debug(`📤 gRPC Request - callerId: ${grpcDto.callerId}, attendingUserId: ${grpcDto.attendingUserId}`);
   
   const resp = await this.housingService.scheduleViewing(grpcDto);
   
@@ -1299,6 +1321,7 @@ async scheduleViewing(
     throw resp;
   }
 
+  this.logger.log(`✅ Viewing scheduled successfully for user ${userId}`);
   return resp;
 }
 

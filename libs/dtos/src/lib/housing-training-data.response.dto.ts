@@ -134,9 +134,6 @@ export class MatchScoresDto {
   @ApiProperty({ description: 'Average price to budget ratio', example: 0.82 })
     avgPriceToBudgetRatio!: number;
 
-  @ApiProperty({ description: 'Average amenity match score', example: 0.45 })
-    avgAmenityMatchScore!: number;
-
   @ApiProperty({ description: 'Average location distance (km)', example: 3.2 })
     avgLocationDistance!: number;
 }

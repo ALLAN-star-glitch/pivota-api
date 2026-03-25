@@ -15,8 +15,6 @@ import {
   StatsSwaggerRequestDto, 
   StatsRequestDto, 
   ExportSwaggerRequestDto, 
-  ExportWrapperResponseDto, 
-  ExportRequestDto, 
   SampleWrapperResponseDto, 
   SampleSwaggerRequestDto, 
   SampleRequestDto 
@@ -121,7 +119,7 @@ export class HousingTrainingDataGatewayController {
       - Total events and unique users/listings
       - Label distribution (clicks, saves, contacts, viewings)
       - Price range (min, max, avg)
-      - Match scores (overall, price ratio, amenity, location)
+      - Match scores (overall, price ratio, location)
       - Temporal distribution (daily/hourly/day-of-week patterns)
       - Bot traffic percentage
       - Average dwell time
@@ -209,12 +207,15 @@ export class HousingTrainingDataGatewayController {
   ): Promise<void> {
     this.logger.log(`🤖 AI Training: ${req.user.userUuid} downloading training data in ${body.format} format`);
     
-    const dto: ExportRequestDto = {
-      ...body,
+    // Extract params and format separately
+    const { format, params } = body;
+    
+    const dto: TrainingDataRequestDto = {
+      ...params,
       accountUuid: req.user.accountId,
     };
     
-    const response = await this.trainingDataService.exportTrainingData(dto);
+    const response = await this.trainingDataService.exportTrainingData(dto, format);
     
     if (!response.success) {
       this.logger.warn(`Export failed: ${response.message}`);
@@ -273,13 +274,12 @@ export class HousingTrainingDataGatewayController {
   ): Promise<void> {
     this.logger.log(`📥 Downloading CSV for account: ${req.user.accountId}`);
     
-    const dto: ExportRequestDto = {
-      params: query,
-      format: 'csv',
+    const dto: TrainingDataRequestDto = {
+      ...query,
       accountUuid: req.user.accountId,
     };
     
-    const response = await this.trainingDataService.exportTrainingData(dto);
+    const response = await this.trainingDataService.exportTrainingData(dto, 'csv');
     
     if (!response.success) {
       this.logger.warn(`CSV export failed: ${response.message}`);

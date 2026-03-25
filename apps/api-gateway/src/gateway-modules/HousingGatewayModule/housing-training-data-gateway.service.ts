@@ -8,18 +8,16 @@ import {
   TrainingDatasetResponseDto,
   DatasetStatsResponseDto,
   ExportDataDto,
-  ExportRequestDto,
   SampleRequestDto,
   StatsRequestDto,
   TrainingDataRequestDto,
 } from '@pivota-api/dtos';
 
-
 // Interface for the gRPC client
 interface HousingTrainingDataServiceGrpc {
   GetTrainingDataset(data: TrainingDataRequestDto): Observable<BaseResponseDto<TrainingDatasetResponseDto>>;
   GetDatasetStats(data: StatsRequestDto): Observable<BaseResponseDto<DatasetStatsResponseDto>>;
-  ExportTrainingData(data: ExportRequestDto): Observable<BaseResponseDto<ExportDataDto>>;
+  ExportTrainingData(data: any): Observable<BaseResponseDto<ExportDataDto>>;
   GetSampleData(data: SampleRequestDto): Observable<BaseResponseDto<SampleDataResponse>>;
 }
 
@@ -74,12 +72,22 @@ export class HousingTrainingDataGatewayService {
 
   /**
    * Export training data in various formats
+   * Accepts TrainingDataRequestDto and format separately
    */
-  async exportTrainingData(dto: ExportRequestDto): Promise<BaseResponseDto<ExportDataDto>> {
-    this.logger.debug(`ExportTrainingData called for account: ${dto.accountUuid}, format: ${dto.format}`);
+  async exportTrainingData(
+    dto: TrainingDataRequestDto, 
+    format: 'json' | 'csv' | 'parquet'
+  ): Promise<BaseResponseDto<ExportDataDto>> {
+    this.logger.debug(`ExportTrainingData called for account: ${dto.accountUuid}, format: ${format}`);
     
     try {
-      const res = await firstValueFrom(this.grpcService.ExportTrainingData(dto));
+      // Create the ExportRequestDto expected by the gRPC service
+      const exportRequest = {
+        params: dto,
+        format,
+      };
+      
+      const res = await firstValueFrom(this.grpcService.ExportTrainingData(exportRequest));
       return this.handleGrpcResponse(res, 'ExportTrainingData');
     } catch (error) {
       this.logger.error(`ExportTrainingData failed: ${error.message}`);

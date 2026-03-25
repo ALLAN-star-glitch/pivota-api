@@ -5,6 +5,7 @@
 import { Prisma } from '../../../generated/prisma/client';
 import { randomUUID } from 'crypto';
 import { StringUtils, PhoneUtils } from '@pivota-api/utils';
+import { ClientKafka } from '@nestjs/microservices';
 
 // Import your DTO types from dtos library
 import {
@@ -77,13 +78,10 @@ function validateProfileData(
 
     case 'PROPERTY_OWNER': {
       const ownerData = data as PropertyOwnerProfileDataDto;
-      // Required fields for property owner
       if (!ownerData.preferredPropertyTypes?.length) {
         missingFields.push('preferredPropertyTypes');
       }
       if (!ownerData.serviceAreas?.length) missingFields.push('serviceAreas');
-      // For organizations: companyName is required
-      // For individuals: propertyCount can be optional
       if (!ownerData.companyName && !ownerData.propertyCount) {
         missingFields.push('companyName or propertyCount');
       }
@@ -105,14 +103,11 @@ function validateProfileData(
       if (!agentData.specializations?.length) missingFields.push('specializations');
       if (!agentData.serviceAreas?.length) missingFields.push('serviceAreas');
       if (!agentData.licenseNumber) missingFields.push('licenseNumber');
-      // Agency name is recommended but not required for individuals
       break;
     }
 
     case 'EMPLOYER': {
       const employerData = data as EmployerProfileDataDto;
-      // For organizations: companyName is required
-      // For individuals: businessName can be optional
       if (!employerData.companyName && !employerData.businessName) {
         missingFields.push('companyName or businessName');
       }
@@ -127,8 +122,6 @@ function validateProfileData(
       if (!providerData.providerType) missingFields.push('providerType');
       if (!providerData.servicesOffered?.length) missingFields.push('servicesOffered');
       if (!providerData.serviceAreas?.length) missingFields.push('serviceAreas');
-      // For organizations: about, officeHours, yearEstablished are required
-      // For individuals: operatingName is optional
       break;
     }
   }
@@ -152,11 +145,21 @@ export async function createBusinessProfile(
   data: JobSeekerProfileDataDto | SkilledProfessionalProfileDataDto | 
         HousingSeekerProfileDataDto | PropertyOwnerProfileDataDto | 
         SupportBeneficiaryProfileDataDto | IntermediaryAgentProfileDataDto |
-        EmployerProfileDataDto | SocialServiceProviderProfileDataDto
+        EmployerProfileDataDto | SocialServiceProviderProfileDataDto,
+  options?: {
+    userUuid?: string;
+    kafkaClient?: ClientKafka;
+    logger?: any;
+  }
 ): Promise<void> {
+  const logger = options?.logger || console;
+  
+  logger.log(`📝 Creating business profile: ${profileType} for account ${accountUuid}`);
+  
   // Validate required fields before creating
   const validation = validateProfileData(profileType, data);
   if (!validation.isValid) {
+    logger.error(`❌ Validation failed for ${profileType}: missing ${validation.missingFields.join(', ')}`);
     throw new Error(
       `Missing required fields for ${profileType}: ${validation.missingFields.join(', ')}`
     );
@@ -187,6 +190,7 @@ export async function createBusinessProfile(
           agentUuid: jobData.agentUuid,
         },
       });
+      logger.log(`✅ Created JOB_SEEKER profile for account ${accountUuid}`);
       break;
     }
 
@@ -213,11 +217,26 @@ export async function createBusinessProfile(
           certifications: StringUtils.stringifyJsonField(profData.certifications ?? []),
         },
       });
+      logger.log(`✅ Created SKILLED_PROFESSIONAL profile for account ${accountUuid}`);
       break;
     }
 
     case "HOUSING_SEEKER": {
       const housingData = data as HousingSeekerProfileDataDto;
+      
+      logger.log(`🏠 Creating HOUSING_SEEKER profile for account ${accountUuid}`);
+      logger.debug(`📊 Housing data: ${JSON.stringify({
+        minBudget: housingData.minBudget,
+        maxBudget: housingData.maxBudget,
+        preferredCities: housingData.preferredCities,
+        preferredTypes: housingData.preferredTypes,
+        minBedrooms: housingData.minBedrooms,
+        maxBedrooms: housingData.maxBedrooms,
+        hasPets: housingData.hasPets,
+        latitude: housingData.latitude,
+        longitude: housingData.longitude,
+      })}`);
+      
       await tx.housingSeekerProfile.create({
         data: {
           accountUuid,
@@ -240,6 +259,53 @@ export async function createBusinessProfile(
           agentUuid: housingData.agentUuid,
         },
       });
+      
+      logger.log(`✅ Created HOUSING_SEEKER profile for account ${accountUuid}`);
+      
+      // EMIT EVENT AFTER HOUSING SEEKER PROFILE CREATED
+      if (options?.userUuid && options?.kafkaClient) {
+        logger.log(`📤 Preparing to emit housing preferences event for user ${options.userUuid}`);
+        
+        const preferences = {
+          userUuid: options.userUuid,
+          timestamp: new Date().toISOString(),
+          action: 'CREATED' as const,
+          data: {
+            minBudget: housingData.minBudget,
+            maxBudget: housingData.maxBudget,
+            budgetMidpoint: housingData.minBudget && housingData.maxBudget 
+              ? (housingData.minBudget + housingData.maxBudget) / 2 
+              : null,
+            preferredLocations: housingData.preferredCities,
+            preferredNeighborhoods: housingData.preferredNeighborhoods,
+            preferredPropertyTypes: housingData.preferredTypes,
+            minBedrooms: housingData.minBedrooms,
+            maxBedrooms: housingData.maxBedrooms,
+            moveInDate: housingData.moveInDate,
+            hasPets: housingData.hasPets,
+            latitude: housingData.latitude,
+            longitude: housingData.longitude,
+            searchRadiusKm: housingData.searchRadiusKm,
+          }
+        };
+        
+        logger.debug(`📤 Event payload: ${JSON.stringify(preferences)}`);
+        
+        try {
+          await options.kafkaClient.emit('housing.preferences.updated', preferences);
+          logger.log(`✅ Successfully emitted housing preferences event for user ${options.userUuid}`);
+        } catch (kafkaError) {
+          logger.error(`❌ Failed to emit Kafka event: ${kafkaError.message}`);
+          // Don't throw - event emission failure shouldn't block profile creation
+        }
+      } else {
+        if (!options?.userUuid) {
+          logger.warn(`⚠️ No userUuid provided, cannot emit housing preferences event`);
+        }
+        if (!options?.kafkaClient) {
+          logger.warn(`⚠️ No kafkaClient provided, cannot emit housing preferences event`);
+        }
+      }
       break;
     }
 
@@ -262,6 +328,7 @@ export async function createBusinessProfile(
           propertyPurpose: ownerData.propertyPurpose,
         },
       });
+      logger.log(`✅ Created PROPERTY_OWNER profile for account ${accountUuid}`);
       break;
     }
 
@@ -290,6 +357,7 @@ export async function createBusinessProfile(
           caseWorkerUuid: beneficiaryData.caseWorkerUuid,
         },
       });
+      logger.log(`✅ Created SUPPORT_BENEFICIARY profile for account ${accountUuid}`);
       break;
     }
 
@@ -321,6 +389,7 @@ export async function createBusinessProfile(
           clientTypes: StringUtils.stringifyJsonField(agentData.clientTypes ?? []),
         },
       });
+      logger.log(`✅ Created INTERMEDIARY_AGENT profile for account ${accountUuid}`);
       break;
     }
 
@@ -345,6 +414,7 @@ export async function createBusinessProfile(
           yearsExperience: employerData.yearsExperience,
         },
       });
+      logger.log(`✅ Created EMPLOYER profile for account ${accountUuid}`);
       break;
     }
 
@@ -376,10 +446,12 @@ export async function createBusinessProfile(
           availability: providerData.availability,
         },
       });
+      logger.log(`✅ Created SOCIAL_SERVICE_PROVIDER profile for account ${accountUuid}`);
       break;
     }
 
     default:
+      logger.error(`❌ Unknown business profile type: ${profileType}`);
       throw new Error(`Unknown business profile type: ${profileType}`);
   }
 }

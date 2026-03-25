@@ -464,10 +464,10 @@ export class AuthDevController {
   async loginGeneralUser(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      '53ebe2fb-da59-4758-a90d-c41b6f38c54e',
-      'allanmathenge82@gmail.com',
+      '8e28dfe2-fb8d-4b42-9a90-295e66a3af0f',
+      'janenyambura4272@gmail.com',
       'GeneralUser',
-      '04dedb6f-e3f5-4766-9c7c-fb13642a1101',  
+      'e71c5af5-e59c-49fc-ad95-af9e999ed16f',  
       res,
     );
   } 

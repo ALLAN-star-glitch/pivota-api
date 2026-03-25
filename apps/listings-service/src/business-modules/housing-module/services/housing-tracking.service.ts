@@ -16,7 +16,7 @@ import {
   HousingSaveEvent,
   HousingViewingScheduledEvent,
   HousingInquiryEvent,
-  HousingListingMilestoneEvent  // Add this import
+  HousingListingMilestoneEvent
 } from '@pivota-api/interfaces';
 
 // Interface for listing data structure (internal to the service)
@@ -74,59 +74,66 @@ export class HousingTrackingService {
   constructor(
     @Inject('KAFKA_SERVICE')
     private readonly kafkaClient: ClientKafka,
-     @Inject('NOTIFICATION_EVENT_BUS')  // Add this
-     private readonly notificationBus: ClientProxy,
-
+    @Inject('NOTIFICATION_EVENT_BUS')
+    private readonly notificationBus: ClientProxy,
   ) {}
 
   /**
    * Track when user views a listing
    */
-trackView(
-  userId: string,
+  trackView(
+  viewingUserId: string,
   listingId: string,
   listingData: HouseListingData,
   context?: ListingViewContextDto
 ): void {
-  if (!userId) return;
+  // Add log at entry
+  this.logger.log(`🔍 [KAFKA] trackView called - userId: ${viewingUserId}, listingId: ${listingId}`);
+  
+  if (!viewingUserId) {
+    this.logger.warn(`⚠️ [KAFKA] trackView skipped - no viewingUserId provided`);
+    return;
+  }
+
+  // Log Kafka client status
+  if (!this.kafkaClient) {
+    this.logger.error(`❌ [KAFKA] Kafka client is not available!`);
+    return;
+  }
 
   const event: HousingViewEvent = {
-    userId,
+    userId: viewingUserId,
     listingId,
     eventType: 'VIEW',
+    viewingUserId: viewingUserId,
     metadata: {
-      // Core tracking from ListingViewContextDto
       timestamp: new Date().toISOString(),
       sessionId: context?.sessionId,
       platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
       referrer: context?.referrer,
-      referrerType: undefined, // Not in DTO yet
-      
-      // Device context from client object - ENHANCED with all AuthClientInfoDto fields
+      referrerType: undefined,
+
       deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
       os: context?.client?.os,
       osVersion: context?.client?.osVersion,
       browser: context?.client?.browser,
       browserVersion: context?.client?.browserVersion,
-      appVersion: undefined, // Not in DTO yet
+      appVersion: undefined,
       isBot: context?.client?.isBot,
-      
-      // Search context from search object
+
       searchId: context?.search?.searchId,
       searchQuery: context?.search?.query,
       searchFilters: context?.search?.filters,
       position: context?.search?.position,
-      
-      // Interaction data
+
       timeSpent: context?.timeSpent,
       interactionType: context?.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined,
       viewDuration: context?.viewDuration,
       scrollDepth: context?.scrollDepth,
-      
-      // Housing listing data
+
       listingData: {
         price: listingData.price,
-        currency: undefined, // Not in HouseListingData yet
+        currency: undefined,
         bedrooms: listingData.bedrooms,
         bathrooms: listingData.bathrooms,
         locationCity: listingData.locationCity,
@@ -144,125 +151,127 @@ trackView(
         imagesCount: listingData.images?.length || 0,
         daysSincePosted: listingData.daysSincePosted,
         accountId: listingData.accountId,
-        creatorId: listingData.creatorId,
+        listingCreatorId: listingData.creatorId,
         status: listingData.status
       },
-      
-      // User context - will be enriched by analytics service
+
       userContext: {}
-    }
+    },
   };
 
+  // Log event payload before sending
+  this.logger.debug(`📦 [KAFKA] Sending VIEW event - payload: ${JSON.stringify({
+    eventType: event.eventType,
+    userId: event.userId,
+    listingId: event.listingId,
+    viewingUserId: event.viewingUserId,
+    timestamp: event.metadata.timestamp
+  })}`);
+
+  // Emit to Kafka
   this.kafkaClient.emit('housing.ai.tracking', {
     key: event.userId,
     value: event
   });
 
-  this.logger.debug(`📤 Tracked VIEW event for listing ${listingId} by user ${userId}`);
+  // Log success
+  this.logger.log(`✅ [KAFKA] VIEW event sent to topic 'housing.ai.tracking' for listing ${listingId} by user ${viewingUserId}`);
   this.logger.debug(`📊 Device: ${context?.client?.device} (${context?.client?.deviceType}), OS: ${context?.client?.os} ${context?.client?.osVersion || ''}, Browser: ${context?.client?.browser} ${context?.client?.browserVersion || ''}${context?.client?.isBot ? ' [BOT]' : ''}`);
 }
-
   /**
    * Track when user performs a search
    */
-trackSearch(
-  userId: string,
-  searchDto: SearchHouseListingsDto,
-  resultsCount: number,
-  context?: ListingViewContextDto
-): void {
-  if (!userId) return;
+  trackSearch(
+    userId: string,
+    searchDto: SearchHouseListingsDto,
+    resultsCount: number,
+    context?: ListingViewContextDto
+  ): void {
+    if (!userId) return;
 
-  // Convert search DTO to a plain object for filters
-  const filtersObject: Record<string, unknown> = {
-    city: searchDto.city,
-    minPrice: searchDto.minPrice,
-    maxPrice: searchDto.maxPrice,
-    bedrooms: searchDto.bedrooms,
-    listingType: searchDto.listingType,
-    categoryId: searchDto.categoryId,
-    subCategoryId: searchDto.subCategoryId,
-    propertyType: searchDto.propertyType,
-    minSquareFootage: searchDto.minSquareFootage,
-    maxSquareFootage: searchDto.maxSquareFootage,
-    minYearBuilt: searchDto.minYearBuilt,
-    isFurnished: searchDto.isFurnished,
-    amenities: searchDto.amenities,
-    limit: searchDto.limit,
-    offset: searchDto.offset
-  };
+    const filtersObject: Record<string, unknown> = {
+      city: searchDto.city,
+      minPrice: searchDto.minPrice,
+      maxPrice: searchDto.maxPrice,
+      bedrooms: searchDto.bedrooms,
+      listingType: searchDto.listingType,
+      categoryId: searchDto.categoryId,
+      subCategoryId: searchDto.subCategoryId,
+      propertyType: searchDto.propertyType,
+      minSquareFootage: searchDto.minSquareFootage,
+      maxSquareFootage: searchDto.maxSquareFootage,
+      minYearBuilt: searchDto.minYearBuilt,
+      isFurnished: searchDto.isFurnished,
+      amenities: searchDto.amenities,
+      limit: searchDto.limit,
+      offset: searchDto.offset
+    };
 
-  // Remove undefined values
-  Object.keys(filtersObject).forEach(key => 
-    filtersObject[key] === undefined && delete filtersObject[key]
-  );
+    Object.keys(filtersObject).forEach(key => 
+      filtersObject[key] === undefined && delete filtersObject[key]
+    );
 
-  const searchId = context?.search?.searchId || `search_${Date.now()}`;
+    const searchId = context?.search?.searchId || `search_${Date.now()}`;
 
-  const event: HousingSearchEvent = {
-    userId,
-    listingId: '',
-    eventType: 'SEARCH',
-    metadata: {
-      // Core tracking
-      timestamp: new Date().toISOString(),
-      sessionId: context?.sessionId,
-      platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
-      referrer: context?.referrer,
-      referrerType: undefined,
-      
-      // Device context - ENHANCED with all AuthClientInfoDto fields
-      deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
-      os: context?.client?.os,
-      osVersion: context?.client?.osVersion,
-      browser: context?.client?.browser,
-      browserVersion: context?.client?.browserVersion,
-      appVersion: undefined,
-      isBot: context?.client?.isBot,
-      
-      // Search context
-      searchId,
-      searchQuery: context?.search?.query,
-      searchFilters: filtersObject,
-      position: context?.search?.position,
-      
-      // Interaction data (minimal for search)
-      timeSpent: undefined,
-      interactionType: undefined,
-      viewDuration: undefined,
-      scrollDepth: undefined,
-      
-      // Search specific
-      resultsCount,
-      filters: filtersObject,
-      searchDuration: undefined,
-      resultsShown: resultsCount,
-      pagination: {
-        page: Math.floor((searchDto.offset || 0) / (searchDto.limit || 20)) + 1,
-        limit: searchDto.limit || 20,
-        offset: searchDto.offset || 0
-      },
-      
-      listingData: {
-        price: 0,
-        locationCity: '',
-        listingType: '',
-        amenities: [],
-        isFurnished: false
-      },
-      
-      userContext: {}
-    }
-  };
+    const event: HousingSearchEvent = {
+      userId,
+      listingId: '',
+      eventType: 'SEARCH',
+      metadata: {
+        timestamp: new Date().toISOString(),
+        sessionId: context?.sessionId,
+        platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
+        referrer: context?.referrer,
+        referrerType: undefined,
+        
+        deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
+        os: context?.client?.os,
+        osVersion: context?.client?.osVersion,
+        browser: context?.client?.browser,
+        browserVersion: context?.client?.browserVersion,
+        appVersion: undefined,
+        isBot: context?.client?.isBot,
+        
+        searchId,
+        searchQuery: context?.search?.query,
+        searchFilters: filtersObject,
+        position: context?.search?.position,
+        
+        timeSpent: undefined,
+        interactionType: undefined,
+        viewDuration: undefined,
+        scrollDepth: undefined,
+        
+        resultsCount,
+        filters: filtersObject,
+        searchDuration: undefined,
+        resultsShown: resultsCount,
+        pagination: {
+          page: Math.floor((searchDto.offset || 0) / (searchDto.limit || 20)) + 1,
+          limit: searchDto.limit || 20,
+          offset: searchDto.offset || 0
+        },
+        
+        listingData: {
+          price: 0,
+          locationCity: '',
+          listingType: '',
+          amenities: [],
+          isFurnished: false
+        },
+        
+        userContext: {}
+      }
+    };
 
-  this.kafkaClient.emit('housing.ai.tracking', {
-    key: event.userId,
-    value: event
-  });
+    this.kafkaClient.emit('housing.ai.tracking', {
+      key: event.userId,
+      value: event
+    });
 
-  this.logger.debug(`📤 Tracked SEARCH event for user ${userId} - ${resultsCount} results`);
-  this.logger.debug(`🔍 Search from: ${context?.client?.device} (${context?.client?.deviceType}), OS: ${context?.client?.os} ${context?.client?.osVersion || ''}, Browser: ${context?.client?.browser} ${context?.client?.browserVersion || ''}${context?.client?.isBot ? ' [BOT]' : ''}`);
-}
+    this.logger.debug(`📤 Tracked SEARCH event for user ${userId} - ${resultsCount} results`);
+    this.logger.debug(`🔍 Search from: ${context?.client?.device} (${context?.client?.deviceType}), OS: ${context?.client?.os} ${context?.client?.osVersion || ''}, Browser: ${context?.client?.browser} ${context?.client?.browserVersion || ''}${context?.client?.isBot ? ' [BOT]' : ''}`);
+  }
 
   /**
    * Track when user saves a listing
@@ -287,18 +296,15 @@ trackSearch(
         referrer: context?.referrer,
         referrerType: undefined,
         
-        // Device context
         deviceType: context?.client?.device as 'MOBILE' | 'TABLET' | 'DESKTOP' | undefined,
         osVersion: context?.client?.os,
         appVersion: undefined,
         
-        // Search context (if saved from search results)
         searchId: context?.search?.searchId,
         searchQuery: context?.search?.query,
         searchFilters: context?.search?.filters,
         position: context?.search?.position,
         
-        // Interaction data
         timeSpent: context?.timeSpent,
         interactionType: context?.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined,
         viewDuration: context?.viewDuration,
@@ -326,7 +332,7 @@ trackSearch(
           longitude: listingData.longitude,
           imagesCount: listingData.images?.length || 0,
           accountId: listingData.accountId,
-          creatorId: listingData.creatorId,
+          listingCreatorId: listingData.creatorId,
           status: listingData.status
         },
         
@@ -346,96 +352,92 @@ trackSearch(
    * Track when user schedules a viewing
    */
   trackViewingScheduled(
-  userId: string,
-  listingId: string,
-  viewingId: string,
-  viewingDate: Date,
-  listingData: HouseListingData,
-  context?: ListingViewContextDto,
-  isAdminBooking = false,
-  adminMetadata?: any
-): void {
-  if (!userId) return;
+    attendingUserId: string,
+    listingId: string,
+    viewingId: string,
+    viewingDate: Date,
+    listingData: HouseListingData,
+    context?: ListingViewContextDto,
+    isAdminBooking = false,
+    adminMetadata?: any,
+    schedulerId?: string
+  ): void {
+    if (!attendingUserId) return;
 
-  const event: HousingViewingScheduledEvent = {
-    userId,
-    listingId,
-    eventType: 'SCHEDULE_VIEWING',
-    metadata: {
-      // Core tracking
-      timestamp: new Date().toISOString(),
-      sessionId: context?.sessionId,
-      platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
-      referrer: context?.referrer,
-      referrerType: undefined,
-      
-      // Device context - ENHANCED with all AuthClientInfoDto fields
-      deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
-      os: context?.client?.os,
-      osVersion: context?.client?.osVersion,
-      browser: context?.client?.browser,
-      browserVersion: context?.client?.browserVersion,
-      appVersion: undefined,
-      isBot: context?.client?.isBot,
-      
-      // Search context (if scheduled from search results)
-      searchId: context?.search?.searchId,
-      searchQuery: context?.search?.query,
-      searchFilters: context?.search?.filters,
-      position: context?.search?.position,
-      
-      // Interaction data (if coming from a view)
-      timeSpent: context?.timeSpent,
-      interactionType: context?.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined,
-      viewDuration: context?.viewDuration,
-      scrollDepth: context?.scrollDepth,
-      
-      // Viewing specific data
-      viewingId,
-      viewingDate: viewingDate.toISOString(),
-      isAdminBooking,
-      viewingDuration: 60, // Default 60 minutes, could be configurable
-      participants: 1, // Default 1 person
-      
-      // Admin metadata if applicable
-      ...(adminMetadata && { adminMetadata }),
-      
-      // Housing listing data
-      listingData: {
-        price: listingData.price,
-        currency: undefined,
-        bedrooms: listingData.bedrooms,
-        bathrooms: listingData.bathrooms,
-        locationCity: listingData.locationCity,
-        locationNeighborhood: listingData.locationNeighborhood,
-        listingType: listingData.listingType,
-        categoryId: listingData.categoryId,
-        categorySlug: listingData.category?.slug,
-        amenities: listingData.amenities,
-        isFurnished: listingData.isFurnished,
-        squareFootage: listingData.squareFootage,
-        yearBuilt: listingData.yearBuilt,
-        propertyType: listingData.propertyType as any,
-        latitude: listingData.latitude,
-        longitude: listingData.longitude,
-        imagesCount: listingData.images?.length || 0,
-        accountId: listingData.accountId,
-        creatorId: listingData.creatorId,
-        status: listingData.status
-      },
-      
-      userContext: {}
-    }
-  };
+    const event: HousingViewingScheduledEvent = {
+      userId: attendingUserId,
+      listingId,
+      eventType: 'SCHEDULE_VIEWING',
+      schedulerId: schedulerId || attendingUserId,
+      attendingUserId: attendingUserId,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        sessionId: context?.sessionId,
+        platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
+        referrer: context?.referrer,
+        referrerType: undefined,
+        
+        deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
+        os: context?.client?.os,
+        osVersion: context?.client?.osVersion,
+        browser: context?.client?.browser,
+        browserVersion: context?.client?.browserVersion,
+        appVersion: undefined,
+        isBot: context?.client?.isBot,
+        
+        searchId: context?.search?.searchId,
+        searchQuery: context?.search?.query,
+        searchFilters: context?.search?.filters,
+        position: context?.search?.position,
+        
+        timeSpent: context?.timeSpent,
+        interactionType: context?.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined,
+        viewDuration: context?.viewDuration,
+        scrollDepth: context?.scrollDepth,
+        
+        viewingId,
+        viewingDate: viewingDate.toISOString(),
+        isAdminBooking,
+        viewingDuration: 60,
+        participants: 1,
+        
+        ...(adminMetadata && { adminMetadata }),
+        
+        listingData: {
+          price: listingData.price,
+          currency: undefined,
+          bedrooms: listingData.bedrooms,
+          bathrooms: listingData.bathrooms,
+          locationCity: listingData.locationCity,
+          locationNeighborhood: listingData.locationNeighborhood,
+          listingType: listingData.listingType,
+          categoryId: listingData.categoryId,
+          categorySlug: listingData.category?.slug,
+          amenities: listingData.amenities,
+          isFurnished: listingData.isFurnished,
+          squareFootage: listingData.squareFootage,
+          yearBuilt: listingData.yearBuilt,
+          propertyType: listingData.propertyType as any,
+          latitude: listingData.latitude,
+          longitude: listingData.longitude,
+          imagesCount: listingData.images?.length || 0,
+          accountId: listingData.accountId,
+          listingCreatorId: listingData.creatorId,
+          status: listingData.status
+        },
+        
+        userContext: {}
+      }
+    };
 
-  this.kafkaClient.emit('housing.ai.tracking', {
-    key: event.userId,
-    value: event
-  });
+    this.kafkaClient.emit('housing.ai.tracking', {
+      key: event.userId,
+      value: event
+    });
 
-  this.logger.debug(`📤 Tracked SCHEDULE_VIEWING event for listing ${listingId}`);
-  this.logger.debug(`📅 Scheduled from: ${context?.client?.device} (${context?.client?.deviceType}), OS: ${context?.client?.os} ${context?.client?.osVersion || ''}, Browser: ${context?.client?.browser} ${context?.client?.browserVersion || ''}${context?.client?.isBot ? ' [BOT]' : ''}`);
-}
+    this.logger.debug(`📤 Tracked SCHEDULE_VIEWING event for listing ${listingId}`);
+    this.logger.debug(`📅 Scheduled from: ${context?.client?.device} (${context?.client?.deviceType}), OS: ${context?.client?.os} ${context?.client?.osVersion || ''}, Browser: ${context?.client?.browser} ${context?.client?.browserVersion || ''}${context?.client?.isBot ? ' [BOT]' : ''}`);
+  }
 
   /**
    * Track when user makes an inquiry
@@ -461,18 +463,15 @@ trackSearch(
         referrer: context?.referrer,
         referrerType: undefined,
         
-        // Device context
         deviceType: context?.client?.device as 'MOBILE' | 'TABLET' | 'DESKTOP' | undefined,
         osVersion: context?.client?.os,
         appVersion: undefined,
         
-        // Search context (if from search results)
         searchId: context?.search?.searchId,
         searchQuery: context?.search?.query,
         searchFilters: context?.search?.filters,
         position: context?.search?.position,
         
-        // Interaction data
         timeSpent: context?.timeSpent,
         interactionType: context?.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined,
         viewDuration: context?.viewDuration,
@@ -500,7 +499,7 @@ trackSearch(
           longitude: listingData.longitude,
           imagesCount: listingData.images?.length || 0,
           accountId: listingData.accountId,
-          creatorId: listingData.creatorId,
+          listingCreatorId: listingData.creatorId,
           status: listingData.status
         },
         
@@ -514,200 +513,182 @@ trackSearch(
     });
 
     this.logger.debug(`📤 Tracked INQUIRY event for listing ${listingId}`);
-  } 
+  }
 
   /**
-   * NEW: Track listing milestones (1st, 2nd, 3rd, 5th, 10th listing)
+   * Track listing milestones (1st, 2nd, 3rd, 5th, 10th listing)
    */
-async trackListingMilestone(
-  milestoneData: MilestoneData,
-  context?: ListingViewContextDto
-): Promise<void> {
-  try {
-    const { milestone, accountId, listingId } = milestoneData;
-    
-    // Define milestone thresholds we care about
-    const significantMilestones = [1, 2, 3, 5, 10, 25, 50, 100];
-    
-    if (!significantMilestones.includes(milestone)) {
-      return; // Not a significant milestone
-    }
-
-    // Determine milestone tier for routing
-    let milestoneTier: 'ONBOARDING' | 'ENGAGEMENT' | 'GROWTH' | 'POWER' | 'PROFESSIONAL';
-    let suggestedTeam: 'onboarding' | 'success' | 'sales' | 'marketing' | 'partnerships';
-     
-    if (milestone === 1) {
-      milestoneTier = 'ONBOARDING';
-      suggestedTeam = 'onboarding';
-    } else if (milestone <= 3) {
-      milestoneTier = 'ENGAGEMENT';
-      suggestedTeam = 'success';
-    } else if (milestone <= 10) {
-      milestoneTier = 'GROWTH';
-      suggestedTeam = 'sales';
-    } else if (milestone <= 50) {
-      milestoneTier = 'POWER';
-      suggestedTeam = 'marketing';
-    } else {
-      milestoneTier = 'PROFESSIONAL';
-      suggestedTeam = 'partnerships';
-    }
-
-    // Calculate additional metrics if needed
-    const totalValue = milestoneData.totalValue || (milestoneData.listingPrice * milestone);
-    const averagePrice = milestoneData.averagePrice || milestoneData.listingPrice;
-
-    const event: HousingListingMilestoneEvent = {
-      accountId,
-      listingId,
-      eventType: 'LISTING_MILESTONE',
-      metadata: {
-        // Core tracking
-        timestamp: new Date().toISOString(),
-        sessionId: context?.sessionId,
-        platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
-        
-        // Device context
-        deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
-        os: context?.client?.os,
-        osVersion: context?.client?.osVersion,
-        browser: context?.client?.browser,
-        browserVersion: context?.client?.browserVersion,
-        isBot: context?.client?.isBot,
-        
-        // Milestone specific data
-        milestone,
-        milestoneTier,
-        suggestedTeam,
-        
-        // Account metrics
-        accountId: milestoneData.accountId,
-        accountName: milestoneData.accountName,
-        creatorId: milestoneData.creatorId,
-        creatorName: milestoneData.creatorName,
-        
-        // Listing details
-        listingId: milestoneData.listingId,
-        listingTitle: milestoneData.listingTitle,
-        listingPrice: milestoneData.listingPrice,
-        listingType: milestoneData.listingType,
-        locationCity: milestoneData.locationCity,
-        categoryId: milestoneData.categoryId,
-        
-        // Calculated metrics
-        totalListings: milestone,
-        totalValue,
-        averagePrice,
-        daysSinceFirstListing: milestoneData.daysSinceFirstListing,
-        categories: milestoneData.categories || [milestoneData.categoryId].filter(Boolean),
-        
-        // Milestone-specific messaging
-        message: this.getMilestoneMessage(milestone, milestoneData.accountName),
-        
-        // Routing hints for notification service
-        routing: {
-          primaryTeam: suggestedTeam,
-          priority: milestone <= 3 ? 'HIGH' : (milestone <= 10 ? 'MEDIUM' : 'LOW'),
-          requiresFollowUp: milestone <= 5,
-          notificationTemplate: `listing-milestone-${milestone}`
-        },
-        
-        // Add listingData to satisfy the interface
-        listingData: {
-          price: milestoneData.listingPrice,
-          locationCity: milestoneData.locationCity,
-          listingType: milestoneData.listingType,
-          amenities: [],
-          isFurnished: false,
-          categoryId: milestoneData.categoryId,
-          categorySlug: undefined,
-          bedrooms: null,
-          bathrooms: null,
-          locationNeighborhood: null,
-          accountId: milestoneData.accountId,
-          creatorId: milestoneData.creatorId,
-          imagesCount: 0
-        },
-        
-        userContext: {}
-      }
-    };
-
-    this.logger.log(`📤 Emitting to analytics.listing.milestone for account ${accountId}, milestone ${milestone}`);
-
-    // Send to Kafka for analytics storage (all milestones)
-    this.kafkaClient.emit('analytics.listing.milestone', {
-      key: event.accountId,
-      value: {
-        ...event,
-        notificationType: 'LISTING_MILESTONE'
-      }
-    });
-
-    // Send to RabbitMQ for email notifications (only for first 10 milestones)
+  async trackListingMilestone(
+    milestoneData: MilestoneData,
+    context?: ListingViewContextDto
+  ): Promise<void> {
     try {
-      // Only send emails for milestones 1,2,3,5,10 (the ones teams care about)
-      const emailMilestones = [1, 2, 3, 5, 10];
+      const { milestone, accountId, listingId } = milestoneData;
       
-      if (emailMilestones.includes(milestone)) {
-        // Use a single email for all milestone notifications (production-ready)
-        const recipientEmail = process.env.MILESTONE_NOTIFICATIONS_EMAIL || 'allanmathenge82@gmail.com';
-        
-        const emailData = {
-          recipientEmail,
+      const significantMilestones = [1, 2, 3, 5, 10, 25, 50, 100];
+      
+      if (!significantMilestones.includes(milestone)) {
+        return;
+      }
+
+      let milestoneTier: 'ONBOARDING' | 'ENGAGEMENT' | 'GROWTH' | 'POWER' | 'PROFESSIONAL';
+      let suggestedTeam: 'onboarding' | 'success' | 'sales' | 'marketing' | 'partnerships';
+       
+      if (milestone === 1) {
+        milestoneTier = 'ONBOARDING';
+        suggestedTeam = 'onboarding';
+      } else if (milestone <= 3) {
+        milestoneTier = 'ENGAGEMENT';
+        suggestedTeam = 'success';
+      } else if (milestone <= 10) {
+        milestoneTier = 'GROWTH';
+        suggestedTeam = 'sales';
+      } else if (milestone <= 50) {
+        milestoneTier = 'POWER';
+        suggestedTeam = 'marketing';
+      } else {
+        milestoneTier = 'PROFESSIONAL';
+        suggestedTeam = 'partnerships';
+      }
+
+      const totalValue = milestoneData.totalValue || (milestoneData.listingPrice * milestone);
+      const averagePrice = milestoneData.averagePrice || milestoneData.listingPrice;
+
+      const event: HousingListingMilestoneEvent = {
+        accountId,
+        listingId,
+        eventType: 'LISTING_MILESTONE',
+        metadata: {
+          timestamp: new Date().toISOString(),
+          sessionId: context?.sessionId,
+          platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
+          
+          deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
+          os: context?.client?.os,
+          osVersion: context?.client?.osVersion,
+          browser: context?.client?.browser,
+          browserVersion: context?.client?.browserVersion,
+          isBot: context?.client?.isBot,
+          
+          milestone,
+          milestoneTier,
+          suggestedTeam,
+          
           accountId: milestoneData.accountId,
           accountName: milestoneData.accountName,
           creatorId: milestoneData.creatorId,
           creatorName: milestoneData.creatorName,
+          
           listingId: milestoneData.listingId,
           listingTitle: milestoneData.listingTitle,
           listingPrice: milestoneData.listingPrice,
           listingType: milestoneData.listingType,
           locationCity: milestoneData.locationCity,
-          milestone,
-          milestoneTier,
-          suggestedTeam,
+          categoryId: milestoneData.categoryId,
+          
+          totalListings: milestone,
           totalValue,
           averagePrice,
+          daysSinceFirstListing: milestoneData.daysSinceFirstListing,
+          categories: milestoneData.categories || [milestoneData.categoryId].filter(Boolean),
+          
           message: this.getMilestoneMessage(milestone, milestoneData.accountName),
-          timestamp: new Date().toISOString(),
-          priority: milestone <= 3 ? 'HIGH' : 'MEDIUM'
-        };
-
-        // Emit to RabbitMQ for email service
-        if (this.notificationBus) {
-          this.notificationBus.emit('admin.listing.milestone', emailData);
-          this.logger.log(`📧 Milestone email notification sent to ${recipientEmail} for milestone ${milestone}`);
-        } else {
-          this.logger.debug(`📧 Milestone email would be sent to ${recipientEmail} for milestone ${milestone} (notificationBus not configured)`);
+          
+          routing: {
+            primaryTeam: suggestedTeam,
+            priority: milestone <= 3 ? 'HIGH' : (milestone <= 10 ? 'MEDIUM' : 'LOW'),
+            requiresFollowUp: milestone <= 5,
+            notificationTemplate: `listing-milestone-${milestone}`
+          },
+          
+          listingData: {
+            price: milestoneData.listingPrice,
+            locationCity: milestoneData.locationCity,
+            listingType: milestoneData.listingType,
+            amenities: [],
+            isFurnished: false,
+            categoryId: milestoneData.categoryId,
+            categorySlug: undefined,
+            bedrooms: null,
+            bathrooms: null,
+            locationNeighborhood: null,
+            accountId: milestoneData.accountId,
+            listingCreatorId: milestoneData.creatorId,
+            imagesCount: 0
+          },
+          
+          userContext: {}
         }
-      }
-    } catch (emailError) {
-      // Don't fail the whole tracking if email fails
-      this.logger.error(`Failed to send milestone email: ${emailError.message}`);
-    }
+      };
 
-    this.logger.log(`🎯 Tracked LISTING_MILESTONE ${milestone} for account ${accountId}`);
-    
-  } catch (error) {
-    this.logger.error(`Failed to track listing milestone: ${error.message}`);
+      this.logger.log(`📤 Emitting to analytics.listing.milestone for account ${accountId}, milestone ${milestone}`);
+
+      this.kafkaClient.emit('analytics.listing.milestone', {
+        key: event.accountId,
+        value: {
+          ...event,
+          notificationType: 'LISTING_MILESTONE'
+        }
+      });
+
+      try {
+        const emailMilestones = [1, 2, 3, 5, 10];
+        
+        if (emailMilestones.includes(milestone)) {
+          const recipientEmail = process.env.MILESTONE_NOTIFICATIONS_EMAIL || 'allanmathenge82@gmail.com';
+          
+          const emailData = {
+            recipientEmail,
+            accountId: milestoneData.accountId,
+            accountName: milestoneData.accountName,
+            creatorId: milestoneData.creatorId,
+            creatorName: milestoneData.creatorName,
+            listingId: milestoneData.listingId,
+            listingTitle: milestoneData.listingTitle,
+            listingPrice: milestoneData.listingPrice,
+            listingType: milestoneData.listingType,
+            locationCity: milestoneData.locationCity,
+            milestone,
+            milestoneTier,
+            suggestedTeam,
+            totalValue,
+            averagePrice,
+            message: this.getMilestoneMessage(milestone, milestoneData.accountName),
+            timestamp: new Date().toISOString(),
+            priority: milestone <= 3 ? 'HIGH' : 'MEDIUM'
+          };
+
+          if (this.notificationBus) {
+            this.notificationBus.emit('admin.listing.milestone', emailData);
+            this.logger.log(`📧 Milestone email notification sent to ${recipientEmail} for milestone ${milestone}`);
+          } else {
+            this.logger.debug(`📧 Milestone email would be sent to ${recipientEmail} for milestone ${milestone} (notificationBus not configured)`);
+          }
+        }
+      } catch (emailError) {
+        this.logger.error(`Failed to send milestone email: ${emailError.message}`);
+      }
+
+      this.logger.log(`🎯 Tracked LISTING_MILESTONE ${milestone} for account ${accountId}`);
+      
+    } catch (error) {
+      this.logger.error(`Failed to track listing milestone: ${error.message}`);
+    }
   }
-}
 
   /**
    * Helper to generate milestone-specific messages
    */
   private getMilestoneMessage(milestone: number, accountName: string): string {
     const messages = {
-      1: `🎉 ${accountName} just posted their FIRST listing! Welcome to PivotaConnect!`,
-      2: `📈 ${accountName} is getting engaged - posted their SECOND listing!`,
-      3: `🔥 ${accountName} is on a roll with their THIRD listing!`,
-      5: `⭐ ${accountName} has posted 5 listings - becoming a serious seller!`,
-      10: `🏆 ${accountName} hit 10 listings - power user alert!`,
-      25: `🚀 ${accountName} is a top seller with 25 listings!`,
-      50: `💎 ${accountName} joined the 50+ listings club - partnership opportunity!`,
-      100: `👑 ${accountName} reached 100 listings - our elite seller!`
+      1: `${accountName} just posted their FIRST listing! Welcome to PivotaConnect!`,
+      2: `${accountName} is getting engaged - posted their SECOND listing!`,
+      3: `${accountName} is on a roll with their THIRD listing!`,
+      5: `${accountName} has posted 5 listings - becoming a serious seller!`,
+      10: `${accountName} hit 10 listings - power user alert!`,
+      25: `${accountName} is a top seller with 25 listings!`,
+      50: `${accountName} joined the 50+ listings club - partnership opportunity!`,
+      100: `${accountName} reached 100 listings - our elite seller!`
     };
     
     return messages[milestone] || `${accountName} reached ${milestone} listings!`;

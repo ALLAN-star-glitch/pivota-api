@@ -141,7 +141,10 @@ export class UserService implements OnModuleInit {
     @Inject('RBAC_PACKAGE') private readonly rbacClient: ClientGrpc,
     @Inject('SUBSCRIPTIONS_PACKAGE') private readonly subscriptionsClient: ClientGrpc,
     @Inject('PLANS_PACKAGE') private readonly plansClient: ClientGrpc,
-    @Inject('KAFKA_SERVICE') private readonly kafkaClient: ClientKafka,
+    // For storage events (consuming)
+    @Inject('KAFKA_STORAGE_CLIENT') private readonly storageKafkaClient: ClientKafka,
+    // For analytics events (producing)
+    @Inject('KAFKA_ANALYTICS_CLIENT') private readonly analyticsKafkaClient: ClientKafka,
   ) {
     this.rbacGrpc = this.rbacClient.getService<RbacServiceGrpc>('RbacService');
     this.subscriptionGrpc = this.subscriptionsClient.getService<SubscriptionServiceGrpc>('SubscriptionService');
@@ -149,8 +152,8 @@ export class UserService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    this.kafkaClient.subscribeToResponseOf('file.delete_obsolete');
-    await this.kafkaClient.connect();
+    this.storageKafkaClient.subscribeToResponseOf('file.delete_obsolete');
+    await this.storageKafkaClient.connect();
   }
 
 
@@ -650,8 +653,14 @@ async createIndividualAccountWithProfiles(
           tx,
           account.uuid,
           profileToCreate.type as BusinessProfileType,
-          profileToCreate.data
-        );
+          profileToCreate.data,
+          {
+            userUuid: userUuid,
+            kafkaClient: this.analyticsKafkaClient,
+            logger: this.logger, 
+          },
+          
+        ); 
       }
     }, {
       timeout: 15000,
@@ -666,7 +675,7 @@ async createIndividualAccountWithProfiles(
       next: () => this.logger.debug(`RBAC role assigned for user ${userUuid}`),
       error: (err) => {
         this.logger.error(`RBAC sync failed: ${err.message}`);
-        this.kafkaClient.emit('user.rbac.sync.retry', {
+        this.analyticsKafkaClient.emit('user.rbac.sync.retry', {
           userUuid,
           roleId: roleRes.data.roleId,
           timestamp: new Date().toISOString()
@@ -685,7 +694,7 @@ async createIndividualAccountWithProfiles(
         next: (subRes) => {
           if (!subRes.success) {
             this.logger.error(`Subscription creation failed: ${subRes.message}`);
-            this.kafkaClient.emit('user.subscription.retry', {
+            this.analyticsKafkaClient.emit('user.subscription.retry', {
               accountUuid,
               planId: planRes.data.planId,
               timestamp: new Date().toISOString()
@@ -694,7 +703,7 @@ async createIndividualAccountWithProfiles(
         },
         error: (err) => {
           this.logger.error(`Subscription error: ${err.message}`);
-          this.kafkaClient.emit('user.subscription.retry', {
+          this.analyticsKafkaClient.emit('user.subscription.retry', {
             accountUuid,
             planId: planRes.data.planId,
             timestamp: new Date().toISOString()
@@ -702,7 +711,7 @@ async createIndividualAccountWithProfiles(
         }
       });
     } else {
-      this.kafkaClient.emit('user.payment.required', {
+      this.analyticsKafkaClient.emit('user.payment.required', {
         accountUuid,
         userUuid,
         email: normalizedEmail,
@@ -896,7 +905,7 @@ async createSkilledProfessionalProfile(
   }
 }
 
- async createHousingSeekerProfile(
+async createHousingSeekerProfile(
   accountUuid: string,
   data: HousingSeekerProfileDataDto
 ): Promise<BaseResponseDto<HousingSeekerProfileResponseDto>> {
@@ -925,6 +934,34 @@ async createSkilledProfessionalProfile(
     });
 
     await this.updateActiveProfiles(accountUuid, "HOUSING_SEEKER", 'add');
+
+    // Get userUuid from account
+    const account = await this.prisma.account.findUnique({
+      where: { uuid: accountUuid },
+      include: { users: { take: 1 } }
+    });
+    
+    const userUuid = account?.users[0]?.uuid;
+    
+    // ADD DEBUG LOGS HERE
+    this.logger.log(`🔍 DEBUG: Found userUuid = ${userUuid}`);
+    this.logger.log(`🔍 DEBUG: Data = ${JSON.stringify({
+      minBudget: data.minBudget,
+      maxBudget: data.maxBudget,
+      preferredCities: data.preferredCities,
+      preferredTypes: data.preferredTypes,
+      minBedrooms: data.minBedrooms,
+      maxBedrooms: data.maxBedrooms,
+      hasPets: data.hasPets,
+    })}`);
+    
+    if (userUuid) {
+      this.logger.log(`📤 ABOUT TO EMIT housing preferences event for user ${userUuid}`);
+      await this.emitHousingPreferencesEvent(userUuid, data, 'CREATED');
+      this.logger.log(`✅ EMISSION COMPLETED for user ${userUuid}`);
+    } else {
+      this.logger.warn(`⚠️ NO userUuid found for account ${accountUuid}`);
+    }
 
     const completion = this.calculateProfileCompletion("HOUSING_SEEKER", data);
     const missingFields = this.getMissingFields("HOUSING_SEEKER", data);
@@ -2084,6 +2121,53 @@ private mapToUserProfileResponse(user: UserWithAccount): UserProfileResponseDto 
   private handleOldImageDeletion(imageUrl: string): void {
     if (imageUrl.includes('default-avatar')) return;
     this.logger.log(`Emitting Kafka event to delete: ${imageUrl}`);
-    this.kafkaClient.emit('file.delete_obsolete', { url: imageUrl });
+    this.storageKafkaClient.emit('file.delete_obsolete', { url: imageUrl });
   }
+
+
+  // apps/profile-service/src/modules/user/user.service.ts
+
+// Add this method to emit housing preferences
+private async emitHousingPreferencesEvent(
+  userUuid: string,
+  profileData: HousingSeekerProfileDataDto,
+  action: 'CREATED' | 'UPDATED'
+): Promise<void> {
+  this.logger.log(`📤 EMIT: Preparing to emit event for user ${userUuid}`);
+  
+  try {
+    const preferences = {
+      userUuid,
+      timestamp: new Date().toISOString(),
+      action,
+      data: {
+        minBudget: profileData.minBudget,
+        maxBudget: profileData.maxBudget,
+        budgetMidpoint: profileData.minBudget && profileData.maxBudget 
+          ? (profileData.minBudget + profileData.maxBudget) / 2 
+          : null,
+        preferredLocations: profileData.preferredCities,
+        preferredNeighborhoods: profileData.preferredNeighborhoods,
+        preferredPropertyTypes: profileData.preferredTypes,
+        minBedrooms: profileData.minBedrooms,
+        maxBedrooms: profileData.maxBedrooms,
+        moveInDate: profileData.moveInDate,
+        hasPets: profileData.hasPets,
+        latitude: profileData.latitude,
+        longitude: profileData.longitude,
+        searchRadiusKm: profileData.searchRadiusKm,
+      }
+    };
+
+    this.logger.log(`📤 EMIT: Emitting housing.preferences.updated for user ${userUuid}`);
+    this.logger.debug(`📤 EMIT: Payload = ${JSON.stringify(preferences)}`);
+    
+    await this.analyticsKafkaClient.emit('housing.preferences.updated', preferences);
+    
+    this.logger.log(`✅ EMIT: Successfully emitted for user ${userUuid}`);
+  } catch (error) {
+    this.logger.error(`❌ EMIT: Failed to emit housing preferences event: ${error.message}`);
+    this.logger.error(error.stack);
+  }
+}
 }

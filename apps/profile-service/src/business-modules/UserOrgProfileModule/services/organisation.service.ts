@@ -159,7 +159,10 @@ export class OrganisationService implements OnModuleInit {
     private readonly subscriptionsClient: ClientGrpc,
     @Inject('PLANS_PACKAGE') private readonly plansClient: ClientGrpc,
     @Inject('NOTIFICATION_EVENT_BUS') private readonly notificationBus: ClientProxy,
-    @Inject('KAFKA_SERVICE') private readonly kafkaClient: ClientKafka,
+    // For storage events (consuming)
+    @Inject('KAFKA_STORAGE_CLIENT') private readonly storageKafkaClient: ClientKafka,
+    // For analytics events (producing)
+    @Inject('KAFKA_ANALYTICS_CLIENT') private readonly analyticsKafkaClient: ClientKafka,
   ) {
     this.rbacGrpc = this.rbacClient.getService<RbacServiceGrpc>('RbacService');
     this.subscriptionGrpc =
@@ -171,8 +174,8 @@ export class OrganisationService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    this.kafkaClient.subscribeToResponseOf('file.delete_obsolete');
-    await this.kafkaClient.connect();
+    this.storageKafkaClient.subscribeToResponseOf('file.delete_obsolete');
+    await this.storageKafkaClient.connect();
   }
 
   // ======================================================
@@ -417,7 +420,7 @@ export class OrganisationService implements OnModuleInit {
     files.forEach(url => {
       if (!url.includes('default-avatar') && !url.includes('default-logo')) {
         this.logger.log(`Emitting Kafka event to delete: ${url}`);
-        this.kafkaClient.emit('file.delete_obsolete', { url });
+        this.storageKafkaClient.emit('file.delete_obsolete', { url });
       }
     });
   }
@@ -428,7 +431,7 @@ export class OrganisationService implements OnModuleInit {
   private handleOldImageDeletion(imageUrl: string): void {
     if (imageUrl.includes('default-avatar') || imageUrl.includes('default-logo')) return;
     this.logger.log(`Emitting Kafka event to delete: ${imageUrl}`);
-    this.kafkaClient.emit('file.delete_obsolete', { url: imageUrl });
+    this.storageKafkaClient.emit('file.delete_obsolete', { url: imageUrl });
   }
 
   /**

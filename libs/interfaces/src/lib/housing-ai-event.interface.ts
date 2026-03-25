@@ -64,7 +64,7 @@ export interface HousingAIEvent {
       imagesCount?: number;
       daysSincePosted?: number;
       accountId?: string;
-      creatorId?: string;
+      listingCreatorId?: string;
       status?: string;
     };
     
@@ -132,6 +132,7 @@ export interface HousingAIEvent {
 // Specific event types with enhanced typing
 export interface HousingViewEvent extends HousingAIEvent {
   eventType: 'VIEW';
+  viewingUserId: string;  // ← CHANGED: viewerId → viewingUserId
   metadata: HousingAIEvent['metadata'] & {
     viewDuration?: number;
     scrollDepth?: number;
@@ -174,12 +175,14 @@ export interface HousingInquiryEvent extends HousingAIEvent {
 
 export interface HousingViewingScheduledEvent extends HousingAIEvent {
   eventType: 'SCHEDULE_VIEWING';
+  schedulerId: string;      // Who made the booking
+  attendingUserId: string;  // ← ADDED: Who will attend the viewing
   metadata: HousingAIEvent['metadata'] & {
     viewingId: string;
     viewingDate: string;
     isAdminBooking?: boolean;
-    viewingDuration?: number; // Expected duration in minutes
-    participants?: number; // Number of people attending
+    viewingDuration?: number;
+    participants?: number;
   };
 }
 

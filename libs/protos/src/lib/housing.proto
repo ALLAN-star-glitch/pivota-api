@@ -90,7 +90,7 @@ message SearchContext {
 }
 
 message ListingViewContext {
-  optional string userId = 1;
+  optional string viewingUserId = 1;  // CHANGED: userId → viewingUserId
   string sessionId = 2;
   ClientInfo client = 3;
   string platform = 4;
@@ -141,23 +141,24 @@ message HouseListing {
   string accountName = 23;
   optional double latitude = 24;
   optional double longitude = 25;
-  string ownerEmail = 26;  // ADDED - Email of the property owner/agent
+  string ownerEmail = 26;  // Email of the property owner/agent
+  string listingCreatorId = 27;  // ADDED: ID of the user who created/owns the listing
 }
 
 message HouseViewing {
   string id = 1;
   string houseId = 2;
-  string viewerId = 3;
-  string viewerEmail = 4;
-  string viewerName = 5;
+  string attendingUserId = 3;      // CHANGED: viewerId → attendingUserId (who will attend)
+  string attendingUserEmail = 4;   // CHANGED: viewerEmail → attendingUserEmail
+  string attendingUserName = 5;    // CHANGED: viewerName → attendingUserName
   string viewingDate = 6;
   string status = 7;
   string notes = 8;
   string createdAt = 9;
   string updatedAt = 10;
-  string bookedById = 11;
-  string bookedByEmail = 12;
-  string bookedByName = 13;
+  string schedulerId = 11;          // CHANGED: bookedById → schedulerId (who made the booking)
+  string schedulerEmail = 12;       // CHANGED: bookedByEmail → schedulerEmail
+  string schedulerName = 13;        // CHANGED: bookedByName → schedulerName
 }
 
 // ===================================================
@@ -186,7 +187,7 @@ message CreateHouseListingRequest {
   optional double latitude = 19;
   optional double longitude = 20;
   string ownerEmail = 21;
-  optional ClientInfo clientInfo = 22;  // ADD THIS LINE
+  optional ClientInfo clientInfo = 22;
 }
 
 message SearchHouseListingsRequest {
@@ -225,7 +226,7 @@ message UpdateHouseListingData {
   optional string accountId = 13;
   optional double latitude = 14;
   optional double longitude = 15;
-  optional string ownerEmail = 16;  // ADDED - Allow updating owner email
+  optional string ownerEmail = 16;
 }
 
 message UpdateHouseListingStatusRequest {
@@ -244,14 +245,14 @@ message ArchiveHouseListingRequest {
 // ===================================================
 message ScheduleViewingRequest {
   string houseId = 1;
-  string callerId = 2;
-  string callerEmail = 3;
-  string callerName = 4;
+  string schedulerId = 2;           // CHANGED: callerId → schedulerId (who makes the booking)
+  string schedulerEmail = 3;        // CHANGED: callerEmail → schedulerEmail
+  string schedulerName = 4;         // CHANGED: callerName → schedulerName
   string userRole = 5;
   string viewingDate = 6;
-  optional string targetViewerId = 7;
+  optional string attendingUserId = 7;   // CHANGED: targetViewerId → attendingUserId (who will attend)
   optional string notes = 8;
-  optional ListingViewContext context = 9;  // ADD THIS
+  optional ListingViewContext context = 9;
 }
 
 // ===================================================
@@ -259,14 +260,14 @@ message ScheduleViewingRequest {
 // ===================================================
 message ScheduleAdminViewingRequest {
   string houseId = 1;
-  string callerId = 2;
-  string callerEmail = 3;
-  string callerName = 4;
+  string schedulerId = 2;           // CHANGED: callerId → schedulerId (admin who makes the booking)
+  string schedulerEmail = 3;        // CHANGED: callerEmail → schedulerEmail
+  string schedulerName = 4;         // CHANGED: callerName → schedulerName
   string userRole = 5;
   string viewingDate = 6;
-  string targetViewerId = 7;
-  string targetViewerEmail = 8;
-  string targetViewerName = 9;
+  string attendingUserId = 7;       // CHANGED: targetViewerId → attendingUserId (who will attend)
+  string attendingUserEmail = 8;    // CHANGED: targetViewerEmail → attendingUserEmail
+  string attendingUserName = 9;     // CHANGED: targetViewerName → attendingUserName
   optional string notes = 10;
   optional AdminMetadata adminMetadata = 11;
 }

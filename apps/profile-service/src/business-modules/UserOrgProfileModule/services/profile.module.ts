@@ -1,3 +1,4 @@
+// apps/profile-service/src/profile.module.ts
 import { Module } from '@nestjs/common';
 import { UserController } from '../controllers/user.controller';
 import { UserService } from './user.service';
@@ -16,7 +17,7 @@ import { RBAC_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH, PLANS_PROTO_PATH } from '@pi
     SharedStorageModule,
     
     ClientsModule.register([
-      // 1. RMQ: Notification Event Bus (for emails - matches AuthModule)
+      // 1. RMQ: Notification Event Bus (for emails)
       {
         name: 'NOTIFICATION_EVENT_BUS',
         transport: Transport.RMQ,
@@ -27,17 +28,31 @@ import { RBAC_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH, PLANS_PROTO_PATH } from '@pi
         },
       },
 
-      // 2. KAFKA CLIENT (for storage events)
+      // 2. KAFKA CLIENT - STORAGE EVENTS (Consumer - for file deletion)
       {
-        name: 'KAFKA_SERVICE',
+        name: 'KAFKA_STORAGE_CLIENT',
         transport: Transport.KAFKA,
         options: {
           client: {
+            clientId: 'profile-service-storage',
             brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
           },
           consumer: {
             groupId: 'profile-service-storage-consumer',
           },
+        },
+      },
+
+      // 3. KAFKA CLIENT - ANALYTICS EVENTS (Producer - for housing preferences)
+      {
+        name: 'KAFKA_ANALYTICS_CLIENT',
+        transport: Transport.KAFKA,
+        options: {
+          client: {
+            clientId: 'profile-service-analytics',
+            brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+          },
+          producerOnlyMode: true, // Only emits events, no consumer
         },
       },
 
@@ -76,14 +91,15 @@ import { RBAC_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH, PLANS_PROTO_PATH } from '@pi
     UserService,
     OrganisationService
   ],
-  exports: [OrganisationService], // Export if needed by other modules
+  exports: [OrganisationService],
 })
 export class ProfileModule {
   constructor() {
     console.log(
       '🚀 ProfileModule initialized:',
       '\n- RabbitMQ Client (NOTIFICATION_EVENT_BUS) active for email notifications',
-      '\n- Kafka Client (KAFKA_SERVICE) active for storage events',
+      '\n- Kafka Storage Client (KAFKA_STORAGE_CLIENT) active for consuming file deletion events',
+      '\n- Kafka Analytics Client (KAFKA_ANALYTICS_CLIENT) active for emitting housing preferences',
       '\n- StorageModule active for Supabase operations',
     );
   }
