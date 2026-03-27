@@ -16,11 +16,11 @@ export class HousingStorageService {
    */
   async storeHousingView(data: any): Promise<{ success: boolean; message?: string; code?: string }> {
     try {
-      this.logger.debug(`🏠 Storing housing view: ${data.listingId}`);
+      this.logger.debug(`Storing housing view: ${data.listingId}`);
 
-      // Fetch user preferences from UserHousingPreferences table
+      // Fetch user preferences from UserHousingPreferences table using seekerId
       const userPrefs = await this.prisma.userHousingPreferences.findUnique({
-        where: { userUuid: data.userUuid }
+        where: { seekerId: data.seekerId }
       });
 
       // Separate base data from housing-specific data
@@ -39,15 +39,10 @@ export class HousingStorageService {
         housingPetPolicy,
         userScheduledViewing,
         userCompletedViewing,
-        // NEW: Tracking fields
-        viewingUserId,
-        lastViewedAt,
-        attendingUserId,
-        schedulerId,
-        scheduledAt,
-        scheduledFor,
+        // Tracking fields
+        viewingId,
+        viewingDate,
         viewingStatus,
-        listingCreatorId,
         // Base fields (go to SmartMatchyBase)
         ...baseData
       } = data;
@@ -59,17 +54,21 @@ export class HousingStorageService {
       const baseRecord = await this.prisma.smartMatchyBase.create({
         data: {
           // Core identifiers
-          userUuid: baseData.userUuid,
+          seekerId: baseData.seekerId,
           listingId: baseData.listingId,
           vertical: baseData.vertical,
           timestamp: baseData.timestamp,
           featureSetVersion: baseData.featureSetVersion,
           
+          // Provider/owner identifier
+          providerId: baseData.providerId,
+          
           // Raw location data
-          userLat: baseData.userLat,
-          userLng: baseData.userLng,
+          seekerLat: baseData.userLat,
+          seekerLng: baseData.userLng,
           listingLat: baseData.listingLat,
           listingLng: baseData.listingLng,
+          locationDistance: matchScores.locationDistance,
           
           // Raw pricing data
           listingPrice: baseData.listingPrice,
@@ -94,8 +93,7 @@ export class HousingStorageService {
           dayOfWeek: baseData.dayOfWeek,
           isWeekend: baseData.isWeekend,
           
-          // Match scores (from base table)
-          locationDistance: matchScores.locationDistance,
+          // Match scores
           locationScore: matchScores.locationScore,
           priceScore: matchScores.priceScore,
           recencyScore: matchScores.recencyScore,
@@ -120,7 +118,7 @@ export class HousingStorageService {
         },
       });
 
-      // Create housing-specific record - includes tracking fields
+      // Create housing-specific record
       await this.prisma.smartMatchyHousing.create({
         data: {
           baseId: baseRecord.id,
@@ -138,7 +136,10 @@ export class HousingStorageService {
           housingYearBuilt,
           housingPetPolicy,
           
-          // Match scores (calculated using user preferences)
+          // Listing owner (maps to providerId in base)
+          listingOwnerId: baseData.providerId,
+          
+          // Match scores
           priceToBudgetRatio: matchScores.priceToBudgetRatio,
           isWithinBudget: matchScores.isWithinBudget,
           bedroomsMatch: matchScores.bedroomsMatch,
@@ -146,14 +147,10 @@ export class HousingStorageService {
           propertyTypeMatch: matchScores.propertyTypeMatch,
           furnishedMatch: matchScores.furnishedMatch,
           
-          // ==================== TRACKING FIELDS ====================
-          viewerId: viewingUserId || null,
-          lastViewedAt: lastViewedAt ? new Date(lastViewedAt) : null,
-          schedulerId: schedulerId || null,
-          scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-          scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
+          // Viewing tracking
+          viewingId: viewingId || null,
+          viewingDate: viewingDate ? new Date(viewingDate) : null,
           viewingStatus: viewingStatus || null,
-          creatorId: listingCreatorId || null,
           
           // Labels
           userScheduledViewing: userScheduledViewing ?? false,
@@ -164,7 +161,7 @@ export class HousingStorageService {
       return { success: true };
       
     } catch (error) {
-      this.logger.error(`❌ Failed to store housing view: ${error.message}`);
+      this.logger.error(`Failed to store housing view: ${error.message}`);
       return { 
         success: false, 
         message: error.message,
@@ -221,7 +218,10 @@ export class HousingStorageService {
     }
 
     // ==================== PROPERTY TYPE MATCH ====================
-    if (listingData.listingPropertyType && userPrefs.preferredPropertyType) {
+    // Use preferredTypes array or single preferredPropertyType for backward compatibility
+    if (listingData.listingPropertyType && userPrefs.preferredTypes && userPrefs.preferredTypes.length > 0) {
+      scores.propertyTypeMatch = userPrefs.preferredTypes.includes(listingData.listingPropertyType);
+    } else if (listingData.listingPropertyType && userPrefs.preferredPropertyType) {
       scores.propertyTypeMatch = listingData.listingPropertyType === userPrefs.preferredPropertyType;
     }
 
@@ -317,8 +317,8 @@ export class HousingStorageService {
 
   async storeRawAIEvent(event: HousingViewEvent): Promise<{ success: boolean; message?: string }> {
     try {
-      this.logger.debug(`📦 Raw AI event: ${JSON.stringify({
-        userId: event.userId,
+      this.logger.debug(`Raw AI event: ${JSON.stringify({
+        seekerId: event.seekerId,
         listingId: event.listingId,
         eventType: event.eventType,
         timestamp: event.metadata.timestamp
@@ -330,91 +330,90 @@ export class HousingStorageService {
     }
   }
 
- async updateHousingLabel(
-  userUuid: string, 
-  listingId: string, 
-  action: 'SAVE' | 'CONTACT' | 'CLICK' | 'CONVERT' | 'SCHEDULE_VIEWING' | 'COMPLETE_VIEWING',
-  dwellTime?: number,
-  metadata?: any
-): Promise<{ success: boolean; message?: string; code?: string }> {
-  try {
-    const baseRecord = await this.prisma.smartMatchyBase.findFirst({
-      where: {
-        userUuid,
-        listingId,
-        vertical: 'HOUSING'
-      }
-    });
+  async updateHousingLabel(
+    seekerId: string, 
+    listingId: string, 
+    action: 'SAVE' | 'CONTACT' | 'CLICK' | 'CONVERT' | 'SCHEDULE_VIEWING' | 'COMPLETE_VIEWING',
+    dwellTime?: number,
+    metadata?: any
+  ): Promise<{ success: boolean; message?: string; code?: string }> {
+    try {
+      const baseRecord = await this.prisma.smartMatchyBase.findFirst({
+        where: {
+          seekerId,
+          listingId,
+          vertical: 'HOUSING'
+        }
+      });
 
-    if (!baseRecord) {
+      if (!baseRecord) {
+        return { 
+          success: false, 
+          message: 'No matching record found',
+          code: 'NOT_FOUND'
+        };
+      }
+
+      switch (action) {
+        case 'SAVE':
+          await this.prisma.smartMatchyBase.update({
+            where: { id: baseRecord.id },
+            data: { userSaved: true }
+          });
+          break;
+        case 'CONTACT':
+          await this.prisma.smartMatchyBase.update({
+            where: { id: baseRecord.id },
+            data: { userContacted: true }
+          });
+          break;
+        case 'CLICK':
+          await this.prisma.smartMatchyBase.update({
+            where: { id: baseRecord.id },
+            data: { 
+              userClicked: true,
+              dwellTime: dwellTime ?? undefined
+            }
+          });
+          break;
+        case 'CONVERT':
+          await this.prisma.smartMatchyBase.update({
+            where: { id: baseRecord.id },
+            data: { userConverted: true }
+          });
+          break;
+        case 'SCHEDULE_VIEWING':
+          await this.prisma.smartMatchyHousing.update({
+            where: { baseId: baseRecord.id },
+            data: { 
+              userScheduledViewing: true,
+              viewingId: metadata?.viewingId,
+              viewingDate: metadata?.viewingDate ? new Date(metadata.viewingDate) : undefined,
+              viewingStatus: 'SCHEDULED'
+            }
+          });
+          break;
+        case 'COMPLETE_VIEWING':
+          await this.prisma.smartMatchyHousing.update({
+            where: { baseId: baseRecord.id },
+            data: { 
+              userCompletedViewing: true,
+              viewingStatus: 'COMPLETED'
+            }
+          });
+          break;
+      }
+
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Failed to update label: ${error.message}`);
       return { 
         success: false, 
-        message: 'No matching record found',
-        code: 'NOT_FOUND'
+        message: error.message,
+        code: 'INTERNAL_ERROR'
       };
     }
-
-    switch (action) {
-      case 'SAVE':
-        await this.prisma.smartMatchyBase.update({
-          where: { id: baseRecord.id },
-          data: { userSaved: true }
-        });
-        break;
-      case 'CONTACT':
-        await this.prisma.smartMatchyBase.update({
-          where: { id: baseRecord.id },
-          data: { userContacted: true }
-        });
-        break;
-      case 'CLICK':
-        await this.prisma.smartMatchyBase.update({
-          where: { id: baseRecord.id },
-          data: { 
-            userClicked: true,
-            dwellTime: dwellTime ?? undefined
-          }
-        });
-        break;
-      case 'CONVERT':
-        await this.prisma.smartMatchyBase.update({
-          where: { id: baseRecord.id },
-          data: { userConverted: true }
-        });
-        break;
-      case 'SCHEDULE_VIEWING':
-        await this.prisma.smartMatchyHousing.update({
-          where: { baseId: baseRecord.id },
-          data: { 
-            userScheduledViewing: true,
-            schedulerId: metadata?.schedulerId || userUuid,
-            scheduledAt: new Date(),
-            scheduledFor: metadata?.scheduledFor ? new Date(metadata.scheduledFor) : undefined,
-            viewingStatus: 'SCHEDULED'
-          }
-        });
-        break;
-      case 'COMPLETE_VIEWING':
-        await this.prisma.smartMatchyHousing.update({
-          where: { baseId: baseRecord.id },
-          data: { 
-            userCompletedViewing: true,
-            viewingStatus: 'COMPLETED'
-          }
-        });
-        break;
-    }
-
-    return { success: true };
-  } catch (error) {
-    this.logger.error(`Failed to update label: ${error.message}`);
-    return { 
-      success: false, 
-      message: error.message,
-      code: 'INTERNAL_ERROR'
-    };
   }
-}
 
   async deleteOldRecords(daysOld: number): Promise<number> {
     const cutoffDate = new Date();

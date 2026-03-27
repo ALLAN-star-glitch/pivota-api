@@ -49,7 +49,7 @@ export class HousingAnalyticsService {
     try {
       const value = event.value;
       
-      this.logger.debug(`🏠 Processing housing view for user ${value.userId}, listing ${value.listingId}`);
+      this.logger.debug(`Processing housing view for seeker ${value.seekerId}, listing ${value.listingId}`);
 
       // 1. Validate it's a housing listing
       if (!this.isHousingListing(value)) {
@@ -83,7 +83,7 @@ export class HousingAnalyticsService {
       return BaseResponseDto.ok(null, 'Housing view processed successfully', 'OK');
       
     } catch (error) {
-      this.logger.error(`❌ Failed to process housing view: ${error.message}`);
+      this.logger.error(`Failed to process housing view: ${error.message}`);
       return BaseResponseDto.fail('Processing failed', 'INTERNAL_ERROR');
     }
   }
@@ -95,7 +95,7 @@ export class HousingAnalyticsService {
     try {
       const value = event.value;
       
-      this.logger.debug(`🔍 Processing housing search for user ${value.userId}`);
+      this.logger.debug(`Processing housing search for seeker ${value.seekerId}`);
 
       // Transform search to SmartMatchy format
       const smartMatchyData = await this.transformSearchToSmartMatchy(value);
@@ -113,7 +113,7 @@ export class HousingAnalyticsService {
       return BaseResponseDto.ok(null, 'Housing search processed successfully', 'OK');
       
     } catch (error) {
-      this.logger.error(`❌ Failed to process housing search: ${error.message}`);
+      this.logger.error(`Failed to process housing search: ${error.message}`);
       return BaseResponseDto.fail('Processing failed', 'INTERNAL_ERROR');
     }
   }
@@ -125,7 +125,7 @@ export class HousingAnalyticsService {
     try {
       const value = event.value;
       
-      this.logger.debug(`📅 Processing housing viewing scheduled for user ${value.userId}, listing ${value.listingId}`);
+      this.logger.debug(`Processing housing viewing scheduled for seeker ${value.seekerId}, listing ${value.listingId}`);
 
       // Transform viewing scheduled to SmartMatchy format
       const smartMatchyData = await this.transformViewingScheduledToSmartMatchy(value);
@@ -143,59 +143,72 @@ export class HousingAnalyticsService {
       return BaseResponseDto.ok(null, 'Housing viewing scheduled processed successfully', 'OK');
       
     } catch (error) {
-      this.logger.error(`❌ Failed to process housing viewing scheduled: ${error.message}`);
+      this.logger.error(`Failed to process housing viewing scheduled: ${error.message}`);
       return BaseResponseDto.fail('Processing failed', 'INTERNAL_ERROR');
     }
   }
 
-  // apps/admin-service/src/modules/housing/business-analytics/housing-analytics.service.ts
-
-/**
- * Transform HousingViewEvent to SmartMatchy format
- */
-/**
+ /**
  * Transform HousingViewEvent to SmartMatchy format
  */
 private async transformViewToSmartMatchy(event: HousingViewEvent): Promise<Record<string, any>> {
-  const { userId, listingId, viewingUserId, metadata, eventType } = event;  // ← ADD viewingUserId
+  const { seekerId, listingId, metadata, eventType } = event;
   
   return {
     // Core identifiers
-    userUuid: userId,
+    seekerId: seekerId,
     listingId: listingId,
     vertical: 'HOUSING',
     timestamp: new Date(metadata.timestamp),
-    featureSetVersion: '1.0.0',
+    featureSetVersion: '2.1.0',
+    
+    // ==================== PROVIDER/OWNER IDENTIFIER ====================
+    providerId: metadata.listingData.listingCreatorId,
     
     // ==================== AI METADATA ====================
     aiEventType: eventType,
     
-    // ==================== VIEWER TRACKING ====================
-    viewingUserId: viewingUserId || userId,  // ← ADD THIS
-    lastViewedAt: new Date(metadata.timestamp),  // ← ADD THIS
-    
-    // ==================== SCHEDULER TRACKING (null for views) ====================
-    attendingUserId: null,  // ← ADD THIS
-    schedulerId: null,
-    scheduledAt: null,
-    scheduledFor: null,
+    // ==================== VIEWING TRACKING (null for views) ====================
+    viewingId: null,
+    viewingDate: null,
     viewingStatus: null,
     
-    // ==================== LISTING OWNER ====================
-    listingCreatorId: metadata.listingData.listingCreatorId,  // ← ADD THIS
-
-    // User Preferences
-    userMaxBudget: metadata.userContext?.priceRange?.max,
+    // ==================== USER PREFERENCES (from metadata.userContext) ====================
+    // Budget preferences
     userMinBudget: metadata.userContext?.priceRange?.min,
+    userMaxBudget: metadata.userContext?.priceRange?.max,
+    userBudgetMidpoint: metadata.userContext?.priceRange?.min && metadata.userContext?.priceRange?.max 
+      ? (metadata.userContext.priceRange.min + metadata.userContext.priceRange.max) / 2 
+      : null,
+    userBudgetFlexibility: metadata.userContext?.budgetFlexibility,
+    
+    // Bedroom preferences
     userMinBedrooms: metadata.userContext?.preferredBedrooms,
     userMaxBedrooms: metadata.userContext?.preferredBedrooms,
-    userPreferredBathrooms: metadata.userContext?.preferredBathrooms,
-    userPropertyType: metadata.userContext?.preferredPropertyTypes?.[0],
-    userPreferredNeighborhood: metadata.userContext?.preferredLocations?.[0],
-    userPreferredLocations: metadata.userContext?.preferredLocations,
-    userFavoriteAmenities: metadata.userContext?.favoriteAmenities,
+    userMinBathrooms: metadata.userContext?.preferredBathrooms,
     
-    // Listing Features
+    // Location preferences (matches new schema)
+    userPreferredCities: metadata.userContext?.preferredCities,
+    userPreferredNeighborhoods: metadata.userContext?.preferredNeighborhoods,
+    userSearchRadiusKm: metadata.userContext?.searchRadiusKm,
+    userPreferredLat: metadata.userContext?.latitude,
+    userPreferredLng: metadata.userContext?.longitude,
+    
+    // Property preferences (using preferredTypes)
+    userPreferredTypes: metadata.userContext?.preferredTypes,
+    
+    // Amenities
+    userFavoriteAmenities: metadata.userContext?.favoriteAmenities,
+    userPrefersFurnished: metadata.userContext?.prefersFurnished,
+    userHasPets: metadata.userContext?.hasPets,
+    
+    // Move-in preferences
+    userHouseholdSize: metadata.userContext?.householdSize,
+    
+    // Agent preference
+    userHasAgent: metadata.userContext?.hasAgent,
+    
+    // ==================== LISTING FEATURES (from metadata.listingData) ====================
     listingPrice: metadata.listingData.price,
     listingCurrency: metadata.listingData.currency || 'KES',
     listingBedrooms: metadata.listingData.bedrooms,
@@ -206,8 +219,6 @@ private async transformViewToSmartMatchy(event: HousingViewEvent): Promise<Recor
     listingNeighborhood: metadata.listingData.locationNeighborhood,
     listingLat: metadata.listingData.latitude,
     listingLng: metadata.listingData.longitude,
-    listingLatitude: metadata.listingData.latitude,
-    listingLongitude: metadata.listingData.longitude,
     listingCategoryId: metadata.listingData.categoryId,
     listingCategorySlug: metadata.listingData.categorySlug,
     listingAmenities: metadata.listingData.amenities,
@@ -216,9 +227,18 @@ private async transformViewToSmartMatchy(event: HousingViewEvent): Promise<Recor
     listingAge: metadata.listingData.daysSincePosted,
     listingStatus: metadata.listingData.status,
     
-    // Session Context
-    sessionReferrer: metadata.referrer,
-    sessionReferrerType: metadata.referrerType,
+    // ==================== HOUSING-SPECIFIC FEATURES ====================
+    housingType: metadata.listingData.listingType,
+    housingBedrooms: metadata.listingData.bedrooms,
+    housingBathrooms: metadata.listingData.bathrooms,
+    housingPropertyType: metadata.listingData.propertyType,
+    housingNeighborhood: metadata.listingData.locationNeighborhood,
+    housingIsFurnished: metadata.listingData.isFurnished,
+    housingAmenities: metadata.listingData.amenities,
+    housingSquareFootage: metadata.listingData.squareFootage,
+    housingYearBuilt: metadata.listingData.yearBuilt,
+    
+    // ==================== SESSION CONTEXT ====================
     sessionDevice: metadata.deviceType,
     sessionPlatform: metadata.platform,
     deviceType: metadata.deviceType,
@@ -230,115 +250,126 @@ private async transformViewToSmartMatchy(event: HousingViewEvent): Promise<Recor
     appVersion: metadata.appVersion,
     sessionSearchId: metadata.searchId,
     sessionSearchQuery: metadata.searchQuery,
-    sessionSearchMaxBudget: this.extractMaxBudgetFromFilters(metadata.searchFilters),
-    sessionSearchNeighborhood: this.extractNeighborhoodFromFilters(metadata.searchFilters),
     sessionSearchFilters: metadata.searchFilters,
     searchPosition: metadata.position,
     
-    // Interaction Context
+    // ==================== INTERACTION CONTEXT ====================
     interactionType: metadata.interactionType,
     scrollDepth: metadata.scrollDepth,
     viewDuration: metadata.viewDuration,
-    timeSpent: metadata.timeSpent,
     dwellTime: metadata.timeSpent,
     
-    // Temporal Features
+    // ==================== TEMPORAL FEATURES ====================
     hourOfDay: new Date(metadata.timestamp).getHours(),
     dayOfWeek: new Date(metadata.timestamp).getDay(),
     isWeekend: [0, 6].includes(new Date(metadata.timestamp).getDay()),
     
-    // Labels
+    // ==================== LABELS ====================
     userClicked: true,
     
-    // Timestamps
+    // ==================== TIMESTAMPS ====================
     createdAt: new Date(),
     updatedAt: new Date()
   };
 }
 
-/**
- * Transform HousingSearchEvent to SmartMatchy format
- */
-private async transformSearchToSmartMatchy(event: HousingSearchEvent): Promise<Record<string, any>> {
-  const { userId, metadata, eventType } = event;  // Add eventType here
-  
-  return {
-    userUuid: userId,
-    listingId: '',
-    vertical: 'HOUSING',
-    timestamp: new Date(metadata.timestamp),
-    featureSetVersion: '1.0.0',
+  /**
+   * Transform HousingSearchEvent to SmartMatchy format
+   */
+  private async transformSearchToSmartMatchy(event: HousingSearchEvent): Promise<Record<string, any>> {
+    const { seekerId, metadata, eventType } = event;
     
-    // ==================== AI METADATA ====================
-    aiEventType: eventType,  // This will be "SEARCH"
-  
-    
-    // Session Context
-    sessionReferrer: metadata.referrer,
-    sessionReferrerType: metadata.referrerType,
-    sessionDevice: metadata.deviceType,
-    sessionPlatform: metadata.platform,
-    os: metadata.os,
-    osVersion: metadata.osVersion,
-    browser: metadata.browser,
-    browserVersion: metadata.browserVersion,
-    isBot: metadata.isBot,
-    appVersion: metadata.appVersion,
-    sessionSearchId: metadata.searchId,
-    sessionSearchQuery: metadata.searchQuery,
-    sessionSearchFilters: metadata.searchFilters,
-    searchPosition: metadata.position,
-    
-    // Timestamps
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
-}
-/**
- * Transform HousingViewingScheduledEvent to SmartMatchy format
- */
-/**
+    return {
+      seekerId: seekerId,
+      listingId: '',
+      vertical: 'HOUSING',
+      timestamp: new Date(metadata.timestamp),
+      featureSetVersion: '2.1.0',
+      
+      // ==================== AI METADATA ====================
+      aiEventType: eventType,
+      
+      // Session Context
+      sessionDevice: metadata.deviceType,
+      sessionPlatform: metadata.platform,
+      deviceType: metadata.deviceType,
+      os: metadata.os,
+      osVersion: metadata.osVersion,
+      browser: metadata.browser,
+      browserVersion: metadata.browserVersion,
+      isBot: metadata.isBot,
+      appVersion: metadata.appVersion,
+      sessionSearchId: metadata.searchId,
+      sessionSearchQuery: metadata.searchQuery,
+      sessionSearchFilters: metadata.searchFilters,
+      searchPosition: metadata.position,
+      
+      // Timestamps
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+  }
+
+ /**
  * Transform HousingViewingScheduledEvent to SmartMatchy format
  */
 private async transformViewingScheduledToSmartMatchy(event: HousingViewingScheduledEvent): Promise<Record<string, any>> {
-  const { userId, listingId, schedulerId, attendingUserId, metadata, eventType } = event;
+  const { seekerId, listingId, metadata, eventType } = event;
   
   return {
-    userUuid: userId,
+    seekerId: seekerId,
     listingId: listingId,
     vertical: 'HOUSING',
     timestamp: new Date(metadata.timestamp),
-    featureSetVersion: '1.0.0',
+    featureSetVersion: '2.1.0',
+    
+    // ==================== PROVIDER/OWNER IDENTIFIER ====================
+    providerId: metadata.listingData.listingCreatorId,
     
     // ==================== AI METADATA ====================
     aiEventType: eventType,
     
-    // ==================== VIEWER TRACKING (null for schedules) ====================
-    viewingUserId: null,
-    lastViewedAt: null,
-    
-    // ==================== SCHEDULER TRACKING ====================
-    attendingUserId: attendingUserId,
-    schedulerId: schedulerId,
-    scheduledAt: new Date(metadata.timestamp),
-    scheduledFor: new Date(metadata.viewingDate),
+    // ==================== VIEWING TRACKING ====================
+    viewingId: metadata.viewingId,
+    viewingDate: new Date(metadata.viewingDate),
     viewingStatus: 'SCHEDULED',
     
-    // ==================== LISTING OWNER ====================
-    listingCreatorId: metadata.listingData.listingCreatorId,
-    
-    // User Preferences
-    userMaxBudget: metadata.userContext?.priceRange?.max,
+    // ==================== USER PREFERENCES (from metadata.userContext) ====================
+    // Budget preferences
     userMinBudget: metadata.userContext?.priceRange?.min,
+    userMaxBudget: metadata.userContext?.priceRange?.max,
+    userBudgetMidpoint: metadata.userContext?.priceRange?.min && metadata.userContext?.priceRange?.max 
+      ? (metadata.userContext.priceRange.min + metadata.userContext.priceRange.max) / 2 
+      : null,
+    userBudgetFlexibility: metadata.userContext?.budgetFlexibility,
+    
+    // Bedroom preferences
     userMinBedrooms: metadata.userContext?.preferredBedrooms,
     userMaxBedrooms: metadata.userContext?.preferredBedrooms,
-    userPreferredBathrooms: metadata.userContext?.preferredBathrooms,
-    userPropertyType: metadata.userContext?.preferredPropertyTypes?.[0],
-    userPreferredNeighborhood: metadata.userContext?.preferredLocations?.[0],
-    userPreferredLocations: metadata.userContext?.preferredLocations,
-    userFavoriteAmenities: metadata.userContext?.favoriteAmenities,
+    userMinBathrooms: metadata.userContext?.preferredBathrooms,
     
-    // Listing Features
+    // Location preferences (matches new schema)
+    userPreferredCities: metadata.userContext?.preferredCities,
+    userPreferredNeighborhoods: metadata.userContext?.preferredNeighborhoods,
+    userSearchRadiusKm: metadata.userContext?.searchRadiusKm,
+    userPreferredLat: metadata.userContext?.latitude,
+    userPreferredLng: metadata.userContext?.longitude,
+    
+    // Property preferences (using preferredTypes, not preferredPropertyTypes)
+    userPreferredTypes: metadata.userContext?.preferredTypes,
+    
+    // Amenities
+    userFavoriteAmenities: metadata.userContext?.favoriteAmenities,
+    userPrefersFurnished: metadata.userContext?.prefersFurnished,
+    userHasPets: metadata.userContext?.hasPets,
+    
+    // Move-in preferences
+    userHouseholdSize: metadata.userContext?.householdSize,
+    
+    // Agent preference
+    userHasAgent: metadata.userContext?.hasAgent,
+    
+    // ==================== LISTING FEATURES (from metadata.listingData) ====================
     listingPrice: metadata.listingData.price,
     listingCurrency: metadata.listingData.currency || 'KES',
     listingBedrooms: metadata.listingData.bedrooms,
@@ -352,9 +383,18 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
     listingAmenities: metadata.listingData.amenities,
     listingIsFurnished: metadata.listingData.isFurnished,
     
-    // Session Context
-    sessionReferrer: metadata.referrer,
-    sessionReferrerType: metadata.referrerType,
+    // ==================== HOUSING-SPECIFIC FEATURES ====================
+    housingType: metadata.listingData.listingType,
+    housingBedrooms: metadata.listingData.bedrooms,
+    housingBathrooms: metadata.listingData.bathrooms,
+    housingPropertyType: metadata.listingData.propertyType,
+    housingNeighborhood: metadata.listingData.locationNeighborhood,
+    housingIsFurnished: metadata.listingData.isFurnished,
+    housingAmenities: metadata.listingData.amenities,
+    housingSquareFootage: metadata.listingData.squareFootage,
+    housingYearBuilt: metadata.listingData.yearBuilt,
+    
+    // ==================== SESSION CONTEXT ====================
     sessionDevice: metadata.deviceType,
     sessionPlatform: metadata.platform,
     deviceType: metadata.deviceType,
@@ -368,26 +408,26 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
     sessionSearchFilters: metadata.searchFilters,
     searchPosition: metadata.position,
     
-    // Interaction Context
+    // ==================== INTERACTION CONTEXT ====================
     interactionType: metadata.interactionType,
     scrollDepth: metadata.scrollDepth,
     viewDuration: metadata.viewDuration,
-    timeSpent: metadata.timeSpent,
+    dwellTime: metadata.timeSpent,
     
-    // Viewing specific
+    // ==================== VIEWING SPECIFIC ====================
     isAdminBooking: metadata.isAdminBooking,
     viewingDuration: metadata.viewingDuration,
     viewingParticipants: metadata.participants,
     
-    // Temporal Features
+    // ==================== TEMPORAL FEATURES ====================
     hourOfDay: new Date(metadata.timestamp).getHours(),
     dayOfWeek: new Date(metadata.timestamp).getDay(),
     isWeekend: [0, 6].includes(new Date(metadata.timestamp).getDay()),
     
-    // Labels
+    // ==================== LABELS ====================
     userScheduledViewing: true,
     
-    // Timestamps
+    // ==================== TIMESTAMPS ====================
     createdAt: new Date(),
     updatedAt: new Date()
   };
@@ -397,7 +437,7 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
    * Update housing label (save, contact, click, convert, schedule viewing, complete viewing)
    */
   async updateHousingLabel(
-    userUuid: string,
+    seekerId: string,
     listingId: string,
     action: 'SAVE' | 'CONTACT' | 'CLICK' | 'CONVERT' | 'SCHEDULE_VIEWING' | 'COMPLETE_VIEWING',
     dwellTime?: number,
@@ -405,7 +445,7 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
   ): Promise<BaseResponseDto<LabelUpdateResponseDto>> {
     try {
       const result = await this.housingStorage.updateHousingLabel(
-        userUuid,
+        seekerId,
         listingId,
         action,
         dwellTime,
@@ -417,7 +457,7 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
       }
 
       const response: LabelUpdateResponseDto = {
-        userUuid,
+        userUuid: seekerId,
         listingId,
         action,
         updated: true
@@ -439,7 +479,7 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
       const milestone = rootData.milestone ?? rootData.metadata?.milestone;
       const accountId = rootData.accountId ?? rootData.metadata?.accountId;
       
-      this.logger.log(`🏆 Processing listing milestone ${milestone} for account ${accountId}`);
+      this.logger.log(`Processing listing milestone ${milestone} for account ${accountId}`);
 
       const getValue = (field: string) => {
         return rootData[field] ?? rootData.metadata?.[field];
@@ -480,7 +520,7 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
       await this.updateDailyMilestoneMetrics(rootData);
       await this.updateAccountMilestoneSummary(rootData);
 
-      this.logger.log(`✅ Milestone ${milestone} stored for account ${accountId}`);
+      this.logger.log(`Milestone ${milestone} stored for account ${accountId}`);
     } catch (error) {
       this.logger.error(`Failed to process milestone: ${error.message}`);
     }
@@ -502,7 +542,7 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
       const listingType = metadata.listingType ?? metadata.metadata?.listingType;
       
       if (!accountId || !milestone) {
-        this.logger.warn(`⚠️ Cannot update account summary: missing accountId or milestone`);
+        this.logger.warn(`Cannot update account summary: missing accountId or milestone`);
         return;
       }
       
@@ -567,7 +607,7 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
         });
       }
       
-      this.logger.debug(`📊 Updated account milestone summary for ${accountId}`);
+      this.logger.debug(`Updated account milestone summary for ${accountId}`);
     } catch (error) {
       this.logger.error(`Failed to update account milestone summary: ${error.message}`);
     }
@@ -585,7 +625,7 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
       const listingPrice = metadata.listingPrice ?? metadata.metadata?.listingPrice;
       
       if (!milestone || !listingPrice) {
-        this.logger.warn(`⚠️ Cannot update daily metrics: missing milestone or listingPrice`);
+        this.logger.warn(`Cannot update daily metrics: missing milestone or listingPrice`);
         return;
       }
 
@@ -639,7 +679,7 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
         }
       });
       
-      this.logger.debug(`📊 Updated daily milestone metrics for ${date.toISOString()}`);
+      this.logger.debug(`Updated daily milestone metrics for ${date.toISOString()}`);
       
     } catch (error) {
       this.logger.error(`Failed to update daily metrics: ${error.message}`);
@@ -722,7 +762,7 @@ private async transformViewingScheduledToSmartMatchy(event: HousingViewingSchedu
   }
 
   private validateHousingEvent(event: HousingViewEvent): { isValid: boolean; error?: string } {
-    if (!event.userId) return { isValid: false, error: 'Missing userId' };
+    if (!event.seekerId) return { isValid: false, error: 'Missing seekerId' };
     if (!event.listingId) return { isValid: false, error: 'Missing listingId' };
     if (!event.metadata?.listingData) return { isValid: false, error: 'Missing listingData' };
     

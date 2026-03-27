@@ -79,115 +79,108 @@ export class HousingTrackingService {
   ) {}
 
   /**
-   * Track when user views a listing
+   * Track when a house seeker views a listing
    */
   trackView(
-  viewingUserId: string,
-  listingId: string,
-  listingData: HouseListingData,
-  context?: ListingViewContextDto
-): void {
-  // Add log at entry
-  this.logger.log(`🔍 [KAFKA] trackView called - userId: ${viewingUserId}, listingId: ${listingId}`);
-  
-  if (!viewingUserId) {
-    this.logger.warn(`⚠️ [KAFKA] trackView skipped - no viewingUserId provided`);
-    return;
-  }
+    seekerId: string,
+    listingId: string,
+    listingData: HouseListingData,
+    context?: ListingViewContextDto
+  ): void {
+    this.logger.log(`trackView called - seekerId: ${seekerId}, listingId: ${listingId}`);
+    
+    if (!seekerId) {
+      this.logger.warn(`trackView skipped - no seekerId provided`);
+      return;
+    }
 
-  // Log Kafka client status
-  if (!this.kafkaClient) {
-    this.logger.error(`❌ [KAFKA] Kafka client is not available!`);
-    return;
-  }
+    if (!this.kafkaClient) {
+      this.logger.error(`Kafka client is not available!`);
+      return;
+    }
 
-  const event: HousingViewEvent = {
-    userId: viewingUserId,
-    listingId,
-    eventType: 'VIEW',
-    viewingUserId: viewingUserId,
-    metadata: {
-      timestamp: new Date().toISOString(),
-      sessionId: context?.sessionId,
-      platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
-      referrer: context?.referrer,
-      referrerType: undefined,
+    const event: HousingViewEvent = {
+      seekerId: seekerId,
+      listingId,
+      eventType: 'VIEW',
+      metadata: {
+        timestamp: new Date().toISOString(),
+        sessionId: context?.sessionId,
+        platform: context?.platform as 'WEB' | 'MOBILE' | 'API' | 'CLI' | undefined,
+        referrer: context?.referrer,
+        referrerType: undefined,
 
-      deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
-      os: context?.client?.os,
-      osVersion: context?.client?.osVersion,
-      browser: context?.client?.browser,
-      browserVersion: context?.client?.browserVersion,
-      appVersion: undefined,
-      isBot: context?.client?.isBot,
+        deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
+        os: context?.client?.os,
+        osVersion: context?.client?.osVersion,
+        browser: context?.client?.browser,
+        browserVersion: context?.client?.browserVersion,
+        appVersion: undefined,
+        isBot: context?.client?.isBot,
 
-      searchId: context?.search?.searchId,
-      searchQuery: context?.search?.query,
-      searchFilters: context?.search?.filters,
-      position: context?.search?.position,
+        searchId: context?.search?.searchId,
+        searchQuery: context?.search?.query,
+        searchFilters: context?.search?.filters,
+        position: context?.search?.position,
 
-      timeSpent: context?.timeSpent,
-      interactionType: context?.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined,
-      viewDuration: context?.viewDuration,
-      scrollDepth: context?.scrollDepth,
+        timeSpent: context?.timeSpent,
+        interactionType: context?.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined,
+        viewDuration: context?.viewDuration,
+        scrollDepth: context?.scrollDepth,
 
-      listingData: {
-        price: listingData.price,
-        currency: undefined,
-        bedrooms: listingData.bedrooms,
-        bathrooms: listingData.bathrooms,
-        locationCity: listingData.locationCity,
-        locationNeighborhood: listingData.locationNeighborhood,
-        listingType: listingData.listingType,
-        categoryId: listingData.categoryId,
-        categorySlug: listingData.category?.slug,
-        amenities: listingData.amenities,
-        isFurnished: listingData.isFurnished,
-        squareFootage: listingData.squareFootage,
-        yearBuilt: listingData.yearBuilt,
-        propertyType: listingData.propertyType as any,
-        latitude: listingData.latitude,
-        longitude: listingData.longitude,
-        imagesCount: listingData.images?.length || 0,
-        daysSincePosted: listingData.daysSincePosted,
-        accountId: listingData.accountId,
-        listingCreatorId: listingData.creatorId,
-        status: listingData.status
+        listingData: {
+          price: listingData.price,
+          currency: undefined,
+          bedrooms: listingData.bedrooms,
+          bathrooms: listingData.bathrooms,
+          locationCity: listingData.locationCity,
+          locationNeighborhood: listingData.locationNeighborhood,
+          listingType: listingData.listingType,
+          categoryId: listingData.categoryId,
+          categorySlug: listingData.category?.slug,
+          amenities: listingData.amenities,
+          isFurnished: listingData.isFurnished,
+          squareFootage: listingData.squareFootage,
+          yearBuilt: listingData.yearBuilt,
+          propertyType: listingData.propertyType as any,
+          latitude: listingData.latitude,
+          longitude: listingData.longitude,
+          imagesCount: listingData.images?.length || 0,
+          daysSincePosted: listingData.daysSincePosted,
+          accountId: listingData.accountId,
+          listingCreatorId: listingData.creatorId,
+          status: listingData.status
+        },
+
+        userContext: {}
       },
+    };
 
-      userContext: {}
-    },
-  };
+    this.logger.debug(`Sending VIEW event - payload: ${JSON.stringify({
+      eventType: event.eventType,
+      seekerId: event.seekerId,
+      listingId: event.listingId,
+      timestamp: event.metadata.timestamp
+    })}`);
 
-  // Log event payload before sending
-  this.logger.debug(`📦 [KAFKA] Sending VIEW event - payload: ${JSON.stringify({
-    eventType: event.eventType,
-    userId: event.userId,
-    listingId: event.listingId,
-    viewingUserId: event.viewingUserId,
-    timestamp: event.metadata.timestamp
-  })}`);
+    this.kafkaClient.emit('housing.ai.tracking', {
+      key: event.seekerId,
+      value: event
+    });
 
-  // Emit to Kafka
-  this.kafkaClient.emit('housing.ai.tracking', {
-    key: event.userId,
-    value: event
-  });
+    this.logger.log(`VIEW event sent for listing ${listingId} by seeker ${seekerId}`);
+  }
 
-  // Log success
-  this.logger.log(`✅ [KAFKA] VIEW event sent to topic 'housing.ai.tracking' for listing ${listingId} by user ${viewingUserId}`);
-  this.logger.debug(`📊 Device: ${context?.client?.device} (${context?.client?.deviceType}), OS: ${context?.client?.os} ${context?.client?.osVersion || ''}, Browser: ${context?.client?.browser} ${context?.client?.browserVersion || ''}${context?.client?.isBot ? ' [BOT]' : ''}`);
-}
   /**
-   * Track when user performs a search
+   * Track when house seeker performs a search
    */
   trackSearch(
-    userId: string,
+    seekerId: string,
     searchDto: SearchHouseListingsDto,
     resultsCount: number,
     context?: ListingViewContextDto
   ): void {
-    if (!userId) return;
+    if (!seekerId) return;
 
     const filtersObject: Record<string, unknown> = {
       city: searchDto.city,
@@ -214,8 +207,7 @@ export class HousingTrackingService {
     const searchId = context?.search?.searchId || `search_${Date.now()}`;
 
     const event: HousingSearchEvent = {
-      userId,
-      listingId: '',
+      seekerId: seekerId,
       eventType: 'SEARCH',
       metadata: {
         timestamp: new Date().toISOString(),
@@ -265,28 +257,27 @@ export class HousingTrackingService {
     };
 
     this.kafkaClient.emit('housing.ai.tracking', {
-      key: event.userId,
+      key: event.seekerId,
       value: event
     });
 
-    this.logger.debug(`📤 Tracked SEARCH event for user ${userId} - ${resultsCount} results`);
-    this.logger.debug(`🔍 Search from: ${context?.client?.device} (${context?.client?.deviceType}), OS: ${context?.client?.os} ${context?.client?.osVersion || ''}, Browser: ${context?.client?.browser} ${context?.client?.browserVersion || ''}${context?.client?.isBot ? ' [BOT]' : ''}`);
+    this.logger.debug(`Tracked SEARCH event for seeker ${seekerId} - ${resultsCount} results`);
   }
 
   /**
-   * Track when user saves a listing
+   * Track when house seeker saves a listing
    */
   trackSave(
-    userId: string,
+    seekerId: string,
     listingId: string,
     listingData: HouseListingData,
     context?: ListingViewContextDto,
     saveMethod: 'BOOKMARK' | 'FAVORITE' | 'SHORTCUT' = 'BOOKMARK'
   ): void {
-    if (!userId) return;
+    if (!seekerId) return;
 
     const event: HousingSaveEvent = {
-      userId,
+      seekerId: seekerId,
       listingId,
       eventType: 'SAVE',
       metadata: {
@@ -296,9 +287,13 @@ export class HousingTrackingService {
         referrer: context?.referrer,
         referrerType: undefined,
         
-        deviceType: context?.client?.device as 'MOBILE' | 'TABLET' | 'DESKTOP' | undefined,
-        osVersion: context?.client?.os,
+        deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
+        os: context?.client?.os,
+        osVersion: context?.client?.osVersion,
+        browser: context?.client?.browser,
+        browserVersion: context?.client?.browserVersion,
         appVersion: undefined,
+        isBot: context?.client?.isBot,
         
         searchId: context?.search?.searchId,
         searchQuery: context?.search?.query,
@@ -341,18 +336,18 @@ export class HousingTrackingService {
     };
 
     this.kafkaClient.emit('housing.ai.tracking', {
-      key: event.userId,
+      key: event.seekerId,
       value: event
     });
 
-    this.logger.debug(`📤 Tracked SAVE event for listing ${listingId}`);
+    this.logger.debug(`Tracked SAVE event for listing ${listingId} by seeker ${seekerId}`);
   }
 
   /**
-   * Track when user schedules a viewing
+   * Track when house seeker schedules a viewing
    */
   trackViewingScheduled(
-    attendingUserId: string,
+    seekerId: string,
     listingId: string,
     viewingId: string,
     viewingDate: Date,
@@ -362,14 +357,13 @@ export class HousingTrackingService {
     adminMetadata?: any,
     schedulerId?: string
   ): void {
-    if (!attendingUserId) return;
+    if (!seekerId) return;
 
     const event: HousingViewingScheduledEvent = {
-      userId: attendingUserId,
+      seekerId: seekerId,
       listingId,
       eventType: 'SCHEDULE_VIEWING',
-      schedulerId: schedulerId || attendingUserId,
-      attendingUserId: attendingUserId,
+      schedulerId: schedulerId || seekerId,
       metadata: {
         timestamp: new Date().toISOString(),
         sessionId: context?.sessionId,
@@ -431,29 +425,28 @@ export class HousingTrackingService {
     };
 
     this.kafkaClient.emit('housing.ai.tracking', {
-      key: event.userId,
+      key: event.seekerId,
       value: event
     });
 
-    this.logger.debug(`📤 Tracked SCHEDULE_VIEWING event for listing ${listingId}`);
-    this.logger.debug(`📅 Scheduled from: ${context?.client?.device} (${context?.client?.deviceType}), OS: ${context?.client?.os} ${context?.client?.osVersion || ''}, Browser: ${context?.client?.browser} ${context?.client?.browserVersion || ''}${context?.client?.isBot ? ' [BOT]' : ''}`);
+    this.logger.debug(`Tracked SCHEDULE_VIEWING event for listing ${listingId} by seeker ${seekerId}`);
   }
 
   /**
-   * Track when user makes an inquiry
+   * Track when house seeker makes an inquiry
    */
   trackInquiry(
-    userId: string,
+    seekerId: string,
     listingId: string,
     inquiryType: 'PHONE' | 'EMAIL' | 'WHATSAPP' | 'CONTACT_FORM',
     listingData: HouseListingData,
     context?: ListingViewContextDto,
     message?: string
   ): void {
-    if (!userId) return;
+    if (!seekerId) return;
 
     const event: HousingInquiryEvent = {
-      userId,
+      seekerId: seekerId,
       listingId,
       eventType: 'INQUIRY',
       metadata: {
@@ -463,9 +456,13 @@ export class HousingTrackingService {
         referrer: context?.referrer,
         referrerType: undefined,
         
-        deviceType: context?.client?.device as 'MOBILE' | 'TABLET' | 'DESKTOP' | undefined,
-        osVersion: context?.client?.os,
+        deviceType: context?.client?.deviceType as 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | undefined,
+        os: context?.client?.os,
+        osVersion: context?.client?.osVersion,
+        browser: context?.client?.browser,
+        browserVersion: context?.client?.browserVersion,
         appVersion: undefined,
+        isBot: context?.client?.isBot,
         
         searchId: context?.search?.searchId,
         searchQuery: context?.search?.query,
@@ -508,11 +505,11 @@ export class HousingTrackingService {
     };
 
     this.kafkaClient.emit('housing.ai.tracking', {
-      key: event.userId,
+      key: event.seekerId,
       value: event
     });
 
-    this.logger.debug(`📤 Tracked INQUIRY event for listing ${listingId}`);
+    this.logger.debug(`Tracked INQUIRY event for listing ${listingId} by seeker ${seekerId}`);
   }
 
   /**
@@ -558,6 +555,7 @@ export class HousingTrackingService {
         accountId,
         listingId,
         eventType: 'LISTING_MILESTONE',
+        listingCreatorId: milestoneData.creatorId,
         metadata: {
           timestamp: new Date().toISOString(),
           sessionId: context?.sessionId,
@@ -621,7 +619,7 @@ export class HousingTrackingService {
         }
       };
 
-      this.logger.log(`📤 Emitting to analytics.listing.milestone for account ${accountId}, milestone ${milestone}`);
+      this.logger.log(`Emitting to analytics.listing.milestone for account ${accountId}, milestone ${milestone}`);
 
       this.kafkaClient.emit('analytics.listing.milestone', {
         key: event.accountId,
@@ -660,16 +658,16 @@ export class HousingTrackingService {
 
           if (this.notificationBus) {
             this.notificationBus.emit('admin.listing.milestone', emailData);
-            this.logger.log(`📧 Milestone email notification sent to ${recipientEmail} for milestone ${milestone}`);
+            this.logger.log(`Milestone email notification sent to ${recipientEmail} for milestone ${milestone}`);
           } else {
-            this.logger.debug(`📧 Milestone email would be sent to ${recipientEmail} for milestone ${milestone} (notificationBus not configured)`);
+            this.logger.debug(`Milestone email would be sent to ${recipientEmail} for milestone ${milestone} (notificationBus not configured)`);
           }
         }
       } catch (emailError) {
         this.logger.error(`Failed to send milestone email: ${emailError.message}`);
       }
 
-      this.logger.log(`🎯 Tracked LISTING_MILESTONE ${milestone} for account ${accountId}`);
+      this.logger.log(`Tracked LISTING_MILESTONE ${milestone} for account ${accountId}`);
       
     } catch (error) {
       this.logger.error(`Failed to track listing milestone: ${error.message}`);

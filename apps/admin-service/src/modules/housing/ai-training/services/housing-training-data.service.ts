@@ -33,7 +33,7 @@ export class HousingTrainingDataService {
         propertyTypes
       } = params;
 
-      this.logger.log(`📊 Generating training dataset from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      this.logger.log(`Generating training dataset from ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
       // Build where clause for SmartMatchyBase
       const where: any = {
@@ -49,7 +49,7 @@ export class HousingTrainingDataService {
       }
 
       if (userIds && userIds.length > 0) {
-        where.userUuid = { in: userIds };
+        where.seekerId = { in: userIds };
       }
 
       if (onlyLabeled) {
@@ -94,26 +94,47 @@ export class HousingTrainingDataService {
         }
       });
 
-      this.logger.log(`✅ Found ${records.length} training records`);
+      this.logger.log(`Found ${records.length} training records`);
 
-      // Get all unique user UUIDs from records
-      const userUuids = [...new Set(records.map(r => r.userUuid))];
+      // Cast to proper type for TypeScript
+      const typedRecords = records as any[];
+
+      // Get all unique seeker IDs from records, filtering out undefined/null
+      const seekerIds = [...new Set(
+        typedRecords
+          .map(r => r.seekerId)
+          .filter(id => id !== null && id !== undefined && id !== '')
+      )];
       
-      // Fetch user preferences for all users in ONE query
-      const userPreferences = await this.prisma.userHousingPreferences.findMany({
-        where: { userUuid: { in: userUuids } }
-      });
+      this.logger.log(`Found ${seekerIds.length} unique seeker IDs`);
+
+      // Fetch user preferences for all seekers in ONE query
+      let userPreferences: any[] = [];
+      if (seekerIds.length > 0) {
+        userPreferences = await this.prisma.userHousingPreferences.findMany({
+          where: { seekerId: { in: seekerIds } }
+        });
+      }
       
       // Create a map for quick lookup
       const prefsMap = new Map();
       userPreferences.forEach(pref => {
-        prefsMap.set(pref.userUuid, pref);
+        prefsMap.set(pref.seekerId, pref);
       });
 
+      // Log for debugging
+      this.logger.debug(`Found ${userPreferences.length} user preferences records`);
+
       // Transform records into training format with preferences
-      const samples = records.map(record => 
-        this.transformToTrainingSample(record, includeLabels, prefsMap.get(record.userUuid))
-      );
+      const samples = typedRecords.map(record => {
+        const prefs = prefsMap.get(record.seekerId);
+        if (prefs) {
+          this.logger.debug(`Found preferences for seeker ${record.seekerId}: minBudget=${prefs.minBudget}, maxBudget=${prefs.maxBudget}`);
+        } else {
+          this.logger.debug(`No preferences found for seeker ${record.seekerId}`);
+        }
+        return this.transformToTrainingSample(record, includeLabels, prefs);
+      });
 
       // Build feature and label schemas
       const featureSchema = this.getFeatureSchema();
@@ -150,7 +171,7 @@ export class HousingTrainingDataService {
             from: startDate.toISOString(), 
             to: endDate.toISOString() 
           },
-          version: '2.0.0',
+          version: '2.1.0',
           filters: {
             onlyLabeled,
             excludeBots,
@@ -211,37 +232,40 @@ export class HousingTrainingDataService {
         }
       });
 
+      // Cast to proper type for TypeScript
+      const typedRecords = records as any[];
+
       const stats: DatasetStatsResponseDto = {
-        totalEvents: records.length,
+        totalEvents: typedRecords.length,
         dateRange: { 
           from: startDate.toISOString(), 
           to: endDate.toISOString() 
         },
-        uniqueUsers: new Set(records.map(r => r.userUuid)).size,
-        uniqueListings: new Set(records.map(r => r.listingId)).size,
+        uniqueUsers: new Set(typedRecords.map(r => r.seekerId).filter(id => id !== null && id !== undefined)).size,
+        uniqueListings: new Set(typedRecords.map(r => r.listingId)).size,
         labelDistribution: {
-          clicked: records.filter(r => r.userClicked).length,
-          saved: records.filter(r => r.userSaved).length,
-          contacted: records.filter(r => r.userContacted).length,
-          scheduledViewing: records.filter(r => r.housing?.userScheduledViewing).length,
-          completedViewing: records.filter(r => r.housing?.userCompletedViewing).length,
-          anyInteraction: records.filter(r => r.userClicked || r.userSaved || r.userContacted).length
+          clicked: typedRecords.filter(r => r.userClicked).length,
+          saved: typedRecords.filter(r => r.userSaved).length,
+          contacted: typedRecords.filter(r => r.userContacted).length,
+          scheduledViewing: typedRecords.filter(r => r.housing?.userScheduledViewing).length,
+          completedViewing: typedRecords.filter(r => r.housing?.userCompletedViewing).length,
+          anyInteraction: typedRecords.filter(r => r.userClicked || r.userSaved || r.userContacted).length
         },
-        botTraffic: records.filter(r => r.isBot).length,
-        averageDwellTime: this.calculateAverage(records.map(r => r.dwellTime).filter(t => t !== null && t !== undefined)),
+        botTraffic: typedRecords.filter(r => r.isBot).length,
+        averageDwellTime: this.calculateAverage(typedRecords.map(r => r.dwellTime).filter(t => t !== null && t !== undefined)),
         priceRange: {
-          min: Math.min(...records.map(r => r.listingPrice).filter(p => p !== null && p !== undefined)),
-          max: Math.max(...records.map(r => r.listingPrice).filter(p => p !== null && p !== undefined)),
-          avg: this.calculateAverage(records.map(r => r.listingPrice).filter(p => p !== null && p !== undefined))
+          min: Math.min(...typedRecords.map(r => r.listingPrice).filter(p => p !== null && p !== undefined)),
+          max: Math.max(...typedRecords.map(r => r.listingPrice).filter(p => p !== null && p !== undefined)),
+          avg: this.calculateAverage(typedRecords.map(r => r.listingPrice).filter(p => p !== null && p !== undefined))
         },
         matchScores: {
-          avgOverallMatchScore: this.calculateAverage(records.map(r => r.overallMatchScore).filter(s => s !== null && s !== undefined)),
-          avgPriceToBudgetRatio: this.calculateAverage(records.map(r => r.housing?.priceToBudgetRatio).filter(r => r !== null && r !== undefined)),
-          avgLocationDistance: this.calculateAverage(records.map(r => r.locationDistance).filter(d => d !== null && d !== undefined))
+          avgOverallMatchScore: this.calculateAverage(typedRecords.map(r => r.overallMatchScore).filter(s => s !== null && s !== undefined)),
+          avgPriceToBudgetRatio: this.calculateAverage(typedRecords.map(r => r.housing?.priceToBudgetRatio).filter(r => r !== null && r !== undefined)),
+          avgLocationDistance: this.calculateAverage(typedRecords.map(r => r.locationDistance).filter(d => d !== null && d !== undefined))
         },
-        temporalDistribution: this.getTemporalDistribution(records),
-        hourDistribution: this.getHourDistribution(records),
-        dayDistribution: this.getDayDistribution(records)
+        temporalDistribution: this.getTemporalDistribution(typedRecords),
+        hourDistribution: this.getHourDistribution(typedRecords),
+        dayDistribution: this.getDayDistribution(typedRecords)
       };
 
       return BaseResponseDto.ok(stats, 'Dataset statistics retrieved', 'OK');
@@ -306,8 +330,9 @@ export class HousingTrainingDataService {
     const rows = samples.map(sample => {
       const row: any = {
         id: sample.id,
-        userUuid: sample.userUuid,
+        seekerId: sample.seekerId,
         listingId: sample.listingId,
+        listingCreatorId: sample.listingCreatorId,
         timestamp: sample.timestamp,
         ...sample.features,
         ...(sample.labels || {})
@@ -356,28 +381,32 @@ export class HousingTrainingDataService {
   private transformToTrainingSample(record: any, includeLabels: boolean, userPrefs: any) {
     const features: Record<string, any> = {};
 
+    // ==================== AI EVENT TYPE ====================
+    features.aiEventType = record.aiEventType || 'VIEW';
+
     // ==================== USER PREFERENCES (from UserHousingPreferences) ====================
-    features.userMinBudget = userPrefs?.minBudget || null;
-    features.userMaxBudget = userPrefs?.maxBudget || null;
-    features.userBudgetMidpoint = userPrefs?.budgetMidpoint || null;
-    features.userBudgetFlexibility = userPrefs?.budgetFlexibility || null;
-    features.userMinBedrooms = userPrefs?.minBedrooms || null;
-    features.userMaxBedrooms = userPrefs?.maxBedrooms || null;
-    features.userMinBathrooms = userPrefs?.minBathrooms || null;
-    features.userPreferredNeighborhood = userPrefs?.preferredNeighborhood || null;
-    features.userPreferredLocations = userPrefs?.preferredLocations || null;
-    features.userPreferredPropertyTypes = userPrefs?.preferredPropertyTypes || null;
-    features.userPreferredPropertyType = userPrefs?.preferredPropertyType || null;
-    features.userFavoriteAmenities = userPrefs?.favoriteAmenities || null;
-    features.userPrefersFurnished = userPrefs?.prefersFurnished ? 1 : 0;
-    features.userHasPets = userPrefs?.hasPets ? 1 : 0;
-    features.userSearchRadiusKm = userPrefs?.searchRadiusKm || null;
-    features.userPreferredLat = userPrefs?.preferredLat || null;
-    features.userPreferredLng = userPrefs?.preferredLng || null;
-    features.userHasAgent = userPrefs?.hasAgent ? 1 : 0;
-    features.userPreferredHousingType = userPrefs?.preferredHousingType || null;
-    features.userHouseholdSize = userPrefs?.householdSize || null;
-    features.userPreferredMoveInDate = userPrefs?.preferredMoveInDate?.toISOString() || null;
+    // Use the actual preference values from userPrefs (which comes from UserHousingPreferences table)
+    features.userMinBudget = userPrefs?.minBudget !== undefined && userPrefs?.minBudget !== null ? userPrefs.minBudget : null;
+    features.userMaxBudget = userPrefs?.maxBudget !== undefined && userPrefs?.maxBudget !== null ? userPrefs.maxBudget : null;
+    features.userBudgetMidpoint = userPrefs?.budgetMidpoint !== undefined && userPrefs?.budgetMidpoint !== null ? userPrefs.budgetMidpoint : null;
+    features.userBudgetFlexibility = userPrefs?.budgetFlexibility !== undefined && userPrefs?.budgetFlexibility !== null ? userPrefs.budgetFlexibility : null;
+    features.userMinBedrooms = userPrefs?.minBedrooms !== undefined && userPrefs?.minBedrooms !== null ? userPrefs.minBedrooms : null;
+    features.userMaxBedrooms = userPrefs?.maxBedrooms !== undefined && userPrefs?.maxBedrooms !== null ? userPrefs.maxBedrooms : null;
+    features.userMinBathrooms = userPrefs?.minBathrooms !== undefined && userPrefs?.minBathrooms !== null ? userPrefs.minBathrooms : null;
+    features.userPreferredNeighborhood = userPrefs?.preferredNeighborhood !== undefined && userPrefs?.preferredNeighborhood !== null ? userPrefs.preferredNeighborhood : null;
+    features.userPreferredLocations = userPrefs?.preferredLocations !== undefined && userPrefs?.preferredLocations !== null ? userPrefs.preferredLocations : null;
+    features.userPreferredPropertyTypes = userPrefs?.preferredPropertyTypes !== undefined && userPrefs?.preferredPropertyTypes !== null ? userPrefs.preferredPropertyTypes : null;
+    features.userPreferredPropertyType = userPrefs?.preferredPropertyType !== undefined && userPrefs?.preferredPropertyType !== null ? userPrefs.preferredPropertyType : null;
+    features.userFavoriteAmenities = userPrefs?.favoriteAmenities !== undefined && userPrefs?.favoriteAmenities !== null ? userPrefs.favoriteAmenities : null;
+    features.userPrefersFurnished = userPrefs?.prefersFurnished !== undefined && userPrefs?.prefersFurnished !== null ? (userPrefs.prefersFurnished ? 1 : 0) : 0;
+    features.userHasPets = userPrefs?.hasPets !== undefined && userPrefs?.hasPets !== null ? (userPrefs.hasPets ? 1 : 0) : 0;
+    features.userSearchRadiusKm = userPrefs?.searchRadiusKm !== undefined && userPrefs?.searchRadiusKm !== null ? userPrefs.searchRadiusKm : null;
+    features.userPreferredLat = userPrefs?.preferredLat !== undefined && userPrefs?.preferredLat !== null ? userPrefs.preferredLat : null;
+    features.userPreferredLng = userPrefs?.preferredLng !== undefined && userPrefs?.preferredLng !== null ? userPrefs.preferredLng : null;
+    features.userHasAgent = userPrefs?.hasAgent !== undefined && userPrefs?.hasAgent !== null ? (userPrefs.hasAgent ? 1 : 0) : 0;
+    features.userPreferredHousingType = userPrefs?.preferredHousingType !== undefined && userPrefs?.preferredHousingType !== null ? userPrefs.preferredHousingType : null;
+    features.userHouseholdSize = userPrefs?.householdSize !== undefined && userPrefs?.householdSize !== null ? userPrefs.householdSize : null;
+    features.userPreferredMoveInDate = userPrefs?.preferredMoveInDate !== undefined && userPrefs?.preferredMoveInDate !== null ? userPrefs.preferredMoveInDate.toISOString() : null;
     
     // ==================== LISTING FEATURES (from SmartMatchyBase) ====================
     features.listingPrice = record.listingPrice;
@@ -405,14 +434,6 @@ export class HousingTrainingDataService {
       features.housingSquareFootage = record.housing.housingSquareFootage;
       features.housingYearBuilt = record.housing.housingYearBuilt;
       
-      // ==================== TRACKING FIELDS ====================
-      features.viewingUserId = record.housing.viewerId;  // Who viewed the listing
-      features.attendingUserId = record.housing.schedulerId;  // Who will attend (maps to schedulerId)
-      features.listingCreatorId = record.housing.creatorId;  // Listing owner
-      features.scheduledAt = record.housing.scheduledAt;
-      features.scheduledFor = record.housing.scheduledFor;
-      features.viewingStatus = record.housing.viewingStatus;
-      
       // Match scores from housing
       features.priceToBudgetRatio = record.housing.priceToBudgetRatio;
       features.isWithinBudget = record.housing.isWithinBudget ? 1 : 0;
@@ -431,12 +452,6 @@ export class HousingTrainingDataService {
       features.housingMinimumStay = null;
       features.housingSquareFootage = null;
       features.housingYearBuilt = null;
-      features.viewingUserId = null;
-      features.attendingUserId = null;
-      features.listingCreatorId = null;
-      features.scheduledAt = null;
-      features.scheduledFor = null;
-      features.viewingStatus = null;
       features.priceToBudgetRatio = null;
       features.isWithinBudget = 0;
       features.bedroomsMatch = 0;
@@ -475,8 +490,9 @@ export class HousingTrainingDataService {
 
     const sample: any = {
       id: record.id,
-      userUuid: record.userUuid,
+      seekerId: record.seekerId,
       listingId: record.listingId,
+      listingCreatorId: record.housing?.listingOwnerId || null,
       timestamp: record.timestamp,
       features
     };
@@ -501,6 +517,12 @@ export class HousingTrainingDataService {
 
   private getFeatureSchema() {
     return {
+      // ==================== AI EVENT TYPE ====================
+      aiEventType: { 
+        type: 'categorical' as const, 
+        description: 'Type of AI event - VIEW, SEARCH, SAVE, SCHEDULE_VIEWING, INQUIRY' 
+      },
+      
       // User Preference Numeric Features
       userMinBudget: { type: 'numeric' as const, description: 'Minimum budget user is willing to spend' },
       userMaxBudget: { type: 'numeric' as const, description: 'Maximum budget user is willing to spend' },
@@ -526,10 +548,6 @@ export class HousingTrainingDataService {
       // Housing-specific Numeric Features
       housingSquareFootage: { type: 'numeric' as const, description: 'Square footage of property (housing specific)' },
       housingYearBuilt: { type: 'numeric' as const, description: 'Year property was built (housing specific)' },
-      
-      // Tracking Numeric Features
-      scheduledAt: { type: 'datetime' as const, description: 'When the viewing was scheduled' },
-      scheduledFor: { type: 'datetime' as const, description: 'When the viewing is scheduled for' },
       
       // Match Score Numeric Features
       priceToBudgetRatio: { type: 'numeric' as const, description: 'Listing price divided by user\'s max budget' },
@@ -567,12 +585,6 @@ export class HousingTrainingDataService {
       housingAmenities: { type: 'categorical' as const, description: 'Housing amenities (array)' },
       housingMinimumStay: { type: 'categorical' as const, description: 'Minimum stay requirement' },
       
-      // Tracking Categorical Features
-      viewingUserId: { type: 'categorical' as const, description: 'User who viewed the listing' },
-      attendingUserId: { type: 'categorical' as const, description: 'User who will attend the viewing' },
-      listingCreatorId: { type: 'categorical' as const, description: 'User who created/owns the listing' },
-      viewingStatus: { type: 'categorical' as const, description: 'Viewing status (SCHEDULED, COMPLETED, etc.)' },
-      
       sessionDevice: { type: 'categorical' as const, description: 'Device type' },
       sessionPlatform: { type: 'categorical' as const, description: 'Platform (web, ios, android)' },
       deviceType: { type: 'categorical' as const, description: 'Device classification' },
@@ -592,8 +604,7 @@ export class HousingTrainingDataService {
       propertyTypeMatch: { type: 'boolean' as const, description: 'Whether property type matches preference' },
       furnishedMatch: { type: 'boolean' as const, description: 'Whether furnished status matches preference' },
       isWeekend: { type: 'boolean' as const, description: 'Whether event occurred on weekend' },
-      isBot: { type: 'boolean' as const, description: 'Whether from bot' },
-      isAdminBooking: { type: 'boolean' as const, description: 'Whether admin-initiated booking' }
+      isBot: { type: 'boolean' as const, description: 'Whether from bot' }
     };
   }
 

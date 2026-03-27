@@ -105,11 +105,11 @@ async handleHousingAIEvent(
   console.log('🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠');
   console.log('\n');
 
-  this.logger.log(`📥 [Kafka] Received housing AI event: ${data.eventType} for user ${data.userId}`);
+  this.logger.log(`📥 [Kafka] Received housing AI event: ${data.eventType} for user ${data.seekerId}`);
 
   try {
     // Validate required fields
-    if (!data?.userId) {
+    if (!data?.seekerId) {
       throw new Error('Missing userId in event data');
     }
 
@@ -122,7 +122,7 @@ async handleHousingAIEvent(
         if (!data?.metadata?.listingData) throw new Error('Missing listingData in view event');
         
         const viewRequest: HousingViewEventRequest = {
-          key: data.userId,
+          key: data.seekerId,
           value: data as HousingViewEvent
         };
         result = await this.housingAnalyticsService.processHousingView(viewRequest);
@@ -131,7 +131,7 @@ async handleHousingAIEvent(
 
       case 'SEARCH': {
         const searchRequest: HousingSearchEventRequest = {
-          key: data.userId,
+          key: data.seekerId,
           value: data as HousingSearchEvent
         };
         result = await this.housingAnalyticsService.processHousingSearch(searchRequest);
@@ -142,7 +142,7 @@ async handleHousingAIEvent(
         if (!data?.listingId) throw new Error('Missing listingId in viewing event');
         
         const viewingRequest: HousingViewingScheduledEventRequest = {
-          key: data.userId,
+          key: data.seekerId,
           value: data as HousingViewingScheduledEvent
         };
         result = await this.housingAnalyticsService.processHousingViewingScheduled(viewingRequest);
@@ -159,7 +159,7 @@ async handleHousingAIEvent(
       throw new Error(`Processing failed: ${result.message} (${result.code})`);
     }
     
-    this.logger.debug(`✅ Successfully processed ${data.eventType} event for user ${data.userId}`);
+    this.logger.debug(`✅ Successfully processed ${data.eventType} event for user ${data.seekerId}`);
     
   } catch (error) {
     this.logger.error(`❌ Error processing ${data.eventType} event: ${error.message}`);
@@ -175,7 +175,7 @@ async handleHousingAIEvent(
   async processHousingView(
     request: HousingViewEventRequest,
   ): Promise<BaseResponseDto<null>> {
-    this.logger.log(`📊 gRPC: Processing house view for user ${request.value.userId}, listing ${request.value.listingId}`);
+    this.logger.log(`📊 gRPC: Processing house view for user ${request.value.seekerId}, listing ${request.value.listingId}`);
     
     try {
       const result = await this.housingAnalyticsService.processHousingView(request);
@@ -195,7 +195,7 @@ async handleHousingAIEvent(
   async processHousingSearch(
     request: HousingSearchEventRequest,
   ): Promise<BaseResponseDto<null>> {
-    this.logger.log(`🔍 gRPC: Processing house search for user ${request.value.userId}`);
+    this.logger.log(`🔍 gRPC: Processing house search for user ${request.value.seekerId}`);
     
     try {
       const result = await this.housingAnalyticsService.processHousingSearch(request);
@@ -215,7 +215,7 @@ async handleHousingAIEvent(
   async processHousingViewingScheduled(
     request: HousingViewingScheduledEventRequest,
   ): Promise<BaseResponseDto<null>> {
-    this.logger.log(`📅 gRPC: Processing house viewing scheduled for user ${request.value.userId}, listing ${request.value.listingId}`);
+    this.logger.log(`📅 gRPC: Processing house viewing scheduled for user ${request.value.seekerId}, listing ${request.value.listingId}`);
     
     try {
       const result = await this.housingAnalyticsService.processHousingViewingScheduled(request);

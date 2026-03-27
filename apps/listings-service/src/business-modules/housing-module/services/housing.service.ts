@@ -434,18 +434,18 @@ async getHouseListingWithTracking(
     if (!listing) return BaseResponseDto.fail('Listing not found', 'NOT_FOUND');
 
     // Track view using the tracking service (fire and forget)
-    if (dto.context?.viewingUserId) {
+    if (dto.context?.seekerId) {
       // Use setTimeout to make it truly non-blocking
       setTimeout(() => {
         try {
           this.trackingService.trackView(
-            dto.context.viewingUserId,  // viewingUserId - who is viewing
+            dto.context.seekerId,  // seekerId - who is viewing (the person looking for housing)
             listing.id,                  // listingId
             {
               ...listing,
               propertyType: listing.propertyType as 'APARTMENT' | 'HOUSE' | 'CONDO' | 'TOWNHOUSE' | 'VILLA' | 'STUDIO' | undefined,
               images: listing.images,
-              creatorId: listing.creatorId  // listing owner ID
+              creatorId: listing.creatorId  // listing owner ID (the person who listed the property)
             },
             dto.context
           );
@@ -457,7 +457,7 @@ async getHouseListingWithTracking(
 
     return BaseResponseDto.ok(this.mapToDto(listing), 'Listing fetched successfully', 'OK');
   } catch (error) {
-    this.logger.error(`❌ getHouseListingWithTracking failed: ${error.message}`);
+    this.logger.error(`getHouseListingWithTracking failed: ${error.message}`);
     return BaseResponseDto.fail('Fetch failed', 'ERROR');
   }
 }
@@ -478,14 +478,11 @@ async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<House
       where.listingType = dto.listingType;
     }
     
-
     // 2. Hierarchical Category Filtering
-    // If a user clicks a main category in the nav, filter by categoryId
     if (dto.categoryId) {
       where.categoryId = dto.categoryId;
     }
 
-    // If a user drills down into a subcategory, filter by subCategoryId
     if (dto.subCategoryId) {
       where.subCategoryId = dto.subCategoryId;
     }
@@ -508,7 +505,7 @@ async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<House
       include: { 
         images: true, 
         category: true,
-        subCategory: true // Included to support the shared nav/breadhousing logic
+        subCategory: true
       },
       orderBy: { createdAt: 'desc' },
       take: dto.limit ?? 20,
@@ -516,11 +513,11 @@ async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<House
     });
 
     // Track search event (fire and forget)
-    if (dto.context?.viewingUserId) {
+    if (dto.context?.seekerId) {
       setTimeout(() => {
         try {
           this.trackingService.trackSearch(
-            dto.context.viewingUserId,
+            dto.context.seekerId,  // seekerId - who is searching
             dto,
             listings.length,
             dto.context
@@ -633,29 +630,26 @@ async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<House
 async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseDto<HouseViewingResponseDto>> {
   const MAX_RETRIES = 3;
   
-  // Extract user ID from context (which comes from the authenticated user)
-  const userId = dto.context?.viewingUserId;
+  // Extract house seeker ID from context (the person looking for housing)
+  const seekerId = dto.context?.seekerId;
   
   // Validate required fields
-  if (!userId) {
-    this.logger.error('❌ No user ID found in context');
+  if (!seekerId) {
+    this.logger.error('No house seeker ID found in context');
     return BaseResponseDto.fail('Authentication required. User ID is missing.', 'UNAUTHORIZED');
   }
   
   if (!dto.houseId) {
-    this.logger.error('❌ houseId is missing from request');
+    this.logger.error('houseId is missing from request');
     return BaseResponseDto.fail('House ID is required.', 'BAD_REQUEST');
   }
   
   if (!dto.viewingDate) {
-    this.logger.error('❌ viewingDate is missing from request');
+    this.logger.error('viewingDate is missing from request');
     return BaseResponseDto.fail('Viewing date is required.', 'BAD_REQUEST');
   }
   
-  // Determine who will attend the viewing
-  const attendingUserId = dto.attendingUserId || userId;
-  
-  this.logger.log(`📅 ScheduleViewing - User: ${userId}, House: ${dto.houseId}, Attending: ${attendingUserId}`);
+  this.logger.log(`ScheduleViewing - HouseSeeker: ${seekerId}, House: ${dto.houseId}`);
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -700,9 +694,9 @@ async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseD
         return BaseResponseDto.fail('House not found', 'NOT_FOUND');
       }
 
-      // PREVENT SELF-VIEWING: Check if user is trying to view their own property
-      if (house.creatorId === userId || house.accountId === userId) {
-        this.logger.warn(`🚫 User ${userId} attempted to schedule viewing for their own property ${dto.houseId}`);
+      // PREVENT SELF-VIEWING: Check if house seeker is trying to view their own property
+      if (house.creatorId === seekerId || house.accountId === seekerId) {
+        this.logger.warn(`House seeker ${seekerId} attempted to schedule viewing for their own property ${dto.houseId}`);
         return BaseResponseDto.fail(
           'You cannot schedule a viewing for your own property',
           'FORBIDDEN'
@@ -748,18 +742,18 @@ async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseD
       }
 
       // Log the create data for debugging
-      this.logger.debug(`Creating viewing with: houseId=${dto.houseId}, viewerId=${attendingUserId}, bookedById=${userId}`);
+      this.logger.debug(`Creating viewing with: houseId=${dto.houseId}, viewerId=${seekerId}, bookedById=${seekerId}`);
 
       // Create viewing in transaction
       const result = await this.prisma.$transaction(async (tx) => {
         const viewing = await tx.houseViewing.create({
           data: {
             houseId: dto.houseId,
-            viewerId: attendingUserId,
+            viewerId: seekerId,
             viewingDate: viewingDate,
             status: 'SCHEDULED',
             notes: dto.notes || '',
-            bookedById: userId,  // ← Use userId from context
+            bookedById: seekerId,
           },
         });
         return viewing;
@@ -777,10 +771,10 @@ async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseD
           }));
 
           this.trackingService.trackViewingScheduled(
-            attendingUserId,
-            house.id,
-            result.id,
-            viewingDate,
+            seekerId,              // house seeker who will attend
+            house.id,                   // listingId
+            result.id,                  // viewingId
+            viewingDate,                // viewingDate
             {
               id: house.id,
               price: house.price,
@@ -797,22 +791,22 @@ async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseD
               yearBuilt: house.yearBuilt,
               propertyType: house.propertyType as 'APARTMENT' | 'HOUSE' | 'CONDO' | 'TOWNHOUSE' | 'VILLA' | 'STUDIO' | undefined,
               images: formattedImages,
-              creatorId: house.creatorId
+              creatorId: house.creatorId    // listing creator ID (property owner)
             },
             dto.context,
             false,
             undefined,
-            userId  // schedulerId - who made the booking
+            seekerId                  // schedulerId - who made the booking
           );
         } catch (error) {
           this.logger.error(`Viewing tracking failed: ${error.message}`);
         }
       }, 0);
 
-      // Send notifications (user flow)
-      await this.sendUserViewingNotifications(result, house, dto, attendingUserId);
+      // Send notifications
+      await this.sendUserViewingNotifications(result, house, dto, seekerId);
       
-      this.logger.log(`✅ Viewing scheduled successfully: ${result.id}`);
+      this.logger.log(`Viewing scheduled successfully: ${result.id}`);
       
       return BaseResponseDto.ok(
         result as unknown as HouseViewingResponseDto,
@@ -851,7 +845,7 @@ async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseD
       
       // Log and throw if all retries failed
       if (attempt === MAX_RETRIES) {
-        this.logger.error(`❌ ScheduleViewing failed after ${MAX_RETRIES} attempts: ${(error as Error).message}`);
+        this.logger.error(`ScheduleViewing failed after ${MAX_RETRIES} attempts: ${(error as Error).message}`);
         throw error;
       }
     }

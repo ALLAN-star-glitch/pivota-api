@@ -760,21 +760,24 @@ model SmartMatchyBase {
   id              String   @id @default(cuid())
   
   // ==================== CORE IDENTIFIERS ====================
-  userUuid        String
-  listingId       String
-  vertical        String   // "EMPLOYMENT", "HOUSING", "SOCIAL_SUPPORT", "PROFESSIONAL_SERVICES"
+  seekerId        String   // The person seeking something (house seeker, job seeker, beneficiary, service requester)
+  listingId       String   // The opportunity being viewed (listing, job, support program, professional service)
+  vertical        String   // "HOUSING", "EMPLOYMENT", "SOCIAL_SUPPORT", "PROFESSIONAL_SERVICES"
   timestamp       DateTime @default(now())
-  featureSetVersion String  // "1.0" for MVP, will increment as we add features
+  featureSetVersion String  // "2.1.0" for current version
+  
+  // ==================== PROVIDER/OWNER IDENTIFIER ====================
+  providerId      String?  // The person/organization providing the opportunity (listing owner, employer, support provider, professional)
   
   // ==================== RAW LOCATION DATA ====================
-  userLat         Float?
-  userLng         Float?
-  listingLat      Float?
+  seekerLat       Float?   // Location of the seeker
+  seekerLng       Float?
+  listingLat      Float?   // Location of the opportunity
   listingLng      Float?
   locationDistance Float?   // Simple Haversine formula for real-time sorting
   
   // ==================== RAW PRICING DATA ====================
-  listingPrice    Float?
+  listingPrice    Float?   // Price for housing, salary for jobs, support amount, service rate
   listingCurrency String?  @default("KES")
   
   // ==================== RAW SESSION DATA ====================
@@ -812,7 +815,7 @@ model SmartMatchyBase {
   engagementScore Float?     // Simple engagement calculation for baseline
   
   // ==================== AI METADATA ====================
-  aiEventType     String?
+  aiEventType     String?   // VIEW, SEARCH, SAVE, APPLY, BOOK, SCHEDULE, COMPLETE
   recommendationId String?
   experimentId    String?
   experimentVariant String?
@@ -828,10 +831,11 @@ model SmartMatchyBase {
   updatedAt       DateTime @updatedAt
   
   // ==================== INDEXES ====================
-  @@index([userUuid, listingId])
-  @@index([userUuid, timestamp])
+  @@index([seekerId, listingId])
+  @@index([seekerId, timestamp])
   @@index([listingId, timestamp])
   @@index([vertical, timestamp])
+  @@index([providerId])
   @@index([overallMatchScore])
   @@index([userClicked])
   @@index([deviceType])
@@ -861,11 +865,14 @@ model SmartMatchyEmployment {
   jobIsFormal     Boolean? @default(false)
   jobIsInformal   Boolean? @default(false)
   
+  // ==================== EMPLOYER INFO ====================
+  employerId      String?  // Who posted the job (maps to providerId in base)
+  
   // ==================== SIMPLE PRE-COMPUTED MATCH SCORES ====================
-  salaryMatchRatio Float?   // jobSalary / userExpectedSalary (simple ratio)
-  skillsMatchScore Float?   // % of required skills user has
-  experienceMatch Boolean?  // User experience >= job requirement
-  educationMatch  Boolean?  // User education >= job requirement
+  salaryMatchRatio Float?   // jobSalary / seekerExpectedSalary
+  skillsMatchScore Float?   // % of required skills seeker has
+  experienceMatch Boolean?  // Seeker experience >= job requirement
+  educationMatch  Boolean?  // Seeker education >= job requirement
   
   // ==================== LABELS ====================
   userApplied     Boolean? @default(false)
@@ -874,6 +881,7 @@ model SmartMatchyEmployment {
   @@index([jobType])
   @@index([skillsMatchScore])
   @@index([userApplied])
+  @@index([employerId])
 }
 
 // ===================== HOUSING VERTICAL =====================
@@ -886,20 +894,20 @@ model SmartMatchyHousing {
   base            SmartMatchyBase @relation(fields: [baseId], references: [id], onDelete: Cascade)
   
   // ==================== LISTING FEATURES ====================
-  housingType     String?
+  housingType     String?  // "RENTAL", "SALE", "SHORT_STAY"
   housingBedrooms Int?
   housingBathrooms Int?
-  housingPropertyType String?
+  housingPropertyType String?  // "APARTMENT", "HOUSE", "CONDO", "TOWNHOUSE"
   housingNeighborhood String?
   housingIsFurnished Boolean? @default(false)
   housingAmenities Json?
-  housingMinimumStay String?
+  housingMinimumStay String?  // "DAILY", "WEEKLY", "MONTHLY", "YEARLY"
   housingSquareFootage Int?
   housingYearBuilt Int?
-  housingPetPolicy String?
+  housingPetPolicy String?  // "ALLOWED", "NOT_ALLOWED", "CASE_BY_CASE"
   
   // ==================== LISTING OWNER ====================
-  creatorId       String?   // ID of the user who created/owns the listing
+  listingOwnerId  String?  // Who owns the listing (maps to providerId in base)
   
   // ==================== SIMPLE PRE-COMPUTED MATCH SCORES ====================
   priceToBudgetRatio Float?
@@ -909,13 +917,10 @@ model SmartMatchyHousing {
   propertyTypeMatch Boolean?
   furnishedMatch  Boolean?
   
-  // ==================== VIEWER & SCHEDULER TRACKING ====================
-  viewerId        String?
-  lastViewedAt    DateTime?
-  schedulerId     String?
-  scheduledAt     DateTime?
-  scheduledFor    DateTime?
-  viewingStatus   String?
+  // ==================== VIEWING TRACKING ====================
+  viewingId       String?   // ID of the viewing if this record is for a viewing event
+  viewingDate     DateTime? // When the viewing is scheduled for
+  viewingStatus   String?   // "SCHEDULED", "COMPLETED", "CANCELLED"
   
   // ==================== LABELS ====================
   userScheduledViewing Boolean? @default(false)
@@ -925,62 +930,64 @@ model SmartMatchyHousing {
   @@index([housingType])
   @@index([housingNeighborhood])
   @@index([isWithinBudget])
-  @@index([viewerId])
-  @@index([schedulerId])
+  @@index([listingOwnerId])
   @@index([viewingStatus])
-  @@index([creatorId])  // ← NEW INDEX
 }
 
 // ===================== USER HOUSING PREFERENCES =====================
-// Separate table for user preferences - one record per user
+// Separate table for user preferences - one record per seeker
 // Not tied to any listing interaction
 
 model UserHousingPreferences {
   id              String   @id @default(cuid())
-  userUuid        String   @unique
+  seekerId        String   @unique
   
   // ==================== BUDGET ====================
   minBudget       Float?
   maxBudget       Float?
   budgetMidpoint  Float?
+  budgetFlexibility Float?
   
   // ==================== BEDROOMS ====================
   minBedrooms     Int?
+  maxBedrooms     Int?
+  minBathrooms    Int?
   
   // ==================== LOCATION ====================
-  preferredNeighborhood String?
-  preferredLocations     Json?    // Array of preferred locations
-  preferredNeighborhoods Json?    // Array of preferred neighborhoods
+  preferredCities     Json?    // Array of preferred cities (matches profile service)
+  preferredNeighborhoods Json? // Array of preferred neighborhoods (matches profile service)
   preferredLat    Float?
   preferredLng    Float?
   searchRadiusKm  Float?
   
   // ==================== PROPERTY ====================
-  preferredPropertyType String?
-  preferredPropertyTypes Json?    // Array of preferred property types
+  preferredTypes  Json?    // Array of preferred property types (matches profile service)
   preferredHousingType  String?   // "RENTAL", "SALE", "SHORT_STAY"
   
   // ==================== AMENITIES ====================
+  favoriteAmenities Json?
   prefersFurnished Boolean?
   hasPets         Boolean?
-  petDetails      String?
   
   // ==================== MOVE-IN ====================
   preferredMoveInDate DateTime?
-  preferredLeaseDuration String?
+  householdSize   Int?
+  
+  // ==================== AGENT ====================
+  hasAgent        Boolean? @default(false)
   
   // ==================== TIMESTAMPS ====================
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
-  @@index([userUuid])
+  @@index([seekerId])
 }
 
 // ===================== USER EMPLOYMENT PREFERENCES =====================
 
 model UserEmploymentPreferences {
   id              String   @id @default(cuid())
-  userUuid        String   @unique
+  seekerId        String   @unique  // Maps to SmartMatchyBase.seekerId
   
   // ==================== JOB PREFERENCES ====================
   preferredJobType String?  // "FULL_TIME", "PART_TIME", "GIG", "CONTRACT"
@@ -997,7 +1004,7 @@ model UserEmploymentPreferences {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
-  @@index([userUuid])
+  @@index([seekerId])
 }
 
 // ===================== SOCIAL SUPPORT VERTICAL =====================
@@ -1019,11 +1026,14 @@ model SmartMatchySocialSupport {
   supportIsUrgent Boolean? @default(false)
   supportLocation String?
   
+  // ==================== PROVIDER INFO ====================
+  providerId      String?  // Who provides the support (maps to providerId in base)
+  
   // ==================== SIMPLE PRE-COMPUTED MATCH SCORES ====================
-  needMatchScore  Float?   // % of user needs that program addresses
-  urgencyMatch    Boolean? // User urgent needs match urgent program
-  eligibilityMatch Boolean? // User meets eligibility criteria
-  locationMatch   Boolean? // User in service area
+  needMatchScore  Float?   // % of seeker needs that program addresses
+  urgencyMatch    Boolean? // Seeker urgent needs match urgent program
+  eligibilityMatch Boolean? // Seeker meets eligibility criteria
+  locationMatch   Boolean? // Seeker in service area
   
   // ==================== LABELS ====================
   userApplied     Boolean? @default(false)
@@ -1033,13 +1043,14 @@ model SmartMatchySocialSupport {
   @@index([supportType])
   @@index([supportIsUrgent])
   @@index([userApplied])
+  @@index([providerId])
 }
 
 // ===================== USER SOCIAL SUPPORT PREFERENCES =====================
 
 model UserSocialSupportPreferences {
   id              String   @id @default(cuid())
-  userUuid        String   @unique
+  seekerId        String   @unique  // Maps to SmartMatchyBase.seekerId
   
   // ==================== NEEDS ====================
   needs           Json?    // ["food", "shelter", "medical", "cash", "education"]
@@ -1055,7 +1066,7 @@ model UserSocialSupportPreferences {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
-  @@index([userUuid])
+  @@index([seekerId])
 }
 
 // ===================== PROFESSIONAL SERVICES VERTICAL =====================
@@ -1077,11 +1088,14 @@ model SmartMatchyProfessional {
   serviceRating   Float?
   serviceAvailability Json?
   
+  // ==================== PROVIDER INFO ====================
+  providerId      String?  // Who provides the service (maps to providerId in base)
+  
   // ==================== SIMPLE PRE-COMPUTED MATCH SCORES ====================
-  priceMatchRatio Float?   // userBudget / serviceRate
-  locationMatch   Boolean? // User location in service area
-  experienceMatch Boolean? // Service experience >= user expectation
-  availabilityMatch Boolean? // Available when user needs
+  priceMatchRatio Float?   // seekerBudget / serviceRate
+  locationMatch   Boolean? // Seeker location in service area
+  experienceMatch Boolean? // Service experience >= seeker expectation
+  availabilityMatch Boolean? // Available when seeker needs
   
   // ==================== LABELS ====================
   userBooked      Boolean? @default(false)
@@ -1093,13 +1107,14 @@ model SmartMatchyProfessional {
   @@index([serviceType])
   @@index([userBooked])
   @@index([serviceRating])
+  @@index([providerId])
 }
 
 // ===================== USER PROFESSIONAL SERVICES PREFERENCES =====================
 
 model UserProfessionalServicesPreferences {
   id              String   @id @default(cuid())
-  userUuid        String   @unique
+  seekerId        String   @unique  // Maps to SmartMatchyBase.seekerId
   
   // ==================== SERVICE PREFERENCES ====================
   preferredServices Json?   // ["electrician", "plumber", "trainer", "counselor", "mover"]
@@ -1111,9 +1126,8 @@ model UserProfessionalServicesPreferences {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
-  @@index([userUuid])
+  @@index([seekerId])
 }
-
 
 // ===================== VERTICAL-SPECIFIC METRICS =====================
 // These models are kept but deduplicated - they reference common metrics

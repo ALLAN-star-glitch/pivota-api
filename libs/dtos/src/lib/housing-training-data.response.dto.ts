@@ -22,7 +22,7 @@ export class MetadataDto {
   @ApiProperty({ description: 'Date range of data', type: DateRangeDto })
     dateRange!: DateRangeDto;
 
-  @ApiProperty({ description: 'Dataset version', example: '2.0.0' })
+  @ApiProperty({ description: 'Dataset version', example: '2.1.0' })
     version!: string;
 
   @ApiProperty({ description: 'Filters applied to dataset', type: Object })
@@ -61,11 +61,14 @@ export class TrainingSampleDto {
   @ApiProperty({ description: 'Sample ID', example: 'cm123...' })
     id!: string;
 
-  @ApiProperty({ description: 'User UUID', example: 'user-123' })
-    userUuid!: string;
+  @ApiProperty({ description: 'Seeker ID (person looking for housing)', example: 'user-123' })
+    seekerId!: string;
 
   @ApiProperty({ description: 'Listing ID', example: 'listing-456' })
     listingId!: string;
+
+  @ApiProperty({ description: 'Listing creator ID (property owner)', example: 'owner-789' })
+    listingCreatorId!: string | null;
 
   @ApiProperty({ description: 'Timestamp', example: '2026-03-23T10:00:00Z' })
     timestamp!: string;
@@ -145,7 +148,7 @@ export class DatasetStatsResponseDto {
   @ApiProperty({ description: 'Date range of data', type: DateRangeDto })
     dateRange!: DateRangeDto;
 
-  @ApiProperty({ description: 'Number of unique users', example: 2341 })
+  @ApiProperty({ description: 'Number of unique users (seekers)', example: 2341 })
     uniqueUsers!: number;
 
   @ApiProperty({ description: 'Number of unique listings', example: 543 })
@@ -182,7 +185,7 @@ export class ExportDataDto {
   @ApiProperty({ description: 'Export format', example: 'csv', enum: ['json', 'csv', 'parquet'] })
     format!: string;
 
-  @ApiProperty({ description: 'Exported data (base64 for binary formats)', example: 'id,userUuid,...' })
+  @ApiProperty({ description: 'Exported data (base64 for binary formats)', example: 'id,seekerId,...' })
     data!: string;
 
   @ApiProperty({ description: 'Filename for download', example: 'housing_training_data_1742752800000.csv' })

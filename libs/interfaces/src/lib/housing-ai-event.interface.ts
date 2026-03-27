@@ -1,7 +1,7 @@
 // /Users/admin/Desktop/pivota/pivota-api/libs/interfaces/src/lib/housing-ai-tracking.interface.ts
 
 export interface HousingAIEvent {
-  userId: string;
+  seekerId: string;  // The person looking for housing (renamed from houseSeekerId)
   listingId: string;
   eventType: 'VIEW' | 'SEARCH' | 'SAVE' | 'SCHEDULE_VIEWING' | 'COMPLETE_VIEWING' | 'INQUIRY' | 'LISTING_MILESTONE';
   metadata: {
@@ -12,7 +12,7 @@ export interface HousingAIEvent {
     referrer?: string;
     referrerType?: 'DIRECT' | 'SEARCH' | 'SOCIAL' | 'EMAIL' | 'INTERNAL';
     
-     // Device context - ENHANCED
+    // Device context - ENHANCED
     deviceType?: 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT';
     os?: string;              // Operating system name
     osVersion?: string;       // OS version
@@ -20,7 +20,6 @@ export interface HousingAIEvent {
     browserVersion?: string;  // Browser version
     appVersion?: string;      // App version (if applicable)
     isBot?: boolean;          // Bot detection flag
-    
     
     // Search context
     searchId?: string;
@@ -64,24 +63,25 @@ export interface HousingAIEvent {
       imagesCount?: number;
       daysSincePosted?: number;
       accountId?: string;
-      listingCreatorId?: string;
+      listingCreatorId?: string;  // The person who listed the property (owner) - maps to providerId
       status?: string;
     };
     
-    // User context for housing recommendations (ENHANCED)
+    // User context for housing recommendations (ENHANCED) - matches UserHousingPreferences schema
     userContext: {
       // Historical data
       previousSearches?: string[];
       previousViewings?: string[];
       
-      // Location preferences
-      preferredLocations?: string[]; // Cities/neighborhoods they've shown interest in
+      // Location preferences (matches new schema)
+      preferredCities?: string[];           // Array of preferred cities
+      preferredNeighborhoods?: string[];    // Array of preferred neighborhoods
       
-      // Property preferences
+      // Property preferences (matches new schema)
       preferredBedrooms?: number;
       preferredBathrooms?: number;
-      preferredPropertyTypes?: string[]; // ['APARTMENT', 'HOUSE']
-      preferredListingTypes?: string[]; // ['RENTAL', 'SALE']
+      preferredTypes?: string[];             // Array of preferred property types ['APARTMENT', 'HOUSE']
+      preferredHousingTypes?: string[];      // Array of preferred housing types ['RENTAL', 'SALE']
       
       // Budget preferences
       priceRange?: { 
@@ -92,6 +92,20 @@ export interface HousingAIEvent {
       
       // Amenity preferences
       favoriteAmenities?: string[];
+      prefersFurnished?: boolean;
+      hasPets?: boolean;
+      
+      // Move-in preferences
+      moveInDate?: string;
+      householdSize?: number;
+      
+      // Agent preference
+      hasAgent?: boolean;
+      
+      // Location coordinates
+      latitude?: number;
+      longitude?: number;
+      searchRadiusKm?: number;
       
       // User profile
       userType?: 'PROVIDER' | 'BENEFICIARY' | 'BOTH';
@@ -132,7 +146,6 @@ export interface HousingAIEvent {
 // Specific event types with enhanced typing
 export interface HousingViewEvent extends HousingAIEvent {
   eventType: 'VIEW';
-  viewingUserId: string;  // ← CHANGED: viewerId → viewingUserId
   metadata: HousingAIEvent['metadata'] & {
     viewDuration?: number;
     scrollDepth?: number;
@@ -141,7 +154,7 @@ export interface HousingViewEvent extends HousingAIEvent {
 
 export interface HousingSearchEvent extends Omit<HousingAIEvent, 'listingId'> {
   eventType: 'SEARCH';
-  listingId: ''; // Empty string for searches
+  listingId?: string; // Optional for searches
   metadata: HousingAIEvent['metadata'] & {
     resultsCount: number;
     searchId: string;
@@ -175,8 +188,7 @@ export interface HousingInquiryEvent extends HousingAIEvent {
 
 export interface HousingViewingScheduledEvent extends HousingAIEvent {
   eventType: 'SCHEDULE_VIEWING';
-  schedulerId: string;      // Who made the booking
-  attendingUserId: string;  // ← ADDED: Who will attend the viewing
+  schedulerId: string;  // Who made the booking (same as seekerId for user flow)
   metadata: HousingAIEvent['metadata'] & {
     viewingId: string;
     viewingDate: string;
@@ -205,11 +217,12 @@ export interface HousingViewingCompletedEvent extends HousingAIEvent {
   };
 }
 
-// NEW: Listing Milestone Event Interface
-export interface HousingListingMilestoneEvent extends Omit<HousingAIEvent, 'userId' | 'listingId'> {
+// Listing Milestone Event Interface
+export interface HousingListingMilestoneEvent extends Omit<HousingAIEvent, 'seekerId' | 'listingId'> {
   eventType: 'LISTING_MILESTONE';
   accountId: string;  // Account that owns the listings
   listingId: string;  // The listing that triggered the milestone
+  listingCreatorId: string;  // The creator of the listing (property owner) - maps to providerId
   metadata: HousingAIEvent['metadata'] & {
     // Milestone specific data
     milestone: number;  // 1, 2, 3, 5, 10, 25, 50, 100
@@ -256,10 +269,10 @@ export interface HousingListingMilestoneEvent extends Omit<HousingAIEvent, 'user
   };
 }
 
-// You might also want a batch event type
+// Batch event type
 export interface HousingBatchEvent {
   batchId: string;
-  userId: string;
+  seekerId: string;  // Renamed from houseSeekerId
   sessionId: string;
   events: HousingAIEvent[];
   metadata: {

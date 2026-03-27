@@ -90,7 +90,7 @@ message SearchContext {
 }
 
 message ListingViewContext {
-  optional string viewingUserId = 1;  // CHANGED: userId → viewingUserId
+  optional string seekerId = 1;  // The person looking for housing
   string sessionId = 2;
   ClientInfo client = 3;
   string platform = 4;
@@ -142,23 +142,23 @@ message HouseListing {
   optional double latitude = 24;
   optional double longitude = 25;
   string ownerEmail = 26;  // Email of the property owner/agent
-  string listingCreatorId = 27;  // ADDED: ID of the user who created/owns the listing
+  string listingCreatorId = 27;  // ID of the user who created/owns the listing
 }
 
 message HouseViewing {
   string id = 1;
   string houseId = 2;
-  string attendingUserId = 3;      // CHANGED: viewerId → attendingUserId (who will attend)
-  string attendingUserEmail = 4;   // CHANGED: viewerEmail → attendingUserEmail
-  string attendingUserName = 5;    // CHANGED: viewerName → attendingUserName
+  string seekerId = 3;           // The person looking for housing who will attend
+  string seekerEmail = 4;        // Email of the seeker
+  string seekerName = 5;         // Name of the seeker
   string viewingDate = 6;
   string status = 7;
   string notes = 8;
   string createdAt = 9;
   string updatedAt = 10;
-  string schedulerId = 11;          // CHANGED: bookedById → schedulerId (who made the booking)
-  string schedulerEmail = 12;       // CHANGED: bookedByEmail → schedulerEmail
-  string schedulerName = 13;        // CHANGED: bookedByName → schedulerName
+  string schedulerId = 11;        // Who made the booking (same as seekerId for user flow)
+  string schedulerEmail = 12;     // Email of the scheduler
+  string schedulerName = 13;      // Name of the scheduler
 }
 
 // ===================================================
@@ -241,33 +241,32 @@ message ArchiveHouseListingRequest {
 }
 
 // ===================================================
-// USER VIEWING REQUEST
+// USER VIEWING REQUEST (Seeker books for themselves)
 // ===================================================
 message ScheduleViewingRequest {
   string houseId = 1;
-  string schedulerId = 2;           // CHANGED: callerId → schedulerId (who makes the booking)
-  string schedulerEmail = 3;        // CHANGED: callerEmail → schedulerEmail
-  string schedulerName = 4;         // CHANGED: callerName → schedulerName
+  string seekerId = 2;           // The person looking for housing (who will attend)
+  string seekerEmail = 3;        // Email of the seeker
+  string seekerName = 4;         // Name of the seeker
   string userRole = 5;
   string viewingDate = 6;
-  optional string attendingUserId = 7;   // CHANGED: targetViewerId → attendingUserId (who will attend)
-  optional string notes = 8;
-  optional ListingViewContext context = 9;
+  optional string notes = 7;
+  optional ListingViewContext context = 8;
 }
 
 // ===================================================
-// ADMIN VIEWING REQUEST
+// ADMIN VIEWING REQUEST (Admin books for a seeker)
 // ===================================================
 message ScheduleAdminViewingRequest {
   string houseId = 1;
-  string schedulerId = 2;           // CHANGED: callerId → schedulerId (admin who makes the booking)
-  string schedulerEmail = 3;        // CHANGED: callerEmail → schedulerEmail
-  string schedulerName = 4;         // CHANGED: callerName → schedulerName
+  string schedulerId = 2;         // Admin who makes the booking
+  string schedulerEmail = 3;      // Email of the admin
+  string schedulerName = 4;       // Name of the admin
   string userRole = 5;
   string viewingDate = 6;
-  string attendingUserId = 7;       // CHANGED: targetViewerId → attendingUserId (who will attend)
-  string attendingUserEmail = 8;    // CHANGED: targetViewerEmail → attendingUserEmail
-  string attendingUserName = 9;     // CHANGED: targetViewerName → attendingUserName
+  string seekerId = 7;            // The person looking for housing who will attend
+  string seekerEmail = 8;         // Email of the seeker
+  string seekerName = 9;          // Name of the seeker
   optional string notes = 10;
   optional AdminMetadata adminMetadata = 11;
 }
