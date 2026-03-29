@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   Injectable,
@@ -70,7 +70,15 @@ import { createBusinessProfile, BusinessProfileType } from '../../utils/business
 
 // ==================== Type Definitions ====================
 
+// At the top of your file, update the type definition:
+
 type OrganizationWithDetails = OrganizationProfile & {
+  type: {                   
+    slug: string;
+    label: string;
+    description: string | null;
+    order: number;
+  } | null;
   account: Account & {
     individualProfile: IndividualProfile | null;
     employerProfile: EmployerProfile | null;
@@ -510,7 +518,7 @@ export class OrganisationService implements OnModuleInit {
 
     try {
       // 1. PRE-CHECKS: RBAC Role & Plan
-      const roleType = 'BusinessSystemAdmin';
+      const roleType = 'Admin';
       
       const [roleRes, planRes] = await Promise.all([
         lastValueFrom(
@@ -580,24 +588,35 @@ export class OrganisationService implements OnModuleInit {
           },
         });
 
-        // Create Organization Profile
-        await tx.organizationProfile.create({
-          data: {
-            accountUuid: account.uuid,
-            name: data.organizationName,
-            type: data.organizationType,
-            registrationNo: data.registrationNo,
-            kraPin: data.kraPin,
-            officialEmail: normalizedOfficialEmail,
-            officialPhone: normalizedOfficialPhone,
-            physicalAddress: data.physicalAddress,
-            website: data.website,
-            about: data.about,
-            logo: data.logo,
-            orgCode: `ORG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-            verificationStatus: 'PENDING',
+        const organizationType = await tx.organizationType.upsert({
+          where: { slug: data.organizationType || 'COMPANY' },
+          update: {},
+          create: {
+            slug: data.organizationType || 'COMPANY',
+            label: data.organizationType || 'Company',
+            description: `${data.organizationType || 'Company'} organization type`,
+            order: 10,
           },
         });
+
+        // Create Organization Profile
+      await tx.organizationProfile.create({
+        data: {
+          accountUuid: account.uuid,
+          name: data.organizationName,
+          typeSlug: organizationType.slug,  
+          registrationNo: data.registrationNo,
+          kraPin: data.kraPin,
+          officialEmail: normalizedOfficialEmail,
+          officialPhone: normalizedOfficialPhone,
+          physicalAddress: data.physicalAddress,
+          website: data.website,
+          about: data.about,
+          logo: data.logo,
+          orgCode: `ORG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+          verificationStatus: 'PENDING',
+        },
+      });
 
         // Add Admin as Organization Member
         await tx.organizationMember.create({
@@ -998,15 +1017,16 @@ export class OrganisationService implements OnModuleInit {
     }
   }
 
-  async getOrganizationsByType(
+ async getOrganizationsByType(
     typeSlug: string
   ): Promise<BaseResponseDto<OrganizationProfileResponseDto[]>> {
     try {
       const organizations = await this.prisma.organizationProfile.findMany({
         where: {
-          type: typeSlug,
+          typeSlug: typeSlug,  
         },
         include: {
+          type: true,  
           account: {
             include: {
               individualProfile: true,
@@ -1042,91 +1062,92 @@ export class OrganisationService implements OnModuleInit {
   // UPDATE METHODS
   // ======================================================
 
-  async updateOrganizationProfile(
-    accountUuid: string,
-    data: UpdateOrgProfileRequestDto
-  ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
-    try {
-      const updateData: {
-        website?: string;
-        registrationNo?: string;
-        kraPin?: string;
-        physicalAddress?: string;
-        type?: string;
-        about?: string;
-        logo?: string;
-      } = {};
-      
-      if (data.website !== undefined) updateData.website = data.website;
-      if (data.registrationNo !== undefined) updateData.registrationNo = data.registrationNo;
-      if (data.kraPin !== undefined) updateData.kraPin = data.kraPin;
-      if (data.physicalAddress !== undefined) updateData.physicalAddress = data.physicalAddress;
-      if (data.organizationType !== undefined) updateData.type = data.organizationType;
-      if (data.about !== undefined) updateData.about = data.about;
-      if (data.logo !== undefined) updateData.logo = data.logo;
+ async updateOrganizationProfile(
+  accountUuid: string,
+  data: UpdateOrgProfileRequestDto
+): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {
+  try {
+    const updateData: {
+      website?: string;
+      registrationNo?: string;
+      kraPin?: string;
+      physicalAddress?: string;
+      typeSlug?: string;  // ✅ Change from 'type' to 'typeSlug'
+      about?: string;
+      logo?: string;
+    } = {};
+    
+    if (data.website !== undefined) updateData.website = data.website;
+    if (data.registrationNo !== undefined) updateData.registrationNo = data.registrationNo;
+    if (data.kraPin !== undefined) updateData.kraPin = data.kraPin;
+    if (data.physicalAddress !== undefined) updateData.physicalAddress = data.physicalAddress;
+    if (data.organizationType !== undefined) updateData.typeSlug = data.organizationType;  // ✅ Use typeSlug
+    if (data.about !== undefined) updateData.about = data.about;
+    if (data.logo !== undefined) updateData.logo = data.logo;
 
-      if (Object.keys(updateData).length > 0) {
-        await this.prisma.organizationProfile.update({
-          where: { accountUuid },
-          data: updateData,
-        });
-      }
-
-      const organization = await this.prisma.organizationProfile.findFirst({
+    if (Object.keys(updateData).length > 0) {
+      await this.prisma.organizationProfile.update({
         where: { accountUuid },
-        include: {
-          account: {
-            include: {
-              individualProfile: true,
-              users: true,
-              employerProfile: true,
-              socialServiceProviderProfile: true,
-              propertyOwnerProfile: true,
-              skilledProfessionalProfile: true,
-              intermediaryAgentProfile: true,
-            },
-          },
-          members: {
-            include: { user: true },
-            where: { roleName: 'ADMIN' },
-            take: 1,
+        data: updateData,
+      });
+    }
+
+    const organization = await this.prisma.organizationProfile.findFirst({
+      where: { accountUuid },
+      include: {
+        type: true,  // ✅ Include the related OrganizationType
+        account: {
+          include: {
+            individualProfile: true,
+            users: true,
+            employerProfile: true,
+            socialServiceProviderProfile: true,
+            propertyOwnerProfile: true,
+            skilledProfessionalProfile: true,
+            intermediaryAgentProfile: true,
           },
         },
-      });
+        members: {
+          include: { user: true },
+          where: { roleName: 'ADMIN' },
+          take: 1,
+        },
+      },
+    });
 
-      if (!organization) {
-        return BaseResponseDto.fail('Organization not found', 'NOT_FOUND');
-      }
+    if (!organization) {
+      return BaseResponseDto.fail('Organization not found', 'NOT_FOUND');
+    }
 
-      return BaseResponseDto.ok(
-        this.mapToOrganizationProfileResponse(organization as OrganizationWithDetails),
-        'Organization profile updated',
-        'OK'
-      );
-    } catch (error) {
-      this.logger.error(`Failed to update organization profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
-          const target = error.meta?.target as string[];
-          if (target?.includes('registrationNo')) {
-            return BaseResponseDto.fail('Registration number already exists', 'ALREADY_EXISTS');
-          }
-          if (target?.includes('kraPin')) {
-            return BaseResponseDto.fail('KRA PIN already exists', 'ALREADY_EXISTS');
-          }
-          if (target?.includes('officialEmail')) {
-            return BaseResponseDto.fail('Official email already exists', 'ALREADY_EXISTS');
-          }
-          if (target?.includes('officialPhone')) {
-            return BaseResponseDto.fail('Official phone already exists', 'ALREADY_EXISTS');
-          }
+    return BaseResponseDto.ok(
+      this.mapToOrganizationProfileResponse(organization as OrganizationWithDetails),
+      'Organization profile updated',
+      'OK'
+    );
+  } catch (error) {
+    this.logger.error(`Failed to update organization profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        const target = error.meta?.target as string[];
+        if (target?.includes('registrationNo')) {
+          return BaseResponseDto.fail('Registration number already exists', 'ALREADY_EXISTS');
+        }
+        if (target?.includes('kraPin')) {
+          return BaseResponseDto.fail('KRA PIN already exists', 'ALREADY_EXISTS');
+        }
+        if (target?.includes('officialEmail')) {
+          return BaseResponseDto.fail('Official email already exists', 'ALREADY_EXISTS');
+        }
+        if (target?.includes('officialPhone')) {
+          return BaseResponseDto.fail('Official phone already exists', 'ALREADY_EXISTS');
         }
       }
-      
-      return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
     }
+    
+    return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
   }
+}
 
   async updateEmployerProfile(
     accountUuid: string,
@@ -1437,7 +1458,7 @@ export class OrganisationService implements OnModuleInit {
         organizationMemberships: {
           where: {
             organizationUuid: dto.organizationUuid,
-            roleName: 'BusinessSystemAdmin',  
+            roleName: 'Admin',  
           }
         }
       }
@@ -1502,7 +1523,7 @@ export class OrganisationService implements OnModuleInit {
         expiresAt,
         status: 'PENDING',
         invitedByUserUuid: dto.invitedByUserUuid,
-        roleName: 'GeneralUser',
+        roleName: 'Member',
         message: dto.message
       }
     });
@@ -1520,7 +1541,7 @@ export class OrganisationService implements OnModuleInit {
       email: invitation.email,
       organizationName: organization.name,
       organizationUuid: organization.uuid,
-      roleName: 'GeneralUser',
+      roleName: 'Member',
       inviterName: inviterName,
       inviteToken: token,
       message: dto.message,
@@ -1610,14 +1631,14 @@ export class OrganisationService implements OnModuleInit {
       }
 
       const roleRes = await lastValueFrom(
-        this.rbacGrpc.GetRoleIdByType({ roleType: 'GeneralUser' }).pipe(
+        this.rbacGrpc.GetRoleIdByType({ roleType: 'Member' }).pipe(
           timeout(5000),
           catchError(() => throwError(() => new Error('RBAC service unavailable')))
         )
       ).catch(() => null);
 
       if (!roleRes?.data?.roleId) {
-        return BaseResponseDto.fail('System Role: GeneralUser not found', 'NOT_FOUND');
+        return BaseResponseDto.fail('System Role: Member not found', 'NOT_FOUND');
       }
 
       const existingUser = await this.prisma.user.findFirst({
@@ -1650,7 +1671,7 @@ export class OrganisationService implements OnModuleInit {
                 email: invitation.email,
                 phone: dto.phone,
                 accountUuid: invitation.organization.account.uuid,
-                roleName: 'GeneralUser',
+                roleName: 'Member',
                 status: 'ACTIVE',
               },
             });
@@ -1738,7 +1759,7 @@ export class OrganisationService implements OnModuleInit {
         userUuid: result.userUuid,
         organizationUuid: invitation.organizationUuid,
         organizationName: invitation.organization.name,
-        roleName: 'GeneralUser',
+        roleName: 'Member',
         ...(result.isNewUser && {
           firstName: dto.firstName,
           lastName: dto.lastName,
@@ -1755,7 +1776,7 @@ export class OrganisationService implements OnModuleInit {
           userUuid: result.userUuid,
           isNewUser: result.isNewUser,
           organizationUuid: invitation.organizationUuid,
-          roleName: 'GeneralUser'
+          roleName: 'Member'
         },
         result.isNewUser 
           ? 'Account created and you have been added to the organization.' 
@@ -1777,7 +1798,7 @@ export class OrganisationService implements OnModuleInit {
       where: {
         organizationUuid: dto.organizationUuid,
         userUuid: dto.requestingUserUuid,
-        roleName: 'BusinessSystemAdmin'
+        roleName: 'Admin'
       }
     });
 
@@ -2015,9 +2036,9 @@ private mapToOrganizationProfileResponse(
   return {
     id: org.id,
     uuid: org.uuid,
-    orgCode: org.orgCode ?? undefined, // Now this exists
+    orgCode: org.orgCode ?? undefined,
     name: org.name,
-    type: org.type as OrganizationType,
+    type: org.type?.slug as OrganizationType, 
     registrationNo: org.registrationNo ?? undefined,
     kraPin: org.kraPin ?? undefined,
     officialEmail: org.officialEmail ?? undefined,
@@ -2026,7 +2047,7 @@ private mapToOrganizationProfileResponse(
     about: org.about ?? undefined,
     logo: org.logo ?? undefined,
     physicalAddress: org.physicalAddress ?? undefined,
-    verificationStatus: org.verificationStatus, // Now this exists
+    verificationStatus: org.verificationStatus,
     account: {
       uuid: org.account.uuid,
       accountCode: org.account.accountCode,
@@ -2046,7 +2067,6 @@ private mapToOrganizationProfileResponse(
     updatedAt: org.updatedAt,
   };
 }
-
   private mapToEmployerResponse(
     profile: EmployerProfile,
     completion?: number,

@@ -3,8 +3,9 @@ import { Controller, Get, Post, Query, Body, Req, UseGuards, Logger, Res, HttpSt
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
-import { RolesGuard } from '../../guards/role.guard';
+import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
 import { Permissions } from '../../decorators/permissions.decorator';
+import { SetModule } from '../../decorators/set-module.decorator';
 import { JwtRequest } from '@pivota-api/interfaces';
 import { HousingTrainingDataGatewayService } from './housing-training-data-gateway.service';
 import { 
@@ -19,11 +20,13 @@ import {
   SampleSwaggerRequestDto, 
   SampleRequestDto 
 } from '@pivota-api/dtos';
+import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 
 @ApiTags('Housing Training Data')
-@ApiBearerAuth('JWT-auth')
+@ApiBearerAuth('JWT')
 @Controller('housing-training-data-gateway')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@SetModule(ModuleSlug.TRAINING_DATA)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class HousingTrainingDataGatewayController {
   private readonly logger = new Logger(HousingTrainingDataGatewayController.name);
 
@@ -32,35 +35,61 @@ export class HousingTrainingDataGatewayController {
   ) {}
 
   @Get('dataset')
-  @Permissions('houses.read')
+  @Permissions(P.TRAINING_DATA_ACCESS)
   @ApiOperation({ 
     summary: 'Get comprehensive training dataset for AI/ML models',
     description: `
-      **AI Developer Endpoint**: Retrieves structured training data for machine learning models.
+      **🤖 AI Developer Endpoint**: Retrieves structured training data for machine learning models.
       
-      **Access Control:** Requires JWT authentication with houses.read permission.
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT)
+      - **Permission Required:** \`${P.TRAINING_DATA_ACCESS}\`
+      - **Accessible by:** AI Developer role only
       
-      **📊 Data Returned:**
-      - Training samples with features and labels
-      - Feature schemas (types and descriptions)
-      - Label schemas (binary, continuous, multiclass)
-      - Optional feature importance scores
-      - Dataset metadata (date range, filters applied)
+      ---
+      ## 📊 Data Returned
+      | Component | Description |
+      |-----------|-------------|
+      | **Training Samples** | Structured data with features and labels |
+      | **Feature Schema** | Data types, descriptions, and valid ranges |
+      | **Label Schema** | Binary, continuous, or multiclass labels |
+      | **Feature Importance** | Optional SHAP/LIME scores |
+      | **Dataset Metadata** | Date range, filters, record count |
       
-      **🎯 Use Cases:**
-      - Training recommendation models
-      - User behavior prediction
-      - Conversion probability modeling
-      - Feature importance analysis
+      ---
+      ## 🎯 Use Cases
+      - Training recommendation models (Collaborative Filtering, Neural Networks)
+      - User behavior prediction (Conversion Probability)
+      - Feature importance analysis (SHAP, LIME)
+      - A/B testing evaluation
       
-      **Filters Available:**
-      - Date range filtering
-      - Only labeled data
-      - Exclude bot traffic
-      - Minimum dwell time
-      - Minimum match score
-      - Filter by listing/property types
-      - Filter by specific users
+      ---
+      ## 📈 Label Definitions
+      | Label | Type | Description |
+      |-------|------|-------------|
+      | \`clicked\` | Binary | User clicked on listing |
+      | \`saved\` | Binary | User saved listing to favorites |
+      | \`contacted\` | Binary | User contacted provider |
+      | \`viewing_scheduled\` | Binary | User scheduled a viewing |
+      | \`time_spent\` | Continuous | Seconds spent viewing |
+      
+      ---
+      ## 🎛️ Filtering Options
+      | Parameter | Type | Description |
+      |-----------|------|-------------|
+      | \`startDate\` | ISO Date | Beginning of date range |
+      | \`endDate\` | ISO Date | End of date range |
+      | \`onlyLabeled\` | Boolean | Only records with labels |
+      | \`excludeBots\` | Boolean | Remove bot traffic |
+      | \`minDwellTime\` | Seconds | Minimum viewing duration |
+      | \`minOverallMatchScore\` | 0-1 | Minimum AI match score |
+      
+      ---
+      ## ⚠️ Rate Limits
+      - **Free Tier:** 1,000 records/day
+      - **Pro Tier:** 10,000 records/day
+      - **Enterprise:** 100,000 records/day
     `
   })
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'ISO date string (YYYY-MM-DD)' })
@@ -82,7 +111,7 @@ export class HousingTrainingDataGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Invalid request parameters' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.TRAINING_DATA_ACCESS} permission (AI Developer role required)` })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async getTrainingDataset(
     @Query() query: TrainingDataSwaggerRequestDto,
@@ -107,24 +136,53 @@ export class HousingTrainingDataGatewayController {
   }
 
   @Get('stats')
-  @Permissions('houses.read')
+  @Permissions(P.TRAINING_DATA_ACCESS)
   @ApiOperation({ 
     summary: 'Get dataset statistics and insights',
     description: `
-      **AI Developer Endpoint**: Retrieves statistical information about the training dataset.
+      **🤖 AI Developer Endpoint**: Retrieves statistical information about the training dataset.
       
-      **Access Control:** Requires JWT authentication with houses.read permission.
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT)
+      - **Permission Required:** \`${P.TRAINING_DATA_ACCESS}\`
+      - **Accessible by:** AI Developer role only
       
-      **Statistics Returned:**
-      - Total events and unique users/listings
-      - Label distribution (clicks, saves, contacts, viewings)
-      - Price range (min, max, avg)
-      - Match scores (overall, price ratio, location)
-      - Temporal distribution (daily/hourly/day-of-week patterns)
-      - Bot traffic percentage
-      - Average dwell time
+      ---
+      ## 📊 Statistics Returned
       
-      **🎯 Use Cases:**
+      ### Volume Metrics
+      | Metric | Description |
+      |--------|-------------|
+      | \`totalEvents\` | Total number of events in dataset |
+      | \`uniqueUsers\` | Number of unique users |
+      | \`uniqueListings\` | Number of unique listings |
+      | \`uniqueSessions\` | Number of unique sessions |
+      
+      ### Label Distribution
+      | Metric | Description |
+      |--------|-------------|
+      | \`clickRate\` | Percentage of events with clicks |
+      | \`saveRate\` | Percentage of events with saves |
+      | \`contactRate\` | Percentage with contact requests |
+      | \`viewingRate\` | Percentage with scheduled viewings |
+      
+      ### Price Analysis
+      | Metric | Description |
+      |--------|-------------|
+      | \`minPrice\` | Minimum listing price |
+      | \`maxPrice\` | Maximum listing price |
+      | \`avgPrice\` | Average listing price |
+      
+      ### Match Score Analysis
+      | Metric | Description |
+      |--------|-------------|
+      | \`avgOverallMatchScore\` | Average AI match score |
+      | \`avgLocationScore\` | Average location match |
+      | \`avgPriceScore\` | Average price match |
+      
+      ---
+      ## 🎯 Use Cases
       - Dataset quality assessment
       - Class imbalance detection
       - Temporal pattern analysis
@@ -140,7 +198,7 @@ export class HousingTrainingDataGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Invalid request parameters' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.TRAINING_DATA_ACCESS} permission (AI Developer role required)` })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async getDatasetStats(
     @Query() query: StatsSwaggerRequestDto,
@@ -165,25 +223,49 @@ export class HousingTrainingDataGatewayController {
   }
 
   @Post('export')
-  @Permissions('houses.read')
+  @Permissions(P.TRAINING_DATA_EXPORT)
   @ApiOperation({ 
     summary: 'Download training data as file',
     description: `
-      **AI Developer Endpoint**: Downloads the training dataset as a file (JSON, CSV, or Parquet).
+      **🤖 AI Developer Endpoint**: Downloads the training dataset as a file.
       
-      **Access Control:** Requires JWT authentication with houses.read permission.
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT)
+      - **Permission Required:** \`${P.TRAINING_DATA_EXPORT}\`
+      - **Accessible by:** AI Developer role only
       
-      **📁 Export Formats:**
-      - **JSON**: Full structured data with metadata, schemas, and samples
-      - **CSV**: Flat file format for traditional ML tools (Excel, Pandas, etc.)
-      - **Parquet**: Columnar storage format for big data processing (Spark, Dask)
+      ---
+      ## 📁 Export Formats
+      | Format | Extension | Best For | Tools |
+      |--------|-----------|----------|-------|
+      | **JSON** | .json | Full structured data with metadata | Python, Node.js |
+      | **CSV** | .csv | Flat file for traditional ML | Excel, Pandas |
+      | **Parquet** | .parquet | Columnar storage for big data | Spark, Dask |
       
-      **🎯 Use Cases:**
+      ---
+      ## 🎯 Use Cases
       - Download data for local model training
       - Data exploration in Jupyter notebooks
       - Integration with external ML pipelines
       
-      **Note:** This endpoint returns a file download. Use the POST method with JSON body.
+      ---
+      ## 📝 Example Request Body
+      \`\`\`json
+      {
+        "format": "csv",
+        "params": {
+          "startDate": "2024-01-01",
+          "endDate": "2024-12-31",
+          "onlyLabeled": true,
+          "limit": 50000
+        }
+      }
+      \`\`\`
+      
+      ---
+      ## 📥 Response
+      Returns a file download with appropriate Content-Type header
     `
   })
   @ApiBody({ type: ExportSwaggerRequestDto })
@@ -198,7 +280,7 @@ export class HousingTrainingDataGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Invalid request parameters' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.TRAINING_DATA_EXPORT} permission (AI Developer role required)` })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async exportTrainingData(
     @Body() body: ExportSwaggerRequestDto,
@@ -207,7 +289,6 @@ export class HousingTrainingDataGatewayController {
   ): Promise<void> {
     this.logger.log(`🤖 AI Training: ${req.user.userUuid} downloading training data in ${body.format} format`);
     
-    // Extract params and format separately
     const { format, params } = body;
     
     const dto: TrainingDataRequestDto = {
@@ -224,7 +305,6 @@ export class HousingTrainingDataGatewayController {
     }
     
     if (response.success && response.data) {
-      // Set appropriate content type based on format
       const contentType = response.data.format === 'csv' 
         ? 'text/csv' 
         : response.data.format === 'json' 
@@ -244,10 +324,21 @@ export class HousingTrainingDataGatewayController {
   }
 
   @Get('export/csv')
-  @Permissions('houses.read')
+  @Permissions(P.TRAINING_DATA_EXPORT)
   @ApiOperation({ 
     summary: 'Quick CSV download',
-    description: 'Direct CSV download endpoint - opens in browser or saves as file. Use query parameters to filter data.'
+    description: `
+      **🤖 AI Developer Endpoint**: Direct CSV download endpoint.
+      
+      **Access Control:** Requires JWT authentication with ${P.TRAINING_DATA_EXPORT} permission (AI Developer role required)
+      
+      **Example:**
+      \`\`\`
+      GET /housing-training-data-gateway/export/csv?startDate=2024-01-01&endDate=2024-12-31&limit=10000
+      \`\`\`
+      
+      **Response:** CSV file download
+    `
   })
   @ApiQuery({ name: 'startDate', required: false, type: String, description: 'ISO date string (YYYY-MM-DD)' })
   @ApiQuery({ name: 'endDate', required: false, type: String, description: 'ISO date string (YYYY-MM-DD)' })
@@ -265,7 +356,7 @@ export class HousingTrainingDataGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Invalid request parameters' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.TRAINING_DATA_EXPORT} permission (AI Developer role required)` })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async downloadCSV(
     @Query() query: TrainingDataSwaggerRequestDto,
@@ -300,21 +391,30 @@ export class HousingTrainingDataGatewayController {
   }
 
   @Get('sample')
-  @Permissions('houses.read')
+  @Permissions(P.TRAINING_DATA_ACCESS)
   @ApiOperation({ 
     summary: 'Get a small sample of training data for inspection',
     description: `
-      **AI Developer Endpoint**: Returns a small sample of the training dataset for quick inspection.
+      **🤖 AI Developer Endpoint**: Returns a small sample of the training dataset for quick inspection.
       
-      **Access Control:** Requires JWT authentication with houses.read permission.
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT)
+      - **Permission Required:** \`${P.TRAINING_DATA_ACCESS}\`
+      - **Accessible by:** AI Developer role only
       
-      **🎯 Use Cases:**
+      ---
+      ## 🎯 Use Cases
       - Quick data preview before full download
       - Schema verification
       - Feature inspection
       - Sample-based validation
       
-      **Sample Size:** 1-100 records (default: 10)
+      ---
+      ## 📊 Sample Size
+      - **Minimum:** 1 record
+      - **Maximum:** 100 records
+      - **Default:** 10 records
     `
   })
   @ApiQuery({ name: 'size', required: false, type: Number, description: 'Number of samples (1-100)', example: 10 })
@@ -326,7 +426,7 @@ export class HousingTrainingDataGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Invalid request parameters' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.TRAINING_DATA_ACCESS} permission (AI Developer role required)` })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async getSampleData(
     @Query() query: SampleSwaggerRequestDto,

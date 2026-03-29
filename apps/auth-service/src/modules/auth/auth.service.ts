@@ -228,7 +228,7 @@ async generateTokens(
   const userRoleResponse = await firstValueFrom(
     rbacService.getUserRole({ userUuid: userData.uuid }),
   );
-  const roleType = userRoleResponse?.role?.roleType ?? 'GeneralUser';
+  const roleType = userRoleResponse?.role?.roleType ?? 'Individual';
 
   const tokenId = `${userData.uuid}-${Date.now()}`;
 

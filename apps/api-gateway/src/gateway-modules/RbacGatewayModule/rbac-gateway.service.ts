@@ -3,6 +3,7 @@
 import { Inject, Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom, Observable } from 'rxjs';
+
 import {
   RoleResponseDto,
   PermissionResponseDto,
@@ -16,6 +17,7 @@ import {
   UpdateRoleRequestDto,
   GetUserByUserUuidDto
 } from '@pivota-api/dtos';
+
 import {
   
   BaseRoleResponseGrpc,

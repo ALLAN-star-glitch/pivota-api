@@ -577,7 +577,7 @@ async createIndividualAccountWithProfiles(
 
   try {
     // ============ STEP 1: PRE-CHECKS ============
-    const roleType = 'GeneralUser';
+    const roleType = 'Individual';
     
     const [roleRes, planRes] = await Promise.all([
       lastValueFrom(

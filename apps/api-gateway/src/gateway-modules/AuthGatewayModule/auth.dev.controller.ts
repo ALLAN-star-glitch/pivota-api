@@ -17,7 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { BaseResponseDto, TokenPairDto } from '@pivota-api/dtos';
 
-@ApiTags('Auth - Development Tools') // Development tools tag
+@ApiTags('Auth - Development Tools')
 @ApiExtraModels(BaseResponseDto, TokenPairDto)
 @Controller('auth-dev')
 export class AuthDevController {
@@ -54,7 +54,7 @@ export class AuthDevController {
   };
 
   // =========================================================
-  // 🛠️ DEV TOOLS - ADMIN ROLES
+  // 🛠️ DEV TOOLS - PLATFORM ROLES
   // =========================================================
 
   /**
@@ -90,17 +90,6 @@ export class AuthDevController {
       • Audit log access
       • All administrative functions
       
-      **Development UUIDs:**
-      • User UUID: 69a601b6-fdb9-4333-9c01-8895a8b3af45
-      • Email: allanmathenge67@gmail.com
-      • Account ID: 462908a2-0f23-472a-b2d7-54966d004256
-      
-      **Token Generation:**
-      • Creates complete JWT with all claims
-      • Sets HTTP-only cookies automatically
-      • Includes user metadata and permissions
-      • Session is created and tracked
-      
       **Use Cases:**
       • Testing admin-only endpoints
       • Development and debugging
@@ -122,135 +111,73 @@ export class AuthDevController {
   }
 
   /**
-   * Generate System Admin token (Development Only)
+   * Generate Platform System Admin token (Development Only)
    * 
-   * Creates a JWT token for System Admin role in development environment.
+   * Creates a JWT token for Platform System Admin role in development environment.
    * 
    * @param res - Express response object
    * @returns Token pair
    */
-  @Get('token/system-admin')
+  @Get('token/platform-system-admin')
   @Version('1')
   @ApiTags('Auth - Dev Tools')
   @ApiOperation({ 
-    summary: 'Login as SystemAdmin (Development Only)',
+    summary: 'Login as PlatformSystemAdmin (Development Only)',
     description: `
       ⚠️ **DEVELOPMENT ONLY ENDPOINT** ⚠️
       
-      Creates a JWT token for System Admin role in development environment.
+      Creates a JWT token for Platform System Admin role in development environment.
       
-      **System Admin Capabilities:**
-      • System configuration
+      **Platform System Admin Capabilities:**
+      • Platform operations
       • User management
+      • System configuration
       • Module management
       • System monitoring
-      • Limited super admin functions
-      
-      **Development UUIDs:**
-      • User UUID: sys-admin-uuid-1111
-      • Email: system.admin@pivota-dev.com
-      • Account ID: sys-admin-account-id
       
       **Use Cases:**
-      • Testing system administration
+      • Testing platform administration
       • Module management testing
       • System configuration UI
     `
   })
   @ApiResponse(AuthDevController.TokenResponseSchema)
-  async loginSystemAdmin(@Res({ passthrough: true }) res: Response) {
+  async loginPlatformSystemAdmin(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      'sys-admin-uuid-1111',
-      'system.admin@pivota-dev.com',
-      'SystemAdmin',
-      'sys-admin-account-id',
+      'plat-sys-admin-uuid-1111',
+      'platform.system@pivota-dev.com',
+      'PlatformSystemAdmin',
+      'plat-sys-admin-account-id',
       res,
     );
   }
 
   /**
-   * Generate Business System Admin token (Development Only)
+   * Generate Platform Compliance Admin token (Development Only)
    * 
-   * Creates a JWT token for Business System Admin role in development environment.
-   * 
-   * @param res - Express response object
-   * @returns Token pair
-   */
-  @Get('token/business-system-admin')
-  @Version('1')
-  @ApiTags('Auth - Dev Tools')
-  @ApiOperation({ 
-    summary: 'Login as BusinessSystemAdmin (Development Only)',
-    description: `
-      ⚠️ **DEVELOPMENT ONLY ENDPOINT** ⚠️
-      
-      Creates a JWT token for Business System Admin role in development environment.
-      
-      **Business System Admin Capabilities:**
-      • Organization management
-      • Business settings
-      • Team management
-      • Business analytics
-      • Organization-wide permissions
-      
-      **Development UUIDs:**
-      • User UUID: 75249f7d-d2ce-4ad5-b6d1-0b9cf3230f33
-      • Email: allanmathenge22@gmail.com
-      • Account ID: ec46d97e-1fe0-4893-a554-96be8beef377
-      
-      **Use Cases:**
-      • Testing organization features
-      • Team management UI
-      • Business analytics dashboard
-      • Organization settings
-    `
-  })
-  @ApiResponse(AuthDevController.TokenResponseSchema)
-  async loginBusinessSystemAdmin(@Res({ passthrough: true }) res: Response) {
-    this.validateDevMode();
-    return this.authService.generateDevTokenOnly(
-      '24bbd3d2-6d88-456f-9881-741c38003104',
-      'allanmathenge22@gmail.com',
-      'BusinessSystemAdmin',
-      '2178edf5-465b-463f-a36e-e9df92ea3e0e', 
-      res,
-    );
-  } 
-
-  // =========================================================
-  // 🛠️ DEV TOOLS - SPECIALIZED ADMINS
-  // =========================================================
-
-  /**
-   * Generate Compliance Admin token (Development Only)
-   * 
-   * Creates a JWT token for Compliance Admin role in development environment.
+   * Creates a JWT token for Platform Compliance Admin role in development environment.
    * 
    * @param res - Express response object
    * @returns Token pair
    */
-  @Get('token/compliance-admin')
+  @Get('token/platform-compliance-admin')
   @Version('1')
   @ApiTags('Auth - Dev Tools')
   @ApiOperation({ 
-    summary: 'Login as ComplianceAdmin (Development Only)',
+    summary: 'Login as PlatformComplianceAdmin (Development Only)',
     description: `
       ⚠️ **DEVELOPMENT ONLY ENDPOINT** ⚠️
       
-      Creates a JWT token for Compliance Admin role in development environment.
+      Creates a JWT token for Platform Compliance Admin role in development environment.
       
-      **Compliance Admin Capabilities:**
+      **Platform Compliance Admin Capabilities:**
+      • KYC verification
+      • Fraud monitoring
       • Review flagged content
       • Access user reports
       • Compliance monitoring
       • Audit log viewing
-      • Policy enforcement
-      
-      **Development UUIDs:**
-      • User UUID: comp-admin-uuid-2222
-      • Email: compliance.admin@pivota-dev.com
-      • Account ID: comp-admin-account-id
       
       **Use Cases:**
       • Testing moderation tools
@@ -260,46 +187,41 @@ export class AuthDevController {
     `
   })
   @ApiResponse(AuthDevController.TokenResponseSchema)
-  async loginComplianceAdmin(@Res({ passthrough: true }) res: Response) {
+  async loginPlatformComplianceAdmin(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      'comp-admin-uuid-2222',
-      'compliance.admin@pivota-dev.com',
-      'ComplianceAdmin',
-      'comp-admin-account-id',
+      'plat-comp-admin-uuid-2222',
+      'platform.compliance@pivota-dev.com',
+      'PlatformComplianceAdmin',
+      'plat-comp-admin-account-id',
       res,
     );
   }
 
   /**
-   * Generate Analytics Admin token (Development Only)
+   * Generate Platform Analytics Admin token (Development Only)
    * 
-   * Creates a JWT token for Analytics Admin role in development environment.
+   * Creates a JWT token for Platform Analytics Admin role in development environment.
    * 
    * @param res - Express response object
    * @returns Token pair
    */
-  @Get('token/analytics-admin')
+  @Get('token/platform-analytics-admin')
   @Version('1')
   @ApiTags('Auth - Dev Tools')
   @ApiOperation({ 
-    summary: 'Login as AnalyticsAdmin (Development Only)',
+    summary: 'Login as PlatformAnalyticsAdmin (Development Only)',
     description: `
       ⚠️ **DEVELOPMENT ONLY ENDPOINT** ⚠️
       
-      Creates a JWT token for Analytics Admin role in development environment.
+      Creates a JWT token for Platform Analytics Admin role in development environment.
       
-      **Analytics Admin Capabilities:**
+      **Platform Analytics Admin Capabilities:**
       • Access platform analytics
       • View reports and dashboards
       • Export data
       • Performance metrics
       • User behavior analytics
-      
-      **Development UUIDs:**
-      • User UUID: analyt-admin-uuid-3333
-      • Email: analytics.admin@pivota-dev.com
-      • Account ID: analyt-admin-account-id
       
       **Use Cases:**
       • Testing analytics dashboards
@@ -309,46 +231,41 @@ export class AuthDevController {
     `
   })
   @ApiResponse(AuthDevController.TokenResponseSchema)
-  async loginAnalyticsAdmin(@Res({ passthrough: true }) res: Response) {
+  async loginPlatformAnalyticsAdmin(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      'analyt-admin-uuid-3333',
-      'analytics.admin@pivota-dev.com',
-      'AnalyticsAdmin',
-      'analyt-admin-account-id',
+      'plat-analyt-admin-uuid-3333',
+      'platform.analytics@pivota-dev.com',
+      'PlatformAnalyticsAdmin',
+      'plat-analyt-admin-account-id',
       res,
     );
   }
 
   /**
-   * Generate Module Manager token (Development Only)
+   * Generate Platform Module Manager token (Development Only)
    * 
-   * Creates a JWT token for Module Manager role in development environment.
+   * Creates a JWT token for Platform Module Manager role in development environment.
    * 
    * @param res - Express response object
    * @returns Token pair
    */
-  @Get('token/module-manager')
+  @Get('token/platform-module-manager')
   @Version('1')
   @ApiTags('Auth - Dev Tools')
   @ApiOperation({ 
-    summary: 'Login as ModuleManager (Development Only)',
+    summary: 'Login as PlatformModuleManager (Development Only)',
     description: `
       ⚠️ **DEVELOPMENT ONLY ENDPOINT** ⚠️
       
-      Creates a JWT token for Module Manager role in development environment.
+      Creates a JWT token for Platform Module Manager role in development environment.
       
-      **Module Manager Capabilities:**
+      **Platform Module Manager Capabilities:**
       • Manage specific modules
       • Module configuration
       • Feature flags
       • Module access control
       • Module analytics
-      
-      **Development UUIDs:**
-      • User UUID: mod-manager-uuid-4444
-      • Email: module.manager@pivota-dev.com
-      • Account ID: mod-manager-account-id
       
       **Use Cases:**
       • Testing module-specific features
@@ -358,46 +275,137 @@ export class AuthDevController {
     `
   })
   @ApiResponse(AuthDevController.TokenResponseSchema)
-  async loginModuleManager(@Res({ passthrough: true }) res: Response) {
+  async loginPlatformModuleManager(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      'mod-manager-uuid-4444',
-      'module.manager@pivota-dev.com',
-      'ModuleManager',
-      'mod-manager-account-id', 
+      'plat-mod-mgr-uuid-4444',
+      'platform.module@pivota-dev.com',
+      'PlatformModuleManager',
+      'plat-mod-mgr-account-id', 
       res,
     );
   }
 
   /**
-   * Generate Business Content Manager token (Development Only)
+   * Generate AI Developer token (Development Only)
    * 
-   * Creates a JWT token for Business Content Manager role in development environment.
+   * Creates a JWT token for AI Developer role in development environment.
    * 
    * @param res - Express response object
    * @returns Token pair
    */
-  @Get('token/business-content-manager')
+  @Get('token/ai-developer')
   @Version('1')
   @ApiTags('Auth - Dev Tools')
   @ApiOperation({ 
-    summary: 'Login as BusinessContentManager (Development Only)',
+    summary: 'Login as AIDeveloper (Development Only)',
     description: `
       ⚠️ **DEVELOPMENT ONLY ENDPOINT** ⚠️
       
-      Creates a JWT token for Business Content Manager role in development environment.
+      Creates a JWT token for AI Developer role in development environment.
       
-      **Business Content Manager Capabilities:**
+      **AI Developer Capabilities:**
+      • Access training datasets
+      • Export AI/ML data
+      • Model training data access
+      • Data pipeline testing
+      • AI feature development
+      
+      **Use Cases:**
+      • Testing AI training data endpoints
+      • Data pipeline development
+      • Model validation
+      • AI feature testing
+    `
+  })
+  @ApiResponse(AuthDevController.TokenResponseSchema)
+  async loginAIDeveloper(@Res({ passthrough: true }) res: Response) {
+    this.validateDevMode();
+    return this.authService.generateDevTokenOnly(
+      'de6aea28-2dfa-45e3-a527-314917747204',
+      'allanmathenge319@gmail.com',
+      'AIDeveloper',
+      '2eb7df04-3374-44c6-89e4-d94c0b46c024',
+      res,
+    );
+  }
+
+  // =========================================================
+  // 🛠️ DEV TOOLS - BUSINESS ROLES
+  // =========================================================
+
+  /**
+   * Generate Admin token (Development Only)
+   * 
+   * Creates a JWT token for Admin role (business owner) in development environment.
+   * 
+   * @param res - Express response object
+   * @returns Token pair
+   */
+  @Get('token/admin')
+  @Version('1')
+  @ApiTags('Auth - Dev Tools')
+  @ApiOperation({ 
+    summary: 'Login as Admin (Business Owner) (Development Only)',
+    description: `
+      ⚠️ **DEVELOPMENT ONLY ENDPOINT** ⚠️
+      
+      Creates a JWT token for Admin role (business owner) in development environment.
+      
+      **Admin Capabilities:**
+      • Organization management
+      • Business settings
+      • Team management
+      • Invite members
+      • Business analytics
+      • Subscription management
+      • Organization-wide permissions
+      
+      **Use Cases:**
+      • Testing organization features
+      • Team management UI
+      • Business analytics dashboard
+      • Organization settings
+      • Member invitation flow
+    `
+  })
+  @ApiResponse(AuthDevController.TokenResponseSchema)
+  async loginAdmin(@Res({ passthrough: true }) res: Response) {
+    this.validateDevMode();
+    return this.authService.generateDevTokenOnly(
+      '24bbd3d2-6d88-456f-9881-741c38003104',
+      'allanmathenge22@gmail.com',
+      'Admin',
+      '2178edf5-465b-463f-a36e-e9df92ea3e0e', 
+      res,
+    );
+  }
+
+  /**
+   * Generate Content Manager Admin token (Development Only)
+   * 
+   * Creates a JWT token for Content Manager Admin role in development environment.
+   * 
+   * @param res - Express response object
+   * @returns Token pair
+   */
+  @Get('token/content-manager-admin')
+  @Version('1')
+  @ApiTags('Auth - Dev Tools')
+  @ApiOperation({ 
+    summary: 'Login as ContentManagerAdmin (Development Only)',
+    description: `
+      ⚠️ **DEVELOPMENT ONLY ENDPOINT** ⚠️
+      
+      Creates a JWT token for Content Manager Admin role in development environment.
+      
+      **Content Manager Admin Capabilities:**
       • Create and manage content
       • Edit business listings
       • Moderate user content
       • Content analytics
       • Publishing tools
-      
-      **Development UUIDs:**
-      • User UUID: biz-cont-uuid-6666
-      • Email: biz.content@pivota-dev.com
-      • Account ID: biz-cont-account-id
+      • Cannot invite members
       
       **Use Cases:**
       • Testing content management
@@ -407,50 +415,43 @@ export class AuthDevController {
     `
   })
   @ApiResponse(AuthDevController.TokenResponseSchema)
-  async loginBusinessContentManager(@Res({ passthrough: true }) res: Response) {
+  async loginContentManagerAdmin(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
       'biz-cont-uuid-6666',
-      'biz.content@pivota-dev.com',
-      'BusinessContentManager',
+      'content.manager@pivota-dev.com',
+      'ContentManagerAdmin',
       'biz-cont-account-id',  
       res,
     );
   }
 
-  // =========================================================
-  // 🛠️ DEV TOOLS - GENERAL USER
-  // =========================================================
-
   /**
-   * Generate General User token (Development Only)
+   * Generate Member token (Development Only)
    * 
-   * Creates a JWT token for General User role in development environment.
+   * Creates a JWT token for Member role (regular business member) in development environment.
    * 
    * @param res - Express response object
    * @returns Token pair
    */
-  @Get('token/general-user')
+  @Get('token/member')
   @Version('1')
   @ApiTags('Auth - Dev Tools')
   @ApiOperation({ 
-    summary: 'Login as GeneralUser (Development Only)',
+    summary: 'Login as Member (Regular Business Member) (Development Only)',
     description: `
       ⚠️ **DEVELOPMENT ONLY ENDPOINT** ⚠️
       
-      Creates a JWT token for General User role in development environment.
+      Creates a JWT token for Member role (regular business member) in development environment.
       
-      **General User Capabilities:**
-      • Create listings
+      **Member Capabilities:**
+      • Create own listings
       • Apply for jobs
       • Schedule viewings
-      • Manage profile
+      • Manage own profile
       • Basic platform features
-      
-      **Development UUIDs:**
-      • User UUID: 8400a033-eb84-4bd6-b87f-f5e11cba1cd3
-      • Email: stephenjuguna9010@gmail.com
-      • Account ID: eb02ea40-4f17-4040-8885-0029105d9fb2
+      • Cannot invite members
+      • Cannot manage organization settings
       
       **Use Cases:**
       • Testing user-facing features
@@ -461,14 +462,67 @@ export class AuthDevController {
     `
   })
   @ApiResponse(AuthDevController.TokenResponseSchema)
-  async loginGeneralUser(@Res({ passthrough: true }) res: Response) {
+  async loginMember(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
       '8e28dfe2-fb8d-4b42-9a90-295e66a3af0f',
-      'janenyambura4272@gmail.com',
-      'GeneralUser',
+      'member@pivota-dev.com',
+      'Member',
       'e71c5af5-e59c-49fc-ad95-af9e999ed16f',  
       res,
     );
-  } 
-}  
+  }
+
+  // =========================================================
+  // 🛠️ DEV TOOLS - INDIVIDUAL ROLE
+  // =========================================================
+
+  /**
+   * Generate Individual token (Development Only)
+   * 
+   * Creates a JWT token for Individual role (solo user) in development environment.
+   * 
+   * @param res - Express response object
+   * @returns Token pair
+   */
+  @Get('token/individual')
+  @Version('1')
+  @ApiTags('Auth - Dev Tools')
+  @ApiOperation({ 
+    summary: 'Login as Individual (Solo User) (Development Only)',
+    description: `
+      ⚠️ **DEVELOPMENT ONLY ENDPOINT** ⚠️
+      
+      Creates a JWT token for Individual role (solo user) in development environment.
+      
+      **Individual Capabilities:**
+      • Create own listings
+      • Apply for jobs
+      • Schedule viewings
+      • Manage own profile
+      • Book professional services
+      • Basic platform features
+      • Personal account only
+      • Cannot invite members
+      
+      **Use Cases:**
+      • Testing user-facing features
+      • Listing creation flow
+      • Application process
+      • Profile management
+      • General platform testing
+      • Solo user experience
+    `
+  })
+  @ApiResponse(AuthDevController.TokenResponseSchema)
+  async loginIndividual(@Res({ passthrough: true }) res: Response) {
+    this.validateDevMode();
+    return this.authService.generateDevTokenOnly(
+      '8400a033-eb84-4bd6-b87f-f5e11cba1cd3',
+      'stephenjuguna9010@gmail.com',
+      'Individual',
+      'eb02ea40-4f17-4040-8885-0029105d9fb2',   
+      res,
+    );
+  }
+}

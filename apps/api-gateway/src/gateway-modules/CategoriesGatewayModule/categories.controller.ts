@@ -28,11 +28,15 @@ import {
 import { CategoriesService } from './categories.service';
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { Roles } from '../../decorators/roles.decorator';
-import { RolesGuard } from '../../guards/role.guard';
- 
-@ApiTags('Categories') // Main module tag
+import { Permissions } from '../../decorators/permissions.decorator';
+import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
+import { SetModule } from '../../decorators/set-module.decorator';
+import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
+import { Public } from '../../decorators/public.decorator';
+
+@ApiTags('Categories')
 @Controller('categories-module')
+@SetModule(ModuleSlug.REGISTRY)
 export class CategoriesController {
   private readonly logger = new Logger(CategoriesController.name);
 
@@ -53,8 +57,8 @@ export class CategoriesController {
    */
   @Post('categories')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemAdmin', 'ContentManagerAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.ROLE_CREATE)
   @Version('1')
   @ApiTags('Categories - Admin')
   @ApiOperation({ 
@@ -64,7 +68,8 @@ export class CategoriesController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemAdmin, ContentManagerAdmin
+      **Permission Required:** \`${P.ROLE_CREATE}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **Category Properties:**
       • **name** - Display name (e.g., "Apartments")
@@ -114,7 +119,7 @@ export class CategoriesController {
   })
   @ApiResponse({ status: 400, description: 'Validation error - Invalid input data' })
   @ApiResponse({ status: 401, description: 'Unauthorized - Missing or invalid JWT token' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.ROLE_CREATE} permission` })
   @ApiResponse({ status: 409, description: 'Conflict - Category with same slug already exists' })
   async createCategory(
     @Body() dto: CreateCategoryRequestDto,
@@ -133,8 +138,8 @@ export class CategoriesController {
    */
   @Patch('categories')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemAdmin', 'ContentManagerAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.ROLE_UPDATE)
   @Version('1')
   @ApiTags('Categories - Admin')
   @ApiOperation({ 
@@ -144,7 +149,8 @@ export class CategoriesController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemAdmin, ContentManagerAdmin
+      **Permission Required:** \`${P.ROLE_UPDATE}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **Updatable Fields:**
       • **name** - Display name
@@ -167,7 +173,7 @@ export class CategoriesController {
   })
   @ApiResponse({ status: 400, description: 'Validation error - Invalid input data' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.ROLE_UPDATE} permission` })
   @ApiResponse({ status: 404, description: 'Category not found' })
   @ApiResponse({ status: 409, description: 'Conflict - Category with same slug already exists' })
   async updateCategory(
@@ -187,8 +193,8 @@ export class CategoriesController {
    */
   @Delete('categories/:id')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.ROLE_DELETE)
   @Version('1')
   @ApiTags('Categories - Admin')
   @ApiOperation({ 
@@ -198,7 +204,8 @@ export class CategoriesController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemAdmin
+      **Permission Required:** \`${P.ROLE_DELETE}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **Deletion Rules:**
       • Category must have no child categories
@@ -232,7 +239,7 @@ export class CategoriesController {
   })
   @ApiResponse({ status: 400, description: 'Category has subcategories or is in use' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.ROLE_DELETE} permission` })
   @ApiResponse({ status: 404, description: 'Category not found' })
   async deleteCategory(
     @Param('id') id: string,
@@ -255,6 +262,7 @@ export class CategoriesController {
    * @returns Hierarchical category tree with usage stats
    */
   @Get('categories')
+  @Public()
   @Version('1')
   @ApiTags('Categories - Public')
   @ApiOperation({ 
@@ -264,6 +272,7 @@ export class CategoriesController {
       
       **Microservice:** Listings Service
       **Authentication:** Not required
+      **Permission:** Public endpoint
       
       **Features:**
       • Returns categories in a hierarchical tree structure
@@ -356,6 +365,7 @@ export class CategoriesController {
    * @returns Lightweight category metadata
    */
   @Get('categories/discovery')
+  @Public()
   @Version('1')
   @ApiTags('Categories - Public')
   @ApiOperation({ 
@@ -365,6 +375,7 @@ export class CategoriesController {
       
       **Microservice:** Listings Service
       **Authentication:** Not required
+      **Permission:** Public endpoint
       
       **Features:**
       • Lightweight response format
@@ -445,6 +456,7 @@ export class CategoriesController {
    * @returns Category details
    */
   @Get('categories/id/:id')
+  @Public()
   @Version('1')
   @ApiTags('Categories - Public')
   @ApiOperation({ 
@@ -454,6 +466,7 @@ export class CategoriesController {
       
       **Microservice:** Listings Service
       **Authentication:** Not required
+      **Permission:** Public endpoint
       
       **Use Cases:**
       • Category detail pages
@@ -497,6 +510,7 @@ export class CategoriesController {
    * @returns Category details
    */
   @Get('categories/slug/:vertical/:slug')
+  @Public()
   @Version('1')
   @ApiTags('Categories - Public')
   @ApiOperation({ 
@@ -507,6 +521,7 @@ export class CategoriesController {
       
       **Microservice:** Listings Service
       **Authentication:** Not required
+      **Permission:** Public endpoint
       
       **URL Pattern:**
       • Format: /categories/slug/{vertical}/{slug}
@@ -561,6 +576,7 @@ export class CategoriesController {
    * @returns Matching category
    */
   @Get('categories/search')
+  @Public()
   @Version('1')
   @ApiTags('Categories - Public')
   @ApiOperation({ 
@@ -570,6 +586,7 @@ export class CategoriesController {
       
       **Microservice:** Listings Service
       **Authentication:** Not required
+      **Permission:** Public endpoint
       
       **Features:**
       • Case-insensitive search

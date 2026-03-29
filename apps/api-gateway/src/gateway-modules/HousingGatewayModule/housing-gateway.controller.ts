@@ -53,7 +53,7 @@ import {
 } from '@pivota-api/dtos';
 
 import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
-import { RolesGuard } from '../../guards/role.guard';
+import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
 import { SubscriptionGuard } from '../../guards/subscription.guard';
 import { JwtRequest } from '@pivota-api/interfaces';
 import { HousingGatewayService } from './housing-gateway.service';
@@ -65,6 +65,7 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 import { imageFileFilter } from '@pivota-api/filters';
 import { ClientInfo } from '../../decorators/client-info.decorator';
 import { HOUSE_LISTING_STATUSES, HOUSE_LISTING_TYPES } from '@pivota-api/constants';
+import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 
 @ApiTags('Housing')
 @ApiExtraModels( 
@@ -75,9 +76,9 @@ import { HOUSE_LISTING_STATUSES, HOUSE_LISTING_TYPES } from '@pivota-api/constan
   CreateHouseListingDto, 
   AdminCreateHouseListingDto
 )
-@SetModule('housing')
+@SetModule(ModuleSlug.HOUSING)
 @Controller('housing-module')
-@UseGuards(JwtAuthGuard, RolesGuard, SubscriptionGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, SubscriptionGuard)
 export class HousingGatewayController {
   private readonly logger = new Logger(HousingGatewayController.name);
 
@@ -256,7 +257,6 @@ export class HousingGatewayController {
     
     this.logger.debug(`Search from Device: ${clientInfo.device} (${clientInfo.deviceType})`);
     
-    // Add context to DTO
     const context: Partial<ListingViewContextDto> = {
       sessionId: sessionId || this.generateAnonymousId(clientInfo),
       platform: platform?.toUpperCase() as 'WEB' | 'MOBILE' | 'API' | undefined || this.determinePlatform(clientInfo),
@@ -334,25 +334,17 @@ export class HousingGatewayController {
 
     const context = new ListingViewContextDto();
     
-    // Set seeker and session info from JWT
     context.seekerId = seekerId;
     context.sessionId = sessionId;
-    
-    // Set client/device info
     context.client = clientInfo;
-    
-    // Set platform and referrer
     context.platform = (headers['x-platform'] as 'WEB' | 'MOBILE' | 'API' | 'CLI') || 
                        this.determinePlatform(clientInfo);
     context.referrer = headers.referer || 'DIRECT';
-    
-    // Set interaction data from query params
     context.timeSpent = query.timeSpent ? parseInt(query.timeSpent) : undefined;
     context.interactionType = query.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined;
     context.viewDuration = query.timeSpent ? parseInt(query.timeSpent) : undefined;
     context.scrollDepth = query.scrollDepth ? parseInt(query.scrollDepth) : undefined;
     
-    // Set search context if coming from search
     if (query.searchId || query.q || query.pos) {
       const searchContext = new SearchContextDto();
       searchContext.searchId = query.searchId;
@@ -376,7 +368,7 @@ export class HousingGatewayController {
   // ===========================================================
  
   @Post('listings')
-  @Permissions('houses.create.own')
+  @Permissions(P.HOUSING_CREATE_OWN)
   @UseInterceptors(FilesInterceptor('images', 10, {
     fileFilter: imageFileFilter,
     limits: {
@@ -391,7 +383,7 @@ export class HousingGatewayController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** houses.create.own
+      **Permission:** ${P.HOUSING_CREATE_OWN}
     `
   })
   @ApiConsumes('multipart/form-data')
@@ -474,7 +466,7 @@ export class HousingGatewayController {
     }
   }
 
-  @Permissions('houses.read')
+  @Permissions(P.HOUSING_READ)
   @Version('1')
   @Get('my-listings')
   @ApiTags('Housing - Management')
@@ -485,7 +477,7 @@ export class HousingGatewayController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** houses.read
+      **Permission:** ${P.HOUSING_READ}
     `
   })
   @ApiQuery({ 
@@ -530,7 +522,7 @@ export class HousingGatewayController {
   // USER - Schedule Viewing
   // ===========================================================
   @Post('listings/:id/viewing')
-  @Permissions('houses.read')
+  @Permissions(P.HOUSING_READ)
   @ApiTags('Housing - Management')
   @ApiOperation({ 
     summary: 'Schedule a property viewing for yourself with AI-powered analytics tracking',
@@ -539,7 +531,7 @@ export class HousingGatewayController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** houses.read
+      **Permission:** ${P.HOUSING_READ}
       
       **AI Analytics & Tracking**
       
@@ -602,7 +594,6 @@ export class HousingGatewayController {
     this.logger.log(`User ${seekerId} scheduling viewing for listing ${listingId}`);
     this.logger.debug(`Scheduling from Device: ${clientInfo.device} (${clientInfo.deviceType})`);
 
-    // Build context object for tracking
     const context = new ListingViewContextDto();
     context.seekerId = seekerId;
     context.sessionId = sessionId || this.generateAnonymousId(clientInfo);
@@ -638,7 +629,7 @@ export class HousingGatewayController {
   // ADMIN - Schedule Viewing for Any User
   // ===========================================================
   @Post('admin/listings/:id/viewing')
-  @Permissions('houses.create.any')
+  @Permissions(P.HOUSING_CREATE_ANY)
   @ApiTags('Housing - Admin')
   @ApiOperation({ 
     summary: 'Schedule a viewing on behalf of any user (Admin only)',
@@ -647,7 +638,7 @@ export class HousingGatewayController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** houses.create.any
+      **Permission:** ${P.HOUSING_CREATE_ANY}
       
       **Admin Bypass Capabilities:**
       - Can book for any user (targetViewerId required)
@@ -713,7 +704,7 @@ export class HousingGatewayController {
   // ===========================================================
 
   @Post('admin/accounts/:accountId/listings')
-  @Permissions('houses.create.any')
+  @Permissions(P.HOUSING_CREATE_ANY)
   @UseInterceptors(FilesInterceptor('images', 10, {
     fileFilter: imageFileFilter,
     limits: {
@@ -728,7 +719,7 @@ export class HousingGatewayController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** houses.create.any
+      **Permission:** ${P.HOUSING_CREATE_ANY}
     `
   })
   @ApiParam({ 
@@ -809,7 +800,7 @@ export class HousingGatewayController {
   }
 
   @Patch('admin/listings/:id')
-  @Permissions('housing.update.any')
+  @Permissions(P.HOUSING_UPDATE_ANY)
   @ApiTags('Housing - Admin')
   @ApiOperation({ 
     summary: 'Update any house listing',
@@ -818,7 +809,7 @@ export class HousingGatewayController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** housing.update.any
+      **Permission:** ${P.HOUSING_UPDATE_ANY}
     `
   })
   @ApiParam({ 
@@ -860,7 +851,7 @@ export class HousingGatewayController {
     return resp;
   }
 
-  @Permissions('houses.read')
+  @Permissions(P.HOUSING_READ)
   @Version('1')
   @Get('admin/listings')
   @ApiTags('Housing - Admin')
@@ -871,7 +862,7 @@ export class HousingGatewayController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** houses.read
+      **Permission:** ${P.HOUSING_READ}
     `
   })
   @ApiQuery({ 
@@ -901,8 +892,9 @@ export class HousingGatewayController {
     @Query() query: GetAdminHousingFilterDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
-    if (req.user.role === 'GeneralUser') {
-      this.logger.warn(`Unauthorized admin access attempt by GeneralUser ${req.user.userUuid}`);
+    // Check if user has admin role (Individual and Member cannot access admin endpoints)
+    if (req.user.role === 'Individual' || req.user.role === 'Member') {
+      this.logger.warn(`Unauthorized admin access attempt by ${req.user.role} ${req.user.userUuid}`);
       throw BaseResponseDto.fail('Unauthorized access to admin listings.', 'FORBIDDEN');
     }
     
@@ -936,5 +928,5 @@ export class HousingGatewayController {
     const hash = buffer.toString('base64').substring(0, 20).replace(/[^a-zA-Z0-9]/g, '');
     
     return `anon_${hash}`;
-  }
+  }   
 }

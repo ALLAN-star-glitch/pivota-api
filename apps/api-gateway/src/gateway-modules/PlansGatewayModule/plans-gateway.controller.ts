@@ -32,12 +32,16 @@ import {
 } from '@nestjs/swagger';
 
 import { PlansGatewayService } from './plans-gateway.service';
-import { RolesGuard } from '../../guards/role.guard';
-import { Roles } from '../../decorators/roles.decorator';
+import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
+import { Permissions } from '../../decorators/permissions.decorator';
+import { SetModule } from '../../decorators/set-module.decorator';
+import { Public } from '../../decorators/public.decorator';
+import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 
-@ApiTags('Plans') // Main module tag
+@ApiTags('Plans')
 @ApiBearerAuth()
 @Controller('pricing-plans-module')
+@SetModule(ModuleSlug.DASHBOARD)
 export class PlansGatewayController {
   private readonly logger = new Logger(PlansGatewayController.name);
 
@@ -57,8 +61,8 @@ export class PlansGatewayController {
    * @returns Created plan details
    */
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemsAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.SUBSCRIPTION_MANAGE)
   @Version('1')
   @ApiTags('Plans - Admin')
   @ApiOperation({ 
@@ -68,7 +72,8 @@ export class PlansGatewayController {
       
       **Microservice:** Plans Service (Admin Service)
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemsAdmin
+      **Permission Required:** \`${P.SUBSCRIPTION_MANAGE}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **What are Plans?**
       Plans define subscription tiers with specific features, limits, and pricing.
@@ -135,7 +140,7 @@ export class PlansGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Validation error - Invalid input data' })
   @ApiResponse({ status: 401, description: 'Unauthorized - Missing or invalid JWT token' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.SUBSCRIPTION_MANAGE} permission` })
   @ApiResponse({ status: 409, description: 'Conflict - Plan with same slug already exists' })
   async createPlan(
     @Body() dto: CreatePlanDto,
@@ -162,8 +167,8 @@ export class PlansGatewayController {
    * @returns Updated plan details
    */
   @Put(':planId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemsAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.SUBSCRIPTION_MANAGE)
   @Version('1')
   @ApiTags('Plans - Admin')
   @ApiOperation({ 
@@ -173,7 +178,8 @@ export class PlansGatewayController {
       
       **Microservice:** Plans Service (Admin Service)
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemsAdmin
+      **Permission Required:** \`${P.SUBSCRIPTION_MANAGE}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **Updatable Fields:**
       • **name** - Display name of the plan
@@ -237,7 +243,7 @@ export class PlansGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Validation error - Invalid input data' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.SUBSCRIPTION_MANAGE} permission` })
   @ApiResponse({ status: 404, description: 'Plan not found' })
   async updatePlan(
     @Param('planId') planId: string,
@@ -263,8 +269,8 @@ export class PlansGatewayController {
    * @returns Success confirmation
    */
   @Delete('/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'SystemsAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.SUBSCRIPTION_MANAGE)
   @Version('1')
   @ApiTags('Plans - Admin')
   @ApiOperation({ 
@@ -274,7 +280,8 @@ export class PlansGatewayController {
       
       **Microservice:** Plans Service (Admin Service)
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemsAdmin
+      **Permission Required:** \`${P.SUBSCRIPTION_MANAGE}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **Deletion Rules:**
       • Plan must have no active subscriptions
@@ -316,7 +323,7 @@ export class PlansGatewayController {
     }
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.SUBSCRIPTION_MANAGE} permission` })
   @ApiResponse({ status: 404, description: 'Plan not found' })
   @ApiResponse({ status: 409, description: 'Plan has active subscriptions and cannot be deleted' })
   async deletePlan(
@@ -345,6 +352,7 @@ export class PlansGatewayController {
    * @returns Plan details
    */
   @Get('/:id')
+  @Public()
   @Version('1')
   @ApiTags('Plans - Public')
   @ApiOperation({ 
@@ -354,6 +362,7 @@ export class PlansGatewayController {
       
       **Microservice:** Plans Service (Admin Service)
       **Authentication:** Not required
+      **Permission:** Public endpoint
       
       **Information returned:**
       • Plan name and description
@@ -420,6 +429,7 @@ export class PlansGatewayController {
    * @returns List of all plans
    */
   @Get()
+  @Public()
   @Version('1')
   @ApiTags('Plans - Public')
   @ApiOperation({ 
@@ -429,6 +439,7 @@ export class PlansGatewayController {
       
       **Microservice:** Plans Service (Admin Service)
       **Authentication:** Not required
+      **Permission:** Public endpoint
       
       **What's included:**
       • All active plans (including free and premium)
@@ -516,6 +527,7 @@ export class PlansGatewayController {
    * @returns Plan ID
    */
   @Get('/slug/:slug')
+  @Public()
   @Version('1')
   @ApiTags('Plans - Public')
   @ApiOperation({ 
@@ -525,6 +537,7 @@ export class PlansGatewayController {
       
       **Microservice:** Plans Service (Admin Service)
       **Authentication:** Not required
+      **Permission:** Public endpoint
       
       **What are slugs?**
       Slugs are human-readable, URL-friendly identifiers.

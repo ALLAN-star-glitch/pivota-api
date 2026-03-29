@@ -52,9 +52,10 @@ import { JwtRequest } from '@pivota-api/interfaces';
 // Updated Decorators
 import { Permissions } from '../../decorators/permissions.decorator';
 import { Public } from '../../decorators/public.decorator';
-import { RolesGuard } from '../../guards/role.guard';
+import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
 import { SubscriptionGuard } from '../../guards/subscription.guard';
 import { SetModule } from '../../decorators/set-module.decorator';
+import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
  
 /**
  * Jobs Controller
@@ -77,9 +78,9 @@ import { SetModule } from '../../decorators/set-module.decorator';
   CloseJobPostResponseDto, 
   JobApplicationResponseDto
 )
-@SetModule('jobs')
+@SetModule(ModuleSlug.EMPLOYMENT)
 @Controller('jobs-module')
-@UseGuards(JwtAuthGuard, RolesGuard, SubscriptionGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, SubscriptionGuard)
 export class JobsController {
   private readonly logger = new Logger(JobsController.name);
 
@@ -124,7 +125,7 @@ export class JobsController {
    * @returns Created job post details
    */
   @Post('jobs')
-  @Permissions('jobs.create.own')
+  @Permissions(P.EMPLOYMENT_CREATE_OWN)
   @ApiTags('Jobs - Management')
   @ApiOperation({ 
     summary: 'Create a new job posting',
@@ -133,7 +134,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.create.own
+      **Permission:** ${P.EMPLOYMENT_CREATE_OWN}
       
       **Process:**
       1. Validates user permissions
@@ -202,7 +203,7 @@ export class JobsController {
    * @returns Updated job post
    */
   @Patch('jobs/:id')
-  @Permissions('jobs.update.own')
+  @Permissions(P.EMPLOYMENT_UPDATE_OWN)
   @ApiTags('Jobs - Management')
   @Version('1')
   @ApiOperation({ 
@@ -212,7 +213,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.update.own
+      **Permission:** ${P.EMPLOYMENT_UPDATE_OWN}
       
       **Important Rules:**
       • You can only update jobs where you are the creator
@@ -275,7 +276,7 @@ export class JobsController {
    * @returns List of user's job postings
    */
   @Get('my-listings')
-  @Permissions('jobs.read')
+  @Permissions(P.EMPLOYMENT_READ)
   @ApiTags('Jobs - Management')
   @Version('1')
   @ApiOperation({ 
@@ -285,7 +286,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.read
+      **Permission:** ${P.EMPLOYMENT_READ}
       
       **Features:**
       • Returns jobs created by the authenticated user
@@ -325,7 +326,7 @@ export class JobsController {
    * @returns Closure confirmation
    */
   @Patch('jobs/:id/close')
-  @Permissions('jobs.close.own')
+  @Permissions(P.EMPLOYMENT_CLOSE_OWN)
   @ApiTags('Jobs - Management')
   @ApiOperation({ 
     summary: 'Close your own job posting',
@@ -334,7 +335,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.close.own
+      **Permission:** ${P.EMPLOYMENT_CLOSE_OWN}
       
       **Effects:**
       • Job will no longer appear in search results
@@ -387,7 +388,7 @@ export class JobsController {
    * @returns Application confirmation
    */
   @Post('jobs/:id/apply')
-  @Permissions('jobs.read')
+  @Permissions(P.EMPLOYMENT_READ)
   @ApiTags('Jobs - Applications')
   @Version('1')
   @ApiOperation({ 
@@ -397,7 +398,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.read
+      **Permission:** ${P.EMPLOYMENT_READ}
       
       **Process:**
       1. Validates job exists and is active
@@ -440,7 +441,7 @@ export class JobsController {
    * @returns List of user's applications
    */
   @Get('my-applications')
-  @Permissions('jobs.read')
+  @Permissions(P.EMPLOYMENT_READ)
   @ApiTags('Jobs - Applications')
   @Version('1')
   @ApiOperation({ 
@@ -450,7 +451,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.read
+      **Permission:** ${P.EMPLOYMENT_READ}
       
       **Features:**
       • Returns applications across all jobs
@@ -487,7 +488,7 @@ export class JobsController {
    * @returns Full application details
    */
   @Get('applications/:id')
-  @Permissions('jobs.read')
+  @Permissions(P.EMPLOYMENT_READ)
   @ApiTags('Jobs - Applications')
   @Version('1')
   @ApiOperation({ 
@@ -497,7 +498,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.read
+      **Permission:** ${P.EMPLOYMENT_READ}
       
       **Access Rules:**
       • Applicants can view their own applications
@@ -548,7 +549,7 @@ export class JobsController {
    * @returns Created job details
    */
   @Post('admin/accounts/:accountId/jobs')
-  @Permissions('jobs.create.any')
+  @Permissions(P.EMPLOYMENT_CREATE_ANY)
   @ApiTags('Jobs - Admin')
   @ApiOperation({ 
     summary: '[ADMIN] Create job posting for any account',
@@ -557,7 +558,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.create.any
+      **Permission:** ${P.EMPLOYMENT_CREATE_ANY}
       
       **Admin Privileges:**
       • Can specify any account ID via URL parameter
@@ -618,7 +619,7 @@ export class JobsController {
    * @returns Updated job
    */
   @Patch('admin/jobs/:id')
-  @Permissions('jobs.update.any')
+  @Permissions(P.EMPLOYMENT_UPDATE_ANY)
   @ApiTags('Jobs - Admin')
   @Version('1')
   @ApiOperation({ 
@@ -628,7 +629,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.update.any
+      **Permission:** ${P.EMPLOYMENT_UPDATE_ANY}
       
       **Admin Capabilities:**
       • Modify job details for any account
@@ -683,7 +684,7 @@ export class JobsController {
    * @returns Closure confirmation
    */
   @Patch('admin/jobs/:id/close')
-  @Permissions('jobs.close.any')
+  @Permissions(P.EMPLOYMENT_CLOSE_ANY)
   @ApiTags('Jobs - Admin')
   @ApiOperation({ 
     summary: '[ADMIN] Close any job posting',
@@ -692,7 +693,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.close.any
+      **Permission:** ${P.EMPLOYMENT_CLOSE_ANY}
       
       **Use Cases:**
       • Removing inappropriate job posts
@@ -740,7 +741,7 @@ export class JobsController {
    * @returns List of jobs
    */
   @Get('admin/listings')
-  @Permissions('jobs.read')
+  @Permissions(P.EMPLOYMENT_READ)
   @ApiTags('Jobs - Admin')
   @Version('1')
   @ApiOperation({ 
@@ -750,7 +751,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.read
+      **Permission:** ${P.EMPLOYMENT_READ}
       
       **Admin Capabilities:**
       • View jobs from any account or creator
@@ -788,7 +789,8 @@ export class JobsController {
     const adminId = req.user.userUuid;
     const actorRole = req.user.role;
 
-    if (actorRole === 'GeneralUser') {
+    // Updated role check - Individual and Member cannot access admin endpoints
+    if (actorRole === 'Individual' || actorRole === 'Member') {
       this.logger.warn(`🛑 Unauthorized admin access attempt by ${adminId}`);
       return BaseResponseDto.fail('Unauthorized access to administrative listings.', 'FORBIDDEN');
     }
@@ -812,7 +814,7 @@ export class JobsController {
    * @returns List of applications
    */
   @Get('admin/applications')
-  @Permissions('jobs.read')
+  @Permissions(P.EMPLOYMENT_READ)
   @ApiTags('Jobs - Admin')
   @Version('1')
   @ApiOperation({ 
@@ -822,7 +824,7 @@ export class JobsController {
       
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
-      **Permission:** jobs.read
+      **Permission:** ${P.EMPLOYMENT_READ}
       
       **Admin Capabilities:**
       • View applications across all jobs
@@ -858,9 +860,12 @@ export class JobsController {
     @Query() query: GetAdminApplicationsFilterDto,
   ): Promise<BaseResponseDto<JobApplicationResponseDto[]>> {
     const adminId = req.user.userUuid;
-    if (req.user.role === 'GeneralUser') {
+    
+    // Updated role check - Individual, Member, ContentManagerAdmin cannot access admin endpoints
+    if (req.user.role === 'Individual' || req.user.role === 'Member' || req.user.role === 'ContentManagerAdmin') {
       return BaseResponseDto.fail('Unauthorized access to administrative applications.', 'FORBIDDEN');
     }
+    
     this.logger.log(`👮 Admin ${adminId} searching system-wide applications`);
     return this.jobsService.getAdminApplications(query);
   }
@@ -963,7 +968,7 @@ export class JobsController {
    * @returns Validation results
    */
   @Post('jobs/validate-ids')
-  @Permissions('jobs.read')
+  @Permissions(P.EMPLOYMENT_READ)
   @ApiTags('Jobs - Public')
   @Version('1')
   @ApiOperation({ 
@@ -972,7 +977,8 @@ export class JobsController {
       Validates whether given job post IDs exist and are active.
       
       **Microservice:** Listings Service
-      **Authentication:** Optional (can be public or authenticated)
+      **Authentication:** Required (JWT cookie)
+      **Permission:** ${P.EMPLOYMENT_READ}
       
       **Use Cases:**
       • Checking job availability before applying

@@ -30,11 +30,16 @@ import {
   ApiParam,
   ApiExtraModels,
   ApiResponse,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
-import { Roles } from '../../decorators/roles.decorator';
-import { RolesGuard } from '../../guards/role.guard';
+import { Permissions } from '../../decorators/permissions.decorator';
+import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
+import { SetModule } from '../../decorators/set-module.decorator';
+import { Public } from '../../decorators/public.decorator';
+import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 
-@ApiTags('RBAC') // Main module tag
+@ApiTags('RBAC')
+@ApiBearerAuth()
 @ApiExtraModels(
   BaseResponseDto,
   RoleResponseDto,
@@ -43,6 +48,7 @@ import { RolesGuard } from '../../guards/role.guard';
   UserRoleResponseDto
 )
 @Controller('rbac-module')
+@SetModule(ModuleSlug.USER_MANAGEMENT)
 export class RbacGatewayController {
   private readonly logger = new Logger(RbacGatewayController.name);
 
@@ -62,8 +68,8 @@ export class RbacGatewayController {
    * @returns Created role details
    */
   @Post('roles')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.ROLE_CREATE)
   @Version('1')
   @ApiTags('RBAC - Roles')
   @ApiOperation({ 
@@ -73,7 +79,8 @@ export class RbacGatewayController {
       
       **Microservice:** Admin Service (RBAC Module)
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, ContentManagerAdmin, ComplianceAdmin, AnalyticsAdmin, FraudAdmin
+      **Permission Required:** \`${P.ROLE_CREATE}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **What are Roles?**
       Roles are collections of permissions that define what actions a user can perform.
@@ -83,19 +90,8 @@ export class RbacGatewayController {
       • **name** - Display name (e.g., "Content Manager")
       • **roleType** - Unique identifier for the role (e.g., "content-manager")
       • **description** - Detailed description of the role's purpose
-      • **scope** - Scope of the role (e.g., "GLOBAL", "ORGANIZATION", "MODULE")
+      • **scope** - Scope of the role (SYSTEM or BUSINESS)
       • **immutable** - Whether the role can be modified (system roles are immutable)
-      • **status** - Active/Inactive status
-      
-      **Role Types (roleType):**
-      • System roles: 'super-admin', 'system-admin', 'module-manager'
-      • Business roles: 'content-manager', 'compliance-admin', 'analytics-admin'
-      • Custom roles: Defined by organizations
-      
-      **Scope Options:**
-      • **GLOBAL** - Applies across the entire platform
-      • **ORGANIZATION** - Applies within an organization
-      • **MODULE** - Applies to a specific module
       
       **Important Notes:**
       • roleType must be unique across the system
@@ -111,8 +107,7 @@ export class RbacGatewayController {
           name: 'Content Manager',
           roleType: 'content-manager',
           description: 'Can create and manage content across the platform',
-          scope: 'GLOBAL',
-          status: 'Active',
+          scope: 'SYSTEM',
           immutable: false
         }
       },
@@ -121,8 +116,7 @@ export class RbacGatewayController {
           name: 'Organization Admin',
           roleType: 'org-admin',
           description: 'Full access within their organization',
-          scope: 'ORGANIZATION',
-          status: 'Active',
+          scope: 'BUSINESS',
           immutable: false
         }
       }
@@ -142,7 +136,7 @@ export class RbacGatewayController {
           name: 'Content Manager',
           roleType: 'content-manager',
           description: 'Can create and manage content across the platform',
-          scope: 'GLOBAL',
+          scope: 'SYSTEM',
           status: 'Active',
           immutable: false,
           createdAt: '2026-03-05T10:30:00.000Z',
@@ -153,11 +147,12 @@ export class RbacGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Validation error - Invalid input data' })
   @ApiResponse({ status: 401, description: 'Unauthorized - Missing or invalid JWT token' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.ROLE_CREATE} permission` })
   @ApiResponse({ status: 409, description: 'Conflict - Role with same roleType already exists' })
   async createRole(
     @Body() body: CreateRoleRequestDto
   ): Promise<BaseResponseDto<RoleResponseDto>> {
+    this.logger.log(`Creating new role: ${body.name}`);
     return this.rbacGatewayService.createRole(body);
   }
 
@@ -171,8 +166,8 @@ export class RbacGatewayController {
    * @returns Updated role details
    */
   @Put('roles/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.ROLE_UPDATE)
   @Version('1')
   @ApiTags('RBAC - Roles')
   @ApiOperation({ 
@@ -182,7 +177,8 @@ export class RbacGatewayController {
       
       **Microservice:** Admin Service (RBAC Module)
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, ContentManagerAdmin, ComplianceAdmin, AnalyticsAdmin, FraudAdmin
+      **Permission Required:** \`${P.ROLE_UPDATE}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **Updatable Fields:**
       • **name** - Display name
@@ -197,7 +193,6 @@ export class RbacGatewayController {
       
       **Impact:**
       Changes affect all users with this role immediately.
-      Consider communication before updating role definitions.
     `
   })
   @ApiParam({ 
@@ -212,8 +207,7 @@ export class RbacGatewayController {
       'Update name and description': {
         value: {
           name: 'Senior Content Manager',
-          description: 'Advanced content management with approval rights',
-          status: 'Active'
+          description: 'Advanced content management with approval rights'
         }
       },
       'Deactivate role': {
@@ -230,12 +224,13 @@ export class RbacGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Validation error - Invalid input data' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Cannot modify immutable role' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.ROLE_UPDATE} permission` })
   @ApiResponse({ status: 404, description: 'Role not found' })
   async updateRole(
     @Param('id') id: string,
     @Body() body: UpdateRoleRequestDto
   ): Promise<BaseResponseDto<RoleResponseDto>> {
+    this.logger.log(`Updating role: ${id}`);
     return this.rbacGatewayService.updateRole({ ...body, id });
   }
 
@@ -247,8 +242,8 @@ export class RbacGatewayController {
    * @returns List of all roles
    */
   @Get('roles')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.ROLE_VIEW)
   @Version('1')
   @ApiTags('RBAC - Roles')
   @ApiOperation({ 
@@ -258,7 +253,8 @@ export class RbacGatewayController {
       
       **Microservice:** Admin Service (RBAC Module)
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, ContentManagerAdmin, ComplianceAdmin, AnalyticsAdmin, FraudAdmin
+      **Permission Required:** \`${P.ROLE_VIEW}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **Information returned:**
       • All system roles and custom roles
@@ -271,10 +267,6 @@ export class RbacGatewayController {
       • Permission assignment
       • User role selection
       • Audit and compliance
-      
-      **Filtering:**
-      To filter by status or scope, implement client-side filtering
-      or extend the API with query parameters.
     `
   })
   @ApiResponse({ 
@@ -288,29 +280,20 @@ export class RbacGatewayController {
         code: 'OK',
         data: [
           {
-            id: 'role_super_admin',
+            id: 'SuperAdmin',
             name: 'Super Admin',
-            roleType: 'super-admin',
-            description: 'Full system access',
-            scope: 'GLOBAL',
+            roleType: 'SuperAdmin',
+            description: 'Full platform control',
+            scope: 'SYSTEM',
             status: 'Active',
             immutable: true
           },
           {
-            id: 'role_content_manager',
-            name: 'Content Manager',
-            roleType: 'content-manager',
-            description: 'Manage content across platform',
-            scope: 'GLOBAL',
-            status: 'Active',
-            immutable: false
-          },
-          {
-            id: 'role_analytics_viewer',
-            name: 'Analytics Viewer',
-            roleType: 'analytics-viewer',
-            description: 'View reports and analytics',
-            scope: 'ORGANIZATION',
+            id: 'Admin',
+            name: 'Admin',
+            roleType: 'Admin',
+            description: 'Business account owner with full control',
+            scope: 'BUSINESS',
             status: 'Active',
             immutable: false
           }
@@ -319,8 +302,9 @@ export class RbacGatewayController {
     }
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.ROLE_VIEW} permission` })
   async getAllRoles(): Promise<BaseResponseDto<RoleResponseDto[]>> {
+    this.logger.log('Fetching all roles');
     return this.rbacGatewayService.getAllRoles();
   }
 
@@ -338,8 +322,8 @@ export class RbacGatewayController {
    * @returns Created permission details
    */
   @Post('permissions')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.ROLE_ASSIGN)
   @Version('1')
   @ApiTags('RBAC - Permissions')
   @ApiOperation({ 
@@ -349,7 +333,8 @@ export class RbacGatewayController {
       
       **Microservice:** Admin Service (RBAC Module)
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, ContentManagerAdmin, ComplianceAdmin, AnalyticsAdmin, FraudAdmin
+      **Permission Required:** \`${P.ROLE_ASSIGN}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **What are Permissions?**
       Permissions are the smallest unit of access control.
@@ -357,51 +342,32 @@ export class RbacGatewayController {
       
       **Permission Structure:**
       • **name** - Display name (e.g., "Create Listing")
-      • **action** - Unique action identifier (e.g., "listing.create")
+      • **action** - Unique action identifier (e.g., "housing.create")
       • **description** - Detailed description of what the permission allows
       • **moduleId** - Optional module this permission belongs to
       • **system** - Whether this is a system permission (immutable)
       
-      **Action Naming Convention:**
-      Format: \`resource.operation\`
-      Examples:
-      • \`listing.create\` - Create a listing
-      • \`listing.update\` - Update a listing
-      • \`listing.delete\` - Delete a listing
-      • \`user.view\` - View user details
-      • \`settings.manage\` - Manage system settings
-      
-      **Operation Types:**
-      • **create** - Create new resources
-      • **read/view** - View resources
-      • **update/edit** - Modify resources
-      • **delete** - Remove resources
-      • **manage** - Full management access
-      • **approve** - Approval actions
-      
       **Important Notes:**
       • action must be unique across the system
       • System permissions cannot be modified or deleted
-      • Permissions are typically created during module installation
     `
   })
   @ApiBody({ 
     type: CreatePermissionRequestDto,
     examples: {
-      'Listing Permission': {
+      'Housing Permission': {
         value: {
-          name: 'Create Listing',
-          action: 'listing.create',
-          description: 'Allows user to create new listings',
-          moduleId: 'module_housing'
+          name: 'Create Housing Listing',
+          action: 'housing.create.own',
+          description: 'Allows user to create housing listings',
+          moduleId: 'housing'
         }
       },
       'User Management Permission': {
         value: {
-          name: 'Manage Users',
-          action: 'user.manage',
-          description: 'Full user management capabilities',
-          moduleId: 'module_admin',
+          name: 'View Users',
+          action: 'user.view',
+          description: 'View user details',
           system: false
         }
       }
@@ -417,25 +383,25 @@ export class RbacGatewayController {
         message: 'Permission created successfully',
         code: 'CREATED',
         data: {
-          id: 'perm_123abc',
-          name: 'Create Listing',
-          action: 'listing.create',
-          description: 'Allows user to create new listings',
-          moduleId: 'module_housing',
+          id: 'housing.create.own',
+          name: 'Create Housing Listing',
+          action: 'housing.create.own',
+          description: 'Allows user to create housing listings',
+          moduleId: 'housing',
           system: false,
-          createdAt: '2026-03-05T10:30:00.000Z',
-          updatedAt: '2026-03-05T10:30:00.000Z'
+          createdAt: '2026-03-05T10:30:00.000Z'
         }
       }
     }
   })
   @ApiResponse({ status: 400, description: 'Validation error - Invalid input data' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.ROLE_ASSIGN} permission` })
   @ApiResponse({ status: 409, description: 'Conflict - Permission with same action already exists' })
   async createPermission(
     @Body() body: CreatePermissionRequestDto
   ): Promise<BaseResponseDto<PermissionResponseDto>> {
+    this.logger.log(`Creating permission: ${body.name} (${body.action})`);
     return this.rbacGatewayService.createPermission(body);
   }
 
@@ -453,8 +419,8 @@ export class RbacGatewayController {
    * @returns Assignment confirmation
    */
   @Post('roles/:roleId/permissions')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.ROLE_ASSIGN)
   @Version('1')
   @ApiTags('RBAC - Assignments')
   @ApiOperation({ 
@@ -464,33 +430,16 @@ export class RbacGatewayController {
       
       **Microservice:** Admin Service (RBAC Module)
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, ContentManagerAdmin, ComplianceAdmin, AnalyticsAdmin, FraudAdmin
+      **Permission Required:** \`${P.ROLE_ASSIGN}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **How it works:**
       When a permission is assigned to a role, all users with that role
       automatically gain that permission.
       
-      **Assignment Rules:**
-      • A permission can be assigned to multiple roles
-      • A role can have multiple permissions
-      • Duplicate assignments are prevented
-      • System permissions have special handling
-      
       **Impact:**
       Changes take effect immediately for all users with this role.
       No need for users to log out and back in.
-      
-      **Use Cases:**
-      • Building role-based access control
-      • Customizing role capabilities
-      • Implementing feature flags
-      • Gradual permission rollout
-      
-      **Best Practices:**
-      • Group related permissions
-      • Use role templates for consistency
-      • Document permission assignments
-      • Regular audit of assignments
     `
   })
   @ApiParam({ 
@@ -504,7 +453,7 @@ export class RbacGatewayController {
     examples: {
       'Assign single permission': {
         value: {
-          permissionId: 'perm_123abc'
+          permissionId: 'housing.create.own'
         }
       }
     }
@@ -521,7 +470,7 @@ export class RbacGatewayController {
         data: {
           id: 'rp_123abc',
           roleId: 'role_123abc',
-          permissionId: 'perm_123abc',
+          permissionId: 'housing.create.own',
           createdAt: '2026-03-05T10:30:00.000Z'
         }
       }
@@ -529,13 +478,14 @@ export class RbacGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Validation error - Invalid input' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.ROLE_ASSIGN} permission` })
   @ApiResponse({ status: 404, description: 'Role or Permission not found' })
   @ApiResponse({ status: 409, description: 'Permission already assigned to this role' })
   async assignPermissionToRole(
     @Param('roleId') roleId: string,
     @Body() body: AssignPermissionToRoleRequestDto
   ): Promise<BaseResponseDto<RolePermissionResponseDto>> {
+    this.logger.log(`Assigning permission ${body.permissionId} to role ${roleId}`);
     return this.rbacGatewayService.assignPermissionToRole({
       ...body,
       roleId,
@@ -556,8 +506,8 @@ export class RbacGatewayController {
    * @returns Assignment confirmation
    */
   @Post('users/:userUuid/roles')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.ROLE_ASSIGN)
   @Version('1')
   @ApiTags('RBAC - Assignments')
   @ApiOperation({ 
@@ -567,37 +517,19 @@ export class RbacGatewayController {
       
       **Microservice:** Admin Service (RBAC Module)
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin only
+      **Permission Required:** \`${P.ROLE_ASSIGN}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **How it works:**
       When a role is assigned to a user, they gain all permissions
       associated with that role.
       
-      **Assignment Rules:**
-      • A user can have multiple roles
-      • A role can be assigned to multiple users
-      • Duplicate assignments are prevented
-      • System roles have special handling
-      
       **Impact:**
       Changes take effect immediately.
       User's permissions are updated without requiring logout.
       
-      **Use Cases:**
-      • Onboarding new team members
-      • Role changes (promotions, transfers)
-      • Temporary access grants
-      • Project-based assignments
-      
-      **Best Practices:**
-      • Follow principle of least privilege
-      • Regular access reviews
-      • Document role assignments
-      • Audit trail for compliance
-      
       **Important:**
-      This is a sensitive operation restricted to SuperAdmin only.
-      All assignments are logged for audit purposes.
+      This is a sensitive operation. All assignments are logged for audit purposes.
     `
   })
   @ApiParam({ 
@@ -611,7 +543,7 @@ export class RbacGatewayController {
     examples: {
       'Assign role to user': {
         value: {
-          roleId: 'role_123abc'
+          roleId: 'Admin'
         }
       }
     }
@@ -628,7 +560,7 @@ export class RbacGatewayController {
         data: {
           id: 'ur_123abc',
           userUuid: 'usr_123abc',
-          roleId: 'role_123abc',
+          roleId: 'Admin',
           createdAt: '2026-03-05T10:30:00.000Z'
         }
       }
@@ -636,13 +568,14 @@ export class RbacGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Validation error - Invalid input' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - SuperAdmin only' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.ROLE_ASSIGN} permission` })
   @ApiResponse({ status: 404, description: 'User or Role not found' })
   @ApiResponse({ status: 409, description: 'Role already assigned to this user' })
   async assignRoleToUser(
     @Param('userUuid') userUuid: string,
     @Body() body: AssignRoleToUserRequestDto
   ): Promise<BaseResponseDto<UserRoleResponseDto>> {
+    this.logger.log(`Assigning role ${body.roleId} to user ${userUuid}`);
     return this.rbacGatewayService.assignRoleToUser({
       ...body,
       userUuid,
@@ -658,18 +591,19 @@ export class RbacGatewayController {
    * @returns User's role details
    */
   @Get('users/:userUuid/roles')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SuperAdmin', 'ContentManagerAdmin', 'ComplianceAdmin', 'AnalyticsAdmin', 'FraudAdmin')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions(P.USER_VIEW)
   @Version('1')
   @ApiTags('RBAC - Assignments')
   @ApiOperation({ 
     summary: 'Get Role for a user',
     description: `
-      Retrieves the role(s) assigned to a specific user.
+      Retrieves the role assigned to a specific user.
       
       **Microservice:** Admin Service (RBAC Module)
       **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, ContentManagerAdmin, ComplianceAdmin, AnalyticsAdmin, FraudAdmin
+      **Permission Required:** \`${P.USER_VIEW}\`
+      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
       
       **Information returned:**
       • Role details (name, type, scope)
@@ -681,10 +615,6 @@ export class RbacGatewayController {
       • Permission debugging
       • Access verification
       • Audit purposes
-      
-      **Note:**
-      If a user has multiple roles, consider extending this endpoint
-      to return an array or adding a dedicated endpoint for multiple roles.
     `
   })
   @ApiParam({ 
@@ -703,11 +633,11 @@ export class RbacGatewayController {
         message: 'Role retrieved successfully',
         code: 'OK',
         data: {
-          id: 'role_123abc',
-          name: 'Content Manager',
-          roleType: 'content-manager',
-          description: 'Can create and manage content',
-          scope: 'GLOBAL',
+          id: 'Admin',
+          name: 'Admin',
+          roleType: 'Admin',
+          description: 'Business account owner with full control',
+          scope: 'BUSINESS',
           status: 'Active',
           immutable: false
         }
@@ -715,11 +645,12 @@ export class RbacGatewayController {
     }
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Insufficient permissions' })
+  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.USER_VIEW} permission` })
   @ApiResponse({ status: 404, description: 'User not found or no role assigned' })
   async getRoleForUser(
     @Param('userUuid') userUuid: string
   ): Promise<BaseResponseDto<RoleResponseDto>> {
+    this.logger.log(`Fetching role for user: ${userUuid}`);
     return this.rbacGatewayService.getRoleForUser(userUuid);
   }
 }

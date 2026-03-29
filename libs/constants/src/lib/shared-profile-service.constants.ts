@@ -25,19 +25,57 @@ export const PROFILE_TYPES = [
 ] as const;
 export type ProfileType = typeof PROFILE_TYPES[number];
 
-export const USER_ROLES = ['GeneralUser', 'BusinessContentManager', 'BusinessSystemAdmin'] as const;
+// ======================================================
+// USER ROLES (Based on Final RBAC Structure)
+// ======================================================
+export const USER_ROLES = [
+  // Platform Roles (PivotaConnect Team)
+  'SuperAdmin',
+  'PlatformSystemAdmin',
+  'PlatformComplianceAdmin',
+  'PlatformAnalyticsAdmin',
+  'PlatformModuleManager',
+  'AIDeveloper',
+  
+  // Account Roles
+  'Individual',           // Individual user with personal account
+  'Admin',                // Business account owner
+  'ContentManagerAdmin',  // Business content manager
+  'Member'                // Regular business member
+] as const;
 export type UserRole = typeof USER_ROLES[number];
 
+// ======================================================
+// ORGANIZATION TYPES (with slug and label)
+// ======================================================
 export const ORGANIZATION_TYPES = [
-  'COMPANY',
-  'NGO',
-  'GOVERNMENT',
-  'SOCIAL_ENTERPRISE',
-  'AGENCY',
-  'FAITH_BASED',
-  'COMMUNITY_GROUP'
+  { slug: 'NGO', label: 'Non-Governmental Organization' },
+  { slug: 'COMPANY', label: 'Company' },
+  { slug: 'SOCIAL_ENTERPRISE', label: 'Social Enterprise' },
+  { slug: 'GOVERNMENT', label: 'Government Entity' },
+  { slug: 'AGENCY', label: 'Agency' },
+  { slug: 'COOPERATIVE', label: 'Cooperative' },
+  { slug: 'INDIVIDUAL', label: 'Individual' },
+  { slug: 'PRIVATE_LIMITED', label: 'Private Limited Company' },
+  { slug: 'SOLE_PROPRIETORSHIP', label: 'Sole Proprietorship' },
+  { slug: 'PARTNERSHIP', label: 'Partnership' },
+  { slug: 'COMMUNITY_BASED_ORGANIZATION', label: 'Community Based Organization' },
+  { slug: 'FAITH_BASED_ORGANIZATION', label: 'Faith Based Organization' },
+  { slug: 'FAMILY', label: 'Family' },
 ] as const;
-export type OrganizationType = typeof ORGANIZATION_TYPES[number];
+
+export type OrganizationType = typeof ORGANIZATION_TYPES[number]['slug'];
+
+// Helper function to get organization type label
+export function getOrganizationTypeLabel(slug: OrganizationType): string {
+  const type = ORGANIZATION_TYPES.find(t => t.slug === slug);
+  return type?.label || slug;
+}
+
+// Helper function to get all organization type slugs
+export function getOrganizationTypeSlugs(): OrganizationType[] {
+  return ORGANIZATION_TYPES.map(t => t.slug);
+}
 
 export const JOB_TYPES = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'CASUAL', 'GIG'] as const;
 export type JobType = typeof JOB_TYPES[number];

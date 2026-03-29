@@ -122,12 +122,13 @@ model IndividualProfile {
 model OrganizationProfile {
   id           String    @id @default(cuid())
   uuid         String    @unique @default(uuid())
-  orgCode      String?   @unique  // ORG-XXXXXX format
+  orgCode      String?   @unique
   accountUuid  String    @unique
   account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   name             String
-  type             String? // "NGO", "COMPANY", "SOCIAL_ENTERPRISE", "GOVERNMENT", "AGENCY"
+  typeSlug         String?  // Foreign key to OrganizationType
+  type             OrganizationType? @relation(fields: [typeSlug], references: [slug])
   registrationNo   String? @unique
   kraPin           String? @unique
   officialEmail    String?
@@ -137,20 +138,16 @@ model OrganizationProfile {
   logo             String?
   physicalAddress  String?
   
-  // Verification status for organizations
-  verificationStatus String @default("PENDING") // PENDING, VERIFIED, REJECTED, SUSPENDED
+  verificationStatus String @default("PENDING")
 
-  // Team members
   members OrganizationMember[]
-  
-  // Invitations sent to join this organization
   invitations OrganizationInvitation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([accountUuid])
-  @@index([type])
+  @@index([typeSlug])
   @@index([registrationNo])
   @@index([verificationStatus])
 }
@@ -203,6 +200,24 @@ model OrganizationInvitation {
   @@index([organizationUuid])
   @@index([invitedByUserUuid])
   @@index([acceptedByUserUuid])
+}
+
+// Add to your schema.prisma
+
+// ==================== ORGANIZATION TYPE LOOKUP ====================
+model OrganizationType {
+  slug        String   @id
+  label       String
+  description String?
+  icon        String?
+  order       Int      @default(0)
+  
+  organizations OrganizationProfile[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("organization_types")
 }
 
 // ==================== EMPLOYER PROFILE ====================

@@ -1,0 +1,20 @@
+{
+  "name": "access-management",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/access-management/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/access-management",
+        "tsConfig": "libs/access-management/tsconfig.lib.json",
+        "packageJson": "libs/access-management/package.json",
+        "main": "libs/access-management/src/index.ts",
+        "assets": ["libs/access-management/*.md"]
+      }
+    }
+  }
+}

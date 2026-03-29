@@ -67,11 +67,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       `✅ Authenticated user (${dbUser.firstName} ${dbUser.lastName}) ${dbUser.email} (UUID: ${payload.userUuid}) with role: ${dbUser.roleName}`,
     );
 
-    const rawRole = dbUser.roleName || payload.role;
+    const rawRole = payload.role || dbUser.roleName;
     const normalizedRole = rawRole.replace(/\s+/g, '');
 
     // 3. Return the flat object your Guards and Controllers expect
-    return {
+    return { 
       ...dbUser,
       userUuid: payload.userUuid,
       tokenId: payload.tokenId,  

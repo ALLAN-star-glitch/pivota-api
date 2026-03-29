@@ -56,12 +56,14 @@ import {
   ApiExtraModels,
   ApiBody,
 } from '@nestjs/swagger';
-import { Roles } from '../../decorators/roles.decorator';
-import { RolesGuard } from '../../guards/role.guard';
+import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
 import { SubscriptionGuard } from '../../guards/subscription.guard';
 import { SetModule } from '../../decorators/set-module.decorator';
+import { Permissions } from '../../decorators/permissions.decorator';
+import { Public } from '../../decorators/public.decorator';
 import { JwtRequest } from '@pivota-api/interfaces';
 import { ProfileType } from '@pivota-api/constants';
+import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 
 @ApiTags('Organisation')
 @ApiBearerAuth()
@@ -95,9 +97,9 @@ import { ProfileType } from '@pivota-api/constants';
   SkilledProfessionalProfileResponseDto,
   IntermediaryAgentProfileResponseDto,
 )
-@SetModule('profile')
+@SetModule(ModuleSlug.ACCOUNT)
 @Controller('organisation-gateway')
-@UseGuards(JwtAuthGuard, RolesGuard, SubscriptionGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, SubscriptionGuard)
 export class OrganisationGatewayController {
   private readonly logger = new Logger(OrganisationGatewayController.name);
 
@@ -111,14 +113,29 @@ export class OrganisationGatewayController {
 
   @Version('1')
   @Patch('organisations/onboard-provider')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.ACCOUNT_UPDATE)
   @ApiTags('Organisation - Provider')
   @ApiOperation({ 
     summary: 'Activate Organization Service Provider profile',
-    description: `Converts an organization account into a service provider...`
+    description: `
+      Converts an organization account into a service provider.
+      
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.ACCOUNT_UPDATE}\`
+      - **Accessible by:** Business Admins (Account owners)
+    `
   })
   @ApiBody({ type: OnboardOrganizationProviderRequestDto })
-  @ApiResponse({ status: 200, description: 'Organization successfully activated as a provider.' })
+  @ApiResponse({ 
+    status: 200, 
+    description: '✅ Organization successfully activated as a provider.' 
+  })
+  @ApiResponse({ 
+    status: 403, 
+    description: `❌ Forbidden - Requires ${P.ACCOUNT_UPDATE} permission` 
+  })
   async onboardProvider(
     @Body() dto: OnboardOrganizationProviderRequestDto,
     @Req() req: JwtRequest,
@@ -146,37 +163,46 @@ export class OrganisationGatewayController {
    */
   @Version('1')
   @Patch('organisations/profile')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.ACCOUNT_UPDATE)
   @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update organization profile',
     description: `
       Updates the main organization profile information.
       
-      **Microservice:** Profile Service
-      **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemAdmin, BusinessSystemAdmin
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.ACCOUNT_UPDATE}\`
+      - **Accessible by:** Business Admins (Account owners)
       
-      **Fields that can be updated:**
-      • website - Organization website URL
-      • registrationNo - Government registration number
-      • kraPin - KRA PIN number
-      • physicalAddress - Physical office address
-      • organizationType - Legal structure type
-      • about - Organization description
-      • logo - Logo URL
+      ---
+      ## 📝 Fields that can be updated
+      | Field | Description |
+      |-------|-------------|
+      | website | Organization website URL |
+      | registrationNo | Government registration number |
+      | kraPin | KRA PIN number |
+      | physicalAddress | Physical office address |
+      | organizationType | Legal structure type |
+      | about | Organization description |
+      | logo | Logo URL |
     `
   })
   @ApiBody({ type: UpdateOrgProfileRequestDto })
   @ApiResponse({
     status: 200,
-    description: 'Organization profile updated successfully',
+    description: '✅ Organization profile updated successfully',
     schema: {
       allOf: [
         { $ref: getSchemaPath(BaseResponseDto) },
         { properties: { data: { $ref: getSchemaPath(OrganizationProfileResponseDto) } } }
       ],
     },
+  })
+  @ApiResponse({ 
+    status: 403, 
+    description: `❌ Forbidden - Requires ${P.ACCOUNT_UPDATE} permission` 
   })
   async updateOrganizationProfile(
     @Body() dto: UpdateOrgProfileRequestDto,
@@ -197,34 +223,39 @@ export class OrganisationGatewayController {
    */
   @Version('1')
   @Patch('organisations/employer-profile')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.ACCOUNT_UPDATE)
   @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update employer profile',
     description: `
       Updates the employer/hiring profile for the organization.
       
-      **Microservice:** Profile Service
-      **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemAdmin, BusinessSystemAdmin
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.ACCOUNT_UPDATE}\`
+      - **Accessible by:** Business Admins (Account owners)
       
-      **Fields that can be updated:**
-      • companyName - Company name
-      • industry - Industry sector
-      • companySize - Size of the company
-      • foundedYear - Year company was founded
-      • description - Company description
-      • logo - Company logo URL
-      • preferredSkills - Skills commonly hired for
-      • remotePolicy - Remote work policy
-      • worksWithAgents - Whether working with recruitment agents
-      • preferredAgents - Preferred agent UUIDs
+      ---
+      ## 📝 Fields that can be updated
+      | Field | Description |
+      |-------|-------------|
+      | companyName | Company name |
+      | industry | Industry sector |
+      | companySize | Size of the company |
+      | foundedYear | Year company was founded |
+      | description | Company description |
+      | logo | Company logo URL |
+      | preferredSkills | Skills commonly hired for |
+      | remotePolicy | Remote work policy |
+      | worksWithAgents | Whether working with recruitment agents |
+      | preferredAgents | Preferred agent UUIDs |
     `
   })
   @ApiBody({ type: UpdateEmployerProfileRequestDto })
   @ApiResponse({
     status: 200,
-    description: 'Employer profile updated successfully',
+    description: '✅ Employer profile updated successfully',
     schema: {
       allOf: [
         { $ref: getSchemaPath(BaseResponseDto) },
@@ -251,40 +282,43 @@ export class OrganisationGatewayController {
    */
   @Version('1')
   @Patch('organisations/social-service-provider-profile')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.ACCOUNT_UPDATE)
   @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update social service provider profile',
     description: `
       Updates the social service provider profile for the organization.
       
-      **Microservice:** Profile Service
-      **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemAdmin, BusinessSystemAdmin
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.ACCOUNT_UPDATE}\`
+      - **Accessible by:** Business Admins (Account owners)
       
-      **Fields that can be updated:**
-      • providerType - Type of provider (NGO, SOCIAL_ENTERPRISE, etc.)
-      • servicesOffered - List of services offered
-      • targetBeneficiaries - Target beneficiary groups
-      • serviceAreas - Geographic areas served
-      • about - Organization description
-      • website - Website URL
-      • contactEmail - Contact email
-      • contactPhone - Contact phone
-      • officeHours - Office operating hours
-      • physicalAddress - Physical address
-      • peopleServed - Number of people served
-      • yearEstablished - Year established
-      • acceptsDonations - Whether accepts donations
-      • needsVolunteers - Whether needs volunteers
-      • donationInfo - Donation information
-      • volunteerNeeds - Volunteer needs description
+      ---
+      ## 📝 Fields that can be updated
+      | Field | Description |
+      |-------|-------------|
+      | providerType | Type of provider (NGO, SOCIAL_ENTERPRISE, etc.) |
+      | servicesOffered | List of services offered |
+      | targetBeneficiaries | Target beneficiary groups |
+      | serviceAreas | Geographic areas served |
+      | about | Organization description |
+      | website | Website URL |
+      | contactEmail | Contact email |
+      | contactPhone | Contact phone |
+      | officeHours | Office operating hours |
+      | physicalAddress | Physical address |
+      | peopleServed | Number of people served |
+      | yearEstablished | Year established |
+      | acceptsDonations | Whether accepts donations |
+      | needsVolunteers | Whether needs volunteers |
     `
   })
   @ApiBody({ type: UpdateSocialServiceProviderProfileRequestDto })
   @ApiResponse({
     status: 200,
-    description: 'Social service provider profile updated successfully',
+    description: '✅ Social service provider profile updated successfully',
     schema: {
       allOf: [
         { $ref: getSchemaPath(BaseResponseDto) },
@@ -311,32 +345,37 @@ export class OrganisationGatewayController {
    */
   @Version('1')
   @Patch('organisations/property-owner-profile')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.ACCOUNT_UPDATE)
   @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update property owner profile',
     description: `
       Updates the property owner profile for the organization.
       
-      **Microservice:** Profile Service
-      **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemAdmin, BusinessSystemAdmin
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.ACCOUNT_UPDATE}\`
+      - **Accessible by:** Business Admins (Account owners)
       
-      **Fields that can be updated:**
-      • isProfessional - Whether a licensed professional
-      • licenseNumber - Professional license number
-      • companyName - Property management company name
-      • yearsInBusiness - Years in business
-      • preferredPropertyTypes - Preferred property types to list
-      • serviceAreas - Service areas
-      • usesAgent - Whether using an agent
-      • managingAgentUuid - Managing agent UUID
+      ---
+      ## 📝 Fields that can be updated
+      | Field | Description |
+      |-------|-------------|
+      | isProfessional | Whether a licensed professional |
+      | licenseNumber | Professional license number |
+      | companyName | Property management company name |
+      | yearsInBusiness | Years in business |
+      | preferredPropertyTypes | Preferred property types to list |
+      | serviceAreas | Service areas |
+      | usesAgent | Whether using an agent |
+      | managingAgentUuid | Managing agent UUID |
     `
   })
   @ApiBody({ type: UpdateOrganizationPropertyOwnerProfileRequestDto })
   @ApiResponse({
     status: 200,
-    description: 'Property owner profile updated successfully',
+    description: '✅ Property owner profile updated successfully',
     schema: {
       allOf: [
         { $ref: getSchemaPath(BaseResponseDto) },
@@ -363,39 +402,41 @@ export class OrganisationGatewayController {
    */
   @Version('1')
   @Patch('organisations/skilled-professional-profile')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.ACCOUNT_UPDATE)
   @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update skilled professional profile',
     description: `
       Updates the skilled professional profile for the organization.
       
-      **Microservice:** Profile Service
-      **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemAdmin, BusinessSystemAdmin
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.ACCOUNT_UPDATE}\`
+      - **Accessible by:** Business Admins (Account owners)
       
-      **Fields that can be updated:**
-      • title - Professional title
-      • profession - Profession category
-      • specialties - Specialties
-      • serviceAreas - Service areas
-      • yearsExperience - Years of experience
-      • licenseNumber - Professional license number
-      • insuranceInfo - Insurance information
-      • hourlyRate - Hourly rate
-      • dailyRate - Daily rate
-      • paymentTerms - Payment terms
-      • availableToday - Available for emergency today
-      • availableWeekends - Available on weekends
-      • emergencyService - Offers emergency service
-      • portfolioImages - Portfolio image URLs
-      • certifications - Certificate URLs
+      ---
+      ## 📝 Fields that can be updated
+      | Field | Description |
+      |-------|-------------|
+      | title | Professional title |
+      | profession | Profession category |
+      | specialties | Specialties |
+      | serviceAreas | Service areas |
+      | yearsExperience | Years of experience |
+      | licenseNumber | Professional license number |
+      | insuranceInfo | Insurance information |
+      | hourlyRate | Hourly rate |
+      | dailyRate | Daily rate |
+      | availableToday | Available for emergency today |
+      | availableWeekends | Available on weekends |
+      | emergencyService | Offers emergency service |
     `
   })
   @ApiBody({ type: UpdateOrganizationSkilledProfessionalProfileRequestDto })
   @ApiResponse({
     status: 200,
-    description: 'Skilled professional profile updated successfully',
+    description: '✅ Skilled professional profile updated successfully',
     schema: {
       allOf: [
         { $ref: getSchemaPath(BaseResponseDto) },
@@ -422,43 +463,38 @@ export class OrganisationGatewayController {
    */
   @Version('1')
   @Patch('organisations/intermediary-agent-profile')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.ACCOUNT_UPDATE)
   @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update intermediary agent profile',
     description: `
       Updates the intermediary agent profile for the organization.
       
-      **Microservice:** Profile Service
-      **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemAdmin, BusinessSystemAdmin
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.ACCOUNT_UPDATE}\`
+      - **Accessible by:** Business Admins (Account owners)
       
-      **Fields that can be updated:**
-      • agentType - Type of agent
-      • specializations - Specializations
-      • serviceAreas - Service areas
-      • licenseNumber - License number
-      • licenseBody - Licensing body
-      • yearsExperience - Years of experience
-      • agencyName - Agency name
-      • agencyUuid - Agency UUID
-      • commissionRate - Commission rate
-      • feeStructure - Fee structure
-      • minimumFee - Minimum fee
-      • typicalFee - Typical fee description
-      • about - About the agent
-      • profileImage - Profile image URL
-      • contactEmail - Contact email
-      • contactPhone - Contact phone
-      • website - Website URL
-      • socialLinks - Social media links
-      • clientTypes - Types of clients represented
+      ---
+      ## 📝 Fields that can be updated
+      | Field | Description |
+      |-------|-------------|
+      | agentType | Type of agent |
+      | specializations | Specializations |
+      | serviceAreas | Service areas |
+      | licenseNumber | License number |
+      | yearsExperience | Years of experience |
+      | agencyName | Agency name |
+      | commissionRate | Commission rate |
+      | feeStructure | Fee structure |
+      | minimumFee | Minimum fee |
     `
   })
   @ApiBody({ type: UpdateOrganizationIntermediaryAgentProfileRequestDto })
   @ApiResponse({
     status: 200,
-    description: 'Intermediary agent profile updated successfully',
+    description: '✅ Intermediary agent profile updated successfully',
     schema: {
       allOf: [
         { $ref: getSchemaPath(BaseResponseDto) },
@@ -485,31 +521,29 @@ export class OrganisationGatewayController {
    */
   @Version('1')
   @Delete('organisations/profiles/:profileType')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.ACCOUNT_UPDATE)
   @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Remove a profile from the organization',
     description: `
       Removes a specific profile type from the organization account.
       
-      **Microservice:** Profile Service
-      **Authentication:** Required (JWT cookie)
-      **Permissions:** SuperAdmin, SystemAdmin, BusinessSystemAdmin
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.ACCOUNT_UPDATE}\`
+      - **Accessible by:** Business Admins (Account owners)
       
-      **Supported Profile Types:**
-      • EMPLOYER
-      • SOCIAL_SERVICE_PROVIDER
-      • PROPERTY_OWNER
-      • SKILLED_PROFESSIONAL
-      • INTERMEDIARY_AGENT
+      ---
+      ## 📋 Supported Profile Types
+      - EMPLOYER
+      - SOCIAL_SERVICE_PROVIDER
+      - PROPERTY_OWNER
+      - SKILLED_PROFESSIONAL
+      - INTERMEDIARY_AGENT
       
-      **What happens:**
-      • Profile data is permanently deleted
-      • Account activeProfiles list is updated
-      • Related files are cleaned up from storage
-      • Profile completion percentage is recalculated
-      
-      **Warning:**
+      ---
+      ## ⚠️ Warning
       This action is irreversible. All profile data will be permanently deleted.
     `
   })
@@ -521,7 +555,7 @@ export class OrganisationGatewayController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Profile removed successfully',
+    description: '✅ Profile removed successfully',
     schema: {
       allOf: [
         { $ref: getSchemaPath(BaseResponseDto) },
@@ -535,8 +569,8 @@ export class OrganisationGatewayController {
       ],
     },
   })
-  @ApiResponse({ status: 400, description: 'Unsupported profile type' })
-  @ApiResponse({ status: 404, description: 'Profile not found' })
+  @ApiResponse({ status: 400, description: '❌ Unsupported profile type' })
+  @ApiResponse({ status: 404, description: '❌ Profile not found' })
   async removeProfile(
     @Param('profileType') profileType: ProfileType,
     @Req() req: JwtRequest,
@@ -557,11 +591,29 @@ export class OrganisationGatewayController {
 
   @Version('1')
   @Post('organisations/members/invite')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.TEAM_INVITE)
   @ApiTags('Organisation - Invitations')
-  @ApiOperation({ summary: 'Invite a member to join your organization' })
+  @ApiOperation({ 
+    summary: 'Invite a member to join your organization',
+    description: `
+      Invites a new member to join the organization.
+      
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.TEAM_INVITE}\`
+      - **Accessible by:** Business Admins (Account owners)
+    `
+  })
   @ApiBody({ type: InviteMemberRequestDto })
-  @ApiResponse({ status: 201, description: 'Invitation sent successfully' })
+  @ApiResponse({ 
+    status: 201, 
+    description: '✅ Invitation sent successfully' 
+  })
+  @ApiResponse({ 
+    status: 403, 
+    description: `❌ Forbidden - Requires ${P.TEAM_INVITE} permission` 
+  })
   async inviteMember(
     @Body() dto: InviteMemberRequestDto,
     @Req() req: JwtRequest,
@@ -590,10 +642,24 @@ export class OrganisationGatewayController {
 
   @Version('1')
   @Get('invitations/verify')
+  @Public()
   @ApiTags('Organisation - Invitations')
-  @ApiOperation({ summary: 'Verify an invitation token' })
-  @ApiQuery({ name: 'token', required: true })
-  @ApiResponse({ status: 200, description: 'Token is valid' })
+  @ApiOperation({ 
+    summary: 'Verify an invitation token',
+    description: `
+      Public endpoint to verify an invitation token.
+      
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Not required
+      - **Permission:** Public endpoint
+    `
+  })
+  @ApiQuery({ name: 'token', required: true, description: 'Invitation token to verify' })
+  @ApiResponse({ 
+    status: 200, 
+    description: '✅ Token is valid' 
+  })
   async verifyInvitation(
     @Query('token') token: string,
   ): Promise<BaseResponseDto<InvitationVerificationResponseDto>> {
@@ -603,10 +669,24 @@ export class OrganisationGatewayController {
 
   @Version('1')
   @Post('invitations/accept')
+  @Public()
   @ApiTags('Organisation - Invitations')
-  @ApiOperation({ summary: 'Accept an organization invitation' })
+  @ApiOperation({ 
+    summary: 'Accept an organization invitation',
+    description: `
+      Public endpoint to accept an organization invitation.
+      
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Not required
+      - **Permission:** Public endpoint
+    `
+  })
   @ApiBody({ type: AcceptInvitationRequestDto })
-  @ApiResponse({ status: 200, description: 'Invitation accepted successfully' })
+  @ApiResponse({ 
+    status: 200, 
+    description: '✅ Invitation accepted successfully' 
+  })
   async acceptInvitation(
     @Body() dto: AcceptInvitationRequestDto,
   ): Promise<BaseResponseDto<AcceptInvitationResponseDto>> {
@@ -616,10 +696,24 @@ export class OrganisationGatewayController {
 
   @Version('1')
   @Get('organisations/members/invitations')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.TEAM_VIEW)
   @ApiTags('Organisation - Invitations')
-  @ApiOperation({ summary: 'Get all pending invitations' })
-  @ApiResponse({ status: 200, description: 'Pending invitations retrieved' })
+  @ApiOperation({ 
+    summary: 'Get all pending invitations',
+    description: `
+      Retrieves all pending invitations for the organization.
+      
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.TEAM_VIEW}\`
+      - **Accessible by:** Business Admins and Content Managers
+    `
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: '✅ Pending invitations retrieved' 
+  })
   async getPendingInvitations(
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<InvitationDetailsResponseDto[]>> {
@@ -636,11 +730,25 @@ export class OrganisationGatewayController {
 
   @Version('1')
   @Post('organisations/members/invitations/:invitationId/resend')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.TEAM_INVITE)
   @ApiTags('Organisation - Invitations')
-  @ApiOperation({ summary: 'Resend an invitation' })
+  @ApiOperation({ 
+    summary: 'Resend an invitation',
+    description: `
+      Resends a pending invitation to the invitee.
+      
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.TEAM_INVITE}\`
+      - **Accessible by:** Business Admins only
+    `
+  })
   @ApiParam({ name: 'invitationId', description: 'The ID of the invitation to resend' })
-  @ApiResponse({ status: 200, description: 'Invitation resent successfully' })
+  @ApiResponse({ 
+    status: 200, 
+    description: '✅ Invitation resent successfully' 
+  })
   async resendInvitation(
     @Param('invitationId') invitationId: string,
     @Req() req: JwtRequest,
@@ -662,11 +770,25 @@ export class OrganisationGatewayController {
 
   @Version('1')
   @Delete('organisations/members/invitations/:invitationId')
-  @Roles('SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.TEAM_REMOVE_MEMBER)
   @ApiTags('Organisation - Invitations')
-  @ApiOperation({ summary: 'Cancel a pending invitation' })
+  @ApiOperation({ 
+    summary: 'Cancel a pending invitation',
+    description: `
+      Cancels a pending invitation before it is accepted.
+      
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.TEAM_REMOVE_MEMBER}\`
+      - **Accessible by:** Business Admins only
+    `
+  })
   @ApiParam({ name: 'invitationId', description: 'The ID of the invitation to cancel' })
-  @ApiResponse({ status: 200, description: 'Invitation cancelled successfully' })
+  @ApiResponse({ 
+    status: 200, 
+    description: '✅ Invitation cancelled successfully' 
+  })
   async cancelInvitation(
     @Param('invitationId') invitationId: string,
     @Req() req: JwtRequest,
@@ -688,10 +810,25 @@ export class OrganisationGatewayController {
 
   @Version('1')
   @Get('invitations/check-status')
+  @Permissions(P.TEAM_VIEW)
   @ApiTags('Organisation - Invitations')
-  @ApiOperation({ summary: 'Check if an email has a pending invitation' })
-  @ApiQuery({ name: 'email', required: true })
-  @ApiResponse({ status: 200, description: 'Status retrieved successfully' })
+  @ApiOperation({ 
+    summary: 'Check if an email has a pending invitation',
+    description: `
+      Checks if a specific email address has a pending invitation for the organization.
+      
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.TEAM_VIEW}\`
+      - **Accessible by:** Business Admins and Content Managers
+    `
+  })
+  @ApiQuery({ name: 'email', required: true, description: 'Email address to check' })
+  @ApiResponse({ 
+    status: 200, 
+    description: '✅ Status retrieved successfully' 
+  })
   async checkInvitationStatus(
     @Query('email') email: string,
     @Req() req: JwtRequest,
@@ -715,11 +852,25 @@ export class OrganisationGatewayController {
 
   @Version('1')
   @Get('organisations/filter')
-  @Roles('SuperAdmin', 'SystemAdmin', 'ComplianceAdmin', 'AnalyticsAdmin')
+  @Permissions(P.USER_VIEW)
   @ApiTags('Organisation - Discovery')
-  @ApiOperation({ summary: 'Filter organisations by their legal type slug' })
-  @ApiQuery({ name: 'type', required: true })
-  @ApiResponse({ status: 200, description: 'Organizations retrieved successfully' })
+  @ApiOperation({ 
+    summary: 'Filter organisations by their legal type slug',
+    description: `
+      Filters organizations by their legal type slug.
+      
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.USER_VIEW}\`
+      - **Accessible by:** Platform Admins only
+    `
+  })
+  @ApiQuery({ name: 'type', required: true, description: 'Legal type slug to filter by' })
+  @ApiResponse({ 
+    status: 200, 
+    description: '✅ Organizations retrieved successfully' 
+  })
   async getByOrgType(
     @Query('type') typeSlug: string,
   ): Promise<BaseResponseDto<OrganizationProfileResponseDto[]>> {
@@ -729,11 +880,25 @@ export class OrganisationGatewayController {
 
   @Version('1')
   @Get('organisations/:uuid')
-  @Roles('SuperAdmin', 'SystemAdmin', 'ComplianceAdmin', 'BusinessSystemAdmin')
+  @Permissions(P.USER_VIEW)
   @ApiTags('Organisation - Discovery')
-  @ApiOperation({ summary: 'Get detailed organisation profile by UUID' })
+  @ApiOperation({ 
+    summary: 'Get detailed organisation profile by UUID',
+    description: `
+      Retrieves detailed organization profile information by UUID.
+      
+      ---
+      ## 🔐 Access Control
+      - **Authentication:** Required (JWT cookie)
+      - **Permission Required:** \`${P.USER_VIEW}\`
+      - **Accessible by:** Platform Admins only
+    `
+  })
   @ApiParam({ name: 'uuid', description: 'The unique UUID of the organisation' })
-  @ApiResponse({ status: 200, description: 'Organization retrieved successfully' })
+  @ApiResponse({ 
+    status: 200, 
+    description: '✅ Organization retrieved successfully' 
+  })
   async getByUuid(
     @Param('uuid') uuid: string,
   ): Promise<BaseResponseDto<OrganizationProfileResponseDto>> {

@@ -1,6 +1,4 @@
-// Admin bypass: System-level operators are not subject to commercial subscription limits.
-// If business logic diverges in future (workflow differences), consider endpoint separation.
-
+// apps/gateway/src/guards/subscription.guard.ts
 
 import {
   CanActivate,
@@ -11,13 +9,12 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { SubscriptionsGatewayService } from '../gateway-modules/SubscriptionsGatewayModule/subscriptions-gateway.service';
+import { MODULE_KEY } from '../decorators/set-module.decorator';
+import { isPlatformRole } from '@pivota-api/access-management';
 
 @Injectable()
 export class SubscriptionGuard implements CanActivate {
   private readonly logger = new Logger(SubscriptionGuard.name);
-
-  // Administrative roles that bypass subscription constraints
-  private readonly ADMIN_ROLES = ['SuperAdmin', 'SystemAdmin', 'BusinessSystemAdmin'];
 
   constructor(
     private readonly reflector: Reflector,
@@ -28,13 +25,10 @@ export class SubscriptionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    // 1. ADMIN BYPASS
-    // System administrators are exempt from commercial plan restrictions.
-    if (user && this.ADMIN_ROLES.includes(user.role)) {
+    // 1. ADMIN BYPASS - Platform roles bypass subscription restrictions
+    if (user && isPlatformRole(user.role)) {
       this.logger.debug(`Admin bypass triggered for role: ${user.role}`);
       
-    
-      // We still attach a "Unlimited" object so downstream Aggregators don't break
       request['subscriptionRestrictions'] = {
         jobLimit: -1,
         listingLimit: -1,
@@ -44,15 +38,19 @@ export class SubscriptionGuard implements CanActivate {
     }
 
     // 2. MODULE IDENTIFICATION
-    const moduleSlug = this.reflector.get<string>('module', context.getHandler());
+    const moduleSlug = this.reflector.get<string>(MODULE_KEY, context.getHandler());
     if (!moduleSlug) return true;
 
+    // Use accountId (the account that owns the subscription)
+    // For individuals: accountId = their personal account UUID
+    // For business members: accountId = the business account UUID
     const accountId = user?.accountId;
     if (!accountId) {
+      this.logger.warn('No accountId found for user');
       throw new ForbiddenException('User account context not found');
     }
 
-    // 3. PLAN VERIFICATION (gRPC)
+    // 3. PLAN VERIFICATION (gRPC) - Pass accountId as the accountUuid
     try {
       const response = await this.subService.checkModuleAccess(accountId, moduleSlug);
 
@@ -63,13 +61,11 @@ export class SubscriptionGuard implements CanActivate {
         );
       }
 
-      
       // 4. ATTACH RESTRICTIONS
       let restrictions = response.data.restrictions;
       if (typeof restrictions === 'string') {
         try {
           restrictions = JSON.parse(restrictions);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (e) {
           this.logger.error('Failed to parse restrictions string');
           restrictions = {};
@@ -80,11 +76,9 @@ export class SubscriptionGuard implements CanActivate {
       return true;
 
     } catch (error) {
-      // If it's already a ForbiddenException (from our logic), rethrow it
       if (error instanceof ForbiddenException) throw error;
       
       this.logger.error(`Subscription check failed: ${error.message}`);
-      // Fail-closed: block request if the subscription service is unreachable
       throw new ForbiddenException('Subscription status could not be verified.');
     }
   }
