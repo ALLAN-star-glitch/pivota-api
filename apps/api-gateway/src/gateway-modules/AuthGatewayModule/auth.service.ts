@@ -13,12 +13,12 @@ import {
   OrganisationSignupRequestDto,
   OrganizationSignupDataDto,
   UserSignupRequestDto,
-  UserSignupDataDto,
   RequestOtpDto,        
   VerifyOtpDto,         
   VerifyOtpResponseDataDto,
   ResetPasswordDto,
   AuthClientInfoDto,
+  SignupResponseDto,
 } from '@pivota-api/dtos';
 import { BaseRefreshTokenResponseGrpc, JwtPayload } from '@pivota-api/interfaces';
 
@@ -26,7 +26,7 @@ import { BaseRefreshTokenResponseGrpc, JwtPayload } from '@pivota-api/interfaces
 interface AuthServiceGrpc {
   signup(
     data: UserSignupRequestDto & { clientInfo?: AuthClientInfoDto }
-  ): Observable<BaseResponseDto<UserSignupDataDto>>;
+  ): Observable<BaseResponseDto<SignupResponseDto>>;
 
   organisationSignup(data: OrganisationSignupRequestDto & { clientInfo?: AuthClientInfoDto }): Observable<BaseResponseDto<OrganizationSignupDataDto>>;
 
@@ -103,19 +103,25 @@ export class AuthService {
 
   /** ------------------ Private Helper: Set Auth Cookies ------------------ */
   private setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
-    res.cookie('access_token', accessToken, {
+    // Both cookies need these settings to work over an HTTPS tunnel (Pinggy) 
+    // when accessed from a mobile device.
+    const cookieOptions = {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none' as const, // Required for cross-site (tunnel) access
+      secure: true,              // Required if sameSite is 'none'
+    };
+
+    res.cookie('access_token', accessToken, {
+      ...cookieOptions,
       maxAge: 15 * 60 * 1000,
     });
     
     res.cookie('refresh_token', refreshToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      ...cookieOptions,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
+
+    this.logger.debug('🍪 Auth cookies set with SameSite=None and Secure=true');
   }
 
   /** ------------------ OTP Management ------------------ */
@@ -163,7 +169,7 @@ export class AuthService {
 async signup(
   signupDto: UserSignupRequestDto,
   clientInfo: AuthClientInfoDto
-): Promise<BaseResponseDto<UserSignupDataDto>> {
+): Promise<BaseResponseDto<SignupResponseDto>> {
   this.logger.log('📩 Calling Auth microservice for signup');
 
   // Log which specific data field is being used

@@ -360,39 +360,53 @@ export class PlanService implements OnModuleInit {
   // =========================================================
 // GET PLAN ID BY SLUG
 // =========================================================
-async getPlanIdBySlug(planIdRequestDto: PlanIdRequestDto): Promise<BaseResponseDto<PlanIdDtoResponse>> {
+async getPlanIdBySlug(
+  planIdRequestDto: PlanIdRequestDto
+): Promise<BaseResponseDto<PlanIdDtoResponse>> {
+  this.logger.debug(`GetPlanIdBySlug called with slug: ${planIdRequestDto.slug}`);
+
   try {
-
-    this.logger.log(`Fetching plan ID by slug: ${planIdRequestDto.slug}`);
-
+    // OPTIMIZED: Select only needed fields
     const plan = await this.prisma.plan.findUnique({
-      where: { slug: planIdRequestDto.slug }
+      where: { slug: planIdRequestDto.slug },
+      select: { id: true }, // Only select the id field
     });
-
-    this.logger.debug(`Fetched plan: ${JSON.stringify(plan, null, 2)}`);
-  
 
     if (!plan) {
       this.logger.warn(`Plan with slug '${planIdRequestDto.slug}' not found`);
-      return null;
+      return {
+        success: false,
+        message: `Plan with slug '${planIdRequestDto.slug}' not found`,
+        code: 'NOT_FOUND',
+        data: null,
+        error: null,
+      };
     }
 
+    this.logger.debug(`Plan ID fetched: ${plan.id}`);
 
-    this.logger.debug(`Plan ID FETCHED: ${plan.id}`);
-
-    const success = {
+    return {
       success: true,
       message: 'Plan ID fetched successfully',
-      code: 'FETCHED',
+      code: 'OK',
       data: { planId: plan.id },
       error: null,
     };
-    return success;
-;
+
   } catch (err) {
     const error = err as Error;
-    this.logger.error(`Failed to fetch plan ID by slug '${planIdRequestDto}': ${error.message}`, error.stack);
-    return null;
+    this.logger.error(`Failed to fetch plan ID by slug '${planIdRequestDto.slug}': ${error.message}`);
+    return {
+      success: false,
+      message: 'Failed to fetch plan ID',
+      code: 'INTERNAL_ERROR',
+      data: null,
+      error: {
+        message: error.message,
+        code: 'INTERNAL_ERROR',
+        details: null,
+      },
+    };
   }
 }
 
@@ -401,7 +415,7 @@ async getPlanIdBySlug(planIdRequestDto: PlanIdRequestDto): Promise<BaseResponseD
   // DELETE PLAN
   // =========================================================
   async deletePlan(planId: string): Promise<BaseResponseDto<null>> {
-    try {
+    try { 
       await this.prisma.plan.delete({ where: { id: planId } });
 
       const success = {

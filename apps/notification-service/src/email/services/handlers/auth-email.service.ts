@@ -510,4 +510,163 @@ export class AuthEmailService {
 
     await this.emailClient.sendEmail(body, data.email);
   }
+
+
+/**
+ * Send payment pending email for premium users
+ */
+async sendPaymentPendingEmail(data: {
+  to: string;
+  firstName: string;
+  lastName: string;
+  plan: string;
+  profileType?: string;
+  redirectUrl: string;
+  merchantReference: string;
+}): Promise<void> {
+  const content = `
+    <h1>Complete Your Payment</h1>
+    <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.firstName},</p>
+    <p>You've successfully created your ${data.plan} account! To activate your premium features, please complete your payment.</p>
+    
+    <div class="info-box">
+      <h3>Your Plan Details</h3>
+      <ul>
+        <li><strong>Plan:</strong> ${data.plan}</li>
+        <li><strong>Account Type:</strong> Premium</li>
+        <li><strong>Reference:</strong> ${data.merchantReference}</li>
+      </ul>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${data.redirectUrl}" class="button">Complete Payment Now</a>
+    </div>
+    
+    <div class="security-alert">
+      <p>Your account is created but <strong>premium features are locked</strong> until payment is confirmed. You have 24 hours to complete payment.</p>
+    </div>
+    
+    <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">If you have any issues with payment, please contact our support team.</p>
+  `;
+
+  const body: SendEmailV3_1.Body = {
+    Messages: [{
+      From: {
+        Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+        Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+      },
+      To: [{ Email: data.to, Name: data.firstName }],
+      Subject: `Complete Your Payment - ${data.plan} Plan`,
+      HTMLPart: this.template.render(content),
+      TextPart: this.template.stripHtml(content),
+    }],
+  };
+
+  await this.emailClient.sendEmail(body, data.to);
+}
+
+/**
+ * Send payment failed email when payment service is unavailable
+ */
+async sendPaymentFailedEmail(data: {
+  to: string;
+  firstName: string;
+  lastName: string;
+  plan: string;
+  profileType?: string;
+  errorMessage: string;
+}): Promise<void> {
+  const content = `
+    <h1>Payment Service Temporarily Unavailable</h1>
+    <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.firstName},</p>
+    <p>Your ${data.plan} account has been created, but we're currently experiencing issues with our payment service.</p>
+    
+    <div class="info-box">
+      <h3>What This Means</h3>
+      <ul>
+        <li>Your account is created and saved</li>
+        <li>Premium features are temporarily locked</li>
+        <li>You can retry payment later from your dashboard</li>
+      </ul>
+    </div>
+    
+    <div class="security-alert">
+      <p><strong>Next Steps:</strong> Please log in to your account and click "Complete Payment" when the payment system is back online.</p>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${this.template.getSocial().website}/dashboard" class="button">Go to Dashboard</a>
+    </div>
+    
+    <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">We apologize for the inconvenience. Our team has been notified and is working to resolve this issue.</p>
+  `;
+
+  const body: SendEmailV3_1.Body = {
+    Messages: [{
+      From: {
+        Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+        Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+      },
+      To: [{ Email: data.to, Name: data.firstName }],
+      Subject: `Payment Service Update - ${data.plan} Plan`,
+      HTMLPart: this.template.render(content),
+      TextPart: this.template.stripHtml(content),
+    }],
+  };
+
+  await this.emailClient.sendEmail(body, data.to);
+}
+
+/**
+ * Send payment success email after payment is confirmed
+ */
+async sendPaymentSuccessEmail(data: {
+  to: string;
+  firstName: string;
+  lastName: string;
+  plan: string;
+  accountId: string;
+}): Promise<void> {
+  const content = `
+    <h1>Payment Confirmed!</h1>
+    <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.firstName},</p>
+    <p>Thank you for your payment! Your ${data.plan} plan is now active.</p>
+    
+    <div class="success-box">
+      <h3>Your Premium Features Are Now Available</h3>
+      <ul>
+        <li>Full access to all platform features</li>
+        <li>Priority support</li>
+        <li>Advanced analytics and insights</li>
+      </ul>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${this.template.getSocial().website}/dashboard" class="button">Go to Dashboard</a>
+    </div>
+    
+    <div class="divider"></div>
+    
+    <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">
+      Account ID: ${data.accountId}<br>
+      Plan: ${data.plan}<br>
+      Activation Date: ${this.template.formatDate(new Date())}
+    </p>
+  `;
+
+  const body: SendEmailV3_1.Body = {
+    Messages: [{
+      From: {
+        Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
+        Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
+      },
+      To: [{ Email: data.to, Name: data.firstName }],
+      Subject: `Payment Confirmed - ${data.plan} Plan Active`,
+      HTMLPart: this.template.render(content),
+      TextPart: this.template.stripHtml(content),
+    }],
+  };
+
+  await this.emailClient.sendEmail(body, data.to);
+}
 }

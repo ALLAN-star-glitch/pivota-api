@@ -1,7 +1,11 @@
 // LoginResponseDto.dto.ts
-import { UserResponseDto } from './UserResponseDto.dto';
-
-export class LoginResponseDto extends UserResponseDto {
-  accessToken!: string;
-  refreshToken!: string;
+export class LoginResponseDto {
+  // Stage 1: MFA required
+  email?: string;
+  uuid?: string;
+  message?: string;  // "MFA_REQUIRED"
+  
+  // Stage 2: Tokens
+  accessToken?: string;
+  refreshToken?: string;
 }

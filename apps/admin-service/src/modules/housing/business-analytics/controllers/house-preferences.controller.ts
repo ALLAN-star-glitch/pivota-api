@@ -17,6 +17,15 @@ export class HousePreferencesController {
   @EventPattern('housing.preferences.updated')
   async handleHousingPreferencesUpdated(@Payload() data: any) {
     this.logger.log(`📥 Received housing.preferences.updated event: ${JSON.stringify(data)}`);
-    await this.housePreferencesService.processPreferencesEvent(data);
+    
+    // ✅ MAP the event: userUuid from Kafka -> seekerId for the service
+    const mappedEvent = {
+      seekerId: data.userUuid,  // This is the fix
+      timestamp: data.timestamp,
+      action: data.action,
+      data: data.data
+    };
+    
+    await this.housePreferencesService.processPreferencesEvent(mappedEvent);
   }
 }

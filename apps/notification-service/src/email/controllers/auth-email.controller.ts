@@ -155,4 +155,98 @@ export class AuthEmailController {
       channel.nack(originalMsg, false, true);
     }
   }
+
+  // apps/notification-service/src/email/controllers/auth-email.controller.ts
+
+// Add these new handlers to your AuthEmailController class:
+
+/**
+ * Handle payment pending event - Send payment link email
+ */
+@EventPattern('payment.pending')
+async handlePaymentPending(
+  @Payload() data: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    plan: string;
+    profileType?: string;
+    redirectUrl: string;
+    merchantReference: string;
+  },
+  @Ctx() context: RmqContext
+) {
+  this.logger.debug(`[RMQ] Payment pending for: ${data.email}`);
+  await this.processEvent(
+    context,
+    () => this.authEmailService.sendPaymentPendingEmail({
+      to: data.email,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      plan: data.plan,
+      profileType: data.profileType,
+      redirectUrl: data.redirectUrl,
+      merchantReference: data.merchantReference,
+    }),
+    data.email
+  );
+}
+
+/**
+ * Handle payment failed event - Send payment service unavailable email
+ */
+@EventPattern('payment.failed')
+async handlePaymentFailed(
+  @Payload() data: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    plan: string;
+    profileType?: string;
+    errorMessage: string;
+  },
+  @Ctx() context: RmqContext
+) {
+  this.logger.debug(`[RMQ] Payment failed for: ${data.email}`);
+  await this.processEvent(
+    context,
+    () => this.authEmailService.sendPaymentFailedEmail({
+      to: data.email,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      plan: data.plan,
+      profileType: data.profileType,
+      errorMessage: data.errorMessage,
+    }),
+    data.email
+  );
+}
+
+/**
+ * Handle payment success event - Send payment confirmation email
+ */
+@EventPattern('payment.success')
+async handlePaymentSuccess(
+  @Payload() data: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    plan: string;
+    accountId: string;
+  },
+  @Ctx() context: RmqContext
+) {
+  this.logger.debug(`[RMQ] Payment success for: ${data.email}`);
+  await this.processEvent(
+    context,
+    () => this.authEmailService.sendPaymentSuccessEmail({
+      to: data.email,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      plan: data.plan,
+      accountId: data.accountId,
+    }),
+    data.email
+  );
+}
 }

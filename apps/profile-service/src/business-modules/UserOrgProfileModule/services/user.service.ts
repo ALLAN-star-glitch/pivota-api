@@ -51,6 +51,8 @@ import { ProfileType, JobType, SeniorityLevel, PropertyType, SupportNeed, AgentT
 import { BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
 import { PhoneUtils, StringUtils } from '@pivota-api/utils';
 import { BusinessProfileType, createBusinessProfile } from '../../utils/business-profiles-creator.utils';
+import { QueueService } from '@pivota-api/shared-redis';
+
 
 // ==================== Type Definitions ====================
 
@@ -145,6 +147,7 @@ export class UserService implements OnModuleInit {
     @Inject('KAFKA_STORAGE_CLIENT') private readonly storageKafkaClient: ClientKafka,
     // For analytics events (producing)
     @Inject('KAFKA_ANALYTICS_CLIENT') private readonly analyticsKafkaClient: ClientKafka,
+    private queue: QueueService, 
   ) {
     this.rbacGrpc = this.rbacClient.getService<RbacServiceGrpc>('RbacService');
     this.subscriptionGrpc = this.subscriptionsClient.getService<SubscriptionServiceGrpc>('SubscriptionService');
@@ -501,16 +504,11 @@ private async updateActiveProfiles(
 // MAIN ONBOARDING - CREATE INDIVIDUAL ACCOUNT WITH PROFILES
 // ======================================================
 
-/**
- * Creates an individual account with multiple profiles based on user selection
- */
-/**
- * Creates an individual account with multiple profiles based on user selection
- */
+
 async createIndividualAccountWithProfiles(
   data: CreateAccountWithProfilesRequestDto
 ): Promise<BaseResponseDto<AccountResponseDto>> {
-  // Ensure this is for individual accounts only
+  // Early validation
   if (data.accountType !== "INDIVIDUAL") {
     return BaseResponseDto.fail('This method is for individual accounts only', 'BAD_REQUEST');
   }
@@ -519,16 +517,14 @@ async createIndividualAccountWithProfiles(
     return BaseResponseDto.fail('First name and last name are required for individual accounts', 'BAD_REQUEST');
   }
 
-  // Determine which profile to create - ONLY ONE profile type
+  // Determine profile to create
   let profileToCreate: ProfileToCreateDto | null = null;
 
-  // Use primaryPurpose + oneof data from UI flow
   if (data.primaryPurpose && data.primaryPurpose !== 'JUST_EXPLORING') {
     const profileType = mapIndividualPurposeToProfileType(data.primaryPurpose);
     
     this.logger.debug(`Mapping primary purpose "${data.primaryPurpose}" to profile type: ${profileType}`);
     
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let profileData: any = null;
     
     switch (data.primaryPurpose) {
@@ -565,7 +561,6 @@ async createIndividualAccountWithProfiles(
   const userCode = `USR-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
   const accountCode = `ACC-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
   
-  // UPDATED: Use shared utilities for normalization
   const normalizedEmail = StringUtils.normalizeEmail(data.email);
   const normalizedPhone = PhoneUtils.normalize(data.phone || '');
   
@@ -574,11 +569,11 @@ async createIndividualAccountWithProfiles(
   const accountUuid = randomUUID();
   const userUuid = randomUUID();
   const targetPlanSlug = data.planSlug || 'free-forever';
+  const isPremium = targetPlanSlug !== 'free-forever';
+  const roleType = 'Individual';
 
   try {
-    // ============ STEP 1: PRE-CHECKS ============
-    const roleType = 'Individual';
-    
+    // ============ STEP 1: Parallel service calls (both CRITICAL) ============
     const [roleRes, planRes] = await Promise.all([
       lastValueFrom(
         this.rbacGrpc.GetRoleIdByType({ roleType }).pipe(
@@ -601,9 +596,7 @@ async createIndividualAccountWithProfiles(
       return BaseResponseDto.fail(`Plan ${targetPlanSlug} not found`, 'NOT_FOUND');
     }
 
-    const isPremium = targetPlanSlug !== 'free-forever';
-
-    // ============ STEP 2: CREATE ACCOUNT, USER, AND PROFILE ============
+    // ============ STEP 2: Database transaction (ONLY account, user, individual profile) ============
     await this.prisma.$transaction(async (tx) => {
       // Create Account
       const account = await tx.account.create({
@@ -614,143 +607,140 @@ async createIndividualAccountWithProfiles(
           name: `${data.firstName} ${data.lastName}`.trim(),
           status: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
           userRole: roleType,
-          // UPDATED: Use StringUtils
-          activeProfiles: StringUtils.stringifyJsonField(profileToCreate ? [profileToCreate.type] : []),
+          activeProfiles: '[]', // Empty initially, will be updated by worker
           isVerified: false,
           verifiedFeatures: StringUtils.stringifyJsonField([]),
         },
       });
 
-      // Create User
-      await tx.user.create({
-        data: {
-          uuid: userUuid,
-          userCode,
-          email: normalizedEmail,
-          phone: normalizedPhone,
-          accountUuid: account.uuid,
-          roleName: roleType,
-          status: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
-          profileImage: data.profileImage,
-        },
-      });
-
-      // Create Individual Base Profile
-      await tx.individualProfile.create({
-        data: {
-          accountUuid: account.uuid,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          profileImage: data.profileImage,
-        },
-      });
-
-      // UPDATED: Use shared createBusinessProfile instead of local method
-      if (profileToCreate && this.isIndividualProfile(profileToCreate.type)) {
-        this.logger.debug(`Creating profile type: ${profileToCreate.type}`);
-        
-        await createBusinessProfile(
-          tx,
-          account.uuid,
-          profileToCreate.type as BusinessProfileType,
-          profileToCreate.data,
-          {
-            userUuid: userUuid,
-            kafkaClient: this.analyticsKafkaClient,
-            logger: this.logger, 
+      // Create User and Individual Profile in parallel
+      await Promise.all([
+        tx.user.create({
+          data: {
+            uuid: userUuid,
+            userCode,
+            email: normalizedEmail,
+            phone: normalizedPhone,
+            accountUuid: account.uuid,
+            roleName: roleType,
+            status: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
+            profileImage: data.profileImage,
           },
-          
-        ); 
-      }
+        }),
+        tx.individualProfile.create({
+          data: {
+            accountUuid: account.uuid,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            profileImage: data.profileImage,
+          },
+        }),
+      ]);
     }, {
       timeout: 15000,
       isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
     });
 
-    // ============ STEP 3: EXTERNAL SYNCING ============
-    this.rbacGrpc.AssignRoleToUser({
-      userUuid: userUuid,
-      roleId: roleRes.data.roleId,
-    }).subscribe({
-      next: () => this.logger.debug(`RBAC role assigned for user ${userUuid}`),
-      error: (err) => {
-        this.logger.error(`RBAC sync failed: ${err.message}`);
-        this.analyticsKafkaClient.emit('user.rbac.sync.retry', {
-          userUuid,
-          roleId: roleRes.data.roleId,
-          timestamp: new Date().toISOString()
-        });
-      }
-    });
+    // ============ STEP 3: Assign Role (CRITICAL - must succeed) ============
+    const roleAssignment = await lastValueFrom(
+      this.rbacGrpc.AssignRoleToUser({
+        userUuid: userUuid,
+        roleId: roleRes.data.roleId,
+      })
+    );
 
-    if (!isPremium) {
-      this.subscriptionGrpc.SubscribeToPlan({
-        subscriberUuid: accountUuid,
-        planId: planRes.data.planId,
-        billingCycle: null,
-        amountPaid: 0,
-        currency: 'KES'
-      }).subscribe({
-        next: (subRes) => {
-          if (!subRes.success) {
-            this.logger.error(`Subscription creation failed: ${subRes.message}`);
-            this.analyticsKafkaClient.emit('user.subscription.retry', {
-              accountUuid,
-              planId: planRes.data.planId,
-              timestamp: new Date().toISOString()
-            });
-          }
-        },
-        error: (err) => {
-          this.logger.error(`Subscription error: ${err.message}`);
-          this.analyticsKafkaClient.emit('user.subscription.retry', {
-            accountUuid,
-            planId: planRes.data.planId,
-            timestamp: new Date().toISOString()
-          });
-        }
-      });
-    } else {
-      this.analyticsKafkaClient.emit('user.payment.required', {
-        accountUuid,
-        userUuid,
-        email: normalizedEmail,
-        planSlug: targetPlanSlug,
-        timestamp: new Date().toISOString()
-      });
+    if (!roleAssignment?.success) {
+      await this.prisma.account.delete({ where: { uuid: accountUuid } });
+      return BaseResponseDto.fail('Failed to assign user role. Account creation rolled back.', 'INTERNAL_ERROR');
     }
 
-    // ============ STEP 4: RETURN SUCCESS ============
+    this.logger.log(`✅ Role assigned successfully for user ${userUuid}`);
+
+    // ============ STEP 4: Handle Subscription (CRITICAL for free plans) ============
+    if (!isPremium) {
+      const subscriptionResult = await lastValueFrom(
+        this.subscriptionGrpc.SubscribeToPlan({
+          subscriberUuid: accountUuid,
+          planId: planRes.data.planId,
+          billingCycle: null,
+          amountPaid: 0,
+          currency: 'KES'
+        })
+      );
+
+      if (!subscriptionResult?.success) {
+        await this.prisma.account.delete({ where: { uuid: accountUuid } });
+        return BaseResponseDto.fail('Failed to create subscription. Account creation rolled back.', 'INTERNAL_ERROR');
+      }
+      
+      this.logger.log(`✅ Subscription created successfully for account ${accountUuid}`);
+    }
+
+    // ============ STEP 5: QUEUE BUSINESS PROFILE CREATION (Non-blocking) ============
+    if (profileToCreate && this.isIndividualProfile(profileToCreate.type)) {
+      await this.queue.addJob(
+        'profile-queue',
+        'create-business-profile',
+        {
+          accountUuid: accountUuid,
+          profileType: profileToCreate.type,
+          profileData: profileToCreate.data,
+          userUuid: userUuid,
+          isPremium: isPremium,
+        },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: true,
+          removeOnFail: false,
+        }
+      );
+      this.logger.log(`✅ Queued business profile creation for ${profileToCreate.type}`);
+    }
+
+    // ============ STEP 6: Return success immediately ============
     const accountData = await this.getAccountByUuid(accountUuid);
     
-    this.logger.log(`Successfully created account for ${normalizedEmail} with profile: ${profileToCreate?.type || 'none'}`);
+    this.logger.log(`✅ Successfully created account for ${normalizedEmail}`);
+    
+    if (isPremium) {
+      return BaseResponseDto.ok(
+        accountData.data as AccountResponseDto,
+        'Account created. Payment required.',
+        'PAYMENT_REQUIRED'
+      );
+    }
     
     return BaseResponseDto.ok(
       accountData.data as AccountResponseDto,
-      isPremium ? 'Account created. Payment required.' : 'Account created successfully',
-      isPremium ? 'PAYMENT_REQUIRED' : 'CREATED'
+      'Account created successfully',
+      'CREATED'
     );
 
   } catch (error) {
     this.logger.error(`Account creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') {
-        const target = error.meta?.target as string[];
-        if (target?.includes('email')) {
-          return BaseResponseDto.fail('Email already exists', 'ALREADY_EXISTS');
-        }
-        if (target?.includes('phone')) {
-          return BaseResponseDto.fail('Phone number already exists', 'ALREADY_EXISTS');
-        }
-        return BaseResponseDto.fail('Email or phone already exists', 'ALREADY_EXISTS');
+    try {
+      await this.prisma.account.delete({ where: { uuid: accountUuid } });
+      this.logger.log(`🧹 Cleaned up account ${accountUuid} after failure`);
+    } catch (cleanupError) {
+      // Account might not have been created yet
+    }
+    
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const target = error.meta?.target as string[];
+      if (target?.includes('email')) {
+        return BaseResponseDto.fail('Email already exists', 'ALREADY_EXISTS');
       }
+      if (target?.includes('phone')) {
+        return BaseResponseDto.fail('Phone number already exists', 'ALREADY_EXISTS');
+      }
+      return BaseResponseDto.fail('Email or phone already exists', 'ALREADY_EXISTS');
     }
     
     return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
   }
 }
-
   /**
  * Check if profile type is valid for individuals
  */
@@ -1687,6 +1677,17 @@ async updateSupportBeneficiaryProfile(
       return BaseResponseDto.ok(null, 'Profile removed successfully', 'OK');
     } catch (error) {
       this.logger.error(`Failed to remove profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
+    }
+  }
+
+  // Delete account (and all associated profiles/users) - for testing purposes only
+  async deleteAccount(accountUuid: string): Promise<BaseResponseDto<null>> {
+    try {
+      await this.prisma.account.delete({ where: { uuid: accountUuid } });
+      return BaseResponseDto.ok(null, 'Account deleted successfully', 'OK');
+    } catch (error) {
+      this.logger.error(`Failed to delete account: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
     }
   }

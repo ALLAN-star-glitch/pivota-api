@@ -19,7 +19,6 @@ export class AuthAnalyticsController {
     await this.analyticsService.handleUserRegistered(data);
   }
   
-  
   /**
    * Handle user.login.google event 
    * Emitted when existing user logs in with Google
@@ -54,6 +53,16 @@ export class AuthAnalyticsController {
   @EventPattern('user.signup.premium')
   async handleUserSignupPremium(@Payload() data: any) {
     await this.analyticsService.handleUserSignupPremium(data);
+  }
+
+  /**
+   * Handle user.payment.failed event
+   * Emitted when payment initiation fails for premium user
+   */
+  @EventPattern('user.payment.failed')
+  async handleUserPaymentFailed(@Payload() data: any) {
+    this.logger.log(`Received user.payment.failed event: ${JSON.stringify(data)}`);
+    await this.analyticsService.handleUserPaymentFailed(data);
   }
 
   /**

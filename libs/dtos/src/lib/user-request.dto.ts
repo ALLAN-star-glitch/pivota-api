@@ -1688,14 +1688,17 @@ export class UserSignupRequestDto {
   @Matches(KENYAN_PHONE_REGEX)
   phone?: string;
 
-  @ApiProperty({ 
-    description: 'Secure password (min 8 characters)', 
-    example: 'StrongPass@2026', 
+ @ApiProperty({ 
+  description: 'Secure password (min 8 characters, at least one uppercase, one lowercase, one number, and one special character)', 
+  example: 'StrongPass@2026', 
     minLength: 8 
   })
   @IsString()
   @IsNotEmpty()
   @MinLength(8)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/, {
+    message: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character (@$!%*?&)'
+  })
   password!: string;
 
   @ApiPropertyOptional({ description: 'Subscription plan slug', example: 'free-forever' })

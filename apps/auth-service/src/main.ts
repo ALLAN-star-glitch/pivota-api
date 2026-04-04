@@ -17,6 +17,9 @@ async function bootstrap() {
   logger.log(`KAFKA_BROKERS = ${process.env.KAFKA_BROKERS}`);
   logger.log(`RABBITMQ_URL = ${process.env.RABBITMQ_URL}`);
 
+  // ✅ ENABLE LIFECYCLE HOOKS (This is critical for OnModuleInit, OnApplicationBootstrap, etc.)
+  app.enableShutdownHooks();
+
   // ------------------- Kafka Microservice -------------------
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.KAFKA,

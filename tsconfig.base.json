@@ -29,6 +29,7 @@
       "@pivota-api/libs": ["libs/src/index.ts"],
       "@pivota-api/pipes": ["libs/pipes/src/index.ts"],
       "@pivota-api/protos": ["libs/protos/src/index.ts"],
+      "@pivota-api/shared-redis": ["libs/shared-redis/src/index.ts"],
       "@pivota-api/shared-storage": ["libs/shared-storage/src/index.ts"],
       "@pivota-api/types": ["libs/types/src/index.ts"],
       "@pivota-api/utils": ["libs/utils/src/index.ts"]

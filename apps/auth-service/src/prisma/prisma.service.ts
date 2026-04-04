@@ -7,23 +7,32 @@ dotenv.config({ path: '.env.dev' });
 import { PrismaClient } from '../../generated/prisma/client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 
+// Define the extended client type
+export type ExtendedPrismaClient = PrismaClient & {
+  $accelerate: {
+    invalidate(options: { tags: string[] }): Promise<void>;
+  };
+};
+
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
+  public prisma: ExtendedPrismaClient;
 
   constructor(private readonly configService: ConfigService) {
-    super({
-      // This is the key: Prisma Accelerate URL (HTTPS 443)
+    // Create base client
+    const baseClient = new PrismaClient({
       accelerateUrl: configService.get<string>('AUTH_SERVICE_DATABASE_URL'),
+      log: ['error', 'warn'],
     });
 
     // Extend Prisma Client with Accelerate
-    return this.$extends(withAccelerate()) as this;
+    this.prisma = baseClient.$extends(withAccelerate()) as unknown as ExtendedPrismaClient;
   }
 
   async onModuleInit() {
     try {
-      await this.$connect();
+      await this.prisma.$connect();
       this.logger.log('✅ Connected to database via Prisma Accelerate.');
     } catch (error) {
       this.logger.error('❌ Failed to connect', error);
@@ -33,7 +42,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   async onModuleDestroy() {
     try {
-      await this.$disconnect();
+      await this.prisma.$disconnect();
       this.logger.log('🧹 Prisma connection closed gracefully.');
     } catch (error) {
       this.logger.error('❌ Error during Prisma disconnect', error);

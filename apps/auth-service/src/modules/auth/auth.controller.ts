@@ -9,13 +9,13 @@ import {
   OrganisationSignupRequestDto,
   OrganizationSignupDataDto,
   UserSignupRequestDto,
-  UserSignupDataDto,
   RequestOtpDto,
   VerifyOtpDto,
   VerifyOtpResponseDataDto,
   ResetPasswordDto,
   SessionDto,
-  AuthClientInfoDto, // Keep this import
+  AuthClientInfoDto,
+  SignupResponseDto, // Keep this import
 } from '@pivota-api/dtos';
 
 
@@ -66,7 +66,7 @@ export class AuthController {
     data: UserSignupRequestDto & { 
       clientInfo?: AuthClientInfoDto  // Add clientInfo
     }
-  ): Promise<BaseResponseDto<UserSignupDataDto>> {
+  ): Promise<BaseResponseDto<SignupResponseDto>> {
     this.logger.log(`gRPC: Individual Signup for ${data.email} from ${data.clientInfo?.device || 'Unknown'}`);
     return await this.authService.signup(data, data.clientInfo);
   }

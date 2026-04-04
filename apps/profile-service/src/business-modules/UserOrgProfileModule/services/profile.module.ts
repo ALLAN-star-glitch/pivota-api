@@ -1,18 +1,19 @@
 // apps/profile-service/src/profile.module.ts
 import { Module } from '@nestjs/common';
 import { UserController } from '../controllers/user.controller';
-import { UserService } from './user.service';
 import { PrismaModule } from '../../../prisma/prisma.module';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-
-import { OrganisationService } from './organisation.service';
 import { OrganisationController } from '../controllers/organisation.controller';
 import { SharedStorageModule } from '@pivota-api/shared-storage';
+import { SharedRedisModule } from '@pivota-api/shared-redis';
 import { RBAC_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH, PLANS_PROTO_PATH } from '@pivota-api/protos';
-
+import { OrganisationService } from './organisation.service';
+import { UserService } from './user.service';
+import { ProfileWorker } from '../../../workers/profile.worker';
 
 @Module({
   imports: [
+    SharedRedisModule.forRoot(),
     PrismaModule,
     SharedStorageModule,
     
@@ -52,7 +53,7 @@ import { RBAC_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH, PLANS_PROTO_PATH } from '@pi
             clientId: 'profile-service-analytics',
             brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
           },
-          producerOnlyMode: true, // Only emits events, no consumer
+          producerOnlyMode: true,
         },
       },
 
@@ -89,18 +90,29 @@ import { RBAC_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH, PLANS_PROTO_PATH } from '@pi
   controllers: [UserController, OrganisationController],
   providers: [
     UserService,
-    OrganisationService
+    OrganisationService,
+    ProfileWorker,
   ],
   exports: [OrganisationService],
 })
 export class ProfileModule {
-  constructor() {
+  constructor(private profileWorker: ProfileWorker) {
     console.log(
       '🚀 ProfileModule initialized:',
       '\n- RabbitMQ Client (NOTIFICATION_EVENT_BUS) active for email notifications',
       '\n- Kafka Storage Client (KAFKA_STORAGE_CLIENT) active for consuming file deletion events',
       '\n- Kafka Analytics Client (KAFKA_ANALYTICS_CLIENT) active for emitting housing preferences',
       '\n- StorageModule active for Supabase operations',
+      '\n- Redis Module active for BullMQ queues',
     );
+    console.log('🔥 ProfileModule constructor, profileWorker:', !!this.profileWorker);
+    
+    // Initialize profile worker immediately
+    setImmediate(() => {
+      console.log('🔥 ProfileModule - manually initializing ProfileWorker');
+      this.profileWorker.initialize().catch(err => {
+        console.error('🔥 Failed to initialize profile worker:', err);
+      });
+    });
   }
 }

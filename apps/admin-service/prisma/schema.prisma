@@ -1657,6 +1657,23 @@ model DailyAuthMetrics {
   premiumSignups  Int     @default(0)
   freeSignups     Int     @default(0)
   
+  // Device breakdown for SIGNUPS (ADD THESE)
+  mobileSignups    Int      @default(0)
+  desktopSignups   Int      @default(0)
+  tabletSignups    Int      @default(0)
+  botSignups       Int      @default(0)
+  
+  // OS breakdown for SIGNUPS (optional - add if needed)
+  iosSignups       Int      @default(0)
+  androidSignups   Int      @default(0)
+  windowsSignups   Int      @default(0)
+  macSignups       Int      @default(0)
+  
+  // Browser breakdown for SIGNUPS (optional - add if needed)
+  chromeSignups    Int      @default(0)
+  safariSignups    Int      @default(0)
+  firefoxSignups   Int      @default(0)
+  
   // Failed signups
   failedSignups  Int      @default(0)
   invalidOtpSignups Int   @default(0)
@@ -1671,7 +1688,7 @@ model DailyAuthMetrics {
   loginErrors     Int      @default(0)
   
   // Account linking
-  accountsLinked  Int      @default(0) // Google account linking
+  accountsLinked  Int      @default(0)
   
   // OTP metrics
   otpRequests     Int      @default(0)
@@ -1679,24 +1696,24 @@ model DailyAuthMetrics {
   otpFailed       Int      @default(0)
   otpRateLimited  Int      @default(0)
   
-  // Device breakdown from clientInfo
+  // Device breakdown for LOGINS
   mobileLogins    Int      @default(0)
   desktopLogins   Int      @default(0)
   tabletLogins    Int      @default(0)
   botRequests     Int      @default(0)
   
-  // OS breakdown
+  // OS breakdown for LOGINS
   iosLogins       Int      @default(0)
   androidLogins   Int      @default(0)
   windowsLogins   Int      @default(0)
   macLogins       Int      @default(0)
   
-  // Browser breakdown
+  // Browser breakdown for LOGINS
   chromeLogins    Int      @default(0)
   safariLogins    Int      @default(0)
   firefoxLogins   Int      @default(0)
   
-  // ========== PROFILE TYPE METRICS (Individual) ==========
+  // Profile type metrics
   jobSeekerSignups           Int @default(0)
   skilledProfessionalSignups Int @default(0)
   agentSignups               Int @default(0)
@@ -1705,7 +1722,7 @@ model DailyAuthMetrics {
   employerSignups            Int @default(0)
   propertyOwnerSignups       Int @default(0)
   
-  // ========== PRIMARY PURPOSE METRICS (Legacy Tracking) ==========
+  // Primary purpose metrics
   purposeFindJob         Int @default(0)
   purposeOfferServices   Int @default(0)
   purposeWorkAsAgent     Int @default(0)
@@ -1715,21 +1732,21 @@ model DailyAuthMetrics {
   purposeListProperties  Int @default(0)
   purposeJustExploring   Int @default(0)
   
-  // ========== ORGANIZATION PURPOSE METRICS ==========
+  // Organization purpose metrics
   orgPurposeHireEmployees    Int @default(0)
   orgPurposeListProperties   Int @default(0)
   orgPurposeOfferServices    Int @default(0)
   orgPurposeProvideSupport   Int @default(0)
   orgPurposeActAsAgent       Int @default(0)
   
-  // ========== PREMIUM INTENT METRICS ==========
+  // Premium intent metrics
   premiumIntentSignups              Int @default(0)
   premiumJobSeekerIntent            Int @default(0)
   premiumSkilledProfessionalIntent  Int @default(0)
   premiumEmployerIntent             Int @default(0)
   premiumPropertyOwnerIntent        Int @default(0)
 
-    // Add these to your DailyAuthMetrics model
+  // Failed signups by profile type
   failedJobSeekerSignups           Int @default(0)
   failedSkilledProfessionalSignups Int @default(0)
   failedAgentSignups               Int @default(0)
@@ -1738,6 +1755,7 @@ model DailyAuthMetrics {
   failedEmployerSignups            Int @default(0)
   failedPropertyOwnerSignups       Int @default(0)
 
+  // Failed signups by purpose
   failedPurposeFindJob             Int @default(0)
   failedPurposeOfferServices       Int @default(0)
   failedPurposeWorkAsAgent         Int @default(0)
@@ -1747,7 +1765,7 @@ model DailyAuthMetrics {
   failedPurposeListProperties      Int @default(0)
   failedPurposeJustExploring       Int @default(0)
   
-  // ========== PROFILE COMPLETION METRICS ==========
+  // Profile completion metrics
   signupsWithProfileData Int @default(0)
   
   createdAt      DateTime @default(now())

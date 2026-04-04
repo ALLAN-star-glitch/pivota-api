@@ -1,5 +1,8 @@
-// Response after signup (same as UserResponseDto)
+import { ApiProperty } from "@nestjs/swagger";
 
-import { UserResponseDto } from "./UserResponseDto.dto";
+// Create a simple response DTO
+export class SignupResponseDto {
+  @ApiProperty({ example: 'Signup successful' })
+    message!: string;
+}
 
-export class SignupResponseDto extends UserResponseDto {}

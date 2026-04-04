@@ -9,7 +9,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ClientGrpc, ClientProxy, RpcException } from '@nestjs/microservices';
 import * as bcrypt from 'bcrypt';
-import { PrismaService } from '../../prisma/prisma.service';
+import { ExtendedPrismaClient, PrismaService } from '../../prisma/prisma.service';
 import {
   LoginResponseDto,
   LoginRequestDto,
@@ -22,7 +22,6 @@ import {
   OrganizationProfileResponseDto,
   OrganizationSignupDataDto,
   OrganisationSignupRequestDto,
-  UserSignupDataDto,
   UserSignupRequestDto,
   UserProfileResponseDto,
   VerifyOtpDto,
@@ -33,6 +32,7 @@ import {
   AuthClientInfoDto,
   CreateAccountWithProfilesRequestDto,
   AccountResponseDto,
+  SignupResponseDto,
 } from '@pivota-api/dtos';
 import { firstValueFrom, lastValueFrom, Observable } from 'rxjs';
 import { BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
@@ -40,6 +40,9 @@ import { randomUUID } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import * as dotenv from 'dotenv';
 import { HttpService } from '@nestjs/axios';
+import { QueueService } from '@pivota-api/shared-redis';
+
+
 
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
 
@@ -70,13 +73,15 @@ export class AuthService implements OnModuleInit {
   private profileGrpcService: ProfileServiceGrpc;
   private rbacGrpcService: RbacServiceGrpc;
   private readonly googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+   private prisma: ExtendedPrismaClient;
  
 
 
   constructor(
   private readonly jwtService: JwtService,
-  private readonly prisma: PrismaService,
+  private readonly prismaService: PrismaService,
   private readonly httpService: HttpService,
+  private queue: QueueService,
   
   // gRPC Clients
   @Inject('PROFILE_GRPC')
@@ -88,7 +93,9 @@ export class AuthService implements OnModuleInit {
   @Inject('KAFKA_SERVICE') private readonly kafkaClient: ClientProxy, 
 
   @Inject('NOTIFICATION_EVENT_BUS') private readonly notificationBus: ClientProxy,
-) {}
+) {
+  this.prisma = this.prismaService.prisma;
+}
 
   onModuleInit() {
     this.profileGrpcService = this.grpcClient.getService<ProfileServiceGrpc>('ProfileService');
@@ -297,16 +304,16 @@ async generateTokens(
 async signup(
   signupDto: UserSignupRequestDto,
   clientInfo?: AuthClientInfoDto
-): Promise<BaseResponseDto<UserSignupDataDto>> {
+): Promise<BaseResponseDto<SignupResponseDto>> {
   const profileGrpcService = this.getProfileGrpcService();
   
   let profileType: string | null = null;
   let profileDataForEmail: any = null;
 
-  this.logger.log(`📝 Signup attempt: ${signupDto.email} from ${clientInfo?.device || 'Unknown'}`);
+  this.logger.log(`📝 Signup attempt: ${signupDto.email}`);
 
   try {
-    // 1. VERIFY OTP
+    // 1. Verify OTP
     const validOtp = await this.prisma.otp.findFirst({
       where: {
         email: signupDto.email,
@@ -314,27 +321,38 @@ async signup(
         purpose: 'SIGNUP',
         expiresAt: { gt: new Date() },
       },
+      select: { id: true },
     });
 
     if (!validOtp) {
       this.logger.warn(`[AUTH] Blocked signup attempt: Invalid/Expired OTP for ${signupDto.email}`);
       
-      this.kafkaClient.emit('user.signup.failed', {
-        email: signupDto.email,
-        reason: 'INVALID_OTP',
-        primaryPurpose: signupDto.primaryPurpose,
-        profileType: null,
-        clientInfo: clientInfo ? {
-          device: clientInfo.device,
-          deviceType: clientInfo.deviceType,
-          os: clientInfo.os,
-          browser: clientInfo.browser,
-          osVersion: clientInfo.osVersion,
-          browserVersion: clientInfo.browserVersion,
-          isBot: clientInfo.isBot,
-        } : null,
-        timestamp: new Date().toISOString()
-      });
+      await this.queue.addJob(
+        'analytics-queue',
+        'signup-failed',
+        {
+          email: signupDto.email,
+          reason: 'INVALID_OTP',
+          primaryPurpose: signupDto.primaryPurpose,
+          profileType: null,
+          clientInfo: clientInfo ? {
+            device: clientInfo.device,
+            deviceType: clientInfo.deviceType,
+            os: clientInfo.os,
+            browser: clientInfo.browser,
+            osVersion: clientInfo.osVersion,
+            browserVersion: clientInfo.browserVersion,
+            isBot: clientInfo.isBot,
+          } : null,
+          timestamp: new Date().toISOString()
+        },
+        {
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: true,
+          removeOnFail: true,
+        }
+      );
 
       return BaseResponseDto.fail(
         'Invalid or expired verification code.', 
@@ -358,7 +376,7 @@ async signup(
       profiles: [],
     };
 
-    // MAP SPECIFIC ONEOF FIELDS
+    // Map profile data
     if (signupDto.jobSeekerData) {
       createAccountDto.jobSeekerData = signupDto.jobSeekerData;
       profileType = 'JOB_SEEKER';
@@ -424,29 +442,43 @@ async signup(
       };
     }
 
-    // 3. Call Profile Service (no timeout)
-    const profileResponse = await firstValueFrom(
-      profileGrpcService.createIndividualAccountWithProfiles(createAccountDto)
-    );
+    const targetPlanSlug = signupDto.planSlug || 'free-forever';
+    const isPremium = targetPlanSlug !== 'free-forever';
+
+    // 3. Create account via gRPC (parallel with password hash)
+    const [hashedPassword, profileResponse] = await Promise.all([
+      bcrypt.hash(signupDto.password, 10),
+      firstValueFrom(profileGrpcService.createIndividualAccountWithProfiles(createAccountDto))
+    ]);
 
     if (!profileResponse.success || !profileResponse.data) {
       this.logger.error(`[PROFILE FAIL] ${signupDto.email}: ${profileResponse.message}`);
       
-      this.kafkaClient.emit('user.signup.failed', {
-        email: signupDto.email,
-        reason: 'PROFILE_CREATION_FAILED',
-        error: profileResponse.message,
-        clientInfo: clientInfo ? {
-          device: clientInfo.device,
-          deviceType: clientInfo.deviceType,
-          os: clientInfo.os,
-          browser: clientInfo.browser,
-          isBot: clientInfo.isBot,
-          browserVersion: clientInfo.browserVersion, 
-          osVersion: clientInfo.osVersion
-        } : null,
-        timestamp: new Date().toISOString()
-      });
+      await this.queue.addJob(
+        'analytics-queue',
+        'signup-failed',
+        {
+          email: signupDto.email,
+          reason: 'PROFILE_CREATION_FAILED',
+          error: profileResponse.message,
+          clientInfo: clientInfo ? {
+            device: clientInfo.device,
+            deviceType: clientInfo.deviceType,
+            os: clientInfo.os,
+            browser: clientInfo.browser,
+            isBot: clientInfo.isBot,
+            browserVersion: clientInfo.browserVersion, 
+            osVersion: clientInfo.osVersion
+          } : null,
+          timestamp: new Date().toISOString()
+        },
+        {
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: true,
+          removeOnFail: true,
+        }
+      );
 
       return BaseResponseDto.fail(
         profileResponse.message, 
@@ -463,11 +495,8 @@ async signup(
       return BaseResponseDto.fail('Invalid response from profile service', 'INTERNAL_ERROR');
     }
 
-    // 4. Save Credentials Locally (parallelize with OTP cleanup)
-    const hashedPassword = await bcrypt.hash(signupDto.password, 10);
-    
-    // Run credential creation and OTP cleanup in parallel
-    await Promise.all([
+    // 4. Save credentials and cleanup OTP
+    await this.prisma.$transaction([
       this.prisma.credential.create({
         data: {
           userUuid: userData.uuid,
@@ -481,83 +510,281 @@ async signup(
       }),
     ]);
 
-    // 5. FIRE-AND-FORGET NOTIFICATIONS
-    // Welcome email
-    const welcomeEmailPayload: any = {
-      accountId: accountData.accountCode,
-      firstName: signupDto.firstName,
-      email: signupDto.email,
-      plan: signupDto.planSlug || 'Free Forever',
-      profileType: profileType,
-      profileData: profileDataForEmail,
-    };
-    this.notificationBus.emit('user.onboarded', welcomeEmailPayload);
+    // ============ PREMIUM BRANCH: PAYMENT HAND-OFF ============
+    if (isPremium && profileResponse.code === 'PAYMENT_REQUIRED') {
+      try {
+        const paymentPayload = {
+          accountUuid: accountData.uuid,
+          userUuid: userData.uuid,
+          email: signupDto.email,
+          firstName: signupDto.firstName,
+          lastName: signupDto.lastName,
+          planSlug: targetPlanSlug,
+          amount: 5000,
+          currency: 'KES',
+          callbackUrl: 'https://app.pivota.com/onboarding/payment-status'
+        };
 
-    // Admin notification
-    const adminEmail = process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com';
-    const adminPayload = {
-      adminEmail: adminEmail,
-      userEmail: signupDto.email,
-      userName: `${signupDto.firstName} ${signupDto.lastName}`,
-      accountType: 'INDIVIDUAL',
-      registrationMethod: 'EMAIL',
-      registrationDate: new Date().toISOString(),
-      plan: signupDto.planSlug || 'Free Forever',
-      primaryPurpose: signupDto.primaryPurpose || 'JUST_EXPLORING',
-      profileType: profileType,
-    };
-    this.notificationBus.emit('admin.new.registration', adminPayload);
+        const paymentInitResponse = await lastValueFrom(
+          this.httpService.post(
+            `${process.env.PAYMENT_SERVICE_URL}/api/v1/payments/initiate`,
+            paymentPayload,
+            { headers: { 'x-internal-api-key': process.env.INTERNAL_API_KEY } }
+          )
+        );
 
-    // Analytics
-    this.kafkaClient.emit('user.registered', {
-      userUuid: userData.uuid,
-      email: signupDto.email,
-      accountId: accountData.accountCode,
-      plan: signupDto.planSlug || 'free-forever',
-      primaryPurpose: signupDto.primaryPurpose || 'JUST_EXPLORING',
-      profileType: profileType,
-      hasProfileData: !!profileType,
-      signupSource: {
-        device: clientInfo?.device,
-        deviceType: clientInfo?.deviceType,
-        os: clientInfo?.os,
-        osVersion: clientInfo?.osVersion,
-        browser: clientInfo?.browser,
-        browserVersion: clientInfo?.browserVersion,
-        isBot: clientInfo?.isBot,
-        timestamp: new Date().toISOString()
+        // Queue payment pending email
+        await this.queue.addJob(
+          'email-queue',
+          'payment-pending-email',
+          {
+            to: signupDto.email,
+            firstName: signupDto.firstName,
+            lastName: signupDto.lastName,
+            plan: targetPlanSlug,
+            redirectUrl: paymentInitResponse.data.redirectUrl,
+            merchantReference: paymentInitResponse.data.merchantReference,
+            profileType: profileType,
+          },
+          {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5000 },
+            removeOnComplete: true,
+            removeOnFail: false,
+          }
+        );
+
+        // Queue admin notification
+        const adminEmail = process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com';
+        await this.queue.addJob(
+          'email-queue',
+          'admin-notification',
+          {
+            to: adminEmail,
+            userEmail: signupDto.email,
+            userName: `${signupDto.firstName} ${signupDto.lastName}`,
+            accountType: 'INDIVIDUAL',
+            registrationMethod: 'EMAIL',
+            registrationDate: new Date().toISOString(),
+            plan: targetPlanSlug,
+            primaryPurpose: signupDto.primaryPurpose || 'JUST_EXPLORING',
+            profileType: profileType,
+            paymentStatus: 'PENDING',
+          },
+          {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5000 },
+            removeOnComplete: true,
+            removeOnFail: false,
+          }
+        );
+
+        // Queue analytics event
+        await this.queue.addJob(
+          'analytics-queue',
+          'user-registered',
+          {
+            userUuid: userData.uuid,
+            email: signupDto.email,
+            accountId: accountData.accountCode,
+            plan: targetPlanSlug,
+            primaryPurpose: signupDto.primaryPurpose || 'JUST_EXPLORING',
+            profileType: profileType,
+            hasProfileData: !!profileType,
+            paymentStatus: 'PENDING',
+            signupSource: clientInfo ? {
+              device: clientInfo.device,
+              deviceType: clientInfo.deviceType,
+              os: clientInfo.os,
+              osVersion: clientInfo.osVersion,
+              browser: clientInfo.browser,
+              browserVersion: clientInfo.browserVersion,
+              isBot: clientInfo.isBot,
+              timestamp: new Date().toISOString()
+            } : null
+          },
+          {
+            attempts: 2,
+            backoff: { type: 'exponential', delay: 5000 },
+            removeOnComplete: true,
+            removeOnFail: true,
+          }
+        );
+
+        return BaseResponseDto.ok(
+          {
+            message: 'Account created. Complete payment to activate.',
+            redirectUrl: paymentInitResponse.data.redirectUrl,
+            merchantReference: paymentInitResponse.data.merchantReference,
+          } as any,
+          'Payment required to activate account',
+          'PAYMENT_REQUIRED'
+        );
+
+      } catch (paymentErr: unknown) {
+        const message = paymentErr instanceof Error ? paymentErr.message : 'Payment service unreachable';
+        this.logger.error(`[PAYMENT SERVICE DOWN] User ${signupDto.email}: ${message}`);
+
+        // Queue payment failed email
+        await this.queue.addJob(
+          'email-queue',
+          'payment-failed-email',
+          {
+            to: signupDto.email,
+            firstName: signupDto.firstName,
+            lastName: signupDto.lastName,
+            plan: targetPlanSlug,
+            profileType: profileType,
+            errorMessage: message,
+          },
+          {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5000 },
+            removeOnComplete: true,
+            removeOnFail: false,
+          }
+        );
+
+        // Queue admin notification about payment failure
+        const adminEmail = process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com';
+        await this.queue.addJob(
+          'email-queue',
+          'admin-notification',
+          {
+            to: adminEmail,
+            userEmail: signupDto.email,
+            userName: `${signupDto.firstName} ${signupDto.lastName}`,
+            accountType: 'INDIVIDUAL',
+            registrationMethod: 'EMAIL',
+            registrationDate: new Date().toISOString(),
+            plan: targetPlanSlug,
+            primaryPurpose: signupDto.primaryPurpose || 'JUST_EXPLORING',
+            profileType: profileType,
+            paymentStatus: 'FAILED',
+            paymentError: message,
+          },
+          {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5000 },
+            removeOnComplete: true,
+            removeOnFail: false,
+          }
+        );
+
+        // Queue analytics event for payment failure
+        await this.queue.addJob(
+          'analytics-queue',
+          'payment-failed',
+          {
+            userUuid: userData.uuid,
+            email: signupDto.email,
+            accountId: accountData.accountCode,
+            plan: targetPlanSlug,
+            profileType: profileType,
+            error: message,
+            timestamp: new Date().toISOString()
+          },
+          {
+            attempts: 2,
+            backoff: { type: 'exponential', delay: 5000 },
+            removeOnComplete: true,
+            removeOnFail: true,
+          }
+        );
+
+        return BaseResponseDto.ok(
+          {
+            message: 'Account created. Payment system busy. Please login to complete payment.',
+            redirectUrl: null,
+          } as any,
+          'Account created. Payment service offline.',
+          'PAYMENT_SERVICE_OFFLINE'
+        );
       }
-    });
+    }
 
-    // Build response
-    const userSignupData: UserSignupDataDto = {
-      account: {
-        uuid: accountData.uuid,
-        accountCode: accountData.accountCode,
-        type: accountData.type as any,
-      },
-      user: {
-        uuid: userData.uuid,
-        userCode: userData.userCode,
+    // ============ FREE PLAN - QUEUE BACKGROUND JOBS ============
+    
+    // Queue welcome email
+    await this.queue.addJob(
+      'email-queue',
+      'welcome-email',
+      {
+        to: signupDto.email,
         firstName: signupDto.firstName,
         lastName: signupDto.lastName,
+        accountId: accountData.accountCode,
+        plan: targetPlanSlug,
+        profileType: profileType,
+        profileData: profileDataForEmail,
+      },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      }
+    );
+
+    // Queue admin notification
+    const adminEmail = process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com';
+    await this.queue.addJob(
+      'email-queue',
+      'admin-notification',
+      {
+        to: adminEmail,
+        userEmail: signupDto.email,
+        userName: `${signupDto.firstName} ${signupDto.lastName}`,
+        accountType: 'INDIVIDUAL',
+        registrationMethod: 'EMAIL',
+        registrationDate: new Date().toISOString(),
+        plan: targetPlanSlug,
+        primaryPurpose: signupDto.primaryPurpose || 'JUST_EXPLORING',
+        profileType: profileType,
+      },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      }
+    );
+
+    // Queue analytics event
+    await this.queue.addJob(
+      'analytics-queue',
+      'user-registered',
+      {
+        userUuid: userData.uuid,
         email: signupDto.email,
-        phone: signupDto.phone || '',
-        status: userData.status,
-        roleName: userData.roleName,
+        accountId: accountData.accountCode,
+        plan: targetPlanSlug,
+        primaryPurpose: signupDto.primaryPurpose || 'JUST_EXPLORING',
+        profileType: profileType,
+        hasProfileData: !!profileType,
+        signupSource: clientInfo ? {
+          device: clientInfo.device,
+          deviceType: clientInfo.deviceType,
+          os: clientInfo.os,
+          osVersion: clientInfo.osVersion,
+          browser: clientInfo.browser,
+          browserVersion: clientInfo.browserVersion,
+          isBot: clientInfo.isBot,
+          timestamp: new Date().toISOString()
+        } : null
       },
-      profile: {
-        bio: accountData.individualProfile?.bio || null,
-        gender: accountData.individualProfile?.gender || null,
-        dateOfBirth: accountData.individualProfile?.dateOfBirth || null,
-        nationalId: accountData.individualProfile?.nationalId || null,
-        profileImage: signupDto.profileImage || null,
-      },
-      completion: accountData.completion,
-    };
+      {
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: true,
+      }
+    );
+
+    this.logger.log(`✅ Signup completed: ${signupDto.email}`);
 
     return BaseResponseDto.ok(
-      userSignupData,
+      { message: 'Signup successful' } as any,
       'Signup successful',
       'CREATED'
     );
@@ -566,19 +793,29 @@ async signup(
     const errorMessage = err instanceof Error ? err.message : 'Unexpected failure';
     this.logger.error(`[AUTH SIGNUP CRASH] ${errorMessage}`);
 
-    this.kafkaClient.emit('user.signup.error', {
-      email: signupDto.email,
-      error: errorMessage,
-      primaryPurpose: signupDto.primaryPurpose,
-      profileType: profileType,
-      clientInfo: clientInfo ? {
-        device: clientInfo.device,
-        deviceType: clientInfo.deviceType,
-        os: clientInfo.os,
-        browser: clientInfo.browser,
-      } : null,
-      timestamp: new Date().toISOString()
-    });
+    await this.queue.addJob(
+      'analytics-queue',
+      'signup-error',
+      {
+        email: signupDto.email,
+        error: errorMessage,
+        primaryPurpose: signupDto.primaryPurpose,
+        profileType: profileType,
+        clientInfo: clientInfo ? {
+          device: clientInfo.device,
+          deviceType: clientInfo.deviceType,
+          os: clientInfo.os,
+          browser: clientInfo.browser,
+        } : null,
+        timestamp: new Date().toISOString()
+      },
+      {
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: true,
+      }
+    );
 
     return BaseResponseDto.fail(
       errorMessage,
@@ -886,100 +1123,63 @@ async organisationSignup(
 }
 
   // ------------------ Unified Login ------------------
- async login(
+async login(
   loginDto: LoginRequestDto,
 ): Promise<BaseResponseDto<LoginResponseDto>> {
-  this.logger.debug(`Login Stage 1 (Password check) received for: ${loginDto.email}`);
+  this.logger.debug(`Login attempt for: ${loginDto.email}`);
 
   try {
-    // 1. Validate Credentials & Fetch Profile via gRPC
-    // validateUser handles lockout logic and password bcrypt comparison
+    // 1. Validate Credentials
     const profile = await this.validateUser(loginDto.email, loginDto.password);
 
     if (!profile) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    /* ======================================================
-       2. TRIGGER MFA CHALLENGE (Always-On Default)
-    ====================================================== */
-    const otpPayload = {
+    // 2. Trigger MFA Challenge
+    await this.requestOtp({
       email: loginDto.email,
-      purpose: '2FA', 
-    };
+      purpose: '2FA',
+    });
 
-    // Generates code, saves to DB, and emits to Notification Bus
-    await this.requestOtp(otpPayload);
+    this.logger.log(`MFA challenge sent to: ${loginDto.email}`);
 
-    this.logger.log(`[AUTH] Password verified. MFA Challenge sent to: ${loginDto.email}`);
-
-    /* ======================================================
-       3. CONSTRUCT INTERMEDIATE RESPONSE
-    ====================================================== */
-    // We return enough data for the frontend to show a personalized OTP screen
-    // but NO tokens (accessToken/refreshToken) are issued yet.
-    return {
-      success: true,
+    // 3. Return lean MFA response - only what's needed for frontend
+    return BaseResponseDto.ok(
+    { 
       message: 'MFA_REQUIRED',
-      code: '2FA_PENDING',
-      data: {
-        email: profile.user.email,
-        firstName: profile.user.firstName,
-        lastName: profile.user.lastName,
-        uuid: profile.user.uuid,
-        status: profile.user.status,
-      } as unknown as LoginResponseDto,
-      error: null,
-    } as BaseResponseDto<LoginResponseDto>;
-
+      email: profile.user.email,
+      uuid: profile.user.uuid
+    } as LoginResponseDto,
+    'MFA_REQUIRED',
+    '2FA_PENDING'
+  );
 
   } catch (err: unknown) {
-    this.logger.error(`Login Stage 1 failed for ${loginDto.email}`, err instanceof Error ? err.stack : err);
+    this.logger.error(`Login failed for ${loginDto.email}`, err instanceof Error ? err.message : err);
 
-    // 1. Handle Known Unauthorized (Lockouts, Wrong Passwords)
     if (err instanceof UnauthorizedException) {
-      const errorMessage = err.message;
-      return {
-        success: false,
-        message: errorMessage,
-        code: 'UNAUTHORIZED',
-        data: null as unknown as LoginResponseDto,
-        error: { 
-          code: 'AUTH_FAILURE', 
-          message: errorMessage,
-          details: (err as any).getResponse?.()?.message || null 
-        },
-      } as BaseResponseDto<LoginResponseDto>;
+      return BaseResponseDto.fail(
+        err.message,
+        'UNAUTHORIZED',
+        { code: 'AUTH_FAILURE', message: err.message }
+      );
     }
 
-    // 2. Handle gRPC Service Failures (Profile/RBAC)
-    if (err instanceof RpcException || (err as any).code !== undefined) {
+    if (err instanceof RpcException || (err as any)?.code !== undefined) {
       const rpcErr = (err instanceof RpcException ? err.getError() : err) as any;
-      return {
-        success: false,
-        message: 'Identity service communication failure',
-        code: 'SERVICE_UNAVAILABLE',
-        data: null as unknown as LoginResponseDto,
-        error: { 
-          code: String(rpcErr.code), 
-          message: rpcErr.message,
-          details: rpcErr.details || null
-        },
-      } as BaseResponseDto<LoginResponseDto>;
+      return BaseResponseDto.fail(
+        'Identity service communication failure',
+        'SERVICE_UNAVAILABLE',
+        { code: String(rpcErr.code), message: rpcErr.message }
+      );
     }
 
-    // 3. Fallback for Internal Errors
-    return {
-      success: false,
-      message: 'Internal server error during login stage 1',
-      code: 'INTERNAL',
-      data: null as unknown as LoginResponseDto,
-      error: { 
-        code: 'INTERNAL', 
-        message: err instanceof Error ? err.message : 'Login failed',
-        details: null
-      } ,
-    } as BaseResponseDto<LoginResponseDto>;
+    return BaseResponseDto.fail(
+      'Internal server error',
+      'INTERNAL_ERROR',
+      { code: 'INTERNAL', message: err instanceof Error ? err.message : 'Login failed' }
+    );
   }
 }
 
@@ -1368,84 +1568,92 @@ async generateDevToken(
   accountId: string
 ): Promise<BaseResponseDto<TokenPairDto>> {
   const userGrpcService = this.getProfileGrpcService();
-  const profileResponse = await firstValueFrom(
-    userGrpcService.getUserProfileByUuid({ userUuid: userUuid })
-  );   
   
-  const userData = profileResponse.data.user;
-  const accountData = profileResponse.data.account;
-  const organizationData = profileResponse.data.organization;
-  const organizationUuid = organizationData?.uuid || null;
-  const fullName = `${userData.firstName} ${userData.lastName}`.trim();
-
   try {
-    // 1. Pre-generate the Dev Token ID
+    // 1. Fetch user profile
+    const profileResponse = await firstValueFrom(
+      userGrpcService.getUserProfileByUuid({ userUuid: userUuid })
+    );
+    
+    const { user: userData, account: accountData, organization: organizationData } = profileResponse.data;
+    const organizationUuid = organizationData?.uuid || null;
+    const fullName = `${userData.firstName} ${userData.lastName}`.trim();
+
+    // 2. Generate Dev Token ID
     const devTokenId = `dev-${userUuid}-${Date.now()}`;
  
-    // 2. Prepare Payload including the tokenId
+    // 3. Prepare Payload
     const payload: JwtPayload = {
       userUuid,
       email,
       role,
       accountId,
       organizationUuid,
-      tokenId: devTokenId, // Linked to the DB entry below
+      tokenId: devTokenId,
       userName: fullName,
-      accountName: accountData.type === 'ORGANIZATION' ? profileResponse.data.organization.name : fullName,
+      accountName: accountData.type === 'ORGANIZATION' ? organizationData.name : fullName,
       accountType: accountData.type
     };
 
-    // 3. Sign Tokens
-    const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '1h' });
-    const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
+    // 4. Parallel token signing
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(payload, { expiresIn: '1h' }),
+      this.jwtService.signAsync(payload, { expiresIn: '7d' }),
+    ]);
 
-    // 4. Cleanup old Dev sessions to keep DB clean
-    await this.prisma.session.deleteMany({
-      where: {
-        userUuid: userUuid,
-        device: 'Postman-Dev', 
-      },
-    });
+    // 5. Hash refresh token
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
 
-    // 5. Create the fresh session in DB
-    await this.prisma.session.create({
-      data: {
-        userUuid,
-        tokenId: devTokenId, // MUST match payload.tokenId
-        hashedToken: await bcrypt.hash(refreshToken, 10),
-        device: 'Postman-Dev',
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        revoked: false,
-        lastActiveAt: new Date(),
-      },
-    });
+    // 6. Batch database operations
+    await this.prisma.$transaction([
+      this.prisma.session.deleteMany({
+        where: {
+          userUuid,
+          device: 'Postman-Dev',
+        },
+      }),
+      this.prisma.session.create({
+        data: {
+          userUuid,
+          tokenId: devTokenId,
+          hashedToken: hashedRefreshToken,
+          device: 'Postman-Dev',
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          revoked: false,
+          lastActiveAt: new Date(),
+        },
+      }),
+    ]);
 
-    return {
-      success: true,
-      message: 'Dev tokens generated successfully',
-      code: 'OK',
-      data: { accessToken, refreshToken }, // Ensuring it wraps in 'data' for BaseResponseDto consistency
-    } as BaseResponseDto<TokenPairDto>;
+    this.logger.log(`🔑 Dev token generated for ${email}`);
+
+    return BaseResponseDto.ok(
+      { accessToken, refreshToken },
+      'Dev tokens generated successfully',
+      'OK'
+    );
 
   } catch (err: unknown) {
-    const unknownErr = err as Error;
-    this.logger.error(`Dev Token Error: ${unknownErr.message}`);
-    return BaseResponseDto.fail(unknownErr?.message || 'Dev token generation failed', 'INTERNAL');
+    const errorMessage = err instanceof Error ? err.message : 'Dev token generation failed';
+    this.logger.error(`Dev Token Error: ${errorMessage}`);
+    return BaseResponseDto.fail(errorMessage, 'INTERNAL_ERROR');
   }
 }
 
-/** ------------------ Request OTP ------------------ */
+// apps/auth-service/src/auth.service.ts (find your requestOtp method)
+
 async requestOtp(data: RequestOtpDto & { purpose: string }): Promise<BaseResponseDto<null>> {
-  const { email, purpose } = data;
+  const { email, purpose } = data; 
+  const startTime = Date.now();
 
   try {
-    // 1. Check if user already exists
+    // 1. Check user existence
     const existingUser = await this.prisma.credential.findUnique({
       where: { email },
-      select: { id: true }, 
+      select: { id: true },
     });
 
-    // 2. Business Logic based on Purpose
+    // 2. Business Logic
     switch (purpose) {
       case 'SIGNUP':
       case 'ORGANIZATION_SIGNUP':
@@ -1457,7 +1665,6 @@ async requestOtp(data: RequestOtpDto & { purpose: string }): Promise<BaseRespons
 
       case 'PASSWORD_RESET':
         if (!existingUser) {
-          // Masking response to prevent account enumeration
           this.logger.log(`[OTP] Password reset requested for non-existent: ${email}`);
           return BaseResponseDto.ok(null, 'If an account exists, a code has been sent.');
         }
@@ -1482,76 +1689,92 @@ async requestOtp(data: RequestOtpDto & { purpose: string }): Promise<BaseRespons
         break;
 
       default:
-        this.logger.error(`[OTP] Unsupported purpose received: ${purpose}`);
+        this.logger.error(`[OTP] Unsupported purpose: ${purpose}`);
         return BaseResponseDto.fail('Invalid request purpose.', 'BAD_REQUEST');
     }
 
-    // 3. RATE LIMITING: Allow 3 attempts per 10 minutes (more reasonable than 1 minute)
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    // 3. Rate limiting with Redis
+    const rateLimitResult = await this.queue.checkRateLimit(
+      email, `otp_${purpose}`, 3, 600
+    );
     
-    const otpCount = await this.prisma.otp.count({
-      where: { 
-        email, 
-        purpose,
-        createdAt: { gte: tenMinutesAgo } 
-      },
-    });
-
-    // Increased to 3 attempts per 10 minutes for better UX
-    if (otpCount >= 3) {
-      this.logger.warn(`[OTP] Rate limited: ${email} reached 3 attempts in 10 minutes.`);
+    if (!rateLimitResult.allowed) {
+      const minutesLeft = Math.ceil(rateLimitResult.resetInSeconds / 60);
       return BaseResponseDto.fail(
-        'Too many verification attempts. Please try again in 10 minutes.',
+        `Too many attempts. Try again in ${minutesLeft} minutes.`,
         'TOO_MANY_REQUESTS'
       );
     }
     
-    // 4. Generate 6-digit code
+    // 4. Generate OTP
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const EXPIRES_IN_MINUTES = 10;
-    
-    // 5. Create UTC timestamp for expiration
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + EXPIRES_IN_MINUTES * 60000);
+    const expiresAt = new Date(now.getTime() + 10 * 60000);
 
-    // 6. CRITICAL FIX: Delete ALL existing OTPs for this email/purpose
-    // This ensures only ONE valid OTP exists at a time with predictable expiration
-    await this.prisma.otp.deleteMany({ 
-      where: { 
-        email, 
-        purpose,
-      } 
-    });
-
-    // 7. Create the new OTP
-    await this.prisma.otp.create({
-      data: {
+    // 5. UPSERT - Single database operation (requires unique constraint on email + purpose)
+    await this.prisma.otp.upsert({
+      where: {
+        email_purpose: { email, purpose }  // Uses the unique constraint
+      },
+      update: {
+        code: otpCode,
+        expiresAt: expiresAt,
+        createdAt: now,  // Update timestamp on resend
+      },
+      create: {
         email,
         code: otpCode,
         purpose,
         expiresAt,
-        createdAt: now, // Explicitly set for clarity
+        createdAt: now,
       },
     });
 
-    // 8. Emit Event to Notification Service
-    this.logger.log(`[RMQ Outbound] Emitting otp.requested for ${email} (${purpose})`);
+    // 6. Log request (fire and forget)
+    this.prisma.otpRequestLog.create({
+      data: { email, purpose, createdAt: now },
+    }).catch(err => this.logger.debug(`Log failed: ${err.message}`));
 
-    const otpPayload: SendOtpEventDto = {
-      email,
-      code: otpCode,
-      purpose,
-    };
-    this.notificationBus.emit('otp.requested', otpPayload);
+    // 7. Queue email (fire and forget)
+    await this.queue.addJob(
+      'email-queue',
+      'send-otp',
+      {
+        to: email,
+        code: otpCode,
+        purpose: purpose,
+        // Remove firstName - not available in OTP request
+      },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      }
+    );
+
+    // 8. Clean up old logs (fire and forget)
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    this.prisma.otpRequestLog.deleteMany({
+      where: {
+        email,
+        purpose,
+        createdAt: { lt: tenMinutesAgo }
+      },
+    }).catch(err => this.logger.debug(`Cleanup failed: ${err.message}`));
+
+    const totalTime = Date.now() - startTime;
+    this.logger.log(`[OTP] Code sent to ${email} for ${purpose} in ${totalTime}ms`);
 
     return BaseResponseDto.ok(null, 'Verification code sent to your email');
 
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    this.logger.error(`Failed to generate OTP for ${email}`, message);
+    this.logger.error(`Failed to generate OTP for ${email}: ${message}`);
     return BaseResponseDto.fail('An error occurred while processing your request', 'INTERNAL_ERROR');
   }
 }
+
 
 
 
@@ -1614,28 +1837,10 @@ async verifyMfaLogin(
   verifyDto: VerifyOtpDto,
   clientInfo?: AuthClientInfoDto
 ): Promise<BaseResponseDto<LoginResponseDto>> {
-  this.logger.debug(`Login Stage 2 (MFA) received for: ${verifyDto.email}`);
-
-  // ==================== DEBUG: Log received clientInfo ====================
-  this.logger.log('🔍 VERIFY-MFA - AUTH SERVICE - CLIENT INFO RECEIVED');
-  this.logger.debug(`Email: ${verifyDto.email}`);
-  this.logger.debug(`Code: ${verifyDto.code}`);
-  this.logger.debug(`Raw clientInfo parameter: ${JSON.stringify(clientInfo)}`);
-  this.logger.debug(`ClientInfo details:
-    device: ${clientInfo?.device}
-    deviceType: ${clientInfo?.deviceType}
-    ipAddress: ${clientInfo?.ipAddress}
-    userAgent: ${clientInfo?.userAgent}
-    os: ${clientInfo?.os}
-    osVersion: ${clientInfo?.osVersion}
-    browser: ${clientInfo?.browser}
-    browserVersion: ${clientInfo?.browserVersion}
-    isBot: ${clientInfo?.isBot}
-  `);
-  this.logger.log('========================================================');
+  this.logger.debug(`MFA verification for: ${verifyDto.email}`);
 
   try {
-    // 1. Verify OTP in Database
+    // 1. OPTIMIZED: Verify OTP - select only what we need
     const validOtp = await this.prisma.otp.findFirst({
       where: {
         email: verifyDto.email,
@@ -1643,49 +1848,40 @@ async verifyMfaLogin(
         purpose: '2FA',
         expiresAt: { gt: new Date() },
       },
+      select: { id: true },
     });
 
     if (!validOtp) {
       return BaseResponseDto.fail(
-        'Invalid or expired 2FA code',
-        'INVALID_OTP',
-        { email: verifyDto.email }
+        'Invalid or expired verification code',
+        'UNAUTHORIZED',
+        { code: 'INVALID_OTP' }
       );
     }
 
-    // 2. Fetch User Profile to generate tokens
+    // 2. Get user credential
     const credential = await this.prisma.credential.findUnique({
       where: { email: verifyDto.email },
+      select: { userUuid: true },
     });
 
     if (!credential) {
-      return BaseResponseDto.fail(
-        'User account not found',
-        'USER_NOT_FOUND',
-        { email: verifyDto.email }
-      );
+      return BaseResponseDto.fail('User not found', 'NOT_FOUND');
     }
 
+    // 3. Fetch user profile
     let profileResponse;
     try {
       profileResponse = await firstValueFrom(
         this.getProfileGrpcService().getUserProfileByUuid({ userUuid: credential.userUuid })
       );
     } catch (grpcError) {
-      this.logger.error(`gRPC error fetching profile: ${grpcError.message}`);
-      return BaseResponseDto.fail(
-        'Profile service unavailable',
-        'SERVICE_UNAVAILABLE',
-        { userUuid: credential.userUuid }
-      );
+      this.logger.error(`gRPC error: ${grpcError.message}`);
+      return BaseResponseDto.fail('Profile service unavailable', 'SERVICE_UNAVAILABLE');
     }
 
     if (!profileResponse?.success || !profileResponse.data) {
-      return BaseResponseDto.fail(
-        'User profile not found',
-        'USER_NOT_FOUND',
-        { userUuid: credential.userUuid }
-      );
+      return BaseResponseDto.fail('User profile not found', 'NOT_FOUND');
     }
 
     const profile = profileResponse.data;
@@ -1694,98 +1890,62 @@ async verifyMfaLogin(
     // Check user status
     if (userData.status !== 'ACTIVE') {
       return BaseResponseDto.fail(
-        `Your account is ${userData.status.toLowerCase()}`,
-        'ACCOUNT_INACTIVE',
-        { status: userData.status }
+        `Account is ${userData.status.toLowerCase()}`,
+        'ACCOUNT_INACTIVE'
       );
     }
 
-    // 3. Generate JWT Tokens & Create Session
+    // 4. Generate tokens
     const { accessToken, refreshToken } = await this.generateTokens(profile, clientInfo);
 
-    /* ======================================================
-       4. NOTIFICATION LOGIC
-    ====================================================== */
-    const adminRoles = ['Business System Admin'];
-    const isOrgAccount = profile.account.type === 'ORGANIZATION';
-    const isUserAdmin = isOrgAccount && adminRoles.includes(userData.roleName);
+    // 5. Fire-and-forget notifications (don't await)
+    this.sendLoginNotification(userData, profile, clientInfo);
 
-    // ==================== DEBUG: Log email payload before sending ====================
-    this.logger.log('📧 PREPARING LOGIN EMAIL PAYLOAD');
-    this.logger.debug(`Email to: ${userData.email}`);
-    this.logger.debug(`Device info for email:
-      device: ${clientInfo?.device}
-      deviceType: ${clientInfo?.deviceType}
-      os: ${clientInfo?.os}
-      osVersion: ${clientInfo?.osVersion}
-      browser: ${clientInfo?.browser}
-      browserVersion: ${clientInfo?.browserVersion}
-      isBot: ${clientInfo?.isBot}
-    `);
-    this.logger.log('========================================================');
-
-    const loginEmailPayload = {
-      to: userData.email,
-      firstName: userData.firstName,
-      lastName: userData.lastName,
-      organizationName: isOrgAccount ? profile.organization?.name : undefined,
-      orgEmail: isUserAdmin ? profile.organization?.officialEmail : undefined,
-      subject: isUserAdmin ? `SECURITY: Admin Login` : 'New Login detected',
-      device: clientInfo?.device || 'Unknown',
-      deviceType: clientInfo?.deviceType,
-      os: clientInfo?.os || 'Unknown',
-      osVersion: clientInfo?.osVersion,
-      browser: clientInfo?.browser,
-      browserVersion: clientInfo?.browserVersion,
-      userAgent: clientInfo?.userAgent || 'Unknown',
-      ipAddress: clientInfo?.ipAddress || '0.0.0.0',
-      timestamp: new Date().toISOString(),
-      isBot: clientInfo?.isBot,
-    };
-
-    this.notificationBus.emit('user.login.email', loginEmailPayload);
-
-    // 5. Cleanup: Burn the OTP
+    // 6. Clean up OTP
     await this.prisma.otp.delete({ where: { id: validOtp.id } });
 
-    // 6. Final Login Response
+    // 7. Return lean response with only tokens
     return BaseResponseDto.ok(
-      {
-        id: userData.uuid,
-        uuid: userData.uuid,
-        userCode: userData.userCode,
-        accountId: profile.account.uuid,
-        email: userData.email,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        phone: userData.phone,
-        status: userData.status,
-        role: userData.roleName,
-        createdAt: profile.createdAt,
-        updatedAt: profile.updatedAt,
-        accessToken,
-        refreshToken,
-        organization: profile.organization ? {
-          uuid: profile.organization.uuid,
-          name: profile.organization.name,
-          orgCode: profile.organization.orgCode,
-          verificationStatus: profile.organization.verificationStatus,
-        } : undefined,
-      } as unknown as LoginResponseDto,
+      { accessToken, refreshToken } as LoginResponseDto,
       'Login successful',
       'OK'
     );
 
   } catch (err: unknown) {
-    this.logger.error(`MFA Verification failed for ${verifyDto.email}:`, err);
-    
-    // Fallback error for unexpected errors
+    this.logger.error(`MFA verification failed for ${verifyDto.email}:`, err);
     return BaseResponseDto.fail(
-      'An unexpected error occurred during login',
-      'INTERNAL_ERROR',
-      { error: err instanceof Error ? err.message : 'Unknown error' }
+      'An unexpected error occurred',
+      'INTERNAL_ERROR'
     );
   }
+}
+
+// Helper method for fire-and-forget notifications
+private sendLoginNotification(userData: any, profile: any, clientInfo?: AuthClientInfoDto): void {
+  const adminRoles = ['Business System Admin'];
+  const isOrgAccount = profile.account.type === 'ORGANIZATION';
+  const isUserAdmin = isOrgAccount && adminRoles.includes(userData.roleName);
+
+  const loginEmailPayload = {
+    to: userData.email,
+    firstName: userData.firstName,
+    lastName: userData.lastName,
+    organizationName: isOrgAccount ? profile.organization?.name : undefined,
+    orgEmail: isUserAdmin ? profile.organization?.officialEmail : undefined,
+    subject: isUserAdmin ? `SECURITY: Admin Login` : 'New Login detected',
+    device: clientInfo?.device || 'Unknown',
+    deviceType: clientInfo?.deviceType,
+    os: clientInfo?.os || 'Unknown',
+    osVersion: clientInfo?.osVersion,
+    browser: clientInfo?.browser,
+    browserVersion: clientInfo?.browserVersion,
+    userAgent: clientInfo?.userAgent || 'Unknown',
+    ipAddress: clientInfo?.ipAddress || '0.0.0.0',
+    timestamp: new Date().toISOString(),
+    isBot: clientInfo?.isBot,
+  };
+
+  this.notificationBus.emit('user.login.email', loginEmailPayload);
 }
 
 /** ------------------ Forgot Password: Step 1 (Request) ------------------ */

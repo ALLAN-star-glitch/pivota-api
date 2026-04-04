@@ -226,79 +226,121 @@ async getRoleForUser(
 
 
 // ------------------ Assign role to a user ------------------
+// apps/admin-service/src/modules/rbac/rbac.service.ts
+
 async assignRoleToUser(
   dto: AssignRoleToUserRequestDto,
 ): Promise<BaseGetUserRoleReponseGrpc<RoleResponseDto>> {
+  this.logger.log(`[AssignRoleToUser] User: ${dto.userUuid}, Role: ${dto.roleId}`);
 
-  this.logger.log(`[AssignRoleToUser] Request received: ${JSON.stringify(dto)}`);
+  try {
+    // 1. Get role entity with only needed fields
+    const roleEntity = await this.prisma.role.findUnique({
+      where: { id: dto.roleId },
+      select: {
+        id: true,
+        name: true,
+        scope: true,
+        roleType: true,
+        description: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
-  //  Validate role exists
-  const roleEntity = await this.prisma.role.findUnique({
-    where: { id: dto.roleId },
-  });
+    if (!roleEntity) {
+      return {
+        success: false,
+        message: 'Role not found',
+        code: 'NotFound',
+        role: null,
+      };
+    }
 
-  this.logger.debug(`Role Entity: ${JSON.stringify(roleEntity, null, 2)}  `);
+    // 2. Upsert user role (clean Prisma syntax)
+    await this.prisma.userRole.upsert({
+      where: { userUuid: dto.userUuid },
+      update: { roleId: dto.roleId },
+      create: { userUuid: dto.userUuid, roleId: dto.roleId },
+    });
 
-  if (!roleEntity) {
-    this.logger.error(`Role with ID ${dto.roleId} not found`);
+    // 3. Build response
+    const role = {
+      id: roleEntity.id,
+      userUuid: dto.userUuid,
+      roleId: dto.roleId,
+      name: roleEntity.name,
+      scope: roleEntity.scope,
+      roleType: roleEntity.roleType,
+      description: roleEntity.description,
+      status: roleEntity.status,
+      createdAt: roleEntity.createdAt.toISOString(),
+      updatedAt: roleEntity.updatedAt.toISOString(),
+    };
+
+    this.logger.log(`✅ Role ${roleEntity.name} assigned to user ${dto.userUuid}`);
+
+    return {
+      success: true,
+      message: 'Role assigned successfully',
+      code: 'Ok',
+      role,
+    };
+
+  } catch (error) {
+    this.logger.error(`Failed to assign role to user ${dto.userUuid}: ${error.message}`);
     return {
       success: false,
-      message: 'Role not found',
-      code: 'NotFound',
+      message: 'Failed to assign role',
+      code: 'InternalError',
       role: null,
     };
   }
-
-  // 3. Upsert user role (create if doesn't exist, update if exists)
-  await this.prisma.userRole.upsert({
-    where: { userUuid: dto.userUuid },
-    update: { roleId: dto.roleId },
-    create: { userUuid: dto.userUuid, roleId: dto.roleId },
-  });
-  
-
-  // 4. Map role to response
-  const role = {
-    id: roleEntity.id.toString(),
-    userUuid: dto.userUuid,
-    roleId: dto.roleId,
-    name: roleEntity.name,
-    scope: roleEntity.scope,
-    roleType: roleEntity.roleType,
-    description: roleEntity.description,
-    status: roleEntity.status,
-    createdAt: roleEntity.createdAt.toISOString(),
-    updatedAt: roleEntity.updatedAt.toISOString(),
-  };
-
-  this.logger.log(`[AssignRoleToUser] Upserted userRole: ${JSON.stringify(role)}`);
-
-  return {
-    success: true,
-    message: 'Role assigned/updated successfully',
-    code: 'Ok',
-    role,
-  };
 }
 
 
 
- async getRoleIdByType(
+async getRoleIdByType(
   roleIdRequestDto: RoleIdRequestDto,
 ): Promise<BaseResponseDto<RoleIdResponse>> {
-  const role = await this.prisma.role.findFirst({
-    where: { roleType: roleIdRequestDto.roleType },
-  });
-  if (!role) throw new Error(`Role '${roleIdRequestDto.roleType}' not found`);
+  this.logger.debug(`GetRoleIdByType called with type: ${roleIdRequestDto.roleType}`);
 
-  const response: BaseResponseDto<RoleIdResponse> = {
-    success: true,
-    message: 'Role ID fetched successfully',
-    code: 'Ok',
-    data: { roleId: role.id }, 
-  };
+  try {
+    // OPTIMIZED: Select only needed fields
+    const role = await this.prisma.role.findFirst({
+      where: { roleType: roleIdRequestDto.roleType },
+      select: { id: true }, // Only select the id field
+    });
 
-  return response;
+    if (!role) {
+      this.logger.error(`Role '${roleIdRequestDto.roleType}' not found`);
+      return {
+        success: false,
+        message: `Role '${roleIdRequestDto.roleType}' not found`,
+        code: 'NOT_FOUND',
+        data: null,
+      };
+    }
+
+    this.logger.debug(`Role ID fetched: ${role.id}`);
+
+    return {
+      success: true,
+      message: 'Role ID fetched successfully',
+      code: 'OK',
+      data: { roleId: role.id },
+    };
+
+  } catch (error) {
+    this.logger.error(`Failed to fetch role ID: ${error.message}`);
+    return {
+      success: false,
+      message: 'Failed to fetch role ID',
+      code: 'INTERNAL_ERROR',
+      data: null,
+    };
+  }
 }
 
  

@@ -551,7 +551,6 @@ export class IntermediaryAgentProfileResponseDto {
 
 /* ======================================================
    14. USER SIGNUP DATA DTO / TRIO
-   - Matches UserProfileTrio in .proto
 ====================================================== */
 export class UserSignupDataDto {
   @ApiProperty({ type: AccountBaseDto })

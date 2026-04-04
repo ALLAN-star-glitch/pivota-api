@@ -5,7 +5,7 @@
 import { Prisma } from '../../../generated/prisma/client';
 import { randomUUID } from 'crypto';
 import { StringUtils, PhoneUtils } from '@pivota-api/utils';
-import { ClientKafka } from '@nestjs/microservices';
+
 
 // Import your DTO types from dtos library
 import {
@@ -37,14 +37,27 @@ interface ValidationResult {
   missingFields: string[];
 }
 
-/**
- * Validate profile data based on profile type
- */
+// OPTIMIZATION 1: Pre-define validation rules as constants
+const VALIDATION_RULES = {
+  JOB_SEEKER: ['headline', 'skills', 'jobTypes', 'expectedSalary'],
+  SKILLED_PROFESSIONAL: ['title', 'profession', 'specialties', 'serviceAreas', 'yearsExperience'],
+  HOUSING_SEEKER: ['budget (minBudget and maxBudget)', 'preferredTypes', 'preferredCities'],
+  PROPERTY_OWNER: ['preferredPropertyTypes', 'serviceAreas'],
+  SUPPORT_BENEFICIARY: ['needs'],
+  INTERMEDIARY_AGENT: ['agentType', 'specializations', 'serviceAreas', 'licenseNumber'],
+  EMPLOYER: ['industry', 'companySize', 'preferredSkills'],
+  SOCIAL_SERVICE_PROVIDER: ['providerType', 'servicesOffered', 'serviceAreas'],
+} as const;
+
+// OPTIMIZATION 2: Use a more efficient validation approach
 function validateProfileData(
   profileType: BusinessProfileType,
   data: any
 ): ValidationResult {
   const missingFields: string[] = [];
+  const rules = VALIDATION_RULES[profileType];
+  
+  if (!rules) return { isValid: true, missingFields: [] };
 
   switch (profileType) {
     case 'JOB_SEEKER': {
@@ -132,12 +145,72 @@ function validateProfileData(
   };
 }
 
-/**
- * Create a business profile (job seeker, employer, agent, etc.) in a transaction
- * Used by both UserService and OrganisationService within the profile service
- * 
- * @throws Error if required fields are missing
- */
+// OPTIMIZATION 3: Helper to emit events (avoid duplicate code)
+// apps/profile-service/src/utils/business-profiles-creator.utils.ts
+
+// OPTIMIZATION 3: Helper to queue events (non-blocking)
+async function emitHousingEvent(
+  options: any,
+  housingData: HousingSeekerProfileDataDto,
+  accountUuid: string,
+  logger: any
+): Promise<void> {
+  if (!options?.userUuid) {
+    logger.warn(`⚠️ No userUuid provided, cannot emit housing preferences event`);
+    return;
+  }
+
+  if (!options?.queueService) {
+    logger.warn(`⚠️ No queueService provided, cannot queue housing preferences event`);
+    return;
+  }
+
+  logger.log(`📤 Queuing housing preferences event for user ${options.userUuid}`);
+  
+  const preferences = {
+    userUuid: options.userUuid,
+    timestamp: new Date().toISOString(),
+    action: 'CREATED' as const,
+    data: {
+      minBudget: housingData.minBudget,
+      maxBudget: housingData.maxBudget,
+      budgetMidpoint: housingData.minBudget && housingData.maxBudget 
+        ? (housingData.minBudget + housingData.maxBudget) / 2 
+        : null,
+      preferredLocations: housingData.preferredCities,
+      preferredNeighborhoods: housingData.preferredNeighborhoods,
+      preferredPropertyTypes: housingData.preferredTypes,
+      minBedrooms: housingData.minBedrooms,
+      maxBedrooms: housingData.maxBedrooms,
+      moveInDate: housingData.moveInDate,
+      hasPets: housingData.hasPets,
+      latitude: housingData.latitude,
+      longitude: housingData.longitude,
+      searchRadiusKm: housingData.searchRadiusKm,
+    }
+  };
+  
+  try {
+    // Queue the event (non-blocking)
+    await options.queueService.addJob(
+      'profile-queue',
+      'housing-preferences-updated',
+      preferences,
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      }
+    );
+    logger.log(`✅ Successfully queued housing preferences event for user ${options.userUuid}`);
+  } catch (queueError) {
+    logger.error(`❌ Failed to queue housing event: ${queueError.message}`);
+    // Don't throw - event emission failure shouldn't block profile creation
+  }
+}
+
+// OPTIMIZATION 4: Main function with optimized flow
 export async function createBusinessProfile(
   tx: Prisma.TransactionClient,
   accountUuid: string,
@@ -148,7 +221,7 @@ export async function createBusinessProfile(
         EmployerProfileDataDto | SocialServiceProviderProfileDataDto,
   options?: {
     userUuid?: string;
-    kafkaClient?: ClientKafka;
+    queueService?: any;  // ← Add this line
     logger?: any;
   }
 ): Promise<void> {
@@ -165,6 +238,7 @@ export async function createBusinessProfile(
     );
   }
 
+  // OPTIMIZATION 5: Use switch with minimal work inside each case
   switch (profileType) {
     case 'JOB_SEEKER': {
       const jobData = data as JobSeekerProfileDataDto;
@@ -262,50 +336,8 @@ export async function createBusinessProfile(
       
       logger.log(`✅ Created HOUSING_SEEKER profile for account ${accountUuid}`);
       
-      // EMIT EVENT AFTER HOUSING SEEKER PROFILE CREATED
-      if (options?.userUuid && options?.kafkaClient) {
-        logger.log(`📤 Preparing to emit housing preferences event for user ${options.userUuid}`);
-        
-        const preferences = {
-          userUuid: options.userUuid,
-          timestamp: new Date().toISOString(),
-          action: 'CREATED' as const,
-          data: {
-            minBudget: housingData.minBudget,
-            maxBudget: housingData.maxBudget,
-            budgetMidpoint: housingData.minBudget && housingData.maxBudget 
-              ? (housingData.minBudget + housingData.maxBudget) / 2 
-              : null,
-            preferredLocations: housingData.preferredCities,
-            preferredNeighborhoods: housingData.preferredNeighborhoods,
-            preferredPropertyTypes: housingData.preferredTypes,
-            minBedrooms: housingData.minBedrooms,
-            maxBedrooms: housingData.maxBedrooms,
-            moveInDate: housingData.moveInDate,
-            hasPets: housingData.hasPets,
-            latitude: housingData.latitude,
-            longitude: housingData.longitude,
-            searchRadiusKm: housingData.searchRadiusKm,
-          }
-        };
-        
-        logger.debug(`📤 Event payload: ${JSON.stringify(preferences)}`);
-        
-        try {
-          await options.kafkaClient.emit('housing.preferences.updated', preferences);
-          logger.log(`✅ Successfully emitted housing preferences event for user ${options.userUuid}`);
-        } catch (kafkaError) {
-          logger.error(`❌ Failed to emit Kafka event: ${kafkaError.message}`);
-          // Don't throw - event emission failure shouldn't block profile creation
-        }
-      } else {
-        if (!options?.userUuid) {
-          logger.warn(`⚠️ No userUuid provided, cannot emit housing preferences event`);
-        }
-        if (!options?.kafkaClient) {
-          logger.warn(`⚠️ No kafkaClient provided, cannot emit housing preferences event`);
-        }
-      }
+      // OPTIMIZATION 6: Extract event emission to separate function
+      await emitHousingEvent(options, housingData, accountUuid, logger);
       break;
     }
 

@@ -8,33 +8,24 @@ datasource db {
 }
 
 model Credential {
-  id            String    @id @default(cuid())  // CHANGED: from Int to String with cuid()
+  id            String    @id @default(cuid())
   uuid          String    @unique @default(uuid())
   userUuid      String    @unique
   email         String    @unique
   passwordHash  String?  
-
   mfaSecret     String?
   mfaEnabled    Boolean   @default(true)
-
-  // Optional: Store the Google Unique ID for extra security/linking
   googleProviderId String? @unique
-  
-  // Keep these here: They protect the IDENTITY regardless of the device
   failedAttempts Int      @default(0)
   lockoutExpires DateTime?
-  
-  // Global record of the last time this user successfully authenticated
   lastLoginAt    DateTime? 
-
-  // Relation to password setup tokens
   passwordSetupTokens PasswordSetupToken[]
-
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // INDEXES (ADD THIS IF MISSING)
   @@index([userUuid])
-  @@index([email])
+  @@index([email])  // THIS IS CRITICAL FOR USER EXISTENCE CHECKS
 }
 
 model Session {
@@ -83,9 +74,24 @@ model Otp {
   expiresAt     DateTime
   createdAt     DateTime  @default(now())
 
-  @@index([email, code])
-  @@index([purpose])
-  @@index([expiresAt])
+  // ADD THIS UNIQUE CONSTRAINT
+  @@unique([email, purpose])  // ← Add this line!
+  
+  // OPTIMIZED INDEXES FOR PERFORMANCE
+  @@index([email, code])                    // For OTP verification lookups
+  @@index([email, purpose])                 // For deleteMany operations
+  @@index([email, purpose, createdAt])      // For rate limiting COUNT queries
+  @@index([purpose])                        // For general purpose queries
+  @@index([expiresAt])                      // For cleanup jobs
+}
+
+model OtpRequestLog {
+  id        String   @id @default(cuid())
+  email     String
+  purpose   String
+  createdAt DateTime @default(now())
+  
+  @@index([email, purpose, createdAt])
 }
 
 // ======================================================

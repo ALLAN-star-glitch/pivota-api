@@ -35,6 +35,7 @@ import {
   RevokeSessionDto,
   OtpPurposeQueryDto,
   AuthClientInfoDto,
+  SignupResponseDto,
 } from '@pivota-api/dtos';
 import { ClientInfo } from '../../decorators/client-info.decorator';
 import {
@@ -43,7 +44,6 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiBody,
-  getSchemaPath,
   ApiExtraModels,
   ApiQuery,
   ApiHeader,
@@ -370,11 +370,11 @@ export class AuthController {
   async signup(
     @Body() signupDto: UserSignupRequestDto,
     @ClientInfo() clientInfo: AuthClientInfoDto,
-    @Headers('referer') referer?: string,
-  ): Promise<BaseResponseDto<UserSignupDataDto>> {
+    @Headers('referer') referer?: string,  
+  ): Promise<BaseResponseDto<SignupResponseDto>> {
     // ... existing implementation remains exactly the same
     this.logger.log(`📩 Signup request: ${signupDto.email}`);
-    
+     
     this.logger.debug(`[GATEWAY] Client info received for signup:`);
     this.logger.debug(`📱 Device: ${clientInfo.device} (${clientInfo.deviceType})`);
     this.logger.debug(`💻 OS: ${clientInfo.os} ${clientInfo.osVersion || ''}`);
@@ -409,18 +409,7 @@ export class AuthController {
       throw response;
     } else { 
       this.logger.log(`✅ Signup successful for: ${signupDto.email}`);
-      this.logger.debug(`[ANALYTICS] User registered event will include device info and purpose:`, {
-        userUuid: response.data?.user?.uuid,
-        email: signupDto.email,
-        primaryPurpose: signupDto.primaryPurpose || 'NOT_SPECIFIED',
-        hasProfileData: !!(signupDto.jobSeekerData || signupDto.skilledProfessionalData || 
-                           signupDto.intermediaryAgentData || signupDto.housingSeekerData || 
-                           signupDto.supportBeneficiaryData || signupDto.employerData || 
-                           signupDto.propertyOwnerData),
-        deviceType: clientInfo.deviceType,
-        os: clientInfo.os,
-        browser: clientInfo.browser
-      });
+      
     }
     
     return response;
@@ -702,8 +691,8 @@ export class AuthController {
 
   @Post('otp/request')
   @Public()
-  @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 3, ttl: 600000 } })
+  @UseGuards(ThrottlerGuard)  // KEEP THIS
+  @Throttle({ default: { limit: 10, ttl: 60000 } })  // 10 requests per IP/minute
   @Version('1')
   @ApiTags('Auth - OTP')
   @ApiOperation({ 
