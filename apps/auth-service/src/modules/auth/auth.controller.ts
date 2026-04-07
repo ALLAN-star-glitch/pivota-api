@@ -17,6 +17,7 @@ import {
   AuthClientInfoDto,
   SignupResponseDto, // Keep this import
 } from '@pivota-api/dtos';
+import { OtpPurpose } from '@pivota-api/shared-redis';
 
 
 @Controller()
@@ -129,15 +130,15 @@ export class AuthController {
 
   @GrpcMethod('AuthService', 'RequestOtp')
   async handleRequestOtpGrpc(
-    data: RequestOtpDto & { purpose: string } 
+    data: RequestOtpDto & { purpose: OtpPurpose } 
   ): Promise<BaseResponseDto<null>> {
     this.logger.log(`gRPC: Request OTP for ${data.email} (${data.purpose})`);
     return await this.authService.requestOtp(data);
   }
-
+ 
   @GrpcMethod('AuthService', 'VerifyOtp')
   async handleVerifyOtpGrpc(
-    data: VerifyOtpDto & { purpose: string }
+    data: VerifyOtpDto & { purpose: OtpPurpose }
   ): Promise<BaseResponseDto<VerifyOtpResponseDataDto>> {
     this.logger.log(`gRPC: Verify OTP for ${data.email} (${data.purpose})`);
     return await this.authService.verifyOtp(data);

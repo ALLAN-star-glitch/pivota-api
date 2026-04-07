@@ -28,9 +28,8 @@
  */
 
 import { Controller, Logger } from '@nestjs/common';
-import { EventPattern, Payload, Ctx, RmqContext } from '@nestjs/microservices';
+import { EventPattern, Payload, Ctx, RmqContext, Transport } from '@nestjs/microservices';
 import { PaymentEmailService } from '../services/handlers/payment-email.service';
-
 
 // Payment Required DTO
 interface PaymentRequiredDto {
@@ -57,7 +56,7 @@ export class PaymentEmailController {
   /**
    * Handle payment required event - Send payment reminder email
    */
-  @EventPattern('payment.required')
+  @EventPattern('payment.required', Transport.RMQ)
   async handlePaymentRequired(
     @Payload() data: PaymentRequiredDto,
     @Ctx() context: RmqContext
@@ -82,7 +81,7 @@ export class PaymentEmailController {
   /**
    * Handle payment confirmed event - Send payment confirmation email
    */
-  @EventPattern('payment.confirmed')
+  @EventPattern('payment.confirmed', Transport.RMQ)
   async handlePaymentConfirmed(
     @Payload() data: PaymentConfirmedDto,
     @Ctx() context: RmqContext
@@ -127,7 +126,8 @@ export class PaymentEmailController {
     } catch (error) {
       const duration = Date.now() - startTime;
       this.logger.error(`[RMQ] Failed ${pattern} for ${identifier} after ${duration}ms: ${error.message}`);
-      channel.nack(originalMsg, false, true);
+      // ✅ Don't requeue - just reject to prevent infinite retry loop
+      channel.nack(originalMsg, false, false);
     }
   }
 }

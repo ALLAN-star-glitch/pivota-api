@@ -63,7 +63,7 @@
  */
 
 import { Controller, Logger } from '@nestjs/common';
-import { EventPattern, Payload, Ctx, RmqContext } from '@nestjs/microservices';
+import { EventPattern, Payload, Ctx, RmqContext, Transport } from '@nestjs/microservices';
 import { SecurityEmailService } from '../services/handlers/security-email.service';
 
 // Password Setup Required DTO
@@ -143,7 +143,7 @@ export class SecurityEmailController {
   /**
    * Handle password setup required event - Send password setup email
    */
-  @EventPattern('user.password.setup.required')
+  @EventPattern('user.password.setup.required', Transport.RMQ)
   async handlePasswordSetupRequired(
     @Payload() data: PasswordSetupRequiredDto,
     @Ctx() context: RmqContext
@@ -168,7 +168,7 @@ export class SecurityEmailController {
   /**
    * Handle password setup completed event - Send confirmation email
    */
-  @EventPattern('user.password.setup.completed')
+  @EventPattern('user.password.setup.completed', Transport.RMQ)
   async handlePasswordSetupCompleted(
     @Payload() data: PasswordSetupCompletedDto,
     @Ctx() context: RmqContext
@@ -193,7 +193,7 @@ export class SecurityEmailController {
   /**
    * Handle account linked event - Send account linking notification
    */
-  @EventPattern('user.account.linked')
+  @EventPattern('user.account.linked', Transport.RMQ)
   async handleAccountLinked(
     @Payload() data: AccountLinkedDto,
     @Ctx() context: RmqContext
@@ -219,7 +219,7 @@ export class SecurityEmailController {
    * Handle admin new user registration event - Send admin notification
    * UPDATED: Removed userCount dependency, added profileType and primaryPurpose
    */
-  @EventPattern('admin.new.registration')
+  @EventPattern('admin.new.registration', Transport.RMQ)
   async handleAdminNewRegistration(
     @Payload() data: AdminNewRegistrationFromAuthDto,
     @Ctx() context: RmqContext
@@ -260,7 +260,7 @@ export class SecurityEmailController {
   /**
    * Handle admin new organization registration event - Send admin notification
    */
-  @EventPattern('admin.new.organization.registration')
+  @EventPattern('admin.new.organization.registration', Transport.RMQ)
   async handleAdminNewOrganizationRegistration(
     @Payload() data: AdminNewOrganizationRegistrationDto,
     @Ctx() context: RmqContext
@@ -285,7 +285,7 @@ export class SecurityEmailController {
   /**
    * Handle listing milestone event - Send milestone notification to internal teams
    */
-  @EventPattern('admin.listing.milestone')
+  @EventPattern('admin.listing.milestone', Transport.RMQ)
   async handleListingMilestone(
     @Payload() data: ListingMilestoneEmailDto,
     @Ctx() context: RmqContext
@@ -371,7 +371,8 @@ export class SecurityEmailController {
     } catch (error) {
       const duration = Date.now() - startTime;
       this.logger.error(`[RMQ] Failed ${pattern} for ${identifier} after ${duration}ms: ${error.message}`);
-      channel.nack(originalMsg, false, true);
+      // ✅ Don't requeue - just reject to prevent infinite retry loop
+      channel.nack(originalMsg, false, false);
     }
   }
 }

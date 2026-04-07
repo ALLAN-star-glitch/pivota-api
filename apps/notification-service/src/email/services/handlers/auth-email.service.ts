@@ -1,51 +1,138 @@
-// apps/notification-service/src/email/services/auth-email.service.ts
-
 /**
  * Auth Email Service
  * 
  * Handles all authentication-related email communications for the PivotaConnect platform.
  * 
  * Dependencies:
- * - EmailClientService: Core email transport layer
+ * - MailerService: NestJS Mailer for email sending with timeout support
  * - EmailTemplateService: Template rendering and formatting utilities
- * 
- * @example
- * // Send welcome email to a new job seeker
- * await authEmailService.sendUserWelcome({
- *   email: 'user@example.com',
- *   firstName: 'John',
- *   accountId: 'ACC-12345',
- *   plan: 'Free Forever',
- *   profileType: 'JOB_SEEKER',
- *   profileData: {
- *     skills: ['JavaScript', 'React'],
- *     jobTypes: ['FULL_TIME'],
- *     expectedSalary: 150000
- *   }
- * });
  */
 
-import { Injectable } from '@nestjs/common';
-import { SendEmailV3_1 } from 'node-mailjet';
+import { Injectable, Logger } from '@nestjs/common';
+import { MailerService } from '@nestjs-modules/mailer';
 import { 
   UserOnboardedEventDto, 
   UserLoginEmailDto,
   SendOtpEventDto 
 } from '@pivota-api/dtos';
-import { EmailClientService } from '../core/email-client.service';
 import { EmailTemplateService } from '../templates/email-template.service';
 
 @Injectable()
 export class AuthEmailService {
+  private readonly logger = new Logger(AuthEmailService.name);
+
   constructor(
-    private readonly emailClient: EmailClientService,
+    private readonly mailerService: MailerService,
     private readonly template: EmailTemplateService,
   ) {}
+
+  /**
+   * Send OTP verification code email with timeout and retry support
+   */
+  async sendOtp(dto: SendOtpEventDto): Promise<void> {
+    console.log('🔥🔥🔥 SEND OTP METHOD CALLED 🔥🔥🔥');
+    console.log('📧 Email:', dto.email);
+    console.log('🔢 Code:', dto.code);
+    console.log('🎯 Purpose:', dto.purpose);
+    console.log('⏰ Timestamp:', new Date().toISOString());
+    
+    const startTime = Date.now();
+    let subject = 'Your Verification Code';
+    let purposeText = 'verify your action';
+    
+    if (dto.purpose === 'SIGNUP') {
+      subject = 'Confirm Your Registration';
+      purposeText = 'complete your registration';
+    } else if (dto.purpose === 'PASSWORD_RESET') {
+      subject = 'Reset Your Password';
+      purposeText = 'reset your password';
+    } else if (dto.purpose === '2FA') {
+      subject = 'Two-Factor Authentication Code';
+      purposeText = 'complete your login';
+    }
+
+    console.log('📝 Subject:', subject);
+    console.log('📝 Purpose text:', purposeText);
+
+    const content = `
+      <h1>Verification Code</h1>
+      <p style="font-size: 18px; color: ${this.template.getColors().primary};">Use this code to ${purposeText}</p>
+      
+      <div style="text-align: center; margin: 40px 0;">
+        <div style="font-size: 48px; font-weight: 600; color: ${this.template.getColors().secondary}; letter-spacing: 4px; background: ${this.template.getColors().secondary}10; padding: 24px; border-radius: 8px; display: inline-block; border: 1px solid ${this.template.getColors().secondary}20;">
+          ${dto.code}
+        </div>
+      </div>
+      
+      <p><strong>Valid for:</strong> 10 minutes</p>
+      
+      <div class="expiry-box">
+        This code will expire in 10 minutes. Never share it with anyone.
+      </div>
+      
+      <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">If you didn't request this code, please ignore this email.</p>
+    `;
+
+    console.log('🎨 Rendering templates...');
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
+    console.log('✅ Templates rendered, HTML length:', htmlContent.length);
+
+    // Retry logic with timeout
+    const maxRetries = 3;
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📤 Attempt ${attempt}/${maxRetries}: Sending OTP to ${dto.email}`);
+        this.logger.log(`📧 Sending OTP to ${dto.email} (attempt ${attempt}/${maxRetries})`);
+        
+        console.log('📧 Calling mailerService.sendMail...');
+        // NestJS Mailer has built-in timeout from the transport configuration
+        const result = await this.mailerService.sendMail({
+          to: dto.email,
+          subject: subject,
+          html: htmlContent,
+          text: textContent,
+        });
+        
+        const duration = Date.now() - startTime;
+        console.log(`✅✅✅ SUCCESS! Email sent in ${duration}ms`);
+        console.log(`📨 MessageId: ${result.messageId}`);
+        this.logger.log(`✅ OTP sent to ${dto.email} in ${duration}ms. MessageId: ${result.messageId}`);
+        return; // Success - exit retry loop
+        
+      } catch (error) {
+        lastError = error;
+        const duration = Date.now() - startTime;
+        console.error(`❌❌❌ Attempt ${attempt} FAILED after ${duration}ms`);
+        console.error(`Error message: ${error.message}`);
+        console.error(`Error code: ${error.code}`);
+        console.error(`Error command: ${error.command}`);
+        console.error(`Full error object:`, error);
+        this.logger.error(`❌ Attempt ${attempt} failed for ${dto.email} after ${duration}ms: ${error.message}`);
+        
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s exponential backoff
+          console.log(`⏳ Waiting ${delay}ms before retry ${attempt + 1}...`);
+          this.logger.warn(`⏳ Waiting ${delay}ms before retry ${attempt + 1}...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    // All retries failed
+    console.error('💀💀💀 ALL RETRIES FAILED 💀💀💀');
+    console.error(`Failed to send OTP to ${dto.email} after ${maxRetries} attempts`);
+    console.error(`Last error: ${lastError?.message}`);
+    throw new Error(`Failed to send OTP to ${dto.email} after ${maxRetries} attempts: ${lastError?.message}`);
+}
 
   /**
    * Send welcome email to new user after signup with profile-specific content
    */
   async sendUserWelcome(dto: UserOnboardedEventDto): Promise<void> {
+    const startTime = Date.now();
     const joinDate = this.template.formatDate(new Date());
 
     // Generate profile-specific content
@@ -248,7 +335,6 @@ export class AuthEmailService {
         break;
 
       default:
-        // No profile (JUST_EXPLORING)
         profileSpecificContent = `
           <div class="info-box">
             <p><strong>Welcome to PivotaConnect!</strong></p>
@@ -291,26 +377,31 @@ export class AuthEmailService {
       </p>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: dto.email, Name: dto.firstName }],
-        Subject: `Welcome to PivotaConnect, ${dto.firstName}`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, dto.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: dto.email,
+        subject: `Welcome to PivotaConnect, ${dto.firstName}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Welcome email sent to ${dto.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send welcome email to ${dto.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
    * Send login notification email with device info
    */
   async sendLoginAlert(dto: UserLoginEmailDto): Promise<void> {
+    const startTime = Date.now();
     const loginTime = this.template.formatDateTime(dto.timestamp || new Date());
     const isOrgLogin = !!dto.organizationName;
 
@@ -356,20 +447,24 @@ export class AuthEmailService {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: dto.to, Name: dto.firstName }],
-        Subject: isOrgLogin ? `Security Alert: Admin Login - ${dto.organizationName}` : 'New Login Detected',
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, dto.to);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: dto.to,
+        subject: isOrgLogin ? `Security Alert: Admin Login - ${dto.organizationName}` : 'New Login Detected',
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Login alert sent to ${dto.to} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send login alert to ${dto.to} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
 
     // Also send to organization email if applicable
     if (isOrgLogin && dto.orgEmail && dto.orgEmail.toLowerCase() !== dto.to.toLowerCase()) {
@@ -393,80 +488,28 @@ export class AuthEmailService {
         </div>
       `;
 
-      const orgBody: SendEmailV3_1.Body = {
-        Messages: [{
-          From: {
-            Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-            Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-          },
-          To: [{ Email: dto.orgEmail, Name: dto.organizationName }],
-          Subject: `Security Alert: Admin Login - ${dto.organizationName}`,
-          HTMLPart: this.template.render(orgContent),
-          TextPart: this.template.stripHtml(orgContent),
-        }],
-      };
+      const orgHtmlContent = this.template.render(orgContent);
+      const orgTextContent = this.template.stripHtml(orgContent);
 
-      await this.emailClient.sendEmail(orgBody, dto.orgEmail);
+      try {
+        const result = await this.mailerService.sendMail({
+          to: dto.orgEmail,
+          subject: `Security Alert: Admin Login - ${dto.organizationName}`,
+          html: orgHtmlContent,
+          text: orgTextContent,
+        });
+        this.logger.log(`✅ Organization login alert sent to ${dto.orgEmail}. MessageId: ${result.messageId}`);
+      } catch (error) {
+        this.logger.error(`❌ Failed to send organization login alert to ${dto.orgEmail}: ${error.message}`);
+      }
     }
-  }
-
-  /**
-   * Send OTP verification code email
-   */
-  async sendOtp(dto: SendOtpEventDto): Promise<void> {
-    let subject = 'Your Verification Code';
-    let purposeText = 'verify your action';
-    
-    if (dto.purpose === 'SIGNUP') {
-      subject = 'Confirm Your Registration';
-      purposeText = 'complete your registration';
-    } else if (dto.purpose === 'PASSWORD_RESET') {
-      subject = 'Reset Your Password';
-      purposeText = 'reset your password';
-    } else if (dto.purpose === '2FA') {
-      subject = 'Two-Factor Authentication Code';
-      purposeText = 'complete your login';
-    }
-
-    const content = `
-      <h1>Verification Code</h1>
-      <p style="font-size: 18px; color: ${this.template.getColors().primary};">Use this code to ${purposeText}</p>
-      
-      <div style="text-align: center; margin: 40px 0;">
-        <div style="font-size: 48px; font-weight: 600; color: ${this.template.getColors().secondary}; letter-spacing: 4px; background: ${this.template.getColors().secondary}10; padding: 24px; border-radius: 8px; display: inline-block; border: 1px solid ${this.template.getColors().secondary}20;">
-          ${dto.code}
-        </div>
-      </div>
-      
-      <p><strong>Valid for:</strong> 10 minutes</p>
-      
-      <div class="expiry-box">
-        This code will expire in 10 minutes. Never share it with anyone.
-      </div>
-      
-      <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">If you didn't request this code, please ignore this email.</p>
-    `;
-
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: dto.email }],
-        Subject: subject,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
-
-    await this.emailClient.sendEmail(body, dto.email);
   }
 
   /**
    * Send welcome email for Google signup users
    */
   async sendGoogleWelcome(data: { email: string; firstName: string; accountId: string }): Promise<void> {
+    const startTime = Date.now();
     const joinDate = this.template.formatDate(new Date());
 
     const content = `
@@ -495,178 +538,199 @@ export class AuthEmailService {
       </p>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email, Name: data.firstName }],
-        Subject: `Welcome to PivotaConnect, ${data.firstName}`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `Welcome to PivotaConnect, ${data.firstName}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Google welcome email sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send Google welcome email to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
+  /**
+   * Send payment pending email for premium users
+   */
+  async sendPaymentPendingEmail(data: {
+    to: string;
+    firstName: string;
+    lastName: string;
+    plan: string;
+    profileType?: string;
+    redirectUrl: string;
+    merchantReference: string;
+  }): Promise<void> {
+    const startTime = Date.now();
 
-/**
- * Send payment pending email for premium users
- */
-async sendPaymentPendingEmail(data: {
-  to: string;
-  firstName: string;
-  lastName: string;
-  plan: string;
-  profileType?: string;
-  redirectUrl: string;
-  merchantReference: string;
-}): Promise<void> {
-  const content = `
-    <h1>Complete Your Payment</h1>
-    <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.firstName},</p>
-    <p>You've successfully created your ${data.plan} account! To activate your premium features, please complete your payment.</p>
-    
-    <div class="info-box">
-      <h3>Your Plan Details</h3>
-      <ul>
-        <li><strong>Plan:</strong> ${data.plan}</li>
-        <li><strong>Account Type:</strong> Premium</li>
-        <li><strong>Reference:</strong> ${data.merchantReference}</li>
-      </ul>
-    </div>
-    
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${data.redirectUrl}" class="button">Complete Payment Now</a>
-    </div>
-    
-    <div class="security-alert">
-      <p>Your account is created but <strong>premium features are locked</strong> until payment is confirmed. You have 24 hours to complete payment.</p>
-    </div>
-    
-    <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">If you have any issues with payment, please contact our support team.</p>
-  `;
+    const content = `
+      <h1>Complete Your Payment</h1>
+      <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.firstName},</p>
+      <p>You've successfully created your ${data.plan} account! To activate your premium features, please complete your payment.</p>
+      
+      <div class="info-box">
+        <h3>Your Plan Details</h3>
+        <ul>
+          <li><strong>Plan:</strong> ${data.plan}</li>
+          <li><strong>Account Type:</strong> Premium</li>
+          <li><strong>Reference:</strong> ${data.merchantReference}</li>
+        </ul>
+      </div>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${data.redirectUrl}" class="button">Complete Payment Now</a>
+      </div>
+      
+      <div class="security-alert">
+        <p>Your account is created but <strong>premium features are locked</strong> until payment is confirmed. You have 24 hours to complete payment.</p>
+      </div>
+      
+      <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">If you have any issues with payment, please contact our support team.</p>
+    `;
 
-  const body: SendEmailV3_1.Body = {
-    Messages: [{
-      From: {
-        Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-        Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-      },
-      To: [{ Email: data.to, Name: data.firstName }],
-      Subject: `Complete Your Payment - ${data.plan} Plan`,
-      HTMLPart: this.template.render(content),
-      TextPart: this.template.stripHtml(content),
-    }],
-  };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-  await this.emailClient.sendEmail(body, data.to);
-}
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.to,
+        subject: `Complete Your Payment - ${data.plan} Plan`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Payment pending email sent to ${data.to} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send payment pending email to ${data.to} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
+  }
 
-/**
- * Send payment failed email when payment service is unavailable
- */
-async sendPaymentFailedEmail(data: {
-  to: string;
-  firstName: string;
-  lastName: string;
-  plan: string;
-  profileType?: string;
-  errorMessage: string;
-}): Promise<void> {
-  const content = `
-    <h1>Payment Service Temporarily Unavailable</h1>
-    <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.firstName},</p>
-    <p>Your ${data.plan} account has been created, but we're currently experiencing issues with our payment service.</p>
-    
-    <div class="info-box">
-      <h3>What This Means</h3>
-      <ul>
-        <li>Your account is created and saved</li>
-        <li>Premium features are temporarily locked</li>
-        <li>You can retry payment later from your dashboard</li>
-      </ul>
-    </div>
-    
-    <div class="security-alert">
-      <p><strong>Next Steps:</strong> Please log in to your account and click "Complete Payment" when the payment system is back online.</p>
-    </div>
-    
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${this.template.getSocial().website}/dashboard" class="button">Go to Dashboard</a>
-    </div>
-    
-    <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">We apologize for the inconvenience. Our team has been notified and is working to resolve this issue.</p>
-  `;
+  /**
+   * Send payment failed email when payment service is unavailable
+   */
+  async sendPaymentFailedEmail(data: {
+    to: string;
+    firstName: string;
+    lastName: string;
+    plan: string;
+    profileType?: string;
+    errorMessage: string;
+  }): Promise<void> {
+    const startTime = Date.now();
 
-  const body: SendEmailV3_1.Body = {
-    Messages: [{
-      From: {
-        Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-        Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-      },
-      To: [{ Email: data.to, Name: data.firstName }],
-      Subject: `Payment Service Update - ${data.plan} Plan`,
-      HTMLPart: this.template.render(content),
-      TextPart: this.template.stripHtml(content),
-    }],
-  };
+    const content = `
+      <h1>Payment Service Temporarily Unavailable</h1>
+      <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.firstName},</p>
+      <p>Your ${data.plan} account has been created, but we're currently experiencing issues with our payment service.</p>
+      
+      <div class="info-box">
+        <h3>What This Means</h3>
+        <ul>
+          <li>Your account is created and saved</li>
+          <li>Premium features are temporarily locked</li>
+          <li>You can retry payment later from your dashboard</li>
+        </ul>
+      </div>
+      
+      <div class="security-alert">
+        <p><strong>Next Steps:</strong> Please log in to your account and click "Complete Payment" when the payment system is back online.</p>
+      </div>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${this.template.getSocial().website}/dashboard" class="button">Go to Dashboard</a>
+      </div>
+      
+      <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">We apologize for the inconvenience. Our team has been notified and is working to resolve this issue.</p>
+    `;
 
-  await this.emailClient.sendEmail(body, data.to);
-}
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-/**
- * Send payment success email after payment is confirmed
- */
-async sendPaymentSuccessEmail(data: {
-  to: string;
-  firstName: string;
-  lastName: string;
-  plan: string;
-  accountId: string;
-}): Promise<void> {
-  const content = `
-    <h1>Payment Confirmed!</h1>
-    <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.firstName},</p>
-    <p>Thank you for your payment! Your ${data.plan} plan is now active.</p>
-    
-    <div class="success-box">
-      <h3>Your Premium Features Are Now Available</h3>
-      <ul>
-        <li>Full access to all platform features</li>
-        <li>Priority support</li>
-        <li>Advanced analytics and insights</li>
-      </ul>
-    </div>
-    
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${this.template.getSocial().website}/dashboard" class="button">Go to Dashboard</a>
-    </div>
-    
-    <div class="divider"></div>
-    
-    <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">
-      Account ID: ${data.accountId}<br>
-      Plan: ${data.plan}<br>
-      Activation Date: ${this.template.formatDate(new Date())}
-    </p>
-  `;
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.to,
+        subject: `Payment Service Update - ${data.plan} Plan`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Payment failed email sent to ${data.to} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send payment failed email to ${data.to} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
+  }
 
-  const body: SendEmailV3_1.Body = {
-    Messages: [{
-      From: {
-        Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-        Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-      },
-      To: [{ Email: data.to, Name: data.firstName }],
-      Subject: `Payment Confirmed - ${data.plan} Plan Active`,
-      HTMLPart: this.template.render(content),
-      TextPart: this.template.stripHtml(content),
-    }],
-  };
+  /**
+   * Send payment success email after payment is confirmed
+   */
+  async sendPaymentSuccessEmail(data: {
+    to: string;
+    firstName: string;
+    lastName: string;
+    plan: string;
+    accountId: string;
+  }): Promise<void> {
+    const startTime = Date.now();
 
-  await this.emailClient.sendEmail(body, data.to);
-}
+    const content = `
+      <h1>Payment Confirmed!</h1>
+      <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.firstName},</p>
+      <p>Thank you for your payment! Your ${data.plan} plan is now active.</p>
+      
+      <div class="success-box">
+        <h3>Your Premium Features Are Now Available</h3>
+        <ul>
+          <li>Full access to all platform features</li>
+          <li>Priority support</li>
+          <li>Advanced analytics and insights</li>
+        </ul>
+      </div>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${this.template.getSocial().website}/dashboard" class="button">Go to Dashboard</a>
+      </div>
+      
+      <div class="divider"></div>
+      
+      <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">
+        Account ID: ${data.accountId}<br>
+        Plan: ${data.plan}<br>
+        Activation Date: ${this.template.formatDate(new Date())}
+      </p>
+    `;
+
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
+
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.to,
+        subject: `Payment Confirmed - ${data.plan} Plan Active`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Payment success email sent to ${data.to} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send payment success email to ${data.to} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
+  }
 }

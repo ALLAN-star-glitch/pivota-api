@@ -8,56 +8,49 @@ datasource db {
 }
 
 model Credential {
-  id            String    @id @default(cuid())
-  uuid          String    @unique @default(uuid())
-  userUuid      String    @unique
-  email         String    @unique
-  passwordHash  String?  
-  mfaSecret     String?
-  mfaEnabled    Boolean   @default(true)
-  googleProviderId String? @unique
-  failedAttempts Int      @default(0)
-  lockoutExpires DateTime?
-  lastLoginAt    DateTime? 
+  id                  String               @id @default(cuid())
+  passwordHash        String?
+  mfaSecret           String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  userUuid            String               @unique
+  email               String               @unique
+  failedAttempts      Int                  @default(0)
+  lastLoginAt         DateTime?
+  lockoutExpires      DateTime?
+  mfaEnabled          Boolean              @default(true)
+  googleProviderId    String?              @unique
+  uuid                String               @unique @default(uuid())
+  phone               String?              @unique
   passwordSetupTokens PasswordSetupToken[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
 
-  // INDEXES (ADD THIS IF MISSING)
   @@index([userUuid])
-  @@index([email])  // THIS IS CRITICAL FOR USER EXISTENCE CHECKS
+  @@index([email])
 }
 
 model Session {
-  id            String    @id @default(cuid())  // CHANGED: from Int to String with cuid()
-  uuid          String    @unique @default(uuid())
-  userUuid      String
-  tokenId       String    @unique @default(uuid())
-  hashedToken   String
-  
-  // Contextual Data (Already present)
-  device        String?
-  ipAddress     String?
-  userAgent     String?
-  os            String?
-  
-  // --- NEW RICH CLIENT INFO FIELDS ---
-  deviceType    String?   // "MOBILE", "TABLET", "DESKTOP", "BOT", "UNKNOWN"
-  osVersion     String?
-  browser       String?
+  id             String    @id @default(cuid())
+  tokenId        String    @unique @default(uuid())
+  hashedToken    String
+  device         String?
+  ipAddress      String?
+  userAgent      String?
+  os             String?
+  revoked        Boolean   @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime
+  userUuid       String
+  lastActiveAt   DateTime  @default(now())
+  browser        String?
   browserVersion String?
-  isMobile      Boolean?
-  isTablet      Boolean?
-  isDesktop     Boolean?
-  isBot         Boolean?
-  
-  // --- RECOMMENDED ADDITION ---
-  lastActiveAt  DateTime  @default(now()) // Update this on every refresh/authorized request
-  
-  revoked       Boolean   @default(false)
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  expiresAt     DateTime
+  deviceType     String?
+  isBot          Boolean?
+  isDesktop      Boolean?
+  isMobile       Boolean?
+  isTablet       Boolean?
+  osVersion      String?
+  uuid           String    @unique @default(uuid())
 
   @@index([userUuid])
   @@index([revoked])
@@ -66,23 +59,20 @@ model Session {
 }
 
 model Otp {
-  id            String    @id @default(cuid())
-  uuid          String    @unique @default(uuid())
-  email         String
-  code          String   
-  purpose       String    @default("SIGNUP") 
-  expiresAt     DateTime
-  createdAt     DateTime  @default(now())
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  purpose   String   @default("SIGNUP")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  uuid      String   @unique @default(uuid())
 
-  // ADD THIS UNIQUE CONSTRAINT
-  @@unique([email, purpose])  // ← Add this line!
-  
-  // OPTIMIZED INDEXES FOR PERFORMANCE
-  @@index([email, code])                    // For OTP verification lookups
-  @@index([email, purpose])                 // For deleteMany operations
-  @@index([email, purpose, createdAt])      // For rate limiting COUNT queries
-  @@index([purpose])                        // For general purpose queries
-  @@index([expiresAt])                      // For cleanup jobs
+  @@unique([email, purpose])
+  @@index([email, code])
+  @@index([email, purpose])
+  @@index([email, purpose, createdAt])
+  @@index([purpose])
+  @@index([expiresAt])
 }
 
 model OtpRequestLog {
@@ -90,43 +80,37 @@ model OtpRequestLog {
   email     String
   purpose   String
   createdAt DateTime @default(now())
-  
+
   @@index([email, purpose, createdAt])
 }
 
-// ======================================================
-// NEW: Password Setup Tokens for Invitation Flow
-// ======================================================
 model PasswordSetupToken {
-  id            String    @id @default(cuid())
-  uuid          String    @unique @default(uuid())
-  userUuid      String
-  credential    Credential @relation(fields: [userUuid], references: [userUuid], onDelete: Cascade)
-  token         String    @unique
-  expiresAt     DateTime
-  used          Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id         String     @id @default(cuid())
+  userUuid   String
+  token      String     @unique
+  expiresAt  DateTime
+  used       Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  uuid       String     @unique @default(uuid())
+  credential Credential @relation(fields: [userUuid], references: [userUuid], onDelete: Cascade)
 
   @@index([token])
   @@index([expiresAt])
   @@index([userUuid])
 }
 
-// ======================================================
-// OPTIONAL: Track invitation events for audit
-// ======================================================
 model InvitationAudit {
   id                String    @id @default(cuid())
-  uuid              String    @unique @default(uuid())
   email             String
-  userUuid          String?   // Will be null until user accepts
+  userUuid          String?
   organizationUuid  String
   invitedByUserUuid String
-  status            String    @default("PENDING") // PENDING, ACCEPTED, EXPIRED
+  status            String    @default("PENDING")
   acceptedAt        DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  uuid              String    @unique @default(uuid())
 
   @@index([email])
   @@index([organizationUuid])

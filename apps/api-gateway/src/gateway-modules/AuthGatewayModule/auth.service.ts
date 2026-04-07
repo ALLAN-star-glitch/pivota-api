@@ -21,6 +21,7 @@ import {
   SignupResponseDto,
 } from '@pivota-api/dtos';
 import { BaseRefreshTokenResponseGrpc, JwtPayload } from '@pivota-api/interfaces';
+import { OtpPurpose } from '@pivota-api/shared-redis';
 
 // Updated gRPC interface for AuthService
 interface AuthServiceGrpc {
@@ -31,7 +32,7 @@ interface AuthServiceGrpc {
   organisationSignup(data: OrganisationSignupRequestDto & { clientInfo?: AuthClientInfoDto }): Observable<BaseResponseDto<OrganizationSignupDataDto>>;
 
   requestOtp(
-    data: RequestOtpDto & { purpose: string }
+    data: RequestOtpDto & { purpose: OtpPurpose }
   ): Observable<BaseResponseDto<null>>;
 
   verifyOtp(
@@ -128,7 +129,7 @@ export class AuthService {
 
  async requestOtp(
     dto: RequestOtpDto, 
-    purpose: string
+    purpose: OtpPurpose
   ): Promise<BaseResponseDto<null>> {
     this.logger.log(`📩 Requesting OTP [${purpose}] for: ${dto.email}`);
 

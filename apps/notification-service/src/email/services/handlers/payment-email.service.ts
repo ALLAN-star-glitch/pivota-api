@@ -10,7 +10,7 @@
  * - Sends payment confirmation emails after successful payment
  * 
  * Dependencies:
- * - EmailClientService: Core email transport layer
+ * - MailerService: NestJS Mailer for email sending with timeout support
  * - EmailTemplateService: Template rendering and formatting utilities
  * 
  * @example
@@ -31,15 +31,16 @@
  * });
  */
 
-import { Injectable } from '@nestjs/common';
-import { SendEmailV3_1 } from 'node-mailjet';
-import { EmailClientService } from '../core/email-client.service';
+import { Injectable, Logger } from '@nestjs/common';
+import { MailerService } from '@nestjs-modules/mailer';
 import { EmailTemplateService } from '../templates/email-template.service';
 
 @Injectable()
 export class PaymentEmailService {
+  private readonly logger = new Logger(PaymentEmailService.name);
+
   constructor(
-    private readonly emailClient: EmailClientService,
+    private readonly mailerService: MailerService,
     private readonly template: EmailTemplateService,
   ) {}
 
@@ -52,6 +53,8 @@ export class PaymentEmailService {
     plan: string;
     redirectUrl: string;
   }): Promise<void> {
+    const startTime = Date.now();
+
     const content = `
       <h1>Complete Your Subscription</h1>
       <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.firstName},</p>
@@ -72,20 +75,24 @@ export class PaymentEmailService {
       <p>Your account has been created but is pending payment activation. Once payment is confirmed, you'll have full access to all features.</p>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email, Name: data.firstName }],
-        Subject: `Complete Payment for ${data.plan} Plan`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `Complete Payment for ${data.plan} Plan`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Payment required email sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send payment required email to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -97,6 +104,8 @@ export class PaymentEmailService {
     plan: string;
     accountId: string;
   }): Promise<void> {
+    const startTime = Date.now();
+
     const content = `
       <h1>Payment Confirmed!</h1>
       <p style="font-size: 18px; color: ${this.template.getColors().primary};">Congratulations ${data.firstName},</p>
@@ -121,19 +130,23 @@ export class PaymentEmailService {
       <p>Thank you for upgrading your PivotaConnect experience!</p>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email, Name: data.firstName }],
-        Subject: `Payment Confirmed: ${data.plan} Plan Activated`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `Payment Confirmed: ${data.plan} Plan Activated`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Payment confirmation email sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send payment confirmation email to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 }

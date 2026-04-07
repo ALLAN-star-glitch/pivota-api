@@ -13,7 +13,7 @@
  * - Sends listing milestone alerts to internal teams
  * 
  * Dependencies:
- * - EmailClientService: Core email transport layer
+ * - MailerService: NestJS Mailer for email sending with timeout support
  * - EmailTemplateService: Template rendering and formatting utilities
  * 
  * @example
@@ -44,15 +44,16 @@
  * });
  */
 
-import { Injectable } from '@nestjs/common';
-import { SendEmailV3_1 } from 'node-mailjet';
-import { EmailClientService } from '../core/email-client.service';
+import { Injectable, Logger } from '@nestjs/common';
+import { MailerService } from '@nestjs-modules/mailer';
 import { EmailTemplateService } from '../templates/email-template.service';
 
 @Injectable()
 export class SecurityEmailService {
+  private readonly logger = new Logger(SecurityEmailService.name);
+
   constructor(
-    private readonly emailClient: EmailClientService,
+    private readonly mailerService: MailerService,
     private readonly template: EmailTemplateService,
   ) {}
 
@@ -66,6 +67,7 @@ export class SecurityEmailService {
     organizationName: string;
     expiresAt: string;
   }): Promise<void> {
+    const startTime = Date.now();
     const setupUrl = `${process.env.FRONTEND_URL || 'https://pivotaconnect.com'}/setup-password?token=${data.setupToken}`;
     const expiresAtFormatted = this.template.formatDate(new Date(data.expiresAt), 'MMMM do, yyyy');
 
@@ -93,26 +95,32 @@ export class SecurityEmailService {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email, Name: data.firstName }],
-        Subject: `Set up your password for ${data.organizationName}`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `Set up your password for ${data.organizationName}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Password setup email sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send password setup email to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
    * Send confirmation email after password is successfully set
    */
   async sendPasswordSetupConfirmation(data: { email: string }): Promise<void> {
+    const startTime = Date.now();
+
     const content = `
       <h1>Password Setup Complete</h1>
       <p style="font-size: 18px; color: ${this.template.getColors().primary};">Your password has been successfully set.</p>
@@ -132,20 +140,24 @@ export class SecurityEmailService {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email }],
-        Subject: 'Password Setup Complete',
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: 'Password Setup Complete',
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Password setup confirmation sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send password setup confirmation to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -156,6 +168,7 @@ export class SecurityEmailService {
     provider: string;
     timestamp: string;
   }): Promise<void> {
+    const startTime = Date.now();
     const linkTime = this.template.formatDateTime(data.timestamp);
 
     const content = `
@@ -180,111 +193,120 @@ export class SecurityEmailService {
       <p>If you didn't authorize this linking, please contact support immediately.</p>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email }],
-        Subject: `Account Linked with ${data.provider}`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `Account Linked with ${data.provider}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Account linked notification sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send account linked notification to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
    * Send admin notification for new user registration
    */
-async sendAdminNewUser(data: {
-  recipientEmail: string;
-  userEmail: string;
-  userName: string;
-  accountType: string;
-  registrationMethod?: string;
-  registrationDate: string;
-  plan: string;
-  primaryPurpose?: string;   // NEW
-  profileType?: string;       // NEW
-}): Promise<void> {
-  const regDate = this.template.formatDateTime(data.registrationDate);
-  const method = data.registrationMethod || 'Email/Password';
+  async sendAdminNewUser(data: {
+    recipientEmail: string;
+    userEmail: string;
+    userName: string;
+    accountType: string;
+    registrationMethod?: string;
+    registrationDate: string;
+    plan: string;
+    primaryPurpose?: string;
+    profileType?: string;
+  }): Promise<void> {
+    const startTime = Date.now();
+    const regDate = this.template.formatDateTime(data.registrationDate);
+    const method = data.registrationMethod || 'Email/Password';
 
-  // Map profile type to readable name
-  const profileTypeMap: Record<string, string> = {
-    'JOB_SEEKER': 'Job Seeker',
-    'SKILLED_PROFESSIONAL': 'Skilled Professional',
-    'INTERMEDIARY_AGENT': 'Agent',
-    'HOUSING_SEEKER': 'Housing Seeker',
-    'SUPPORT_BENEFICIARY': 'Support Beneficiary',
-    'EMPLOYER': 'Employer',
-    'PROPERTY_OWNER': 'Property Owner',
-    'SOCIAL_SERVICE_PROVIDER': 'Social Service Provider',
-  };
-  
-  const profileTypeDisplay = data.profileType ? profileTypeMap[data.profileType] || data.profileType : 'Not specified';
+    // Map profile type to readable name
+    const profileTypeMap: Record<string, string> = {
+      'JOB_SEEKER': 'Job Seeker',
+      'SKILLED_PROFESSIONAL': 'Skilled Professional',
+      'INTERMEDIARY_AGENT': 'Agent',
+      'HOUSING_SEEKER': 'Housing Seeker',
+      'SUPPORT_BENEFICIARY': 'Support Beneficiary',
+      'EMPLOYER': 'Employer',
+      'PROPERTY_OWNER': 'Property Owner',
+      'SOCIAL_SERVICE_PROVIDER': 'Social Service Provider',
+    };
+    
+    const profileTypeDisplay = data.profileType ? profileTypeMap[data.profileType] || data.profileType : 'Not specified';
 
-  // Map primary purpose to readable name
-  const purposeMap: Record<string, string> = {
-    'FIND_JOB': 'Find Job',
-    'OFFER_SKILLED_SERVICES': 'Offer Skilled Services',
-    'WORK_AS_AGENT': 'Work as Agent',
-    'FIND_HOUSING': 'Find Housing',
-    'GET_SOCIAL_SUPPORT': 'Get Social Support',
-    'HIRE_EMPLOYEES': 'Hire Employees',
-    'LIST_PROPERTIES': 'List Properties',
-    'JUST_EXPLORING': 'Just Exploring',
-  };
-  
-  const purposeDisplay = data.primaryPurpose ? purposeMap[data.primaryPurpose] || data.primaryPurpose : 'Not specified';
+    // Map primary purpose to readable name
+    const purposeMap: Record<string, string> = {
+      'FIND_JOB': 'Find Job',
+      'OFFER_SKILLED_SERVICES': 'Offer Skilled Services',
+      'WORK_AS_AGENT': 'Work as Agent',
+      'FIND_HOUSING': 'Find Housing',
+      'GET_SOCIAL_SUPPORT': 'Get Social Support',
+      'HIRE_EMPLOYEES': 'Hire Employees',
+      'LIST_PROPERTIES': 'List Properties',
+      'JUST_EXPLORING': 'Just Exploring',
+    };
+    
+    const purposeDisplay = data.primaryPurpose ? purposeMap[data.primaryPurpose] || data.primaryPurpose : 'Not specified';
 
-  // Build subject with profile type for better filtering
-  let subject: string;
-  if (data.profileType && profileTypeDisplay !== 'Not specified') {
-    subject = `New ${profileTypeDisplay}: ${data.userName} joined PivotaConnect`;
-  } else {
-    subject = `New User Registration: ${data.userName} joined PivotaConnect`;
+    // Build subject with profile type for better filtering
+    let subject: string;
+    if (data.profileType && profileTypeDisplay !== 'Not specified') {
+      subject = `New ${profileTypeDisplay}: ${data.userName} joined PivotaConnect`;
+    } else {
+      subject = `New User Registration: ${data.userName} joined PivotaConnect`;
+    }
+
+    const content = `
+      <h1>New User Registration</h1>
+      <p style="font-size: 18px; color: ${this.template.getColors().primary};">A new user has joined PivotaConnect</p>
+      
+      <div class="info-box">
+        <h3>User Details</h3>
+        <ul>
+          <li><strong>Name:</strong> ${data.userName}</li>
+          <li><strong>Email:</strong> ${data.userEmail}</li>
+          <li><strong>Account Type:</strong> ${data.accountType}</li>
+          <li><strong>Registration Method:</strong> ${method}</li>
+          <li><strong>Plan:</strong> ${data.plan}</li>
+          <li><strong>Date:</strong> ${regDate}</li>
+          <li><strong>Primary Purpose:</strong> ${purposeDisplay}</li>
+          <li><strong>Profile Type:</strong> ${profileTypeDisplay}</li>
+        </ul>
+      </div>
+      
+      <p>Welcome them to the community!</p>
+    `;
+
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
+
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.recipientEmail,
+        subject: subject,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Admin new user notification sent to ${data.recipientEmail} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send admin new user notification to ${data.recipientEmail} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
-
-  const content = `
-    <h1>New User Registration</h1>
-    <p style="font-size: 18px; color: ${this.template.getColors().primary};">A new user has joined PivotaConnect</p>
-    
-    <div class="info-box">
-      <h3>User Details</h3>
-      <ul>
-        <li><strong>Name:</strong> ${data.userName}</li>
-        <li><strong>Email:</strong> ${data.userEmail}</li>
-        <li><strong>Account Type:</strong> ${data.accountType}</li>
-        <li><strong>Registration Method:</strong> ${method}</li>
-        <li><strong>Plan:</strong> ${data.plan}</li>
-        <li><strong>Date:</strong> ${regDate}</li>
-        <li><strong>Primary Purpose:</strong> ${purposeDisplay}</li>
-        <li><strong>Profile Type:</strong> ${profileTypeDisplay}</li>
-      </ul>
-    </div>
-    
-    <p>Welcome them to the community! </p>
-  `;
-
-  const body: SendEmailV3_1.Body = {
-    Messages: [{
-      From: {
-        Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-        Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-      },
-      To: [{ Email: data.recipientEmail }],
-      Subject: subject,
-      HTMLPart: this.template.render(content),
-      TextPart: this.template.stripHtml(content),
-    }],
-  };
-
-  await this.emailClient.sendEmail(body, data.recipientEmail);
-}
 
   /**
    * Send admin notification for new organization registration
@@ -298,6 +320,7 @@ async sendAdminNewUser(data: {
     registrationDate: string;
     plan: string;
   }): Promise<void> {
+    const startTime = Date.now();
     const regDate = this.template.formatDateTime(data.registrationDate);
 
     const content = `
@@ -326,20 +349,24 @@ async sendAdminNewUser(data: {
       <p>Welcome them to the platform!</p>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.recipientEmail }],
-        Subject: `New Organization: ${data.organizationName}`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.recipientEmail);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.recipientEmail,
+        subject: `New Organization: ${data.organizationName}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Admin new organization notification sent to ${data.recipientEmail} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send admin new organization notification to ${data.recipientEmail} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -365,6 +392,7 @@ async sendAdminNewUser(data: {
     },
     subject: string
   ): Promise<void> {
+    const startTime = Date.now();
     const milestoneTime = this.template.formatDateTime(data.timestamp);
 
     const content = `
@@ -410,19 +438,23 @@ async sendAdminNewUser(data: {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.recipientEmail }],
-        Subject: subject,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.recipientEmail);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.recipientEmail,
+        subject: subject,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Listing milestone email sent to ${data.recipientEmail} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send listing milestone email to ${data.recipientEmail} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 }

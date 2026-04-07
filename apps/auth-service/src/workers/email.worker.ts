@@ -9,12 +9,23 @@ export class EmailWorker {
   private initialized = false;
 
   constructor(
-    private queue: QueueService,
-    @Inject('NOTIFICATION_EVENT_BUS') private notificationBus: ClientProxy,
-  ) {
-    console.log('🔥 EmailWorker CONSTRUCTOR called');
-  }
-
+  private queue: QueueService,
+  @Inject('NOTIFICATION_EVENT_BUS') private notificationBus: ClientProxy,
+) {
+  console.log('🔥 EmailWorker CONSTRUCTOR called');
+  
+  // ✅ Connect to RabbitMQ immediately (Promise style)
+  this.notificationBus.connect()
+    .then(() => {
+      console.log('✅✅✅ EmailWorker connected to RabbitMQ ✅✅✅');
+      this.logger.log('RabbitMQ connection established successfully');
+    }) 
+    .catch((err) => {
+      console.error('❌❌❌ EmailWorker RabbitMQ connection FAILED ❌❌❌');
+      console.error('Error:', err.message);
+      this.logger.error(`RabbitMQ connection failed: ${err.message}`);
+    });
+}
   async initialize() {
     if (this.initialized) {
       console.log('🔥 EmailWorker already initialized, skipping');
@@ -34,13 +45,16 @@ export class EmailWorker {
         
         try {
           switch (name) {
-            case 'send-otp':
+              case 'send-otp':
+              console.log('📧 Emitting OTP event to RabbitMQ');
+              
               this.notificationBus.emit('otp.requested', {
                 email: data.to,
                 code: data.code,
                 purpose: data.purpose,
               });
-              this.logger.log(`✅ OTP email queued for ${data.to}`);
+              
+              this.logger.log(`✅ OTP event emitted for ${data.to}`);
               break;
               
             case 'welcome-email':

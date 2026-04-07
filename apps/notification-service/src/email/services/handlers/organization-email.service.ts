@@ -1,11 +1,10 @@
-
 /**
  * Organization Email Service
  * 
  * Handles all organization-related email communications for the PivotaConnect platform.
  * 
  * Dependencies:
- * - EmailClientService: Core email transport layer
+ * - MailerService: NestJS Mailer for email sending with timeout support
  * - EmailTemplateService: Template rendering and formatting utilities
  * 
  * @example
@@ -27,18 +26,19 @@
  * });
  */
 
-import { Injectable } from '@nestjs/common';
-import { SendEmailV3_1 } from 'node-mailjet';
+import { Injectable, Logger } from '@nestjs/common';
+import { MailerService } from '@nestjs-modules/mailer';
 import { 
   OrganizationOnboardedEventDto 
 } from '@pivota-api/dtos';
-import { EmailClientService } from '../core/email-client.service';
 import { EmailTemplateService } from '../templates/email-template.service';
 
 @Injectable()
 export class OrganizationEmailService {
+  private readonly logger = new Logger(OrganizationEmailService.name);
+
   constructor(
-    private readonly emailClient: EmailClientService,
+    private readonly mailerService: MailerService,
     private readonly template: EmailTemplateService,
   ) {}
 
@@ -46,6 +46,7 @@ export class OrganizationEmailService {
    * Send welcome email to organization admin after registration
    */
   async sendOrganizationWelcome(dto: OrganizationOnboardedEventDto): Promise<void> {
+    const startTime = Date.now();
     const joinDate = this.template.formatDate(new Date());
     const businessName = dto.name || 'Your Organization';
 
@@ -78,23 +79,28 @@ export class OrganizationEmailService {
       </p>
     `;
 
-    const adminBody: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: dto.adminEmail, Name: dto.adminFirstName }],
-        Subject: `Welcome to PivotaConnect, ${businessName}`,
-        HTMLPart: this.template.render(adminContent),
-        TextPart: this.template.stripHtml(adminContent),
-      }],
-    };
+    const htmlContent = this.template.render(adminContent);
+    const textContent = this.template.stripHtml(adminContent);
 
-    await this.emailClient.sendEmail(adminBody, dto.adminEmail);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: dto.adminEmail,
+        subject: `Welcome to PivotaConnect, ${businessName}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Organization welcome email sent to ${dto.adminEmail} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send organization welcome email to ${dto.adminEmail} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
 
     // Also send to organization email if different from admin email
     if (dto.orgEmail && dto.orgEmail.toLowerCase() !== dto.adminEmail.toLowerCase()) {
+      const orgStartTime = Date.now();
       const orgContent = `
         <h1>Registration Confirmed</h1>
         <p style="font-size: 18px; color: ${this.template.getColors().primary};"><strong>${businessName}</strong> is now on PivotaConnect.</p>
@@ -113,20 +119,23 @@ export class OrganizationEmailService {
         <p>Your organization can now post opportunities and connect with talent across Africa.</p>
       `;
 
-      const orgBody: SendEmailV3_1.Body = {
-        Messages: [{
-          From: {
-            Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-            Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-          },
-          To: [{ Email: dto.orgEmail, Name: businessName }],
-          Subject: `Official Registration: ${businessName}`,
-          HTMLPart: this.template.render(orgContent),
-          TextPart: this.template.stripHtml(orgContent),
-        }],
-      };
+      const orgHtmlContent = this.template.render(orgContent);
+      const orgTextContent = this.template.stripHtml(orgContent);
 
-      await this.emailClient.sendEmail(orgBody, dto.orgEmail);
+      try {
+        const result = await this.mailerService.sendMail({
+          to: dto.orgEmail,
+          subject: `Official Registration: ${businessName}`,
+          html: orgHtmlContent,
+          text: orgTextContent,
+        });
+        
+        const duration = Date.now() - orgStartTime;
+        this.logger.log(`✅ Organization confirmation email sent to ${dto.orgEmail} in ${duration}ms. MessageId: ${result.messageId}`);
+      } catch (error) {
+        const duration = Date.now() - orgStartTime;
+        this.logger.error(`❌ Failed to send organization confirmation email to ${dto.orgEmail} after ${duration}ms: ${error.message}`);
+      }
     }
   }
 
@@ -141,6 +150,7 @@ export class OrganizationEmailService {
     message?: string;
     roleName: string;
   }): Promise<void> {
+    const startTime = Date.now();
     const joinUrl = `${process.env.FRONTEND_URL || 'https://pivotaconnect.com'}/accept-invite?token=${data.inviteToken}`;
     const expiresAt = this.template.formatDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), 'MMMM do, yyyy');
 
@@ -177,20 +187,24 @@ export class OrganizationEmailService {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email }],
-        Subject: `Join ${data.organizationName} on PivotaConnect`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `Join ${data.organizationName} on PivotaConnect`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Invitation (new user) sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send invitation (new user) to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -204,6 +218,7 @@ export class OrganizationEmailService {
     message?: string;
     roleName: string;
   }): Promise<void> {
+    const startTime = Date.now();
     const acceptUrl = `${process.env.FRONTEND_URL || 'https://pivotaconnect.com'}/accept-invite?token=${data.inviteToken}`;
     const expiresAt = this.template.formatDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), 'MMMM do, yyyy');
 
@@ -240,22 +255,25 @@ export class OrganizationEmailService {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email }],
-        Subject: `Added to ${data.organizationName} on PivotaConnect`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `Added to ${data.organizationName} on PivotaConnect`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Invitation (existing user) sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send invitation (existing user) to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
-
 
   /**
    * Send notification to admin when a user accepts their invitation
@@ -267,6 +285,8 @@ export class OrganizationEmailService {
     newMemberName: string;
     organizationName: string;
   }): Promise<void> {
+    const startTime = Date.now();
+
     const content = `
       <h1>New Team Member Joined</h1>
       <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.adminName},</p>
@@ -289,19 +309,23 @@ export class OrganizationEmailService {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.adminEmail, Name: data.adminName }],
-        Subject: `${data.newMemberName} joined ${data.organizationName}`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.adminEmail);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.adminEmail,
+        subject: `${data.newMemberName} joined ${data.organizationName}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Admin invitation acceptance notification sent to ${data.adminEmail} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send admin notification to ${data.adminEmail} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 }

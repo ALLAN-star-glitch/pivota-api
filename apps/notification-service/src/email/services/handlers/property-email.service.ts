@@ -12,7 +12,7 @@
  * - Sends listing creation confirmation emails to property owners
  * 
  * Dependencies:
- * - EmailClientService: Core email transport layer
+ * - MailerService: NestJS Mailer for email sending with timeout support
  * - EmailTemplateService: Template rendering and formatting utilities
  * 
  * @example
@@ -49,15 +49,16 @@
  * });
  */
 
-import { Injectable } from '@nestjs/common';
-import { SendEmailV3_1 } from 'node-mailjet';
-import { EmailClientService } from '../core/email-client.service';
+import { Injectable, Logger } from '@nestjs/common';
+import { MailerService } from '@nestjs-modules/mailer';
 import { EmailTemplateService } from '../templates/email-template.service';
 
 @Injectable()
 export class PropertyEmailService {
+  private readonly logger = new Logger(PropertyEmailService.name);
+
   constructor(
-    private readonly emailClient: EmailClientService,
+    private readonly mailerService: MailerService,
     private readonly template: EmailTemplateService,
   ) {}
 
@@ -73,6 +74,8 @@ export class PropertyEmailService {
     location: string;
     notes?: string;
   }): Promise<void> {
+    const startTime = Date.now();
+    
     const imageHtml = data.houseImageUrl ? `
       <div style="text-align: center; margin-bottom: 20px;">
         <img src="${data.houseImageUrl}" alt="${data.houseTitle}" 
@@ -111,20 +114,24 @@ export class PropertyEmailService {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email, Name: data.firstName }],
-        Subject: `Viewing Confirmed: ${data.houseTitle}`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `Viewing Confirmed: ${data.houseTitle}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Viewing confirmation (viewer) sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send viewing confirmation to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -139,6 +146,8 @@ export class PropertyEmailService {
     location: string;
     notes?: string;
   }): Promise<void> {
+    const startTime = Date.now();
+    
     const imageHtml = data.houseImageUrl ? `
       <div style="text-align: center; margin-bottom: 20px;">
         <img src="${data.houseImageUrl}" alt="${data.houseTitle}" 
@@ -178,20 +187,24 @@ export class PropertyEmailService {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email, Name: data.firstName }],
-        Subject: `Viewing Scheduled: ${data.houseTitle}`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `Viewing Scheduled: ${data.houseTitle}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Admin viewing confirmation sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send admin viewing confirmation to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -208,6 +221,8 @@ export class PropertyEmailService {
     viewerEmail?: string;
     notes?: string;
   }): Promise<void> {
+    const startTime = Date.now();
+    
     const viewerInfo = data.viewerEmail 
       ? `${data.viewerName} (${data.viewerEmail})`
       : data.viewerName;
@@ -251,20 +266,24 @@ export class PropertyEmailService {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email, Name: data.ownerName }],
-        Subject: `New Viewing Request: ${data.houseTitle}`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `New Viewing Request: ${data.houseTitle}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Viewing request (owner) sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send viewing request to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -281,6 +300,8 @@ export class PropertyEmailService {
     viewerEmail?: string;
     notes?: string;
   }): Promise<void> {
+    const startTime = Date.now();
+    
     const viewerInfo = data.viewerEmail 
       ? `${data.viewerName} (${data.viewerEmail})`
       : data.viewerName;
@@ -325,20 +346,24 @@ export class PropertyEmailService {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email, Name: data.ownerName }],
-        Subject: `Admin Scheduled Viewing: ${data.houseTitle}`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `Admin Scheduled Viewing: ${data.houseTitle}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Admin viewing request sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send admin viewing request to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -356,6 +381,7 @@ export class PropertyEmailService {
     status: string;
     imageUrl?: string;
   }): Promise<void> {
+    const startTime = Date.now();
     const listingDate = this.template.formatDate(new Date());
     
     const imageHtml = data.imageUrl ? `
@@ -413,19 +439,23 @@ export class PropertyEmailService {
       </div>
     `;
 
-    const body: SendEmailV3_1.Body = {
-      Messages: [{
-        From: {
-          Email: process.env.MAILJET_SENDER_EMAIL || 'info@acop.co.ke',
-          Name: process.env.MAILJET_SENDER_NAME || 'Pivota Connect',
-        },
-        To: [{ Email: data.email, Name: data.firstName }],
-        Subject: `Your listing "${data.listingTitle}" is now live on PivotaConnect`,
-        HTMLPart: this.template.render(content),
-        TextPart: this.template.stripHtml(content),
-      }],
-    };
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-    await this.emailClient.sendEmail(body, data.email);
+    try {
+      const result = await this.mailerService.sendMail({
+        to: data.email,
+        subject: `Your listing "${data.listingTitle}" is now live on PivotaConnect`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`✅ Listing created confirmation sent to ${data.email} in ${duration}ms. MessageId: ${result.messageId}`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ Failed to send listing confirmation to ${data.email} after ${duration}ms: ${error.message}`);
+      throw error;
+    }
   }
 }

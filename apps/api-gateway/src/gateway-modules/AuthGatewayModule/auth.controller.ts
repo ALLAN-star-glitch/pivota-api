@@ -36,6 +36,7 @@ import {
   OtpPurposeQueryDto,
   AuthClientInfoDto,
   SignupResponseDto,
+  RequestOtpQueryDto,
 } from '@pivota-api/dtos';
 import { ClientInfo } from '../../decorators/client-info.decorator';
 import {
@@ -53,7 +54,7 @@ import { Public } from '../../decorators/public.decorator';
 import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
 import { ThrottlerGuard, Throttle} from '@nestjs/throttler';
 import { Headers } from '@nestjs/common';
-import { ALLOWED_OTP_PURPOSES } from '@pivota-api/constants';
+import { OtpPurpose, OtpPurposeEnum } from '@pivota-api/shared-redis';
 import { TimeoutInterceptor } from '@pivota-api/interceptors';
 
 @ApiTags('Auth')
@@ -93,6 +94,8 @@ export class AuthController {
    */
   @Post('signup')
   @Public()
+  @UseGuards(ThrottlerGuard)  // IP-based rate limiting at gateway level
+  @Throttle({ default: { limit: 10, ttl: 60000 } })  // 10 requests per IP/minute
   @Version('1')
   @ApiTags('Auth - Registration')
   @ApiHeader({
@@ -528,6 +531,8 @@ export class AuthController {
 
   @Post('login')
   @Public()
+  @UseGuards(ThrottlerGuard)  // IP-based rate limiting at gateway level
+  @Throttle({ default: { limit: 10, ttl: 60000 } })  // 10 requests per IP/minute
   @Version('1')
   @ApiTags('Auth - Login')
   @ApiOperation({ 
@@ -554,13 +559,15 @@ export class AuthController {
 
   @Post('login/verify-mfa')
   @Public()
+  @UseGuards(ThrottlerGuard)  // IP-based rate limiting at gateway level
+@Throttle({ default: { limit: 10, ttl: 60000 } })  // 10 requests per IP/minute
   @Version('1')
   @ApiTags('Auth - Login')
   @ApiOperation({ 
     summary: 'Step 2: Verify OTP and issue JWT cookies',
     description: `
       Completes the two-factor authentication process.
-      
+       
       **Microservice:** Auth Service
       **Authentication:** Not required (completes login)
       
@@ -689,39 +696,130 @@ export class AuthController {
   // 🔐 AUTH - OTP MANAGEMENT
   // ===========================================================
 
-  @Post('otp/request')
-  @Public()
-  @UseGuards(ThrottlerGuard)  // KEEP THIS
-  @Throttle({ default: { limit: 10, ttl: 60000 } })  // 10 requests per IP/minute
-  @Version('1')
-  @ApiTags('Auth - OTP')
-  @ApiOperation({ 
-    summary: 'Request a security code (OTP) via email',
-    description: `
-      Sends a verification code to the user's email for various purposes.
-      
-      **Microservice:** Auth Service
-      **Authentication:** Not required
-      
-      ... (rest of existing documentation) ...
-    `
-  })
-  @ApiBody({ type: RequestOtpDto })
-  @ApiQuery({ name: 'purpose', required: true, enum: ALLOWED_OTP_PURPOSES })
-  @ApiResponse({ status: 200, description: 'OTP sent successfully' })
-  async requestOtp(
-    @Body() dto: RequestOtpDto,
-    @Query() query: OtpPurposeQueryDto
-  ): Promise<BaseResponseDto<null>> {
-    this.logger.log(`📩 OTP Request [${query.purpose}] for: ${dto.email}`);
+@Post('otp/request')
+@Public()
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { limit: 10, ttl: 60000 } })
+@Version('1')
+@ApiTags('Auth - OTP')
+@ApiOperation({ 
+  summary: 'Request a security code (OTP) via email',
+  description: `
+    Sends a verification code to the user's email for various purposes.
     
-    const result = await this.authService.requestOtp(dto, query.purpose);
-    if (!result.success) {
-      this.logger.warn(`⚠️ OTP Request failed for ${dto.email}: ${result.message}`);
-      throw result; 
+    **Microservice:** Auth Service
+    **Authentication:** Not required
+    
+    **Purpose Types:**
+    - EMAIL_VERIFICATION: Sign up new account (requires phone number)
+    - ORGANIZATION_EMAIL_VERIFICATION: Organization sign up
+    - LOGIN_2FA: Two-factor authentication during login
+    - PASSWORD_RESET: Reset forgotten password
+    - CHANGE_EMAIL: Change email address
+    - CHANGE_PHONE: Change phone number
+    - WITHDRAWAL: Withdraw money from wallet
+    - ESCROW_RELEASE: Release escrow funds
+    - PAYMENT_CONFIRM: Confirm payment
+    - JOB_ACCEPT: Accept job offer
+    - CONTRACT_SIGN: Sign employment contract
+    - LEASE_SIGN: Sign lease agreement
+    - DEPOSIT_CONFIRM: Confirm deposit payment
+    - AID_RECEIPT: Confirm aid receipt
+    - CASH_DISBURSEMENT: Receive cash aid
+    - DELETE_ACCOUNT: Delete account confirmation
+    - MFA_RECOVERY: Recover from lost MFA
+    
+    **Rate Limits:**
+    - IP-based: 10 requests per minute (ThrottlerGuard at gateway)
+    - Email-based: Purpose-specific limits (3-10 attempts per time window)
+    
+    **Security:**
+    - No user enumeration: Returns same response for existing/non-existing emails
+    - Timing attack protection: Random delays on error paths
+  `
+})
+@ApiBody({ type: RequestOtpDto })
+// ✅ REMOVE this line - don't use @ApiQuery decorator
+// @ApiQuery({ type: RequestOtpQueryDto })
+@ApiResponse({ 
+  status: 200, 
+  description: 'OTP sent successfully (or appears sent for security reasons)',
+  schema: {
+    example: {
+      success: true,
+      message: 'Verification code sent to your email',
+      code: 'OK',
+      data: null
     }
-    return result;
   }
+})
+@ApiResponse({ 
+  status: 400, 
+  description: 'Invalid purpose or request',
+  schema: {
+    example: {
+      success: false,
+      message: 'Purpose must be one of: EMAIL_VERIFICATION, ORGANIZATION_EMAIL_VERIFICATION, LOGIN_2FA, ...',
+      code: 'BAD_REQUEST'
+    }
+  }
+})
+@ApiResponse({ 
+  status: 429, 
+  description: 'Rate limit exceeded (IP or email based)',
+  schema: {
+    example: {
+      success: false,
+      message: 'Too many attempts. Try again in 5 minutes.',
+      code: 'TOO_MANY_REQUESTS'
+    }
+  }
+})
+@ApiResponse({ 
+  status: 500, 
+  description: 'Internal server error',
+  schema: {
+    example: {
+      success: false,
+      message: 'An error occurred while processing your request',
+      code: 'INTERNAL_ERROR'
+    }
+  }
+})
+async requestOtp(
+  @Body() body: RequestOtpDto,
+  @Query() query: RequestOtpQueryDto  // Keep this for functionality
+): Promise<BaseResponseDto<null>> {
+  const { email, phone } = body;
+  const { purpose } = query;
+   
+  this.logger.log(`📩 OTP Request [${purpose}] for: ${email}${phone ? ` with phone: ${phone}` : ''}`);
+   
+  try {  
+    const result = await this.authService.requestOtp(
+      { email, phone },   
+      purpose            
+    );
+    
+    if (!result.success) {
+      this.logger.warn(`⚠️ OTP Request failed for ${email} [${purpose}]: ${result.message}`);
+      return result;
+    } 
+    
+    this.logger.log(`✅ OTP Request successful for ${email} [${purpose}]`);
+    return result;
+    
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    this.logger.error(`❌ OTP Request error for ${email} [${purpose}]: ${errorMessage}`);
+    
+    return BaseResponseDto.fail(
+      'An error occurred while processing your request',
+      'INTERNAL_ERROR',
+      { code: 'INTERNAL', message: errorMessage }
+    );
+  }
+}
 
   @Post('otp/verify')
   @Public()
@@ -786,6 +884,8 @@ export class AuthController {
 
   @Post('password/reset')
   @Public()
+  @UseGuards(ThrottlerGuard)  
+  @Throttle({ default: { limit: 10, ttl: 60000 } })  // 10 requests per IP/minute
   @Version('1')
   @ApiTags('Auth - Password')
   @ApiOperation({ 
@@ -798,7 +898,7 @@ export class AuthController {
       
       ... (rest of existing documentation) ...
     `
-  })
+  })  
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successful' })
   @ApiResponse({ status: 400, description: 'Invalid or expired OTP' })
@@ -809,7 +909,7 @@ export class AuthController {
     this.logger.log(`🔄 Processing password reset for: ${dto.email}`);
     return this.authService.resetPassword(dto);
   }
-
+ 
   // ===========================================================
   // 🔐 AUTH - SESSION MANAGEMENT
   // ===========================================================

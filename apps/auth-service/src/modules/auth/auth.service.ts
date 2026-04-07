@@ -40,7 +40,7 @@ import { randomUUID } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import * as dotenv from 'dotenv';
 import { HttpService } from '@nestjs/axios';
-import { QueueService } from '@pivota-api/shared-redis';
+import { getRateLimitConfig, OtpPurpose, QueueService } from '@pivota-api/shared-redis';
 
 
 
@@ -298,8 +298,9 @@ async generateTokens(
   return { accessToken, refreshToken };
 }
 
+
 /* ======================================================
-   INDIVIDUAL SIGNUP (With Transactional OTP Verification)
+   INDIVIDUAL SIGNUP (With Transactional OTP Verification & Auto-Login)
 ====================================================== */
 async signup(
   signupDto: UserSignupRequestDto,
@@ -313,18 +314,42 @@ async signup(
   this.logger.log(`📝 Signup attempt: ${signupDto.email}`);
 
   try {
-    // 1. Verify OTP
-    const validOtp = await this.prisma.otp.findFirst({
-      where: {
-        email: signupDto.email,
-        code: signupDto.code,
-        purpose: 'SIGNUP',
-        expiresAt: { gt: new Date() },
-      },
-      select: { id: true },
+    // 1. Get signup rate limit configuration using unified function
+    const signupLimit = getRateLimitConfig('SIGNUP_ATTEMPTS');
+    
+    // 2. Check rate limit for signup attempts
+    const rateLimitResult = await this.queue.checkRateLimit(
+      signupDto.email,
+      'signup_attempts',
+      signupLimit.maxAttempts,
+      signupLimit.windowSeconds
+    );
+    
+    if (!rateLimitResult.allowed) {
+      const minutesLeft = Math.ceil(rateLimitResult.resetInSeconds / 60);
+      this.logger.warn(`[AUTH] Signup rate limit exceeded for ${signupDto.email}`);
+      return BaseResponseDto.fail(
+        signupLimit.errorMessage(minutesLeft),
+        'TOO_MANY_REQUESTS'
+      );
+    }
+
+    // 3. Verify OTP using unified function for OTP config
+    const verificationResult = await this.verifyOtp({
+      email: signupDto.email,
+      code: signupDto.code,
+      purpose: 'EMAIL_VERIFICATION',
     });
 
-    if (!validOtp) {
+    if (!verificationResult.success || !verificationResult.data?.verified) {
+      // Increment failed attempt counter
+      await this.queue.incrementRateLimit(
+        signupDto.email,
+        'signup_attempts',
+        signupLimit.maxAttempts,
+        signupLimit.windowSeconds
+      );
+      
       this.logger.warn(`[AUTH] Blocked signup attempt: Invalid/Expired OTP for ${signupDto.email}`);
       
       await this.queue.addJob(
@@ -361,7 +386,7 @@ async signup(
       );
     }
 
-    // 2. Build the CreateAccountWithProfilesRequestDto
+    // 4. Build the CreateAccountWithProfilesRequestDto
     const createAccountDto: any = {
       accountType: 'INDIVIDUAL',
       email: signupDto.email,
@@ -445,13 +470,21 @@ async signup(
     const targetPlanSlug = signupDto.planSlug || 'free-forever';
     const isPremium = targetPlanSlug !== 'free-forever';
 
-    // 3. Create account via gRPC (parallel with password hash)
+    // 5. Create account via gRPC
     const [hashedPassword, profileResponse] = await Promise.all([
       bcrypt.hash(signupDto.password, 10),
       firstValueFrom(profileGrpcService.createIndividualAccountWithProfiles(createAccountDto))
     ]);
 
     if (!profileResponse.success || !profileResponse.data) {
+      // Increment rate limit counter on profile creation failure
+      await this.queue.incrementRateLimit(
+        signupDto.email,
+        'signup_attempts',
+        signupLimit.maxAttempts,
+        signupLimit.windowSeconds
+      );
+      
       this.logger.error(`[PROFILE FAIL] ${signupDto.email}: ${profileResponse.message}`);
       
       await this.queue.addJob(
@@ -491,24 +524,31 @@ async signup(
     const userData = accountData.users?.[0];
     
     if (!userData) {
+      // Increment rate limit counter when no user data returned
+      await this.queue.incrementRateLimit(
+        signupDto.email,
+        'signup_attempts',
+        signupLimit.maxAttempts,
+        signupLimit.windowSeconds
+      );
+      
       this.logger.error(`[PROFILE RESPONSE] No user found in account data for ${signupDto.email}`);
       return BaseResponseDto.fail('Invalid response from profile service', 'INTERNAL_ERROR');
     }
 
-    // 4. Save credentials and cleanup OTP
-    await this.prisma.$transaction([
-      this.prisma.credential.create({
-        data: {
-          userUuid: userData.uuid,
-          passwordHash: hashedPassword,
-          email: signupDto.email,
-          mfaEnabled: true,
-        },
-      }),
-      this.prisma.otp.deleteMany({
-        where: { email: signupDto.email, purpose: 'SIGNUP' },
-      }),
-    ]);
+    // 6. Save credentials (OTP already deleted by verifyOtp)
+    await this.prisma.credential.create({
+      data: {
+        userUuid: userData.uuid,
+        passwordHash: hashedPassword,
+        email: signupDto.email,
+        phone: signupDto.phone || null,
+        mfaEnabled: true,
+      },
+    });
+
+    // 7. Reset rate limit on successful signup
+    await this.queue.resetRateLimit(signupDto.email, 'signup_attempts');
 
     // ============ PREMIUM BRANCH: PAYMENT HAND-OFF ============
     if (isPremium && profileResponse.code === 'PAYMENT_REQUIRED') {
@@ -554,149 +594,25 @@ async signup(
           }
         );
 
-        // Queue admin notification
-        const adminEmail = process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com';
-        await this.queue.addJob(
-          'email-queue',
-          'admin-notification',
-          {
-            to: adminEmail,
-            userEmail: signupDto.email,
-            userName: `${signupDto.firstName} ${signupDto.lastName}`,
-            accountType: 'INDIVIDUAL',
-            registrationMethod: 'EMAIL',
-            registrationDate: new Date().toISOString(),
-            plan: targetPlanSlug,
-            primaryPurpose: signupDto.primaryPurpose || 'JUST_EXPLORING',
-            profileType: profileType,
-            paymentStatus: 'PENDING',
-          },
-          {
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 5000 },
-            removeOnComplete: true,
-            removeOnFail: false,
-          }
-        );
-
-        // Queue analytics event
-        await this.queue.addJob(
-          'analytics-queue',
-          'user-registered',
-          {
-            userUuid: userData.uuid,
-            email: signupDto.email,
-            accountId: accountData.accountCode,
-            plan: targetPlanSlug,
-            primaryPurpose: signupDto.primaryPurpose || 'JUST_EXPLORING',
-            profileType: profileType,
-            hasProfileData: !!profileType,
-            paymentStatus: 'PENDING',
-            signupSource: clientInfo ? {
-              device: clientInfo.device,
-              deviceType: clientInfo.deviceType,
-              os: clientInfo.os,
-              osVersion: clientInfo.osVersion,
-              browser: clientInfo.browser,
-              browserVersion: clientInfo.browserVersion,
-              isBot: clientInfo.isBot,
-              timestamp: new Date().toISOString()
-            } : null
-          },
-          {
-            attempts: 2,
-            backoff: { type: 'exponential', delay: 5000 },
-            removeOnComplete: true,
-            removeOnFail: true,
-          }
-        );
-
         return BaseResponseDto.ok(
-          {
-            message: 'Account created. Complete payment to activate.',
-            redirectUrl: paymentInitResponse.data.redirectUrl,
-            merchantReference: paymentInitResponse.data.merchantReference,
-          } as any,
-          'Payment required to activate account',
-          'PAYMENT_REQUIRED'
-        );
+            {
+              message: 'Account created. Complete payment to activate.',
+              redirectUrl: paymentInitResponse.data.redirectUrl,
+              merchantReference: paymentInitResponse.data.merchantReference,
+            } as SignupResponseDto,
+            'Payment required to activate account',
+            'PAYMENT_REQUIRED'
+          );
 
       } catch (paymentErr: unknown) {
         const message = paymentErr instanceof Error ? paymentErr.message : 'Payment service unreachable';
         this.logger.error(`[PAYMENT SERVICE DOWN] User ${signupDto.email}: ${message}`);
 
-        // Queue payment failed email
-        await this.queue.addJob(
-          'email-queue',
-          'payment-failed-email',
-          {
-            to: signupDto.email,
-            firstName: signupDto.firstName,
-            lastName: signupDto.lastName,
-            plan: targetPlanSlug,
-            profileType: profileType,
-            errorMessage: message,
-          },
-          {
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 5000 },
-            removeOnComplete: true,
-            removeOnFail: false,
-          }
-        );
-
-        // Queue admin notification about payment failure
-        const adminEmail = process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com';
-        await this.queue.addJob(
-          'email-queue',
-          'admin-notification',
-          {
-            to: adminEmail,
-            userEmail: signupDto.email,
-            userName: `${signupDto.firstName} ${signupDto.lastName}`,
-            accountType: 'INDIVIDUAL',
-            registrationMethod: 'EMAIL',
-            registrationDate: new Date().toISOString(),
-            plan: targetPlanSlug,
-            primaryPurpose: signupDto.primaryPurpose || 'JUST_EXPLORING',
-            profileType: profileType,
-            paymentStatus: 'FAILED',
-            paymentError: message,
-          },
-          {
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 5000 },
-            removeOnComplete: true,
-            removeOnFail: false,
-          }
-        );
-
-        // Queue analytics event for payment failure
-        await this.queue.addJob(
-          'analytics-queue',
-          'payment-failed',
-          {
-            userUuid: userData.uuid,
-            email: signupDto.email,
-            accountId: accountData.accountCode,
-            plan: targetPlanSlug,
-            profileType: profileType,
-            error: message,
-            timestamp: new Date().toISOString()
-          },
-          {
-            attempts: 2,
-            backoff: { type: 'exponential', delay: 5000 },
-            removeOnComplete: true,
-            removeOnFail: true,
-          }
-        );
-
         return BaseResponseDto.ok(
           {
             message: 'Account created. Payment system busy. Please login to complete payment.',
             redirectUrl: null,
-          } as any,
+          },
           'Account created. Payment service offline.',
           'PAYMENT_SERVICE_OFFLINE'
         );
@@ -781,10 +697,30 @@ async signup(
       }
     );
 
-    this.logger.log(`✅ Signup completed: ${signupDto.email}`);
+    // ✅ STEP 8: Generate tokens for auto-login
+    // Fetch the full profile data to generate tokens
+    const profileDataForTokens = await firstValueFrom(
+      this.getProfileGrpcService().getUserProfileByUuid({ userUuid: userData.uuid })
+    );
 
+    if (!profileDataForTokens?.success || !profileDataForTokens.data) {
+      this.logger.error(`Failed to get profile data for token generation for user: ${userData.uuid}`);
+      return BaseResponseDto.fail('Signup succeeded but failed to generate session', 'INTERNAL_ERROR');
+    }
+
+    // Generate access and refresh tokens
+    const { accessToken, refreshToken } = await this.generateTokens(profileDataForTokens.data, clientInfo);
+
+    this.logger.log(`✅ Signup completed and tokens generated for: ${signupDto.email}`);
+
+    // ✅ Return success with tokens for auto-login (no user DTO - frontend decodes token)
     return BaseResponseDto.ok(
-      { message: 'Signup successful' } as any,
+      {
+        message: 'Signup successful',
+        accessToken,
+        refreshToken,
+        redirectTo: '/dashboard'
+      },
       'Signup successful',
       'CREATED'
     );
@@ -792,6 +728,19 @@ async signup(
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : 'Unexpected failure';
     this.logger.error(`[AUTH SIGNUP CRASH] ${errorMessage}`);
+
+    // Increment rate limit counter on unexpected errors
+    try {
+      const signupLimit = getRateLimitConfig('SIGNUP_ATTEMPTS');
+      await this.queue.incrementRateLimit(
+        signupDto.email,
+        'signup_attempts',
+        signupLimit.maxAttempts,
+        signupLimit.windowSeconds
+      );
+    } catch (rateError) {
+      this.logger.error(`Failed to increment rate limit: ${rateError}`);
+    }
 
     await this.queue.addJob(
       'analytics-queue',
@@ -1129,31 +1078,60 @@ async login(
   this.logger.debug(`Login attempt for: ${loginDto.email}`);
 
   try {
-    // 1. Validate Credentials
+    // 1. Check rate limit for login attempts (early defense)
+    const loginLimit = getRateLimitConfig('LOGIN_ATTEMPTS');
+    
+    const rateLimitResult = await this.queue.checkRateLimit(
+      loginDto.email,
+      'login_attempts',
+      loginLimit.maxAttempts,
+      loginLimit.windowSeconds
+    );
+    
+    if (!rateLimitResult.allowed) {
+      const minutesLeft = Math.ceil(rateLimitResult.resetInSeconds / 60);
+      this.logger.warn(`[AUTH] Login rate limit exceeded for ${loginDto.email}`);
+      return BaseResponseDto.fail(
+        loginLimit.errorMessage(minutesLeft),
+        'TOO_MANY_REQUESTS'
+      );
+    }
+    
+    // 2. Validate Credentials (database lockout is second layer)
     const profile = await this.validateUser(loginDto.email, loginDto.password);
 
     if (!profile) {
-      throw new UnauthorizedException('Invalid credentials');
+      // Increment rate limit counter on failed password
+      await this.queue.incrementRateLimit(
+        loginDto.email,
+        'login_attempts',
+        loginLimit.maxAttempts,
+        loginLimit.windowSeconds
+      );
+      throw new UnauthorizedException('Invalid password or email');
     }
 
-    // 2. Trigger MFA Challenge
+    // 3. Reset rate limit on successful password validation
+    await this.queue.resetRateLimit(loginDto.email, 'login_attempts');
+
+    // 4. Trigger MFA Challenge (has its own rate limit)
     await this.requestOtp({
       email: loginDto.email,
-      purpose: '2FA',
+      purpose: "LOGIN_2FA",   
     });
 
     this.logger.log(`MFA challenge sent to: ${loginDto.email}`);
 
-    // 3. Return lean MFA response - only what's needed for frontend
+    // 5. Return lean MFA response
     return BaseResponseDto.ok(
-    { 
-      message: 'MFA_REQUIRED',
-      email: profile.user.email,
-      uuid: profile.user.uuid
-    } as LoginResponseDto,
-    'MFA_REQUIRED',
-    '2FA_PENDING'
-  );
+      { 
+        message: 'MFA_REQUIRED',
+        email: profile.user.email,
+        uuid: profile.user.uuid
+      } as LoginResponseDto,
+      'MFA_REQUIRED',
+      '2FA_PENDING'
+    );
 
   } catch (err: unknown) {
     this.logger.error(`Login failed for ${loginDto.email}`, err instanceof Error ? err.message : err);
@@ -1640,86 +1618,119 @@ async generateDevToken(
   }
 }
 
-// apps/auth-service/src/auth.service.ts (find your requestOtp method)
 
-async requestOtp(data: RequestOtpDto & { purpose: string }): Promise<BaseResponseDto<null>> {
-  const { email, purpose } = data; 
+async requestOtp(
+  dto: RequestOtpDto & { purpose: OtpPurpose } & { phone?: string }
+): Promise<BaseResponseDto<null>> {
+  const { email, purpose, phone } = dto;
   const startTime = Date.now();
 
+  // Get purpose-specific configuration
+  const config = getRateLimitConfig(purpose);
+  const validation = config.validation;
+
   try {
-    // 1. Check user existence
-    const existingUser = await this.prisma.credential.findUnique({
-      where: { email },
-      select: { id: true },
-    });
-
-    // 2. Business Logic
-    switch (purpose) {
-      case 'SIGNUP':
-      case 'ORGANIZATION_SIGNUP':
-        if (existingUser) {
-          this.logger.warn(`[OTP] ${purpose} blocked: ${email} already exists.`);
-          return BaseResponseDto.fail('This email is already registered.', 'CONFLICT');
-        }
-        break;
-
-      case 'PASSWORD_RESET':
-        if (!existingUser) {
-          this.logger.log(`[OTP] Password reset requested for non-existent: ${email}`);
-          return BaseResponseDto.ok(null, 'If an account exists, a code has been sent.');
-        }
-        break;
-
-      case '2FA':
-        if (!existingUser) {
-          return BaseResponseDto.fail('Account not found.', 'NOT_FOUND');
-        }
-        break;
-
-      case 'CHANGE_EMAIL':
-        if (existingUser) {
-          return BaseResponseDto.fail('This email is already in use.', 'CONFLICT');
-        }
-        break;
- 
-      case 'CHANGE_PHONE':
-        if (!existingUser) {
-          return BaseResponseDto.fail('User account not found.', 'NOT_FOUND');
-        }
-        break;
-
-      default:
-        this.logger.error(`[OTP] Unsupported purpose: ${purpose}`);
-        return BaseResponseDto.fail('Invalid request purpose.', 'BAD_REQUEST');
-    }
-
-    // 3. Rate limiting with Redis
+    // 1. CHECK rate limit
     const rateLimitResult = await this.queue.checkRateLimit(
-      email, `otp_${purpose}`, 3, 600
+      email, 
+      `otp_${purpose}`, 
+      config.maxAttempts,
+      config.windowSeconds
     );
     
     if (!rateLimitResult.allowed) {
       const minutesLeft = Math.ceil(rateLimitResult.resetInSeconds / 60);
+      this.logger.warn(`[OTP] Rate limit exceeded for ${email} (${purpose})`);
       return BaseResponseDto.fail(
-        `Too many attempts. Try again in ${minutesLeft} minutes.`,
+        config.errorMessage(minutesLeft, rateLimitResult.attempts),
         'TOO_MANY_REQUESTS'
       );
     }
     
-    // 4. Generate OTP
+    // 2. Check user existence (only if validation rules require it)
+    let existingUser = null;
+    if (validation && validation.userExists !== 'ignore') {
+      existingUser = await this.prisma.credential.findUnique({
+        where: { email },
+        select: { id: true, phone: true, userUuid: true },
+      });
+      
+      // Also check profile service for existing user (for Google signups etc.)
+      if (!existingUser && validation.userExists === 'forbidden') {
+        try {
+          const profileGrpc = this.getProfileGrpcService();
+          const profileResponse = await firstValueFrom(
+            profileGrpc.getUserProfileByEmail({ email })
+          );
+          if (profileResponse?.success && profileResponse.data) {
+            existingUser = { id: 'profile-exists', phone: null, userUuid: profileResponse.data.user.uuid };
+            this.logger.debug(`[OTP] User exists in Profile service for ${email}`);
+          }
+        } catch (profileErr) {
+          this.logger.debug(`[OTP] Profile check failed for ${email}: ${profileErr.message}`);
+        }
+      }
+    }
+
+    // 3. Check phone uniqueness ONLY for EMAIL_VERIFICATION (signup)
+    if (purpose === 'EMAIL_VERIFICATION' && phone) {
+      const existingPhone = await this.prisma.credential.findUnique({
+        where: { phone },
+        select: { id: true },
+      });
+      
+      if (existingPhone) {
+        this.logger.warn(`[OTP] Signup blocked: Phone ${phone} already registered`);
+        return BaseResponseDto.fail(
+          'This phone number is already registered.',
+          'CONFLICT',
+          { code: 'PHONE_EXISTS' }
+        );
+      }
+    }
+
+    this.logger.debug(`[OTP] Validation config for ${purpose}:`, validation);
+    
+    // 4. Apply validation rules (with null checks)
+    if (validation?.userExists === 'required' && !existingUser) {
+      if (validation?.requireDelayOnError) {
+        await this.simulateDelay();
+      }
+      return BaseResponseDto.fail(
+        validation?.customMessage?.userNotFound || 'Account not found.',
+        'NOT_FOUND'
+      );
+    }
+
+    // ✅ FIX: Return error immediately for existing user during signup
+    if (validation?.userExists === 'forbidden' && existingUser) {
+      this.logger.warn(`[OTP] Signup blocked: Email ${email} already registered`);
+      return BaseResponseDto.fail(
+        validation?.customMessage?.userExists || 'This email is already registered. Please login instead.',
+        'CONFLICT',
+        { code: 'EMAIL_EXISTS', userExists: true }
+      );
+    }
+
+    if (validation?.returnSuccessOnNonExistent && !existingUser) {
+      this.logger.log(`[OTP] Request for non-existent email: ${email} (${purpose})`);
+      return BaseResponseDto.ok(null, validation?.customMessage?.userNotFound || 'If an account exists, a code has been sent.');
+    }
+
+    // 5. Generate OTP (only reaches here if validation passes)
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 10 * 60000);
 
-    // 5. UPSERT - Single database operation (requires unique constraint on email + purpose)
+    // 6. UPSERT - Store phone only for EMAIL_VERIFICATION
     await this.prisma.otp.upsert({
       where: {
-        email_purpose: { email, purpose }  // Uses the unique constraint
+        email_purpose: { email, purpose }
       },
       update: {
         code: otpCode,
         expiresAt: expiresAt,
-        createdAt: now,  // Update timestamp on resend
+        createdAt: now,
       },
       create: {
         email,
@@ -1730,12 +1741,22 @@ async requestOtp(data: RequestOtpDto & { purpose: string }): Promise<BaseRespons
       },
     });
 
-    // 6. Log request (fire and forget)
+    // 7. INCREMENT rate limit counter AFTER successfully generating OTP
+    await this.queue.incrementRateLimit(
+      email, 
+      `otp_${purpose}`, 
+      config.maxAttempts,
+      config.windowSeconds
+    );
+
+    // 8. Log request
     this.prisma.otpRequestLog.create({
       data: { email, purpose, createdAt: now },
     }).catch(err => this.logger.debug(`Log failed: ${err.message}`));
 
-    // 7. Queue email (fire and forget)
+
+    this.logger.debug(`Sending OTP ${otpCode} to ${email} for ${purpose}`);
+    // 9. Queue email (fire and forget)
     await this.queue.addJob(
       'email-queue',
       'send-otp',
@@ -1743,7 +1764,6 @@ async requestOtp(data: RequestOtpDto & { purpose: string }): Promise<BaseRespons
         to: email,
         code: otpCode,
         purpose: purpose,
-        // Remove firstName - not available in OTP request
       },
       {
         attempts: 3,
@@ -1753,7 +1773,7 @@ async requestOtp(data: RequestOtpDto & { purpose: string }): Promise<BaseRespons
       }
     );
 
-    // 8. Clean up old logs (fire and forget)
+    // 10. Clean up old logs
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
     this.prisma.otpRequestLog.deleteMany({
       where: {
@@ -1766,7 +1786,8 @@ async requestOtp(data: RequestOtpDto & { purpose: string }): Promise<BaseRespons
     const totalTime = Date.now() - startTime;
     this.logger.log(`[OTP] Code sent to ${email} for ${purpose} in ${totalTime}ms`);
 
-    return BaseResponseDto.ok(null, 'Verification code sent to your email');
+    // Use success message from config
+    return BaseResponseDto.ok(null, config.successMessage || 'Verification code sent to your email');
 
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -1775,61 +1796,90 @@ async requestOtp(data: RequestOtpDto & { purpose: string }): Promise<BaseRespons
   }
 }
 
+// Helper to prevent timing attacks
+private async simulateDelay(): Promise<void> {
+  const delay = Math.random() * 100 + 50; // 50-150ms random delay
+  await new Promise(resolve => setTimeout(resolve, delay));
+}
+
 
 
 
 /** ------------------ Verify OTP ------------------ */
-async verifyOtp(data: VerifyOtpDto & { purpose: string }): Promise<BaseResponseDto<{ verified: boolean }>> {
-  const { email, code, purpose } = data;
+async verifyOtp(
+  dto: VerifyOtpDto & { purpose: OtpPurpose }
+): Promise<BaseResponseDto<{ verified: boolean }>> {
+  const { email, code, purpose } = dto;
+  const startTime = Date.now();
 
   try {
-    /**
-     * 1. Find the latest valid OTP.
-     * We strictly use the provided 'purpose' (SIGNUP, ORGANIZATION_SIGNUP, PASSWORD_RESET, etc.)
-     * to ensure the security context remains isolated.
-     */
-    const latestOtp = await this.prisma.otp.findFirst({
+    // 1. Check rate limit for OTP verification attempts (prevent brute force)
+    const verifyLimit = getRateLimitConfig('OTP_VERIFICATION');
+    
+    const rateLimitResult = await this.queue.checkRateLimit(
+      email,
+      `verify_otp_${purpose}`,
+      verifyLimit.maxAttempts,
+      verifyLimit.windowSeconds
+    );
+    
+    if (!rateLimitResult.allowed) {
+      const minutesLeft = Math.ceil(rateLimitResult.resetInSeconds / 60);
+      this.logger.warn(`[AUTH] OTP verification rate limit exceeded for ${email} (${purpose})`);
+      return BaseResponseDto.fail(
+        verifyLimit.errorMessage(minutesLeft),
+        'TOO_MANY_REQUESTS'
+      );
+    }
+    
+    // 2. Single database call - find AND delete in one operation
+    const deleteResult = await this.prisma.otp.deleteMany({
       where: {
         email,
         code,
-        purpose, // Strict match against the validated purpose
-        expiresAt: { gt: new Date() }, // Check if the current time is before expiry
+        purpose,
+        expiresAt: { gt: new Date() },
       },
-      orderBy: { createdAt: 'desc' },
     });
 
-    if (!latestOtp) {
-      this.logger.warn(`[AUTH] Failed verification for: ${email} | Purpose: ${purpose} | Code: ${code}`);
-      return {
-        success: false,
-        message: 'Invalid or expired verification code.',
-        code: 'UNAUTHORIZED',
-        data: { verified: false },
-      } as BaseResponseDto<{ verified: boolean }>;
+    if (deleteResult.count === 0) {
+      // Increment failed attempt counter
+      await this.queue.incrementRateLimit(
+        email,
+        `verify_otp_${purpose}`,
+        verifyLimit.maxAttempts,
+        verifyLimit.windowSeconds
+      );
+      
+      this.logger.warn(`[AUTH] Failed OTP verification for: ${email} | Purpose: ${purpose}`);
+      return BaseResponseDto.fail(
+        'Invalid or expired verification code.',
+        'UNAUTHORIZED',
+        { code: 'INVALID_OTP', verified: false }
+      );
     }
-
-    /**
-     * 2. OTP is valid!
-     * NOTE: We do NOT delete the OTP here to support multiple validations
-     * (e.g., admin testing, resend scenarios, etc.)
-     * The OTP should only be deleted after the actual operation completes
-     * (signup, password reset, etc.)
-     */
-    this.logger.log(`[AUTH] OTP verified successfully: ${email} [${purpose}] (NOT deleted - validation only)`);
-
-    return {
-      success: true,
-      message: 'Verification successful',
-      code: 'OK',
-      data: { verified: true },
-    } as BaseResponseDto<{ verified: boolean }>;
+    
+    // 3. Reset rate limit on success
+    await this.queue.resetRateLimit(email, `verify_otp_${purpose}`);
+    
+    const totalTime = Date.now() - startTime;
+    this.logger.log(`[AUTH] OTP verified successfully: ${email} [${purpose}] in ${totalTime}ms`);
+    
+    return BaseResponseDto.ok(
+      { verified: true },
+      'Verification successful',
+      'OK'
+    );
 
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown validation error';
     this.logger.error(`Error verifying OTP for ${email}: ${errorMsg}`);
     
-    // Throwing RpcException for gRPC protocol mapping
-    throw new RpcException({ code: 13, message: 'Internal validation failure' });
+    return BaseResponseDto.fail(
+      'An error occurred during verification',
+      'INTERNAL_ERROR',
+      { code: 'VERIFICATION_ERROR', message: errorMsg }
+    );
   }
 }
 
@@ -1840,26 +1890,52 @@ async verifyMfaLogin(
   this.logger.debug(`MFA verification for: ${verifyDto.email}`);
 
   try {
-    // 1. OPTIMIZED: Verify OTP - select only what we need
-    const validOtp = await this.prisma.otp.findFirst({
-      where: {
-        email: verifyDto.email,
-        code: verifyDto.code,
-        purpose: '2FA',
-        expiresAt: { gt: new Date() },
-      },
-      select: { id: true },
+    // 1. Get MFA verification rate limit configuration
+    const mfaLimit = getRateLimitConfig('MFA_VERIFICATION');
+    
+    // 2. Check rate limit for OTP verification attempts
+    const rateLimitResult = await this.queue.checkRateLimit(
+      verifyDto.email,
+      'mfa_verification',
+      mfaLimit.maxAttempts,
+      mfaLimit.windowSeconds
+    );
+    
+    if (!rateLimitResult.allowed) {
+      const minutesLeft = Math.ceil(rateLimitResult.resetInSeconds / 60);
+      this.logger.warn(`[AUTH] MFA verification rate limit exceeded for ${verifyDto.email}`);
+      return BaseResponseDto.fail(
+        mfaLimit.errorMessage(minutesLeft),
+        'TOO_MANY_REQUESTS'
+      );
+    }
+    
+    // 3. Verify OTP
+    const verificationResult = await this.verifyOtp({
+      email: verifyDto.email,
+      code: verifyDto.code,
+      purpose: 'LOGIN_2FA',
     });
 
-    if (!validOtp) {
+    if (!verificationResult.success || !verificationResult.data?.verified) {
+      // Increment failed attempt counter
+      await this.queue.incrementRateLimit(
+        verifyDto.email,
+        'mfa_verification',
+        mfaLimit.maxAttempts,
+        mfaLimit.windowSeconds
+      );
       return BaseResponseDto.fail(
         'Invalid or expired verification code',
         'UNAUTHORIZED',
         { code: 'INVALID_OTP' }
       );
     }
-
-    // 2. Get user credential
+    
+    // 4. Reset rate limit on success
+    await this.queue.resetRateLimit(verifyDto.email, 'mfa_verification');
+    
+    // 5. Get user credential
     const credential = await this.prisma.credential.findUnique({
       where: { email: verifyDto.email },
       select: { userUuid: true },
@@ -1869,7 +1945,7 @@ async verifyMfaLogin(
       return BaseResponseDto.fail('User not found', 'NOT_FOUND');
     }
 
-    // 3. Fetch user profile
+    // 6. Fetch user profile
     let profileResponse;
     try {
       profileResponse = await firstValueFrom(
@@ -1887,7 +1963,7 @@ async verifyMfaLogin(
     const profile = profileResponse.data;
     const userData = profile.user;
 
-    // Check user status
+    // 7. Check user status
     if (userData.status !== 'ACTIVE') {
       return BaseResponseDto.fail(
         `Account is ${userData.status.toLowerCase()}`,
@@ -1895,18 +1971,19 @@ async verifyMfaLogin(
       );
     }
 
-    // 4. Generate tokens
+    // 8. Generate tokens
     const { accessToken, refreshToken } = await this.generateTokens(profile, clientInfo);
 
-    // 5. Fire-and-forget notifications (don't await)
+    // 9. Fire-and-forget notifications
     this.sendLoginNotification(userData, profile, clientInfo);
 
-    // 6. Clean up OTP
-    await this.prisma.otp.delete({ where: { id: validOtp.id } });
-
-    // 7. Return lean response with only tokens
+    // 10. Return response
     return BaseResponseDto.ok(
-      { accessToken, refreshToken } as LoginResponseDto,
+      { 
+        accessToken, 
+        refreshToken,
+        message: 'Login successful'
+      } as LoginResponseDto,
       'Login successful',
       'OK'
     );
@@ -1949,16 +2026,24 @@ private sendLoginNotification(userData: any, profile: any, clientInfo?: AuthClie
 }
 
 /** ------------------ Forgot Password: Step 1 (Request) ------------------ */
-  async requestPasswordReset(dto: RequestOtpDto): Promise<BaseResponseDto<null>> {
-    // Verify user exists before sending email
-    const credential = await this.prisma.credential.findUnique({ where: { email: dto.email } });
-    if (!credential) {
-      // Security best practice: don't reveal if email exists, just say "If account exists..."
-      return BaseResponseDto.ok(null, 'If an account exists, a reset code has been sent.');
-    }
-
-    return this.requestOtp({ email: dto.email, purpose: 'PASSWORD_RESET' });
+async requestPasswordReset(dto: RequestOtpDto): Promise<BaseResponseDto<null>> {
+  this.logger.log(`🔐 Password reset requested for: ${dto.email}`);
+  
+  // Verify user exists before sending email
+  const credential = await this.prisma.credential.findUnique({ where: { email: dto.email } });
+  this.logger.log(`🔐 User exists: ${!!credential}`);
+  
+  if (!credential) {
+    // Security best practice: don't reveal if email exists, just say "If account exists..."
+    return BaseResponseDto.ok(null, 'If an account exists, a reset code has been sent.');
   }
+
+  this.logger.log(`🔐 Calling requestOtp for PASSWORD_RESET to: ${dto.email}`);
+  const result = await this.requestOtp({ email: dto.email, purpose: 'PASSWORD_RESET' });
+  this.logger.log(`🔐 requestOtp result: ${result.success ? 'SUCCESS' : 'FAILED'} - ${result.message}`);
+  
+  return result;
+}q
 
   /** ------------------ Forgot Password: Step 2 (Reset) ------------------ */
 async resetPassword(dto: ResetPasswordDto): Promise<BaseResponseDto<null>> {
@@ -2377,4 +2462,8 @@ async createInvitedUserCredentials(data: {
     return BaseResponseDto.fail(error.message, 'INTERNAL_ERROR');
   }
 }
+}
+
+function getValidationRule(purpose: string) {
+  throw new Error('Function not implemented.');
 }

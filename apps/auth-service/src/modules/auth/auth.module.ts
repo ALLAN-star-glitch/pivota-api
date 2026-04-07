@@ -44,12 +44,13 @@ import { AnalyticsWorker } from '../../workers/analytics.worker';
         },
       },
       {
-        name: 'NOTIFICATION_EVENT_BUS', 
+        name: 'NOTIFICATION_EVENT_BUS',
         transport: Transport.RMQ,
         options: {
           urls: [process.env.RMQ_URL || 'amqp://localhost:5672'],
           queue: 'notification_email_queue',
-          queueOptions: { durable: true },
+          exchange: 'amq.direct',  // ← ADD THIS (must match what you bound)
+          routingKey: 'otp.requested',  // ← ADD THIS
         },
       },
       {

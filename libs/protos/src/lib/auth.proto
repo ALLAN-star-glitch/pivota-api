@@ -290,6 +290,7 @@ message RequestOtpRequest {
   string email = 1;
   string purpose = 2;
   ClientInfo clientInfo = 3;
+  optional string phone = 4;  // Add phone for signup validation
 }
 
 message VerifyOtpRequest {
@@ -344,7 +345,14 @@ message SignupResponse {
 }
 
 message SignupSuccessData {
-  string message = 1;  // "Signup successful"
+  string message = 1;           // "Signup successful"
+  optional string accessToken = 2;   // JWT access token for auto-login
+  optional string refreshToken = 3;  // JWT refresh token for auto-login
+  optional string redirectTo = 4;    // "/dashboard"
+  
+  // For payment required response (premium plans)
+  optional string redirectUrl = 5;       // Payment URL
+  optional string merchantReference = 6; // Payment reference
 }
 
 // Lean Login Response (handles both MFA stage and final login)

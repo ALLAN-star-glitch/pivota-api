@@ -1,5 +1,3 @@
-// ==================== GENERATOR & DATASOURCE ====================
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -7,59 +5,33 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // Add this to enable raw SQL for check constraints
-  // url      = env("DATABASE_URL")
 }
 
-// ==================== CORE ACCOUNT (Always exists) ====================
 model Account {
-  id          String   @id @default(cuid())
-  uuid        String   @unique @default(uuid())
-  accountCode String   @unique
-
-  // Basic Identity
-  name        String?  // Individual name OR Organization name
-  type        String   @default("INDIVIDUAL") // INDIVIDUAL | ORGANIZATION
-  status      String   @default("ACTIVE") // ACTIVE, PENDING_PAYMENT, SUSPENDED, DEACTIVATED
-  
-  // User role for RBAC
-  userRole    String   @default("GeneralUser")
-  
-  // Track which profiles this account has (stored as JSON)
-  activeProfiles Json   @default("[]") // ["JOB_SEEKER", "SKILLED_PROFESSIONAL", etc.]
-  
-  // Verification
-  isVerified  Boolean  @default(false)
-  verifiedFeatures Json @default("[]") // ["IDENTITY", "BUSINESS", "PROFESSIONAL_LICENSE"]
-
-  // Base Profiles (mutually exclusive)
-  individualProfile    IndividualProfile?
-  organizationProfile  OrganizationProfile?
-  
-  // Employment Pillar
-  employerProfile      EmployerProfile?        // Hiring for jobs
-  jobSeekerProfile     JobSeekerProfile?       // Looking for work
-  
-  // Housing Pillar
-  propertyOwnerProfile PropertyOwnerProfile?   // Listing properties
-  housingSeekerProfile HousingSeekerProfile?   // Looking for housing
-  
-  // Social Support Pillar
-  socialServiceProviderProfile SocialServiceProviderProfile? // NGOs, social orgs
-  supportBeneficiaryProfile    SupportBeneficiaryProfile?    // People seeking help
-  
-  // Cross-Pillar Professional Profiles
-  skilledProfessionalProfile   SkilledProfessionalProfile?   // Trades: electricians, plumbers
-  intermediaryAgentProfile     IntermediaryAgentProfile?     // Agents, brokers
-
-  // Verifications
-  verifications AccountVerification[]
-
-  // Login credentials
-  users User[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                           String                        @id @default(cuid())
+  uuid                         String                        @unique @default(uuid())
+  accountCode                  String                        @unique
+  type                         String                        @default("INDIVIDUAL")
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  name                         String?
+  isVerified                   Boolean                       @default(false)
+  status                       String                        @default("ACTIVE")
+  activeProfiles               Json                          @default("[]")
+  userRole                     String                        @default("GeneralUser")
+  verifiedFeatures             Json                          @default("[]")
+  individualProfile            IndividualProfile?
+  organizationProfile          OrganizationProfile?
+  users                        User[]
+  verifications                AccountVerification[]
+  employerProfile              EmployerProfile?
+  housingSeekerProfile         HousingSeekerProfile?
+  intermediaryAgentProfile     IntermediaryAgentProfile?
+  jobSeekerProfile             JobSeekerProfile?
+  propertyOwnerProfile         PropertyOwnerProfile?
+  skilledProfessionalProfile   SkilledProfessionalProfile?
+  socialServiceProviderProfile SocialServiceProviderProfile?
+  supportBeneficiaryProfile    SupportBeneficiaryProfile?
 
   @@index([type])
   @@index([status])
@@ -67,42 +39,31 @@ model Account {
   @@index([userRole])
 }
 
-// ==================== LOGIN CREDENTIALS ====================
 model User {
-  id          String  @id @default(cuid())
-  uuid        String  @unique @default(uuid())
-  email       String  @unique
-  phone       String? @unique
-
-  accountUuid String
-  account     Account @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
-  roleName    String  @default("GeneralUser") // Maps to Account.userRole
-  profileImage String?
-
-  userCode    String  @unique  // USR-XXXXXX for user identification
-
-  status      String   @default("ACTIVE")
-  lastLoginAt DateTime?
-  
-  // Relations
+  id                      String                   @id @default(cuid())
+  uuid                    String                   @unique @default(uuid())
+  email                   String                   @unique
+  phone                   String?                  @unique
+  roleName                String                   @default("GeneralUser")
+  status                  String                   @default("ACTIVE")
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  profileImage            String?
+  accountUuid             String
+  lastLoginAt             DateTime?
+  userCode                String                   @unique
+  receivedInvitations     OrganizationInvitation[] @relation("receivedInvitations")
+  sentInvitations         OrganizationInvitation[] @relation("sentInvitations")
   organizationMemberships OrganizationMember[]
-  sentInvitations OrganizationInvitation[] @relation("sentInvitations")
-  receivedInvitations OrganizationInvitation[] @relation("receivedInvitations")
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  account                 Account                  @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([email])
 }
 
-// ==================== INDIVIDUAL PROFILE ====================
 model IndividualProfile {
   id           String    @id @default(cuid())
   accountUuid  String    @unique
-  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
   firstName    String?
   lastName     String?
   bio          String?
@@ -110,41 +71,36 @@ model IndividualProfile {
   dateOfBirth  DateTime?
   nationalId   String?   @unique
   profileImage String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([nationalId])
 }
 
-// ==================== ORGANIZATION PROFILE ====================
 model OrganizationProfile {
-  id           String    @id @default(cuid())
-  uuid         String    @unique @default(uuid())
-  orgCode      String?   @unique
-  accountUuid  String    @unique
-  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
-  name             String
-  typeSlug         String?  // Foreign key to OrganizationType
-  type             OrganizationType? @relation(fields: [typeSlug], references: [slug])
-  registrationNo   String? @unique
-  kraPin           String? @unique
-  officialEmail    String?
-  officialPhone    String?
-  website          String?
-  about            String?
-  logo             String?
-  physicalAddress  String?
-  
-  verificationStatus String @default("PENDING")
-
-  members OrganizationMember[]
-  invitations OrganizationInvitation[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String                   @id @default(cuid())
+  about              String?
+  website            String?
+  officialEmail      String?
+  officialPhone      String?
+  registrationNo     String?                  @unique
+  kraPin             String?                  @unique
+  physicalAddress    String?
+  logo               String?
+  accountUuid        String                   @unique
+  createdAt          DateTime                 @default(now())
+  name               String
+  updatedAt          DateTime                 @updatedAt
+  orgCode            String?                  @unique
+  uuid               String                   @unique @default(uuid())
+  verificationStatus String                   @default("PENDING")
+  typeSlug           String?
+  invitations        OrganizationInvitation[]
+  members            OrganizationMember[]
+  account            Account                  @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
+  type               OrganizationType?        @relation(fields: [typeSlug], references: [slug])
 
   @@index([accountUuid])
   @@index([typeSlug])
@@ -152,47 +108,38 @@ model OrganizationProfile {
   @@index([verificationStatus])
 }
 
-// ==================== TEAM MANAGEMENT ====================
 model OrganizationMember {
-  id               String       @id @default(cuid())
+  id               String              @id @default(cuid())
   userUuid         String
-  user             User         @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
   organizationUuid String
+  roleName         String
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
   organization     OrganizationProfile @relation(fields: [organizationUuid], references: [accountUuid], onDelete: Cascade)
-
-  roleName String // "ADMIN", "MEMBER", "VIEWER", "AGENT"
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  user             User                @relation(fields: [userUuid], references: [uuid], onDelete: Cascade)
 
   @@unique([userUuid, organizationUuid])
   @@index([organizationUuid])
   @@index([userUuid])
 }
 
-// ==================== ORGANIZATION INVITATIONS ====================
 model OrganizationInvitation {
-  id               String       @id @default(cuid())
-  email            String
-  token            String       @unique
-  status           String       @default("PENDING") // PENDING, ACCEPTED, EXPIRED, CANCELLED
-  roleName         String       @default("GeneralUser")
-  message          String?
-  expiresAt        DateTime
-  acceptedAt       DateTime?
-  
-  // Relations
-  organizationUuid String
-  organization     OrganizationProfile @relation(fields: [organizationUuid], references: [accountUuid], onDelete: Cascade)
-  
-  invitedByUserUuid String
-  invitedByUser     User @relation("sentInvitations", fields: [invitedByUserUuid], references: [uuid])
-  
+  id                 String              @id @default(cuid())
+  email              String
+  organizationUuid   String
+  token              String              @unique
+  status             String              @default("PENDING")
+  roleName           String              @default("GeneralUser")
+  invitedByUserUuid  String
+  message            String?
+  expiresAt          DateTime
+  acceptedAt         DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
   acceptedByUserUuid String?
-  acceptedByUser     User? @relation("receivedInvitations", fields: [acceptedByUserUuid], references: [uuid])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  acceptedByUser     User?               @relation("receivedInvitations", fields: [acceptedByUserUuid], references: [uuid])
+  invitedByUser      User                @relation("sentInvitations", fields: [invitedByUserUuid], references: [uuid])
+  organization       OrganizationProfile @relation(fields: [organizationUuid], references: [accountUuid], onDelete: Cascade)
 
   @@unique([email, organizationUuid])
   @@index([token])
@@ -202,58 +149,39 @@ model OrganizationInvitation {
   @@index([acceptedByUserUuid])
 }
 
-// Add to your schema.prisma
-
-// ==================== ORGANIZATION TYPE LOOKUP ====================
 model OrganizationType {
-  slug        String   @id
-  label       String
-  description String?
-  icon        String?
-  order       Int      @default(0)
-  
+  slug          String                @id
+  label         String
+  description   String?
+  icon          String?
+  order         Int                   @default(0)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
   organizations OrganizationProfile[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@map("organization_types")
 }
 
-// ==================== EMPLOYER PROFILE ====================
 model EmployerProfile {
-  id           String    @id @default(cuid())
-  accountUuid  String    @unique
-  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
-  // Business name (either companyName OR businessName must be provided)
-  companyName     String?  // For organizations
-  businessName    String?  // For individuals
-  
-  // Required fields
-  industry        String   // Required - NOT NULL
-  companySize     String   // Required - NOT NULL - "1-10", "11-50", "51-200", "200+"
-  preferredSkills Json     @default("[]") // Required to have at least one skill (enforced by app)
-  
-  // Optional fields
-  foundedYear     Int?
-  description     String?
-  logo            String?
-  remotePolicy    String?  // "REMOTE", "HYBRID", "ONSITE"
-  
-  // Verification
-  isVerifiedEmployer Boolean @default(false)
-  
-  // If using an agent/recruiter
-  worksWithAgents Boolean @default(false)
-  preferredAgents Json     @default("[]")
-  
-  // Individual-specific fields
-  isRegistered    Boolean? @default(false)
-  yearsExperience Int?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  accountUuid        String   @unique
+  companyName        String?
+  businessName       String?
+  industry           String
+  companySize        String
+  preferredSkills    Json     @default("[]")
+  foundedYear        Int?
+  description        String?
+  logo               String?
+  remotePolicy       String?
+  isVerifiedEmployer Boolean  @default(false)
+  worksWithAgents    Boolean  @default(false)
+  preferredAgents    Json     @default("[]")
+  isRegistered       Boolean? @default(false)
+  yearsExperience    Int?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  account            Account  @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([industry])
@@ -261,70 +189,54 @@ model EmployerProfile {
   @@map("employer_profiles")
 }
 
-// ==================== JOB SEEKER PROFILE ====================
 model JobSeekerProfile {
-  id           String    @id @default(cuid())
-  accountUuid  String    @unique
-  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
-  // Required fields
-  headline        String   // Required
-  expectedSalary  Float    // Required
-  skills          Json     @default("[]") // Required to have at least one skill (enforced by app)
-  jobTypes        Json     @default("[]") // Required to have at least one job type (enforced by app)
-  
-  // Optional fields
-  isActivelySeeking Boolean @default(false)
-  industries      Json     @default("[]")
-  seniorityLevel  String?
-  noticePeriod    String?
-  workAuthorization Json   @default("[]")
-  cvUrl           String?
-  cvLastUpdated   DateTime?
-  portfolioImages Json     @default("[]")
-  linkedInUrl     String?
-  githubUrl       String?
-  portfolioUrl    String?
-  hasAgent        Boolean @default(false)
-  agentUuid       String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String    @id @default(cuid())
+  accountUuid       String    @unique
+  headline          String
+  expectedSalary    Float
+  skills            Json      @default("[]")
+  jobTypes          Json      @default("[]")
+  isActivelySeeking Boolean   @default(false)
+  industries        Json      @default("[]")
+  seniorityLevel    String?
+  noticePeriod      String?
+  workAuthorization Json      @default("[]")
+  cvUrl             String?
+  cvLastUpdated     DateTime?
+  portfolioImages   Json      @default("[]")
+  linkedInUrl       String?
+  githubUrl         String?
+  portfolioUrl      String?
+  hasAgent          Boolean   @default(false)
+  agentUuid         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  account           Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([isActivelySeeking])
   @@map("job_seeker_profiles")
 }
 
-// ==================== PROPERTY OWNER PROFILE ====================
 model PropertyOwnerProfile {
-  id           String    @id @default(cuid())
-  accountUuid  String    @unique
-  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
-  // Business name (either companyName OR businessName must be provided)
-  companyName     String?  // For organizations/property management companies
-  businessName    String?  // For individuals
-  
-  // Required fields
-  preferredPropertyTypes Json @default("[]") // Required to have at least one type (enforced by app)
-  serviceAreas      Json     @default("[]") // Required to have at least one area (enforced by app)
-  
-  // Optional fields
-  isProfessional    Boolean @default(false)
-  licenseNumber     String?
-  yearsInBusiness   Int?
-  isVerifiedOwner   Boolean @default(false)
-  usesAgent         Boolean @default(false)
-  managingAgentUuid String?
-  
-  // Individual-specific fields
-  propertyCount    Int?
-  propertyTypes    Json?    @default("[]")
-  propertyPurpose  String?  // "PRIMARY", "INVESTMENT", "BOTH"
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  accountUuid            String   @unique
+  companyName            String?
+  businessName           String?
+  preferredPropertyTypes Json     @default("[]")
+  serviceAreas           Json     @default("[]")
+  isProfessional         Boolean  @default(false)
+  licenseNumber          String?
+  yearsInBusiness        Int?
+  isVerifiedOwner        Boolean  @default(false)
+  usesAgent              Boolean  @default(false)
+  managingAgentUuid      String?
+  propertyCount          Int?
+  propertyTypes          Json?    @default("[]")
+  propertyPurpose        String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  account                Account  @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([isProfessional])
@@ -332,81 +244,65 @@ model PropertyOwnerProfile {
   @@map("property_owner_profiles")
 }
 
-// ==================== HOUSING SEEKER PROFILE ====================
 model HousingSeekerProfile {
-  id           String    @id @default(cuid())
-  accountUuid  String    @unique
-  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
-  // Required fields
-  minBudget         Float    // Required
-  maxBudget         Float    // Required
-  preferredTypes    Json     @default("[]") // Required to have at least one type (enforced by app)
-  preferredCities   Json     @default("[]") // Required to have at least one city (enforced by app)
-  
-  // Optional fields
-  minBedrooms       Int      @default(0)
-  maxBedrooms       Int      @default(5)
-  preferredNeighborhoods Json @default("[]")
-  moveInDate        DateTime?
-  leaseDuration     String?
-  householdSize     Int?     @default(1)
-  hasPets           Boolean? @default(false)
-  petDetails        String?
-  latitude          Float?
-  longitude         Float?
-  searchRadiusKm    Int?     @default(10)
-  hasAgent          Boolean @default(false)
-  agentUuid         String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                     String    @id @default(cuid())
+  accountUuid            String    @unique
+  minBudget              Float
+  maxBudget              Float
+  preferredTypes         Json      @default("[]")
+  preferredCities        Json      @default("[]")
+  minBedrooms            Int       @default(0)
+  maxBedrooms            Int       @default(5)
+  preferredNeighborhoods Json      @default("[]")
+  moveInDate             DateTime?
+  leaseDuration          String?
+  householdSize          Int?      @default(1)
+  hasPets                Boolean?  @default(false)
+  petDetails             String?
+  latitude               Float?
+  longitude              Float?
+  searchRadiusKm         Int?      @default(10)
+  hasAgent               Boolean   @default(false)
+  agentUuid              String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  account                Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([maxBudget])
   @@map("housing_seeker_profiles")
 }
 
-// ==================== SOCIAL SERVICE PROVIDER PROFILE ====================
 model SocialServiceProviderProfile {
-  id           String    @id @default(cuid())
-  accountUuid  String    @unique
-  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
-  // Business name (either companyName OR operatingName must be provided)
-  companyName     String?  // For organizations
-  operatingName   String?  // For individuals
-  
-  // Required fields
-  providerType      String   // Required - "NGO", "SOCIAL_ENTERPRISE", "INDIVIDUAL", etc.
-  servicesOffered   Json     @default("[]") // Required to have at least one service (enforced by app)
-  serviceAreas      Json     @default("[]") // Required to have at least one area (enforced by app)
-  
-  // Optional fields
-  targetBeneficiaries Json   @default("[]")
-  isVerified        Boolean @default(false)
-  verifiedBy        String?
+  id                   String   @id @default(cuid())
+  accountUuid          String   @unique
+  companyName          String?
+  operatingName        String?
+  providerType         String
+  servicesOffered      Json     @default("[]")
+  serviceAreas         Json     @default("[]")
+  targetBeneficiaries  Json     @default("[]")
+  isVerified           Boolean  @default(false)
+  verifiedBy           String?
   verificationDocument String?
-  about             String?
-  website           String?
-  contactEmail      String?
-  contactPhone      String?
-  officeHours       String?
-  physicalAddress   String?
-  peopleServed      Int?    @default(0)
-  yearEstablished   Int?
-  acceptsDonations  Boolean @default(false)
-  needsVolunteers   Boolean @default(false)
-  donationInfo      String?
-  volunteerNeeds    String?
-  
-  // Individual-specific fields
-  yearsExperience   Int?
-  qualifications    Json?    @default("[]")
-  availability      String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  about                String?
+  website              String?
+  contactEmail         String?
+  contactPhone         String?
+  officeHours          String?
+  physicalAddress      String?
+  peopleServed         Int?     @default(0)
+  yearEstablished      Int?
+  acceptsDonations     Boolean  @default(false)
+  needsVolunteers      Boolean  @default(false)
+  donationInfo         String?
+  volunteerNeeds       String?
+  yearsExperience      Int?
+  qualifications       Json?    @default("[]")
+  availability         String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  account              Account  @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([providerType])
@@ -414,78 +310,66 @@ model SocialServiceProviderProfile {
   @@map("social_service_provider_profiles")
 }
 
-// ==================== SUPPORT BENEFICIARY PROFILE ====================
 model SupportBeneficiaryProfile {
-  id           String    @id @default(cuid())
-  accountUuid  String    @unique
-  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
-  // Required fields
-  needs              Json     @default("[]") // Required to have at least one need (enforced by app)
-  city               String   // Required - location for matching
-  
-  // Optional fields
-  urgentNeeds        Json     @default("[]")
-  familySize         Int?
-  dependents         Int?
+  id                   String    @id @default(cuid())
+  accountUuid          String    @unique
+  needs                Json      @default("[]")
+  city                 String
+  urgentNeeds          Json      @default("[]")
+  familySize           Int?
+  dependents           Int?
   householdComposition String?
-  vulnerabilityFactors Json   @default("[]")
-  neighborhood       String?
-  latitude           Float?
-  longitude          Float?
-  landmark           String?
-  prefersAnonymity   Boolean @default(true)
-  languagePreference Json     @default("[]")
-  consentToShare     Boolean @default(false)
-  consentGivenAt     DateTime?
-  consentExpiresAt   DateTime?
-  referredBy         String?
-  referredByUuid     String?
-  caseWorkerUuid     String?
-  caseNotes          String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  vulnerabilityFactors Json      @default("[]")
+  neighborhood         String?
+  latitude             Float?
+  longitude            Float?
+  landmark             String?
+  prefersAnonymity     Boolean   @default(true)
+  languagePreference   Json      @default("[]")
+  consentToShare       Boolean   @default(false)
+  consentGivenAt       DateTime?
+  consentExpiresAt     DateTime?
+  referredBy           String?
+  referredByUuid       String?
+  caseWorkerUuid       String?
+  caseNotes            String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  account              Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([city])
   @@map("support_beneficiary_profiles")
 }
 
-// ==================== SKILLED PROFESSIONAL PROFILE ====================
 model SkilledProfessionalProfile {
-  id           String    @id @default(cuid())
-  uuid         String    @unique @default(uuid())
-  accountUuid  String    @unique
-  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
-  // Required fields
-  title            String   // Required - e.g., "Master Electrician"
-  profession       String   // Required - e.g., "ELECTRICIAN"
-  specialties      Json     @default("[]") // Required to have at least one specialty (enforced by app)
-  serviceAreas     Json     @default("[]") // Required to have at least one area (enforced by app)
-  yearsExperience  Int      // Required
-  
-  // Optional fields
-  licenseNumber    String?
-  insuranceInfo    String?
-  hourlyRate       Float?
-  dailyRate        Float?
-  paymentTerms     String?
-  availableToday   Boolean? @default(false)
+  id                String   @id @default(cuid())
+  uuid              String   @unique @default(uuid())
+  accountUuid       String   @unique
+  title             String
+  profession        String
+  specialties       Json     @default("[]")
+  serviceAreas      Json     @default("[]")
+  yearsExperience   Int
+  licenseNumber     String?
+  insuranceInfo     String?
+  hourlyRate        Float?
+  dailyRate         Float?
+  paymentTerms      String?
+  availableToday    Boolean? @default(false)
   availableWeekends Boolean? @default(true)
-  emergencyService Boolean? @default(false)
-  isVerified       Boolean   @default(false)
-  averageRating    Float     @default(0.0)
-  totalReviews     Int       @default(0)
-  completedJobs    Int       @default(0)
-  completionRate   Float?
-  portfolioImages  Json      @default("[]")
-  portfolioVideos  Json      @default("[]")
-  certifications   Json      @default("[]")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  emergencyService  Boolean? @default(false)
+  isVerified        Boolean  @default(false)
+  averageRating     Float    @default(0.0)
+  totalReviews      Int      @default(0)
+  completedJobs     Int      @default(0)
+  completionRate    Float?
+  portfolioImages   Json     @default("[]")
+  portfolioVideos   Json     @default("[]")
+  certifications    Json     @default("[]")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  account           Account  @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([profession])
@@ -494,48 +378,40 @@ model SkilledProfessionalProfile {
   @@map("skilled_professional_profiles")
 }
 
-// ==================== INTERMEDIARY AGENT PROFILE ====================
 model IntermediaryAgentProfile {
-  id           String    @id @default(cuid())
-  uuid         String    @unique @default(uuid())
-  accountUuid  String    @unique
-  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
-  // Business name (either agencyName OR businessName must be provided)
-  agencyName       String?  // For agencies
-  businessName     String?  // For individuals
-  
-  // Required fields
-  agentType        String   // Required - "HOUSING_AGENT", "RECRUITMENT_AGENT", etc.
-  specializations  Json     @default("[]") // Required to have at least one specialization (enforced by app)
-  serviceAreas     Json     @default("[]") // Required to have at least one area (enforced by app)
-  licenseNumber    String   // Required - Agent license/certification
-  
-  // Optional fields
-  licenseBody      String?
-  yearsExperience  Int?
-  agencyUuid       String?
-  commissionRate   Float?
-  feeStructure     String?
-  minimumFee       Float?
-  typicalFee       String?
-  isVerified       Boolean  @default(false)
-  verifiedBy       String?
-  verifiedAt       DateTime?
-  averageRating    Float    @default(0.0)
-  totalReviews     Int      @default(0)
-  completedDeals   Int      @default(0)
-  successRate      Float?
-  about            String?
-  profileImage     String?
-  contactEmail     String?
-  contactPhone     String?
-  website          String?
-  socialLinks      Json     @default("{}")
-  clientTypes      Json     @default("[]")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String    @id @default(cuid())
+  uuid            String    @unique @default(uuid())
+  accountUuid     String    @unique
+  agencyName      String?
+  businessName    String?
+  agentType       String
+  specializations Json      @default("[]")
+  serviceAreas    Json      @default("[]")
+  licenseNumber   String
+  licenseBody     String?
+  yearsExperience Int?
+  agencyUuid      String?
+  commissionRate  Float?
+  feeStructure    String?
+  minimumFee      Float?
+  typicalFee      String?
+  isVerified      Boolean   @default(false)
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  averageRating   Float     @default(0.0)
+  totalReviews    Int       @default(0)
+  completedDeals  Int       @default(0)
+  successRate     Float?
+  about           String?
+  profileImage    String?
+  contactEmail    String?
+  contactPhone    String?
+  website         String?
+  socialLinks     Json      @default("{}")
+  clientTypes     Json      @default("[]")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  account         Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([agentType])
@@ -544,24 +420,21 @@ model IntermediaryAgentProfile {
   @@map("intermediary_agent_profiles")
 }
 
-// ==================== VERIFICATION TRACKING ====================
 model AccountVerification {
-  id          String   @id @default(cuid())
-  accountUuid String
-  account     Account  @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-
-  type        String   // "IDENTITY", "BUSINESS", "PROFESSIONAL_LICENSE", "AGENT_LICENSE", "NGO_REGISTRATION", "PROPERTY_OWNER"
-  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED, EXPIRED
-  documentUrl String?
-  documentType String? // "NATIONAL_ID", "PASSPORT", "CERTIFICATE", "LICENSE", "KRA_PIN", "REGISTRATION"
+  id              String    @id @default(cuid())
+  accountUuid     String
+  type            String
+  status          String    @default("PENDING")
+  documentUrl     String?
+  documentType    String?
   rejectionReason String?
-  verifiedAt  DateTime?
-  expiresAt   DateTime?
-  verifiedBy  String?  // Admin or system that verified
-  verifiedByUuid String? // Reference to admin user
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  verifiedAt      DateTime?
+  expiresAt       DateTime?
+  verifiedBy      String?
+  verifiedByUuid  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  account         Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@unique([accountUuid, type])
   @@index([accountUuid])

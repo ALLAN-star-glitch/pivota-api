@@ -44,9 +44,8 @@
  */
 
 import { Controller, Logger } from '@nestjs/common';
-import { EventPattern, Payload, Ctx, RmqContext } from '@nestjs/microservices';
+import { EventPattern, Payload, Ctx, RmqContext, Transport } from '@nestjs/microservices';
 import { PropertyEmailService } from '../services/handlers/property-email.service';
-
 
 // Notification Email DTO
 interface NotificationEmailData {
@@ -92,7 +91,7 @@ export class PropertyEmailController {
    * Handle notification email event from housing service
    * Routes to appropriate email template based on template type
    */
-  @EventPattern('notification.email')
+  @EventPattern('notification.email', Transport.RMQ)
   async handleNotificationEmail(
     @Payload() data: NotificationEmailData,
     @Ctx() context: RmqContext
@@ -177,14 +176,15 @@ export class PropertyEmailController {
       this.logger.error(`[RMQ] Failed to send ${data.template} email: ${error.message}`);
       const channel = context.getChannelRef();
       const originalMsg = context.getMessage();
-      channel.nack(originalMsg, false, true);
+      // ✅ Don't requeue - just reject to prevent infinite retry loop
+      channel.nack(originalMsg, false, false);
     }
   }
 
   /**
    * Handle listing created event - Send confirmation to property owner
    */
-  @EventPattern('listing.created.owner')
+  @EventPattern('listing.created.owner', Transport.RMQ)
   async handleListingCreated(
     @Payload() data: ListingCreatedEmailDto,
     @Ctx() context: RmqContext
@@ -243,7 +243,8 @@ export class PropertyEmailController {
     } catch (error) {
       const duration = Date.now() - startTime;
       this.logger.error(`[RMQ] Failed ${pattern} for ${identifier} after ${duration}ms: ${error.message}`);
-      channel.nack(originalMsg, false, true);
+      // ✅ Don't requeue - just reject to prevent infinite retry loop
+      channel.nack(originalMsg, false, false);
     }
   }
 }

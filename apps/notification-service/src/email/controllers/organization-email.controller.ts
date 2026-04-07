@@ -36,7 +36,7 @@
  */
 
 import { Controller, Logger } from '@nestjs/common';
-import { EventPattern, Payload, Ctx, RmqContext } from '@nestjs/microservices';
+import { EventPattern, Payload, Ctx, RmqContext, Transport } from '@nestjs/microservices';
 import { OrganizationOnboardedEventDto } from '@pivota-api/dtos';
 import { OrganizationEmailService } from '../services/handlers/organization-email.service';
 
@@ -84,7 +84,7 @@ export class OrganizationEmailController {
   /**
    * Handle organization onboarded event - Send welcome email to admin
    */
-  @EventPattern('organization.onboarded')
+  @EventPattern('organization.onboarded', Transport.RMQ)
   async handleOrganizationOnboarded(
     @Payload() data: OrganizationOnboardedEventDto,
     @Ctx() context: RmqContext
@@ -100,7 +100,7 @@ export class OrganizationEmailController {
   /**
    * Handle invitation sent to new user (needs to create account)
    */
-  @EventPattern('organization.invitation.sent.new')
+  @EventPattern('organization.invitation.sent.new', Transport.RMQ)
   async handleInvitationSentNewUser(
     @Payload() data: InvitationSentDto,
     @Ctx() context: RmqContext
@@ -116,7 +116,7 @@ export class OrganizationEmailController {
   /**
    * Handle invitation sent to existing user (already has account)
    */
-  @EventPattern('organization.invitation.sent.existing')
+  @EventPattern('organization.invitation.sent.existing', Transport.RMQ)
   async handleInvitationSentExistingUser(
     @Payload() data: InvitationSentDto,
     @Ctx() context: RmqContext
@@ -132,7 +132,7 @@ export class OrganizationEmailController {
   /**
    * Handle invitation resend
    */
-  @EventPattern('organization.invitation.resend')
+  @EventPattern('organization.invitation.resend', Transport.RMQ)
   async handleInvitationResend(
     @Payload() data: InvitationResendDto,
     @Ctx() context: RmqContext
@@ -171,22 +171,20 @@ export class OrganizationEmailController {
   /**
    * Handle welcome event for user who joined via invitation
    */
-  @EventPattern('user.invitation.welcome')
+  @EventPattern('user.invitation.welcome', Transport.RMQ)
   async handleInvitationWelcome(
     @Payload() data: InvitationWelcomeDto,
     @Ctx() context: RmqContext
   ) {
     this.logger.debug(`[RMQ] Invitation welcome for: ${data.email}`);
     
-    // Convert to OrganizationOnboardedEventDto format for sendUserWelcome
-    // Note: OrganizationEmailService doesn't have sendUserWelcome directly,
-    // this should be handled by AuthEmailService. This event might need to be moved.
-    this.logger.warn(`user.invitation.welcome event should be handled by AuthEmailService`);
+    // Note: This should be handled by AuthEmailService.sendUserWelcome
+    this.logger.warn(`user.invitation.welcome event - should be handled by AuthEmailService`);
     
     await this.processEvent(
       context,
       async () => {
-        // This should call AuthEmailService.sendUserWelcome, not OrganizationEmailService
+        // This should call AuthEmailService.sendUserWelcome
         this.logger.log(`Welcome email would be sent to ${data.email} from AuthEmailService`);
       },
       data.email
@@ -196,7 +194,7 @@ export class OrganizationEmailController {
   /**
    * Handle admin notification when user accepts invitation
    */
-  @EventPattern('admin.invitation.accepted')
+  @EventPattern('admin.invitation.accepted', Transport.RMQ)
   async handleAdminInvitationAccepted(
     @Payload() data: AdminInvitationAcceptedDto,
     @Ctx() context: RmqContext
@@ -232,7 +230,8 @@ export class OrganizationEmailController {
     } catch (error) {
       const duration = Date.now() - startTime;
       this.logger.error(`[RMQ] Failed ${pattern} for ${identifier} after ${duration}ms: ${error.message}`);
-      channel.nack(originalMsg, false, true);
+      // ✅ Don't requeue - just reject
+      channel.nack(originalMsg, false, false);
     }
   }
 }

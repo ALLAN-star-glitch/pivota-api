@@ -116,16 +116,17 @@ export class QueueService implements OnModuleDestroy {
     return job;
   }
 
-  // ==================== RATE LIMITING ====================
+  // ==================== RATE LIMITING METHODS ====================
   
   /**
-   * Generic rate limiting for any service
+   * CHECK rate limit WITHOUT incrementing
+   * Use this to verify if an action is allowed before doing expensive operations
    */
   async checkRateLimit(
-    identifier: string,  // email, userId, IP, etc.
-    type: string,        // e.g., 'otp', 'login', 'signup'
-    maxAttempts = 3,
-    windowSeconds = 600
+    identifier: string,
+    type: string,
+    maxAttempts: number,
+    windowSeconds: number
   ): Promise<{
     allowed: boolean;
     attempts: number;
@@ -136,7 +137,8 @@ export class QueueService implements OnModuleDestroy {
     
     const currentAttempts = await this.connection.get(key);
     const attempts = currentAttempts ? parseInt(currentAttempts, 10) : 0;
-    
+
+    // If attempts exceed max, return not allowed with remaining time
     if (attempts >= maxAttempts) {
       const ttl = await this.connection.ttl(key);
       return {
@@ -147,6 +149,72 @@ export class QueueService implements OnModuleDestroy {
       };
     }
     
+    return {
+      allowed: true,
+      attempts,
+      remaining: maxAttempts - attempts,
+      resetInSeconds: windowSeconds,
+    };
+  }
+
+  /**
+   * INCREMENT rate limit counter after successful operation
+   * Call this ONLY after successfully completing the action (e.g., OTP sent, email verified)
+   */
+  async incrementRateLimit(
+    identifier: string,
+    type: string,
+    maxAttempts: number,
+    windowSeconds: number
+  ): Promise<{
+    attempts: number;
+    remaining: number;
+  }> {
+    const key = `rate_limit:${type}:${identifier}`;
+    const newAttempts = await this.connection.incr(key);
+    
+    if (newAttempts === 1) {
+      await this.connection.expire(key, windowSeconds);
+    }
+    
+    return {
+      attempts: newAttempts,
+      remaining: Math.max(0, maxAttempts - newAttempts),
+    };
+  }
+
+  /**
+   * CONSUME attempt (check AND increment in one operation)
+   * Use this for login failures where you want to increment on failure
+   */
+  async consumeAttempt(
+    identifier: string,
+    type: string,
+    maxAttempts: number,
+    windowSeconds: number
+  ): Promise<{
+    allowed: boolean;
+    attempts: number;
+    remaining: number;
+    resetInSeconds: number;
+  }> {
+    const key = `rate_limit:${type}:${identifier}`;
+    
+    const currentAttempts = await this.connection.get(key);
+    const attempts = currentAttempts ? parseInt(currentAttempts, 10) : 0;
+
+    // If attempts exceed max, return not allowed with remaining time
+    if (attempts >= maxAttempts) {
+      const ttl = await this.connection.ttl(key);
+      return {
+        allowed: false,
+        attempts,
+        remaining: 0,
+        resetInSeconds: ttl > 0 ? ttl : 0,
+      };
+    }
+    
+    // Increment attempts
     const newAttempts = await this.connection.incr(key);
     if (newAttempts === 1) {
       await this.connection.expire(key, windowSeconds);
@@ -161,12 +229,35 @@ export class QueueService implements OnModuleDestroy {
   }
 
   /**
-   * Reset rate limit for a specific identifier
+   * Reset rate limit for a specific identifier (on successful verification)
    */
   async resetRateLimit(identifier: string, type: string): Promise<void> {
     const key = `rate_limit:${type}:${identifier}`;
     await this.connection.del(key);
     this.logger.debug(`Reset rate limit for ${type}:${identifier}`);
+  }
+
+  /**
+   * Get current rate limit stats without modifying
+   */
+  async getRateLimitStats(
+    identifier: string,
+    type: string
+  ): Promise<{
+    attempts: number;
+    remaining: number;
+    resetInSeconds: number;
+  }> {
+    const key = `rate_limit:${type}:${identifier}`;
+    const currentAttempts = await this.connection.get(key);
+    const attempts = currentAttempts ? parseInt(currentAttempts, 10) : 0;
+    const ttl = await this.connection.ttl(key);
+    
+    return {
+      attempts,
+      remaining: 0, // Caller must provide maxAttempts to calculate remaining
+      resetInSeconds: ttl > 0 ? ttl : 0,
+    };
   }
 
   // ==================== QUEUE METRICS ====================

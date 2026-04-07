@@ -1688,16 +1688,27 @@ export class UserSignupRequestDto {
   @Matches(KENYAN_PHONE_REGEX)
   phone?: string;
 
- @ApiProperty({ 
-  description: 'Secure password (min 8 characters, at least one uppercase, one lowercase, one number, and one special character)', 
-  example: 'StrongPass@2026', 
-    minLength: 8 
+ @ApiProperty({
+    example: 'SecurePass123!',
+    description: 'The password for the account. Must contain at least one uppercase letter, one lowercase letter, one number, and one special character.'
   })
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(8)
-  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/, {
-    message: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character (@$!%*?&)'
+  @IsString({ message: 'Password must be a string' })
+  @IsNotEmpty({ message: 'Password is required' })
+  @MinLength(8, { message: 'Password must be at least 8 characters long' })
+  @Matches(/^(?=.*[a-z])/, { 
+    message: 'Password must contain at least one lowercase letter (a-z)' 
+  })
+  @Matches(/^(?=.*[A-Z])/, { 
+    message: 'Password must contain at least one uppercase letter (A-Z)' 
+  })
+  @Matches(/^(?=.*\d)/, {  
+    message: 'Password must contain at least one number (0-9)' 
+  })
+  @Matches(/^(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?])/, { 
+    message: 'Password must contain at least one special character (!@#$%^&*()_+-=[]{};:\'",.<>/?|)' 
+  })
+  @Matches(/^[A-Za-z\d!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]{8,}$/, {
+    message: 'Password contains invalid characters'
   })
   password!: string;
 

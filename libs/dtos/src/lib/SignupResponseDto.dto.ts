@@ -1,8 +1,14 @@
-import { ApiProperty } from "@nestjs/swagger";
-
-// Create a simple response DTO
+// In your DTOs
 export class SignupResponseDto {
-  @ApiProperty({ example: 'Signup successful' })
-    message!: string;
+  // Common fields
+  message: string | undefined;
+  
+  // For successful signup (free plan)
+  accessToken?: string;
+  refreshToken?: string;
+  redirectTo?: string;
+  
+  // For payment required response
+  redirectUrl?: string;
+  merchantReference?: string;
 }
-
