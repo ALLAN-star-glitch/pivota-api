@@ -41,8 +41,8 @@ interface ValidationResult {
 const VALIDATION_RULES = {
   JOB_SEEKER: ['headline', 'skills', 'jobTypes', 'expectedSalary'],
   SKILLED_PROFESSIONAL: ['title', 'profession', 'specialties', 'serviceAreas', 'yearsExperience'],
-  HOUSING_SEEKER: ['budget (minBudget and maxBudget)', 'preferredTypes', 'preferredCities'],
-  PROPERTY_OWNER: ['preferredPropertyTypes', 'serviceAreas'],
+  HOUSING_SEEKER: ['searchType', 'preferredTypes'],  // ✅ Simplified: only require searchType and property types
+  PROPERTY_OWNER: ['preferredPropertyTypes', 'serviceAreas', 'listingType'],
   SUPPORT_BENEFICIARY: ['needs'],
   INTERMEDIARY_AGENT: ['agentType', 'specializations', 'serviceAreas', 'licenseNumber'],
   EMPLOYER: ['industry', 'companySize', 'preferredSkills'],
@@ -81,11 +81,10 @@ function validateProfileData(
 
     case 'HOUSING_SEEKER': {
       const housingData = data as HousingSeekerProfileDataDto;
-      if (!housingData.minBudget || !housingData.maxBudget) {
-        missingFields.push('budget (minBudget and maxBudget)');
-      }
+      // ✅ Only validate required fields for simplified UI
+      if (!housingData.searchType) missingFields.push('searchType');
       if (!housingData.preferredTypes?.length) missingFields.push('preferredTypes');
-      if (!housingData.preferredCities?.length) missingFields.push('preferredCities');
+      // Budget and preferredCities are optional now
       break;
     }
 
@@ -98,6 +97,7 @@ function validateProfileData(
       if (!ownerData.companyName && !ownerData.propertyCount) {
         missingFields.push('companyName or propertyCount');
       }
+      if (!ownerData.listingType) missingFields.push('listingType');
       break;
     }
 
@@ -145,9 +145,6 @@ function validateProfileData(
   };
 }
 
-// OPTIMIZATION 3: Helper to emit events (avoid duplicate code)
-// apps/profile-service/src/utils/business-profiles-creator.utils.ts
-
 // OPTIMIZATION 3: Helper to queue events (non-blocking)
 async function emitHousingEvent(
   options: any,
@@ -187,6 +184,9 @@ async function emitHousingEvent(
       latitude: housingData.latitude,
       longitude: housingData.longitude,
       searchRadiusKm: housingData.searchRadiusKm,
+      searchType: housingData.searchType,
+      isLookingForRental: housingData.isLookingForRental,
+      isLookingToBuy: housingData.isLookingToBuy,
     }
   };
   
@@ -221,7 +221,7 @@ export async function createBusinessProfile(
         EmployerProfileDataDto | SocialServiceProviderProfileDataDto,
   options?: {
     userUuid?: string;
-    queueService?: any;  // ← Add this line
+    queueService?: any;
     logger?: any;
   }
 ): Promise<void> {
@@ -300,10 +300,13 @@ export async function createBusinessProfile(
       
       logger.log(`🏠 Creating HOUSING_SEEKER profile for account ${accountUuid}`);
       logger.debug(`📊 Housing data: ${JSON.stringify({
+        searchType: housingData.searchType,
+        isLookingForRental: housingData.isLookingForRental,
+        isLookingToBuy: housingData.isLookingToBuy,
+        preferredTypes: housingData.preferredTypes,
         minBudget: housingData.minBudget,
         maxBudget: housingData.maxBudget,
         preferredCities: housingData.preferredCities,
-        preferredTypes: housingData.preferredTypes,
         minBedrooms: housingData.minBedrooms,
         maxBedrooms: housingData.maxBedrooms,
         hasPets: housingData.hasPets,
@@ -316,8 +319,8 @@ export async function createBusinessProfile(
           accountUuid,
           minBedrooms: housingData.minBedrooms ?? 0,
           maxBedrooms: housingData.maxBedrooms ?? 5,
-          minBudget: housingData.minBudget!,
-          maxBudget: housingData.maxBudget!,
+          minBudget: housingData.minBudget ?? 0,
+          maxBudget: housingData.maxBudget ?? 10000000,
           preferredTypes: StringUtils.stringifyJsonField(housingData.preferredTypes ?? []),
           preferredCities: StringUtils.stringifyJsonField(housingData.preferredCities ?? []),
           preferredNeighborhoods: StringUtils.stringifyJsonField(housingData.preferredNeighborhoods ?? []),
@@ -331,6 +334,9 @@ export async function createBusinessProfile(
           searchRadiusKm: housingData.searchRadiusKm ?? 10,
           hasAgent: housingData.hasAgent ?? false,
           agentUuid: housingData.agentUuid,
+          searchType: housingData.searchType,
+          isLookingForRental: housingData.isLookingForRental ?? false,
+          isLookingToBuy: housingData.isLookingToBuy ?? false,
         },
       });
       
@@ -343,6 +349,17 @@ export async function createBusinessProfile(
 
     case "PROPERTY_OWNER": {
       const ownerData = data as PropertyOwnerProfileDataDto;
+      
+      logger.log(`🏢 Creating PROPERTY_OWNER profile for account ${accountUuid}`);
+      logger.debug(`📊 Property owner data: ${JSON.stringify({
+        isProfessional: ownerData.isProfessional,
+        preferredPropertyTypes: ownerData.preferredPropertyTypes,
+        serviceAreas: ownerData.serviceAreas,
+        listingType: ownerData.listingType,
+        isListingForRent: ownerData.isListingForRent,
+        isListingForSale: ownerData.isListingForSale,
+      })}`);
+      
       await tx.propertyOwnerProfile.create({
         data: {
           accountUuid,
@@ -358,6 +375,9 @@ export async function createBusinessProfile(
           propertyCount: ownerData.propertyCount,
           propertyTypes: StringUtils.stringifyJsonField(ownerData.propertyTypes ?? []),
           propertyPurpose: ownerData.propertyPurpose,
+          listingType: ownerData.listingType,
+          isListingForRent: ownerData.isListingForRent ?? false,
+          isListingForSale: ownerData.isListingForSale ?? false,
         },
       });
       logger.log(`✅ Created PROPERTY_OWNER profile for account ${accountUuid}`);

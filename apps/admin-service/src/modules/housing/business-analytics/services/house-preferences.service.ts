@@ -41,6 +41,22 @@ export interface HousingPreferencesEvent {
     
     // Agent preference
     hasAgent?: boolean;
+    
+    // ======================================================
+    // NEW RENTAL PREFERENCES
+    // ======================================================
+    searchType?: string;                  // "RENT", "BUY", "BOTH"
+    isLookingForRental?: boolean;         // Whether specifically looking for rental
+    isLookingToBuy?: boolean;             // Whether specifically looking to buy
+    preferredLeaseTerm?: number;          // Preferred lease term in months
+    requiresPetFriendly?: boolean;        // Whether they need pet-friendly
+    requiresUtilitiesIncluded?: boolean;  // Whether they need utilities included
+    
+    // ======================================================
+    // NEW SALE PREFERENCES
+    // ======================================================
+    requiresNegotiable?: boolean;         // Whether they need negotiable price
+    requiresTitleDeed?: boolean;          // Whether they need title deed available
   };
 }
 
@@ -108,6 +124,55 @@ export class HousePreferencesService {
       // Handle preferred housing type (single value)
       if (data.preferredHousingType !== undefined) {
         preferencesData.preferredHousingType = data.preferredHousingType;
+      }
+      
+      // ==================== NEW RENTAL PROPERTY PREFERENCES ====================
+      // Search type (RENT, BUY, BOTH)
+      if (data.searchType !== undefined) {
+        preferencesData.searchType = data.searchType;
+        
+        // Auto-set boolean flags based on searchType
+        if (data.searchType === 'RENT') {
+          preferencesData.isLookingForRental = true;
+          preferencesData.isLookingToBuy = false;
+        } else if (data.searchType === 'BUY') {
+          preferencesData.isLookingForRental = false;
+          preferencesData.isLookingToBuy = true;
+        } else if (data.searchType === 'BOTH') {
+          preferencesData.isLookingForRental = true;
+          preferencesData.isLookingToBuy = true;
+        }
+      }
+      
+      // Override with direct boolean flags if provided
+      if (data.isLookingForRental !== undefined) {
+        preferencesData.isLookingForRental = data.isLookingForRental;
+      }
+      
+      if (data.isLookingToBuy !== undefined) {
+        preferencesData.isLookingToBuy = data.isLookingToBuy;
+      }
+      
+      // Rental-specific preferences
+      if (data.preferredLeaseTerm !== undefined) {
+        preferencesData.preferredLeaseTerm = data.preferredLeaseTerm;
+      }
+      
+      if (data.requiresPetFriendly !== undefined) {
+        preferencesData.requiresPetFriendly = data.requiresPetFriendly;
+      }
+      
+      if (data.requiresUtilitiesIncluded !== undefined) {
+        preferencesData.requiresUtilitiesIncluded = data.requiresUtilitiesIncluded;
+      }
+      
+      // ==================== NEW SALE PREFERENCES ====================
+      if (data.requiresNegotiable !== undefined) {
+        preferencesData.requiresNegotiable = data.requiresNegotiable;
+      }
+      
+      if (data.requiresTitleDeed !== undefined) {
+        preferencesData.requiresTitleDeed = data.requiresTitleDeed;
       }
       
       // ==================== AMENITIES ====================
@@ -190,6 +255,20 @@ export class HousePreferencesService {
         property: {
           preferredTypes: preferences.preferredTypes,
           preferredHousingType: preferences.preferredHousingType,
+        },
+        // ==================== NEW RENTAL PREFERENCES ====================
+        rentalPreferences: {
+          searchType: preferences.searchType,
+          isLookingForRental: preferences.isLookingForRental,
+          isLookingToBuy: preferences.isLookingToBuy,
+          preferredLeaseTerm: preferences.preferredLeaseTerm,
+          requiresPetFriendly: preferences.requiresPetFriendly,
+          requiresUtilitiesIncluded: preferences.requiresUtilitiesIncluded,
+        },
+        // ==================== NEW SALE PREFERENCES ====================
+        salePreferences: {
+          requiresNegotiable: preferences.requiresNegotiable,
+          requiresTitleDeed: preferences.requiresTitleDeed,
         },
         amenities: {
           favoriteAmenities: preferences.favoriteAmenities,

@@ -196,6 +196,116 @@ export class HouseListingResponseDto extends HouseListingSummaryDto {
   @ApiProperty({ type: [HouseImageResponseDto] })
   @IsArray()
   images!: HouseImageResponseDto[];
+
+  // ======================================================
+  // NEW RENTAL FIELDS
+  // ======================================================
+
+  @ApiPropertyOptional({
+    description: 'Minimum lease term in months (for rental listings)',
+    example: 6,
+    minimum: 1
+  })
+  @IsOptional()
+  @IsNumber()
+  minimumLeaseTerm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Maximum lease term in months (for rental listings)',
+    example: 24,
+    minimum: 1
+  })
+  @IsOptional()
+  @IsNumber()
+  maximumLeaseTerm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Security deposit amount in KES (for rental listings)',
+    example: 50000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  depositAmount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Whether pets are allowed (for rental listings)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  isPetFriendly?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether utilities are included in rent (for rental listings)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  utilitiesIncluded?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Details about which utilities are included (water, electricity, internet, etc.)',
+    example: 'Water and garbage only. Electricity and internet are extra.'
+  })
+  @IsOptional()
+  @IsString()
+  utilitiesDetails?: string;
+
+  // ======================================================
+  // NEW SALE FIELDS
+  // ======================================================
+
+  @ApiPropertyOptional({
+    description: 'Whether price is negotiable (for sale listings)',
+    example: true,
+    default: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  isNegotiable?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether title deed is available (for sale listings)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  titleDeedAvailable?: boolean;
+
+  // ======================================================
+  // AI TRAINING FIELDS
+  // ======================================================
+
+  @ApiPropertyOptional({
+    description: 'Total square footage of the property',
+    example: 1200,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  squareFootage?: number;
+
+  @ApiPropertyOptional({
+    description: 'Year the property was built',
+    example: 2015,
+    minimum: 1800
+  })
+  @IsOptional()
+  @IsNumber()
+  yearBuilt?: number;
+
+  @ApiPropertyOptional({
+    description: 'Type of property',
+    example: 'APARTMENT',
+    enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO']
+  })
+  @IsOptional()
+  @IsString()
+  propertyType?: string;
 }
 
 /* ======================================================
@@ -323,8 +433,6 @@ export class AdminHouseViewingResponseDto extends HouseViewingResponseDto {
   };
 }
 
-// Add these to your response DTOs file after the existing DTOs
-
 /* ======================================================
    ANALYTICS RESPONSE DTOs
 ====================================================== */
@@ -401,7 +509,7 @@ export class HousingTrainingDataResponseDto {
     }]
   })
   @IsArray()
-  sampleData!: any[]; // This can remain any as it's just a preview
+  sampleData!: any[];
 
   @ApiProperty({ 
     example: { from: '2026-02-02T00:00:00Z', to: '2026-03-04T00:00:00Z' },

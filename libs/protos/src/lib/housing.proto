@@ -143,6 +143,29 @@ message HouseListing {
   optional double longitude = 25;
   string ownerEmail = 26;  // Email of the property owner/agent
   string listingCreatorId = 27;  // ID of the user who created/owns the listing
+  
+  // ===================================================
+  // NEW RENTAL FIELDS
+  // ===================================================
+  optional int32 minimumLeaseTerm = 28;   // Minimum lease term in months
+  optional int32 maximumLeaseTerm = 29;   // Maximum lease term in months
+  optional double depositAmount = 30;      // Security deposit amount in KES
+  optional bool isPetFriendly = 31;        // Whether pets are allowed
+  optional bool utilitiesIncluded = 32;    // Whether utilities are included in rent
+  optional string utilitiesDetails = 33;   // Details about which utilities are included
+  
+  // ===================================================
+  // NEW SALE FIELDS
+  // ===================================================
+  optional bool isNegotiable = 34;         // Whether price is negotiable
+  optional bool titleDeedAvailable = 35;   // Whether title deed is available
+  
+  // ===================================================
+  // AI TRAINING FIELDS
+  // ===================================================
+  optional int32 squareFootage = 36;        // Total square footage of the property
+  optional int32 yearBuilt = 37;            // Year the property was built
+  optional string propertyType = 38;        // APARTMENT, HOUSE, CONDO, TOWNHOUSE, VILLA, STUDIO
 }
 
 message HouseViewing {
@@ -188,6 +211,29 @@ message CreateHouseListingRequest {
   optional double longitude = 20;
   string ownerEmail = 21;
   optional ClientInfo clientInfo = 22;
+  
+  // ===================================================
+  // NEW RENTAL FIELDS
+  // ===================================================
+  optional int32 minimumLeaseTerm = 23;
+  optional int32 maximumLeaseTerm = 24;
+  optional double depositAmount = 25;
+  optional bool isPetFriendly = 26;
+  optional bool utilitiesIncluded = 27;
+  optional string utilitiesDetails = 28;
+  
+  // ===================================================
+  // NEW SALE FIELDS
+  // ===================================================
+  optional bool isNegotiable = 29;
+  optional bool titleDeedAvailable = 30;
+  
+  // ===================================================
+  // AI TRAINING FIELDS
+  // ===================================================
+  optional int32 squareFootage = 31;
+  optional int32 yearBuilt = 32;
+  optional string propertyType = 33;
 }
 
 message SearchHouseListingsRequest {
@@ -200,6 +246,21 @@ message SearchHouseListingsRequest {
   optional int32 offset = 7;
   optional string categoryId = 8;
   optional string subCategoryId = 9;
+  
+  // ===================================================
+  // NEW SEARCH FILTERS
+  // ===================================================
+  optional int32 minSquareFootage = 10;
+  optional int32 maxSquareFootage = 11;
+  optional string propertyType = 12;
+  optional int32 minYearBuilt = 13;
+  optional bool isFurnished = 14;
+  repeated string amenities = 15;
+  optional int32 minLeaseTerm = 16;        // For rental listings
+  optional bool isPetFriendly = 17;         // For rental listings
+  optional bool utilitiesIncluded = 18;     // For rental listings
+  optional bool isNegotiable = 19;          // For sale listings
+  optional bool titleDeedAvailable = 20;    // For sale listings
 }
 
 message UpdateHouseListingRequest {
@@ -227,6 +288,29 @@ message UpdateHouseListingData {
   optional double latitude = 14;
   optional double longitude = 15;
   optional string ownerEmail = 16;
+  
+  // ===================================================
+  // NEW RENTAL FIELDS
+  // ===================================================
+  optional int32 minimumLeaseTerm = 17;
+  optional int32 maximumLeaseTerm = 18;
+  optional double depositAmount = 19;
+  optional bool isPetFriendly = 20;
+  optional bool utilitiesIncluded = 21;
+  optional string utilitiesDetails = 22;
+  
+  // ===================================================
+  // NEW SALE FIELDS
+  // ===================================================
+  optional bool isNegotiable = 23;
+  optional bool titleDeedAvailable = 24;
+  
+  // ===================================================
+  // AI TRAINING FIELDS
+  // ===================================================
+  optional int32 squareFootage = 25;
+  optional int32 yearBuilt = 26;
+  optional string propertyType = 27;
 }
 
 message UpdateHouseListingStatusRequest {
@@ -288,6 +372,12 @@ message GetAdminListingsRequest {
   optional string status = 1;
   optional string accountId = 2;
   optional string creatorId = 3;
+  // NEW FILTERS
+  optional string listingType = 4;      // RENT or SALE
+  optional string propertyType = 5;      // APARTMENT, HOUSE, etc.
+  optional int32 minBedrooms = 6;
+  optional double minPrice = 7;
+  optional double maxPrice = 8;
 }
 
 // ===================================================

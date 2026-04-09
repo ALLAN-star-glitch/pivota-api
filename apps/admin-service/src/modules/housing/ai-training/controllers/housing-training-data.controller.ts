@@ -17,7 +17,7 @@ export class HousingTrainingDataController {
   private readonly logger = new Logger(HousingTrainingDataController.name);
 
   constructor(private readonly trainingDataService: HousingTrainingDataService) {}
-
+ 
   /**
    * Get comprehensive training dataset for AI/ML models
    */

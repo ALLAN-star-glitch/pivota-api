@@ -148,130 +148,151 @@ export class HousingAnalyticsService {
     }
   }
 
- /**
- * Transform HousingViewEvent to SmartMatchy format
- */
-private async transformViewToSmartMatchy(event: HousingViewEvent): Promise<Record<string, any>> {
-  const { seekerId, listingId, metadata, eventType } = event;
-  
-  return {
-    // Core identifiers
-    seekerId: seekerId,
-    listingId: listingId,
-    vertical: 'HOUSING',
-    timestamp: new Date(metadata.timestamp),
-    featureSetVersion: '2.1.0',
+  /**
+   * Transform HousingViewEvent to SmartMatchy format
+   */
+  private async transformViewToSmartMatchy(event: HousingViewEvent): Promise<Record<string, any>> {
+    const { seekerId, listingId, metadata, eventType } = event;
     
-    // ==================== PROVIDER/OWNER IDENTIFIER ====================
-    providerId: metadata.listingData.listingCreatorId,
-    
-    // ==================== AI METADATA ====================
-    aiEventType: eventType,
-    
-    // ==================== VIEWING TRACKING (null for views) ====================
-    viewingId: null,
-    viewingDate: null,
-    viewingStatus: null,
-    
-    // ==================== USER PREFERENCES (from metadata.userContext) ====================
-    // Budget preferences
-    userMinBudget: metadata.userContext?.priceRange?.min,
-    userMaxBudget: metadata.userContext?.priceRange?.max,
-    userBudgetMidpoint: metadata.userContext?.priceRange?.min && metadata.userContext?.priceRange?.max 
-      ? (metadata.userContext.priceRange.min + metadata.userContext.priceRange.max) / 2 
-      : null,
-    userBudgetFlexibility: metadata.userContext?.budgetFlexibility,
-    
-    // Bedroom preferences
-    userMinBedrooms: metadata.userContext?.preferredBedrooms,
-    userMaxBedrooms: metadata.userContext?.preferredBedrooms,
-    userMinBathrooms: metadata.userContext?.preferredBathrooms,
-    
-    // Location preferences (matches new schema)
-    userPreferredCities: metadata.userContext?.preferredCities,
-    userPreferredNeighborhoods: metadata.userContext?.preferredNeighborhoods,
-    userSearchRadiusKm: metadata.userContext?.searchRadiusKm,
-    userPreferredLat: metadata.userContext?.latitude,
-    userPreferredLng: metadata.userContext?.longitude,
-    
-    // Property preferences (using preferredTypes)
-    userPreferredTypes: metadata.userContext?.preferredTypes,
-    
-    // Amenities
-    userFavoriteAmenities: metadata.userContext?.favoriteAmenities,
-    userPrefersFurnished: metadata.userContext?.prefersFurnished,
-    userHasPets: metadata.userContext?.hasPets,
-    
-    // Move-in preferences
-    userHouseholdSize: metadata.userContext?.householdSize,
-    
-    // Agent preference
-    userHasAgent: metadata.userContext?.hasAgent,
-    
-    // ==================== LISTING FEATURES (from metadata.listingData) ====================
-    listingPrice: metadata.listingData.price,
-    listingCurrency: metadata.listingData.currency || 'KES',
-    listingBedrooms: metadata.listingData.bedrooms,
-    listingBathrooms: metadata.listingData.bathrooms,
-    listingPropertyType: metadata.listingData.propertyType,
-    listingSquareFootage: metadata.listingData.squareFootage,
-    listingYearBuilt: metadata.listingData.yearBuilt,
-    listingNeighborhood: metadata.listingData.locationNeighborhood,
-    listingLat: metadata.listingData.latitude,
-    listingLng: metadata.listingData.longitude,
-    listingCategoryId: metadata.listingData.categoryId,
-    listingCategorySlug: metadata.listingData.categorySlug,
-    listingAmenities: metadata.listingData.amenities,
-    listingIsFurnished: metadata.listingData.isFurnished,
-    listingPhotoCount: metadata.listingData.imagesCount || 0,
-    listingAge: metadata.listingData.daysSincePosted,
-    listingStatus: metadata.listingData.status,
-    
-    // ==================== HOUSING-SPECIFIC FEATURES ====================
-    housingType: metadata.listingData.listingType,
-    housingBedrooms: metadata.listingData.bedrooms,
-    housingBathrooms: metadata.listingData.bathrooms,
-    housingPropertyType: metadata.listingData.propertyType,
-    housingNeighborhood: metadata.listingData.locationNeighborhood,
-    housingIsFurnished: metadata.listingData.isFurnished,
-    housingAmenities: metadata.listingData.amenities,
-    housingSquareFootage: metadata.listingData.squareFootage,
-    housingYearBuilt: metadata.listingData.yearBuilt,
-    
-    // ==================== SESSION CONTEXT ====================
-    sessionDevice: metadata.deviceType,
-    sessionPlatform: metadata.platform,
-    deviceType: metadata.deviceType,
-    os: metadata.os,
-    osVersion: metadata.osVersion,
-    browser: metadata.browser,
-    browserVersion: metadata.browserVersion,
-    isBot: metadata.isBot,
-    appVersion: metadata.appVersion,
-    sessionSearchId: metadata.searchId,
-    sessionSearchQuery: metadata.searchQuery,
-    sessionSearchFilters: metadata.searchFilters,
-    searchPosition: metadata.position,
-    
-    // ==================== INTERACTION CONTEXT ====================
-    interactionType: metadata.interactionType,
-    scrollDepth: metadata.scrollDepth,
-    viewDuration: metadata.viewDuration,
-    dwellTime: metadata.timeSpent,
-    
-    // ==================== TEMPORAL FEATURES ====================
-    hourOfDay: new Date(metadata.timestamp).getHours(),
-    dayOfWeek: new Date(metadata.timestamp).getDay(),
-    isWeekend: [0, 6].includes(new Date(metadata.timestamp).getDay()),
-    
-    // ==================== LABELS ====================
-    userClicked: true,
-    
-    // ==================== TIMESTAMPS ====================
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
-}
+    return {
+      // Core identifiers
+      seekerId: seekerId,
+      listingId: listingId,
+      vertical: 'HOUSING',
+      timestamp: new Date(metadata.timestamp),
+      featureSetVersion: '2.1.0',
+      
+      // ==================== PROVIDER/OWNER IDENTIFIER ====================
+      providerId: metadata.listingData.listingCreatorId,
+      
+      // ==================== AI METADATA ====================
+      aiEventType: eventType,
+      
+      // ==================== VIEWING TRACKING (null for views) ====================
+      viewingId: null,
+      viewingDate: null,
+      viewingStatus: null,
+      
+      // ==================== USER PREFERENCES (from metadata.userContext) ====================
+      // Budget preferences
+      userMinBudget: metadata.userContext?.priceRange?.min,
+      userMaxBudget: metadata.userContext?.priceRange?.max,
+      userBudgetMidpoint: metadata.userContext?.priceRange?.min && metadata.userContext?.priceRange?.max 
+        ? (metadata.userContext.priceRange.min + metadata.userContext.priceRange.max) / 2 
+        : null,
+      userBudgetFlexibility: metadata.userContext?.budgetFlexibility,
+      
+      // Bedroom preferences
+      userMinBedrooms: metadata.userContext?.preferredBedrooms,
+      userMaxBedrooms: metadata.userContext?.preferredBedrooms,
+      userMinBathrooms: metadata.userContext?.preferredBathrooms,
+      
+      // Location preferences (matches new schema)
+      userPreferredCities: metadata.userContext?.preferredCities,
+      userPreferredNeighborhoods: metadata.userContext?.preferredNeighborhoods,
+      userSearchRadiusKm: metadata.userContext?.searchRadiusKm,
+      userPreferredLat: metadata.userContext?.latitude,
+      userPreferredLng: metadata.userContext?.longitude,
+      
+      // Property preferences (using preferredTypes)
+      userPreferredTypes: metadata.userContext?.preferredTypes,
+      
+      // Amenities
+      userFavoriteAmenities: metadata.userContext?.favoriteAmenities,
+      userPrefersFurnished: metadata.userContext?.prefersFurnished,
+      userHasPets: metadata.userContext?.hasPets,
+      
+      // Move-in preferences
+      userHouseholdSize: metadata.userContext?.householdSize,
+      
+      // Agent preference
+      userHasAgent: metadata.userContext?.hasAgent,
+      
+      // ==================== NEW RENTAL PREFERENCES ====================
+      userPreferredLeaseTerm: metadata.userContext?.preferredLeaseTerm,
+      userRequiresPetFriendly: metadata.userContext?.requiresPetFriendly,
+      userRequiresUtilitiesIncluded: metadata.userContext?.requiresUtilitiesIncluded,
+      
+      // ==================== NEW SALE PREFERENCES ====================
+      userRequiresNegotiable: metadata.userContext?.requiresNegotiable,
+      userRequiresTitleDeed: metadata.userContext?.requiresTitleDeed,
+      
+      // ==================== LISTING FEATURES (from metadata.listingData) ====================
+      listingPrice: metadata.listingData.price,
+      listingCurrency: metadata.listingData.currency || 'KES',
+      listingBedrooms: metadata.listingData.bedrooms,
+      listingBathrooms: metadata.listingData.bathrooms,
+      listingPropertyType: metadata.listingData.propertyType,
+      listingSquareFootage: metadata.listingData.squareFootage,
+      listingYearBuilt: metadata.listingData.yearBuilt,
+      listingNeighborhood: metadata.listingData.locationNeighborhood,
+      listingLat: metadata.listingData.latitude,
+      listingLng: metadata.listingData.longitude,
+      listingCategoryId: metadata.listingData.categoryId,
+      listingCategorySlug: metadata.listingData.categorySlug,
+      listingAmenities: metadata.listingData.amenities,
+      listingIsFurnished: metadata.listingData.isFurnished,
+      listingPhotoCount: metadata.listingData.imagesCount || 0,
+      listingAge: metadata.listingData.daysSincePosted,
+      listingStatus: metadata.listingData.status,
+      
+      // ==================== NEW RENTAL LISTING FIELDS ====================
+      listingMinimumLeaseTerm: metadata.listingData.minimumLeaseTerm,
+      listingMaximumLeaseTerm: metadata.listingData.maximumLeaseTerm,
+      listingDepositAmount: metadata.listingData.depositAmount,
+      listingIsPetFriendly: metadata.listingData.isPetFriendly,
+      listingUtilitiesIncluded: metadata.listingData.utilitiesIncluded,
+      listingUtilitiesDetails: metadata.listingData.utilitiesDetails,
+      
+      // ==================== NEW SALE LISTING FIELDS ====================
+      listingIsNegotiable: metadata.listingData.isNegotiable,
+      listingTitleDeedAvailable: metadata.listingData.titleDeedAvailable,
+      
+      // ==================== HOUSING-SPECIFIC FEATURES ====================
+      housingType: metadata.listingData.listingType,
+      housingBedrooms: metadata.listingData.bedrooms,
+      housingBathrooms: metadata.listingData.bathrooms,
+      housingPropertyType: metadata.listingData.propertyType,
+      housingNeighborhood: metadata.listingData.locationNeighborhood,
+      housingIsFurnished: metadata.listingData.isFurnished,
+      housingAmenities: metadata.listingData.amenities,
+      housingSquareFootage: metadata.listingData.squareFootage,
+      housingYearBuilt: metadata.listingData.yearBuilt,
+      
+      // ==================== SESSION CONTEXT ====================
+      sessionDevice: metadata.deviceType,
+      sessionPlatform: metadata.platform,
+      deviceType: metadata.deviceType,
+      os: metadata.os,
+      osVersion: metadata.osVersion,
+      browser: metadata.browser,
+      browserVersion: metadata.browserVersion,
+      isBot: metadata.isBot,
+      appVersion: metadata.appVersion,
+      sessionSearchId: metadata.searchId,
+      sessionSearchQuery: metadata.searchQuery,
+      sessionSearchFilters: metadata.searchFilters,
+      searchPosition: metadata.position,
+      
+      // ==================== INTERACTION CONTEXT ====================
+      interactionType: metadata.interactionType,
+      scrollDepth: metadata.scrollDepth,
+      viewDuration: metadata.viewDuration,
+      dwellTime: metadata.timeSpent,
+      
+      // ==================== TEMPORAL FEATURES ====================
+      hourOfDay: new Date(metadata.timestamp).getHours(),
+      dayOfWeek: new Date(metadata.timestamp).getDay(),
+      isWeekend: [0, 6].includes(new Date(metadata.timestamp).getDay()),
+      
+      // ==================== LABELS ====================
+      userClicked: true,
+      
+      // ==================== TIMESTAMPS ====================
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+  }
 
   /**
    * Transform HousingSearchEvent to SmartMatchy format
@@ -310,128 +331,149 @@ private async transformViewToSmartMatchy(event: HousingViewEvent): Promise<Recor
     };
   }
 
- /**
- * Transform HousingViewingScheduledEvent to SmartMatchy format
- */
-private async transformViewingScheduledToSmartMatchy(event: HousingViewingScheduledEvent): Promise<Record<string, any>> {
-  const { seekerId, listingId, metadata, eventType } = event;
-  
-  return {
-    seekerId: seekerId,
-    listingId: listingId,
-    vertical: 'HOUSING',
-    timestamp: new Date(metadata.timestamp),
-    featureSetVersion: '2.1.0',
+  /**
+   * Transform HousingViewingScheduledEvent to SmartMatchy format
+   */
+  private async transformViewingScheduledToSmartMatchy(event: HousingViewingScheduledEvent): Promise<Record<string, any>> {
+    const { seekerId, listingId, metadata, eventType } = event;
     
-    // ==================== PROVIDER/OWNER IDENTIFIER ====================
-    providerId: metadata.listingData.listingCreatorId,
-    
-    // ==================== AI METADATA ====================
-    aiEventType: eventType,
-    
-    // ==================== VIEWING TRACKING ====================
-    viewingId: metadata.viewingId,
-    viewingDate: new Date(metadata.viewingDate),
-    viewingStatus: 'SCHEDULED',
-    
-    // ==================== USER PREFERENCES (from metadata.userContext) ====================
-    // Budget preferences
-    userMinBudget: metadata.userContext?.priceRange?.min,
-    userMaxBudget: metadata.userContext?.priceRange?.max,
-    userBudgetMidpoint: metadata.userContext?.priceRange?.min && metadata.userContext?.priceRange?.max 
-      ? (metadata.userContext.priceRange.min + metadata.userContext.priceRange.max) / 2 
-      : null,
-    userBudgetFlexibility: metadata.userContext?.budgetFlexibility,
-    
-    // Bedroom preferences
-    userMinBedrooms: metadata.userContext?.preferredBedrooms,
-    userMaxBedrooms: metadata.userContext?.preferredBedrooms,
-    userMinBathrooms: metadata.userContext?.preferredBathrooms,
-    
-    // Location preferences (matches new schema)
-    userPreferredCities: metadata.userContext?.preferredCities,
-    userPreferredNeighborhoods: metadata.userContext?.preferredNeighborhoods,
-    userSearchRadiusKm: metadata.userContext?.searchRadiusKm,
-    userPreferredLat: metadata.userContext?.latitude,
-    userPreferredLng: metadata.userContext?.longitude,
-    
-    // Property preferences (using preferredTypes, not preferredPropertyTypes)
-    userPreferredTypes: metadata.userContext?.preferredTypes,
-    
-    // Amenities
-    userFavoriteAmenities: metadata.userContext?.favoriteAmenities,
-    userPrefersFurnished: metadata.userContext?.prefersFurnished,
-    userHasPets: metadata.userContext?.hasPets,
-    
-    // Move-in preferences
-    userHouseholdSize: metadata.userContext?.householdSize,
-    
-    // Agent preference
-    userHasAgent: metadata.userContext?.hasAgent,
-    
-    // ==================== LISTING FEATURES (from metadata.listingData) ====================
-    listingPrice: metadata.listingData.price,
-    listingCurrency: metadata.listingData.currency || 'KES',
-    listingBedrooms: metadata.listingData.bedrooms,
-    listingBathrooms: metadata.listingData.bathrooms,
-    listingPropertyType: metadata.listingData.propertyType,
-    listingSquareFootage: metadata.listingData.squareFootage,
-    listingYearBuilt: metadata.listingData.yearBuilt,
-    listingNeighborhood: metadata.listingData.locationNeighborhood,
-    listingCategoryId: metadata.listingData.categoryId,
-    listingCategorySlug: metadata.listingData.categorySlug,
-    listingAmenities: metadata.listingData.amenities,
-    listingIsFurnished: metadata.listingData.isFurnished,
-    
-    // ==================== HOUSING-SPECIFIC FEATURES ====================
-    housingType: metadata.listingData.listingType,
-    housingBedrooms: metadata.listingData.bedrooms,
-    housingBathrooms: metadata.listingData.bathrooms,
-    housingPropertyType: metadata.listingData.propertyType,
-    housingNeighborhood: metadata.listingData.locationNeighborhood,
-    housingIsFurnished: metadata.listingData.isFurnished,
-    housingAmenities: metadata.listingData.amenities,
-    housingSquareFootage: metadata.listingData.squareFootage,
-    housingYearBuilt: metadata.listingData.yearBuilt,
-    
-    // ==================== SESSION CONTEXT ====================
-    sessionDevice: metadata.deviceType,
-    sessionPlatform: metadata.platform,
-    deviceType: metadata.deviceType,
-    os: metadata.os,
-    osVersion: metadata.osVersion,
-    browser: metadata.browser,
-    browserVersion: metadata.browserVersion,
-    isBot: metadata.isBot,
-    sessionSearchId: metadata.searchId,
-    sessionSearchQuery: metadata.searchQuery,
-    sessionSearchFilters: metadata.searchFilters,
-    searchPosition: metadata.position,
-    
-    // ==================== INTERACTION CONTEXT ====================
-    interactionType: metadata.interactionType,
-    scrollDepth: metadata.scrollDepth,
-    viewDuration: metadata.viewDuration,
-    dwellTime: metadata.timeSpent,
-    
-    // ==================== VIEWING SPECIFIC ====================
-    isAdminBooking: metadata.isAdminBooking,
-    viewingDuration: metadata.viewingDuration,
-    viewingParticipants: metadata.participants,
-    
-    // ==================== TEMPORAL FEATURES ====================
-    hourOfDay: new Date(metadata.timestamp).getHours(),
-    dayOfWeek: new Date(metadata.timestamp).getDay(),
-    isWeekend: [0, 6].includes(new Date(metadata.timestamp).getDay()),
-    
-    // ==================== LABELS ====================
-    userScheduledViewing: true,
-    
-    // ==================== TIMESTAMPS ====================
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
-}
+    return {
+      seekerId: seekerId,
+      listingId: listingId,
+      vertical: 'HOUSING',
+      timestamp: new Date(metadata.timestamp),
+      featureSetVersion: '2.1.0',
+      
+      // ==================== PROVIDER/OWNER IDENTIFIER ====================
+      providerId: metadata.listingData.listingCreatorId,
+      
+      // ==================== AI METADATA ====================
+      aiEventType: eventType,
+      
+      // ==================== VIEWING TRACKING ====================
+      viewingId: metadata.viewingId,
+      viewingDate: new Date(metadata.viewingDate),
+      viewingStatus: 'SCHEDULED',
+      
+      // ==================== USER PREFERENCES (from metadata.userContext) ====================
+      // Budget preferences
+      userMinBudget: metadata.userContext?.priceRange?.min,
+      userMaxBudget: metadata.userContext?.priceRange?.max,
+      userBudgetMidpoint: metadata.userContext?.priceRange?.min && metadata.userContext?.priceRange?.max 
+        ? (metadata.userContext.priceRange.min + metadata.userContext.priceRange.max) / 2 
+        : null,
+      userBudgetFlexibility: metadata.userContext?.budgetFlexibility,
+      
+      // Bedroom preferences
+      userMinBedrooms: metadata.userContext?.preferredBedrooms,
+      userMaxBedrooms: metadata.userContext?.preferredBedrooms,
+      userMinBathrooms: metadata.userContext?.preferredBathrooms,
+      
+      // Location preferences (matches new schema)
+      userPreferredCities: metadata.userContext?.preferredCities,
+      userPreferredNeighborhoods: metadata.userContext?.preferredNeighborhoods,
+      userSearchRadiusKm: metadata.userContext?.searchRadiusKm,
+      userPreferredLat: metadata.userContext?.latitude,
+      userPreferredLng: metadata.userContext?.longitude,
+      
+      // Property preferences (using preferredTypes, not preferredPropertyTypes)
+      userPreferredTypes: metadata.userContext?.preferredTypes,
+      
+      // Amenities
+      userFavoriteAmenities: metadata.userContext?.favoriteAmenities,
+      userPrefersFurnished: metadata.userContext?.prefersFurnished,
+      userHasPets: metadata.userContext?.hasPets,
+      
+      // Move-in preferences
+      userHouseholdSize: metadata.userContext?.householdSize,
+      
+      // Agent preference
+      userHasAgent: metadata.userContext?.hasAgent,
+      
+      // ==================== NEW RENTAL PREFERENCES ====================
+      userPreferredLeaseTerm: metadata.userContext?.preferredLeaseTerm,
+      userRequiresPetFriendly: metadata.userContext?.requiresPetFriendly,
+      userRequiresUtilitiesIncluded: metadata.userContext?.requiresUtilitiesIncluded,
+      
+      // ==================== NEW SALE PREFERENCES ====================
+      userRequiresNegotiable: metadata.userContext?.requiresNegotiable,
+      userRequiresTitleDeed: metadata.userContext?.requiresTitleDeed,
+      
+      // ==================== LISTING FEATURES (from metadata.listingData) ====================
+      listingPrice: metadata.listingData.price,
+      listingCurrency: metadata.listingData.currency || 'KES',
+      listingBedrooms: metadata.listingData.bedrooms,
+      listingBathrooms: metadata.listingData.bathrooms,
+      listingPropertyType: metadata.listingData.propertyType,
+      listingSquareFootage: metadata.listingData.squareFootage,
+      listingYearBuilt: metadata.listingData.yearBuilt,
+      listingNeighborhood: metadata.listingData.locationNeighborhood,
+      listingCategoryId: metadata.listingData.categoryId,
+      listingCategorySlug: metadata.listingData.categorySlug,
+      listingAmenities: metadata.listingData.amenities,
+      listingIsFurnished: metadata.listingData.isFurnished,
+      
+      // ==================== NEW RENTAL LISTING FIELDS ====================
+      listingMinimumLeaseTerm: metadata.listingData.minimumLeaseTerm,
+      listingMaximumLeaseTerm: metadata.listingData.maximumLeaseTerm,
+      listingDepositAmount: metadata.listingData.depositAmount,
+      listingIsPetFriendly: metadata.listingData.isPetFriendly,
+      listingUtilitiesIncluded: metadata.listingData.utilitiesIncluded,
+      listingUtilitiesDetails: metadata.listingData.utilitiesDetails,
+      
+      // ==================== NEW SALE LISTING FIELDS ====================
+      listingIsNegotiable: metadata.listingData.isNegotiable,
+      listingTitleDeedAvailable: metadata.listingData.titleDeedAvailable,
+      
+      // ==================== HOUSING-SPECIFIC FEATURES ====================
+      housingType: metadata.listingData.listingType,
+      housingBedrooms: metadata.listingData.bedrooms,
+      housingBathrooms: metadata.listingData.bathrooms,
+      housingPropertyType: metadata.listingData.propertyType,
+      housingNeighborhood: metadata.listingData.locationNeighborhood,
+      housingIsFurnished: metadata.listingData.isFurnished,
+      housingAmenities: metadata.listingData.amenities,
+      housingSquareFootage: metadata.listingData.squareFootage,
+      housingYearBuilt: metadata.listingData.yearBuilt,
+      
+      // ==================== SESSION CONTEXT ====================
+      sessionDevice: metadata.deviceType,
+      sessionPlatform: metadata.platform,
+      deviceType: metadata.deviceType,
+      os: metadata.os,
+      osVersion: metadata.osVersion,
+      browser: metadata.browser,
+      browserVersion: metadata.browserVersion,
+      isBot: metadata.isBot,
+      sessionSearchId: metadata.searchId,
+      sessionSearchQuery: metadata.searchQuery,
+      sessionSearchFilters: metadata.searchFilters,
+      searchPosition: metadata.position,
+      
+      // ==================== INTERACTION CONTEXT ====================
+      interactionType: metadata.interactionType,
+      scrollDepth: metadata.scrollDepth,
+      viewDuration: metadata.viewDuration,
+      dwellTime: metadata.timeSpent,
+      
+      // ==================== VIEWING SPECIFIC ====================
+      isAdminBooking: metadata.isAdminBooking,
+      viewingDuration: metadata.viewingDuration,
+      viewingParticipants: metadata.participants,
+      
+      // ==================== TEMPORAL FEATURES ====================
+      hourOfDay: new Date(metadata.timestamp).getHours(),
+      dayOfWeek: new Date(metadata.timestamp).getDay(),
+      isWeekend: [0, 6].includes(new Date(metadata.timestamp).getDay()),
+      
+      // ==================== LABELS ====================
+      userScheduledViewing: true,
+      
+      // ==================== TIMESTAMPS ====================
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+  }
 
   /**
    * Update housing label (save, contact, click, convert, schedule viewing, complete viewing)

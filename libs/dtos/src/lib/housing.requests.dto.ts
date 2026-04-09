@@ -172,6 +172,97 @@ export abstract class BaseHouseListingDto {
   @IsOptional()
   @IsString()
   locationNeighborhood?: string;
+
+  // ======================================================
+  // NEW RENTAL FIELDS
+  // ======================================================
+
+  @ApiPropertyOptional({
+    description: 'Minimum lease term in months (for rental listings)',
+    example: 6,
+    minimum: 1
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  minimumLeaseTerm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Maximum lease term in months (for rental listings)',
+    example: 24,
+    minimum: 1
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  maximumLeaseTerm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Security deposit amount in KES (for rental listings)',
+    example: 50000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  depositAmount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Whether pets are allowed (for rental listings)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isPetFriendly?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether utilities are included in rent (for rental listings)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  utilitiesIncluded?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Details about which utilities are included (water, electricity, internet, etc.)',
+    example: 'Water and garbage only. Electricity and internet are extra.',
+    maxLength: 500
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  utilitiesDetails?: string;
+
+  // ======================================================
+  // NEW SALE FIELDS
+  // ======================================================
+
+  @ApiPropertyOptional({
+    description: 'Whether price is negotiable (for sale listings)',
+    example: true,
+    default: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isNegotiable?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether title deed is available (for sale listings)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  titleDeedAvailable?: boolean;
 }
 
 /* ======================================================
@@ -484,6 +575,53 @@ export class SearchHouseListingsDto {
   @IsString({ each: true })
   amenities?: string[];
 
+  @ApiPropertyOptional({
+    description: 'Filter by minimum lease term in months (for rental listings)',
+    example: 6,
+    minimum: 1
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  minLeaseTerm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Filter by pet friendly (for rental listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isPetFriendly?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Filter by utilities included (for rental listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  utilitiesIncluded?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Filter by negotiable price (for sale listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isNegotiable?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Filter by title deed available (for sale listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  titleDeedAvailable?: boolean;
+
   @ApiPropertyOptional({ 
     description: 'Maximum number of results to return (pagination)',
     example: 20,
@@ -677,6 +815,97 @@ export class UpdateOwnHouseListingRequestDto {
   @IsOptional()
   @IsString()
   locationNeighborhood?: string;
+
+  // ======================================================
+  // NEW RENTAL FIELDS FOR UPDATE
+  // ======================================================
+
+  @ApiPropertyOptional({
+    description: 'Minimum lease term in months (for rental listings)',
+    example: 6,
+    minimum: 1
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  minimumLeaseTerm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Maximum lease term in months (for rental listings)',
+    example: 24,
+    minimum: 1
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  maximumLeaseTerm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Security deposit amount in KES (for rental listings)',
+    example: 50000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  depositAmount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Whether pets are allowed (for rental listings)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isPetFriendly?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether utilities are included in rent (for rental listings)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  utilitiesIncluded?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Details about which utilities are included (water, electricity, internet, etc.)',
+    example: 'Water and garbage only. Electricity and internet are extra.',
+    maxLength: 500
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  utilitiesDetails?: string;
+
+  // ======================================================
+  // NEW SALE FIELDS FOR UPDATE
+  // ======================================================
+
+  @ApiPropertyOptional({
+    description: 'Whether price is negotiable (for sale listings)',
+    example: true,
+    default: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isNegotiable?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether title deed is available (for sale listings)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  titleDeedAvailable?: boolean;
 }
 
 export class UpdateAdminHouseListingRequestDto extends UpdateOwnHouseListingRequestDto {

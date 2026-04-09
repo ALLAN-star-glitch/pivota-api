@@ -135,7 +135,7 @@ export class AuthController {
     this.logger.log(`gRPC: Request OTP for ${data.email} (${data.purpose})`);
     return await this.authService.requestOtp(data);
   }
- 
+  
   @GrpcMethod('AuthService', 'VerifyOtp')
   async handleVerifyOtpGrpc(
     data: VerifyOtpDto & { purpose: OtpPurpose }

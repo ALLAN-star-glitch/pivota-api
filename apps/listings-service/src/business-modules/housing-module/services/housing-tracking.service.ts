@@ -44,6 +44,16 @@ interface HouseListingData {
   creatorId?: string;
   status?: string;
   daysSincePosted?: number;
+  // NEW RENTAL FIELDS
+  minimumLeaseTerm?: number | null;
+  maximumLeaseTerm?: number | null;
+  depositAmount?: number | null;
+  isPetFriendly?: boolean;
+  utilitiesIncluded?: boolean;
+  utilitiesDetails?: string | null;
+  // NEW SALE FIELDS
+  isNegotiable?: boolean;
+  titleDeedAvailable?: boolean;
   [key: string]: unknown;
 }
 
@@ -70,13 +80,13 @@ interface MilestoneData {
 @Injectable()
 export class HousingTrackingService {
   private readonly logger = new Logger(HousingTrackingService.name);
-
+ 
   constructor(
     @Inject('KAFKA_SERVICE')
     private readonly kafkaClient: ClientKafka,
     @Inject('NOTIFICATION_EVENT_BUS')
     private readonly notificationBus: ClientProxy,
-  ) {}
+  ) {} 
 
   /**
    * Track when a house seeker views a listing
@@ -149,7 +159,17 @@ export class HousingTrackingService {
           daysSincePosted: listingData.daysSincePosted,
           accountId: listingData.accountId,
           listingCreatorId: listingData.creatorId,
-          status: listingData.status
+          status: listingData.status,
+          // NEW RENTAL FIELDS
+          minimumLeaseTerm: listingData.minimumLeaseTerm,
+          maximumLeaseTerm: listingData.maximumLeaseTerm,
+          depositAmount: listingData.depositAmount,
+          isPetFriendly: listingData.isPetFriendly,
+          utilitiesIncluded: listingData.utilitiesIncluded,
+          utilitiesDetails: listingData.utilitiesDetails,
+          // NEW SALE FIELDS
+          isNegotiable: listingData.isNegotiable,
+          titleDeedAvailable: listingData.titleDeedAvailable,
         },
 
         userContext: {}
@@ -197,7 +217,13 @@ export class HousingTrackingService {
       isFurnished: searchDto.isFurnished,
       amenities: searchDto.amenities,
       limit: searchDto.limit,
-      offset: searchDto.offset
+      offset: searchDto.offset,
+      // NEW SEARCH FILTERS
+      minLeaseTerm: searchDto.minLeaseTerm,
+      isPetFriendly: searchDto.isPetFriendly,
+      utilitiesIncluded: searchDto.utilitiesIncluded,
+      isNegotiable: searchDto.isNegotiable,
+      titleDeedAvailable: searchDto.titleDeedAvailable,
     };
 
     Object.keys(filtersObject).forEach(key => 
@@ -328,7 +354,17 @@ export class HousingTrackingService {
           imagesCount: listingData.images?.length || 0,
           accountId: listingData.accountId,
           listingCreatorId: listingData.creatorId,
-          status: listingData.status
+          status: listingData.status,
+          // NEW RENTAL FIELDS
+          minimumLeaseTerm: listingData.minimumLeaseTerm,
+          maximumLeaseTerm: listingData.maximumLeaseTerm,
+          depositAmount: listingData.depositAmount,
+          isPetFriendly: listingData.isPetFriendly,
+          utilitiesIncluded: listingData.utilitiesIncluded,
+          utilitiesDetails: listingData.utilitiesDetails,
+          // NEW SALE FIELDS
+          isNegotiable: listingData.isNegotiable,
+          titleDeedAvailable: listingData.titleDeedAvailable,
         },
         
         userContext: {}
@@ -417,7 +453,17 @@ export class HousingTrackingService {
           imagesCount: listingData.images?.length || 0,
           accountId: listingData.accountId,
           listingCreatorId: listingData.creatorId,
-          status: listingData.status
+          status: listingData.status,
+          // NEW RENTAL FIELDS
+          minimumLeaseTerm: listingData.minimumLeaseTerm,
+          maximumLeaseTerm: listingData.maximumLeaseTerm,
+          depositAmount: listingData.depositAmount,
+          isPetFriendly: listingData.isPetFriendly,
+          utilitiesIncluded: listingData.utilitiesIncluded,
+          utilitiesDetails: listingData.utilitiesDetails,
+          // NEW SALE FIELDS
+          isNegotiable: listingData.isNegotiable,
+          titleDeedAvailable: listingData.titleDeedAvailable,
         },
         
         userContext: {}
@@ -497,7 +543,17 @@ export class HousingTrackingService {
           imagesCount: listingData.images?.length || 0,
           accountId: listingData.accountId,
           listingCreatorId: listingData.creatorId,
-          status: listingData.status
+          status: listingData.status,
+          // NEW RENTAL FIELDS
+          minimumLeaseTerm: listingData.minimumLeaseTerm,
+          maximumLeaseTerm: listingData.maximumLeaseTerm,
+          depositAmount: listingData.depositAmount,
+          isPetFriendly: listingData.isPetFriendly,
+          utilitiesIncluded: listingData.utilitiesIncluded,
+          utilitiesDetails: listingData.utilitiesDetails,
+          // NEW SALE FIELDS
+          isNegotiable: listingData.isNegotiable,
+          titleDeedAvailable: listingData.titleDeedAvailable,
         },
         
         userContext: {}

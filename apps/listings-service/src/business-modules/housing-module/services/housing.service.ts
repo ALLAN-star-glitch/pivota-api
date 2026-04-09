@@ -74,6 +74,15 @@ interface HouseListingWithRelations {
   squareFootage?: number | null;
   yearBuilt?: number | null;
   propertyType?: string | null;
+  // NEW FIELDS
+  minimumLeaseTerm?: number | null;
+  maximumLeaseTerm?: number | null;
+  depositAmount?: number | null;
+  isPetFriendly?: boolean;
+  utilitiesIncluded?: boolean;
+  utilitiesDetails?: string | null;
+  isNegotiable?: boolean;
+  titleDeedAvailable?: boolean;
 }
 
 // Type for user flow - needs all fields including ownerEmail
@@ -200,6 +209,20 @@ private async executeCreate(dto: CreateHouseListingGrpcRequestDto): Promise<Base
         locationNeighborhood: dto.locationNeighborhood,
         address: dto.address,
         status: 'AVAILABLE',
+        // NEW RENTAL FIELDS
+        minimumLeaseTerm: dto.minimumLeaseTerm,
+        maximumLeaseTerm: dto.maximumLeaseTerm,
+        depositAmount: dto.depositAmount,
+        isPetFriendly: dto.isPetFriendly ?? false,
+        utilitiesIncluded: dto.utilitiesIncluded ?? false,
+        utilitiesDetails: dto.utilitiesDetails,
+        // NEW SALE FIELDS
+        isNegotiable: dto.isNegotiable ?? true,
+        titleDeedAvailable: dto.titleDeedAvailable ?? false,
+        // AI Training fields
+        squareFootage: dto.squareFootage,
+        yearBuilt: dto.yearBuilt,
+        propertyType: dto.propertyType,
         images: dto.imageUrls
           ? {
               create: dto.imageUrls.map((url, index) => ({
@@ -212,7 +235,7 @@ private async executeCreate(dto: CreateHouseListingGrpcRequestDto): Promise<Base
       select: { id: true, status: true, createdAt: true },
     });
 
-    // 🔥 ADD THIS: Send email to the lister/owner
+    // Send email to the lister/owner
     try {
       const mainImageUrl = dto.imageUrls && dto.imageUrls.length > 0 ? dto.imageUrls[0] : undefined;
       
@@ -421,6 +444,15 @@ async getHouseListingById(
       ownerEmail: true,
       images: true,
       category: true,
+      // NEW FIELDS
+      minimumLeaseTerm: true,
+      maximumLeaseTerm: true,
+      depositAmount: true,
+      isPetFriendly: true,
+      utilitiesIncluded: true,
+      utilitiesDetails: true,
+      isNegotiable: true,
+      titleDeedAvailable: true,
     },
   }) as unknown as HouseListingWithRelations | null;
 }
@@ -996,14 +1028,11 @@ async scheduleAdminViewing(dto: ScheduleAdminViewingGrpcRequestDto): Promise<Bas
 /**
  * Send notifications for user-flow viewing
  */
-/**
- * Send notifications for user-flow viewing
- */
 private async sendUserViewingNotifications(
   viewing: HouseViewing,
   house: HouseWithFullInfo & { images?: { url: string }[] },
   dto: ScheduleViewingGrpcRequestDto,
-  attendingUserId: string  // ← ADD THIS PARAMETER
+  attendingUserId: string
 ): Promise<void> {
   // Determine who will attend and who booked
   const attendingUserIdValue = attendingUserId;
@@ -1095,12 +1124,6 @@ private async sendUserViewingNotifications(
   });
 }
 
-/**
- * Send notifications for admin-flow viewing
- */
-/**
- * Send notifications for admin-flow viewing
- */
 /**
  * Send notifications for admin-flow viewing
  */
@@ -1274,6 +1297,20 @@ private isTransientError(error: unknown): error is Prisma.PrismaClientKnownReque
         id: listing.accountId,
         name: listing.accountName,
       },
+      // NEW RENTAL FIELDS
+      minimumLeaseTerm: listing.minimumLeaseTerm ?? undefined,
+      maximumLeaseTerm: listing.maximumLeaseTerm ?? undefined,
+      depositAmount: listing.depositAmount ?? undefined,
+      isPetFriendly: listing.isPetFriendly ?? false,
+      utilitiesIncluded: listing.utilitiesIncluded ?? false,
+      utilitiesDetails: listing.utilitiesDetails ?? undefined,
+      // NEW SALE FIELDS
+      isNegotiable: listing.isNegotiable ?? true,
+      titleDeedAvailable: listing.titleDeedAvailable ?? false,
+      // AI Training fields
+      squareFootage: listing.squareFootage ?? undefined,
+      yearBuilt: listing.yearBuilt ?? undefined,
+      propertyType: listing.propertyType ?? undefined,
     };
   }
 

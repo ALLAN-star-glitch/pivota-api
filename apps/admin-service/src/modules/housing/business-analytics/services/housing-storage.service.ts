@@ -37,12 +37,22 @@ export class HousingStorageService {
         housingSquareFootage,
         housingYearBuilt,
         housingPetPolicy,
-        userScheduledViewing,
-        userCompletedViewing,
+        // NEW RENTAL FIELDS
+        listingMinimumLeaseTerm,
+        listingMaximumLeaseTerm,
+        listingDepositAmount,
+        listingIsPetFriendly,
+        listingUtilitiesIncluded,
+        listingUtilitiesDetails,
+        // NEW SALE FIELDS
+        listingIsNegotiable,
+        listingTitleDeedAvailable,
         // Tracking fields
         viewingId,
         viewingDate,
         viewingStatus,
+        userScheduledViewing,
+        userCompletedViewing,
         // Base fields (go to SmartMatchyBase)
         ...baseData
       } = data;
@@ -136,6 +146,18 @@ export class HousingStorageService {
           housingYearBuilt,
           housingPetPolicy,
           
+          // NEW RENTAL FIELDS
+          listingMinimumLeaseTerm,
+          listingMaximumLeaseTerm,
+          listingDepositAmount,
+          listingIsPetFriendly: listingIsPetFriendly ?? false,
+          listingUtilitiesIncluded: listingUtilitiesIncluded ?? false,
+          listingUtilitiesDetails,
+          
+          // NEW SALE FIELDS
+          listingIsNegotiable: listingIsNegotiable ?? true,
+          listingTitleDeedAvailable: listingTitleDeedAvailable ?? false,
+          
           // Listing owner (maps to providerId in base)
           listingOwnerId: baseData.providerId,
           
@@ -146,6 +168,15 @@ export class HousingStorageService {
           bathroomsMatch: matchScores.bathroomsMatch,
           propertyTypeMatch: matchScores.propertyTypeMatch,
           furnishedMatch: matchScores.furnishedMatch,
+          
+          // NEW RENTAL MATCH SCORES
+          leaseTermMatch: matchScores.leaseTermMatch,
+          petFriendlyMatch: matchScores.petFriendlyMatch,
+          utilitiesMatch: matchScores.utilitiesMatch,
+          
+          // NEW SALE MATCH SCORES
+          negotiableMatch: matchScores.negotiableMatch,
+          titleDeedMatch: matchScores.titleDeedMatch,
           
           // Viewing tracking
           viewingId: viewingId || null,
@@ -188,6 +219,13 @@ export class HousingStorageService {
     bathroomsMatch?: boolean;
     propertyTypeMatch?: boolean;
     furnishedMatch?: boolean;
+    // NEW RENTAL MATCH SCORES
+    leaseTermMatch?: boolean;
+    petFriendlyMatch?: boolean;
+    utilitiesMatch?: boolean;
+    // NEW SALE MATCH SCORES
+    negotiableMatch?: boolean;
+    titleDeedMatch?: boolean;
   } {
     const scores: any = {};
 
@@ -218,7 +256,6 @@ export class HousingStorageService {
     }
 
     // ==================== PROPERTY TYPE MATCH ====================
-    // Use preferredTypes array or single preferredPropertyType for backward compatibility
     if (listingData.listingPropertyType && userPrefs.preferredTypes && userPrefs.preferredTypes.length > 0) {
       scores.propertyTypeMatch = userPrefs.preferredTypes.includes(listingData.listingPropertyType);
     } else if (listingData.listingPropertyType && userPrefs.preferredPropertyType) {
@@ -228,6 +265,49 @@ export class HousingStorageService {
     // ==================== FURNISHED MATCH ====================
     if (listingData.listingIsFurnished !== undefined && userPrefs.prefersFurnished !== undefined) {
       scores.furnishedMatch = listingData.listingIsFurnished === userPrefs.prefersFurnished;
+    }
+
+    // ==================== NEW RENTAL MATCH SCORES ====================
+    // Lease term match (check if listing's lease term fits within user's preference)
+    if (userPrefs.preferredLeaseTerm !== undefined && listingData.listingMinimumLeaseTerm !== undefined) {
+      scores.leaseTermMatch = listingData.listingMinimumLeaseTerm <= userPrefs.preferredLeaseTerm;
+    }
+    
+    // Pet friendly match
+    if (userPrefs.requiresPetFriendly !== undefined && listingData.listingIsPetFriendly !== undefined) {
+      if (userPrefs.requiresPetFriendly) {
+        scores.petFriendlyMatch = listingData.listingIsPetFriendly === true;
+      } else {
+        scores.petFriendlyMatch = true; // Not required, so always matches
+      }
+    }
+    
+    // Utilities included match
+    if (userPrefs.requiresUtilitiesIncluded !== undefined && listingData.listingUtilitiesIncluded !== undefined) {
+      if (userPrefs.requiresUtilitiesIncluded) {
+        scores.utilitiesMatch = listingData.listingUtilitiesIncluded === true;
+      } else {
+        scores.utilitiesMatch = true; // Not required, so always matches
+      }
+    }
+
+    // ==================== NEW SALE MATCH SCORES ====================
+    // Negotiable match
+    if (userPrefs.requiresNegotiable !== undefined && listingData.listingIsNegotiable !== undefined) {
+      if (userPrefs.requiresNegotiable) {
+        scores.negotiableMatch = listingData.listingIsNegotiable === true;
+      } else {
+        scores.negotiableMatch = true; // Not required, so always matches
+      }
+    }
+    
+    // Title deed match
+    if (userPrefs.requiresTitleDeed !== undefined && listingData.listingTitleDeedAvailable !== undefined) {
+      if (userPrefs.requiresTitleDeed) {
+        scores.titleDeedMatch = listingData.listingTitleDeedAvailable === true;
+      } else {
+        scores.titleDeedMatch = true; // Not required, so always matches
+      }
     }
 
     // ==================== LOCATION MATCH ====================
@@ -273,23 +353,45 @@ export class HousingStorageService {
     let weightedSum = 0;
 
     if (scores.priceScore !== undefined) {
-      weightedSum += scores.priceScore * 0.3;
-      totalWeight += 0.3;
-    }
-    if (scores.locationScore !== undefined) {
-      weightedSum += scores.locationScore * 0.25;
+      weightedSum += scores.priceScore * 0.25;
       totalWeight += 0.25;
     }
-    if (scores.bedroomsMatch !== undefined) {
-      weightedSum += (scores.bedroomsMatch ? 1 : 0) * 0.2;
+    if (scores.locationScore !== undefined) {
+      weightedSum += scores.locationScore * 0.2;
       totalWeight += 0.2;
     }
-    if (scores.propertyTypeMatch !== undefined) {
-      weightedSum += (scores.propertyTypeMatch ? 1 : 0) * 0.15;
+    if (scores.bedroomsMatch !== undefined) {
+      weightedSum += (scores.bedroomsMatch ? 1 : 0) * 0.15;
       totalWeight += 0.15;
     }
+    if (scores.propertyTypeMatch !== undefined) {
+      weightedSum += (scores.propertyTypeMatch ? 1 : 0) * 0.1;
+      totalWeight += 0.1;
+    }
     if (scores.furnishedMatch !== undefined) {
-      weightedSum += (scores.furnishedMatch ? 1 : 0) * 0.1;
+      weightedSum += (scores.furnishedMatch ? 1 : 0) * 0.05;
+      totalWeight += 0.05;
+    }
+    // NEW RENTAL WEIGHTS
+    if (scores.leaseTermMatch !== undefined) {
+      weightedSum += (scores.leaseTermMatch ? 1 : 0) * 0.1;
+      totalWeight += 0.1;
+    }
+    if (scores.petFriendlyMatch !== undefined) {
+      weightedSum += (scores.petFriendlyMatch ? 1 : 0) * 0.05;
+      totalWeight += 0.05;
+    }
+    if (scores.utilitiesMatch !== undefined) {
+      weightedSum += (scores.utilitiesMatch ? 1 : 0) * 0.05;
+      totalWeight += 0.05;
+    }
+    // NEW SALE WEIGHTS
+    if (scores.negotiableMatch !== undefined) {
+      weightedSum += (scores.negotiableMatch ? 1 : 0) * 0.1;
+      totalWeight += 0.1;
+    }
+    if (scores.titleDeedMatch !== undefined) {
+      weightedSum += (scores.titleDeedMatch ? 1 : 0) * 0.1;
       totalWeight += 0.1;
     }
 

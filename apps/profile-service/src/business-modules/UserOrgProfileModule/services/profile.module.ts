@@ -18,7 +18,6 @@ import { ProfileWorker } from '../../../workers/profile.worker';
     SharedStorageModule,
     
     ClientsModule.register([
-      // 1. RMQ: Notification Event Bus (for emails)
       {
         name: 'NOTIFICATION_EVENT_BUS',
         transport: Transport.RMQ,
@@ -28,8 +27,6 @@ import { ProfileWorker } from '../../../workers/profile.worker';
           queueOptions: { durable: true },
         },
       },
-
-      // 2. KAFKA CLIENT - STORAGE EVENTS (Consumer - for file deletion)
       {
         name: 'KAFKA_STORAGE_CLIENT',
         transport: Transport.KAFKA,
@@ -43,8 +40,6 @@ import { ProfileWorker } from '../../../workers/profile.worker';
           },
         },
       },
-
-      // 3. KAFKA CLIENT - ANALYTICS EVENTS (Producer - for housing preferences)
       {
         name: 'KAFKA_ANALYTICS_CLIENT',
         transport: Transport.KAFKA,
@@ -56,8 +51,6 @@ import { ProfileWorker } from '../../../workers/profile.worker';
           producerOnlyMode: true,
         },
       },
-
-      /* ---------- gRPC CLIENTS ---------- */
       {
         name: 'RBAC_PACKAGE',
         transport: Transport.GRPC,
@@ -97,17 +90,9 @@ import { ProfileWorker } from '../../../workers/profile.worker';
 })
 export class ProfileModule {
   constructor(private profileWorker: ProfileWorker) {
-    console.log(
-      '🚀 ProfileModule initialized:',
-      '\n- RabbitMQ Client (NOTIFICATION_EVENT_BUS) active for email notifications',
-      '\n- Kafka Storage Client (KAFKA_STORAGE_CLIENT) active for consuming file deletion events',
-      '\n- Kafka Analytics Client (KAFKA_ANALYTICS_CLIENT) active for emitting housing preferences',
-      '\n- StorageModule active for Supabase operations',
-      '\n- Redis Module active for BullMQ queues',
-    );
-    console.log('🔥 ProfileModule constructor, profileWorker:', !!this.profileWorker);
+    console.log('🚀 ProfileModule constructor called');
     
-    // Initialize profile worker immediately
+    // Initialize profile worker immediately (same pattern as EmailWorker)
     setImmediate(() => {
       console.log('🔥 ProfileModule - manually initializing ProfileWorker');
       this.profileWorker.initialize().catch(err => {

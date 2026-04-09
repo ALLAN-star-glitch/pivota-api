@@ -154,7 +154,7 @@ export class HousingGatewayController {
       |----------|--------|-------------|
       | **Search Intent** | Search query, filters applied, results count | Query understanding, intent classification |
       | **User Context** | Session ID, platform, referrer | Personalization, user profiling |
-      | **Filter Preferences** | City, price range, bedrooms, property type | Preference learning, feature importance |
+      | **Filter Preferences** | City, price range, bedrooms, property type, lease term, pet policy, utilities | Preference learning, feature importance |
       | **Pagination Data** | Limit, offset, total results | User patience, scroll behavior |
       
       **AI Training Applications:**
@@ -241,6 +241,48 @@ export class HousingGatewayController {
     example: 2,
     type: Number
   })
+  @ApiQuery({ 
+    name: 'propertyType', 
+    required: false,
+    description: 'Filter by property type - captures style preference',
+    example: 'APARTMENT',
+    enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO']
+  })
+  @ApiQuery({ 
+    name: 'minLeaseTerm', 
+    required: false,
+    description: 'Minimum lease term in months (for rental listings)',
+    example: 6,
+    type: Number
+  })
+  @ApiQuery({ 
+    name: 'isPetFriendly', 
+    required: false,
+    description: 'Filter by pet friendly status (for rental listings)',
+    example: true,
+    type: Boolean
+  })
+  @ApiQuery({ 
+    name: 'utilitiesIncluded', 
+    required: false,
+    description: 'Filter by utilities included status (for rental listings)',
+    example: true,
+    type: Boolean
+  })
+  @ApiQuery({ 
+    name: 'isNegotiable', 
+    required: false,
+    description: 'Filter by negotiable price status (for sale listings)',
+    example: true,
+    type: Boolean
+  })
+  @ApiQuery({ 
+    name: 'titleDeedAvailable', 
+    required: false,
+    description: 'Filter by title deed availability (for sale listings)',
+    example: true,
+    type: Boolean
+  })
   @ApiResponse({ 
     status: 200, 
     description: 'Search results retrieved successfully with analytics tracking',
@@ -300,7 +342,7 @@ export class HousingGatewayController {
       - Device Info - Platform, Device Type, OS, Browser
       - Search Context - Search ID, Position, Query
       - Interaction Metrics - Time Spent, Scroll Depth
-      - Listing Features - Price, Location, Amenities
+      - Listing Features - Price, Location, Amenities, Lease Terms, Pet Policy, Utilities, Negotiability, Title Deed
     `
   })
   @ApiParam({ 
@@ -384,6 +426,25 @@ export class HousingGatewayController {
       **Microservice:** Listings Service
       **Authentication:** Required (JWT cookie)
       **Permission:** ${P.HOUSING_CREATE_OWN}
+      
+      **Supported Fields by Listing Type:**
+      
+      **For Rental Listings (listingType: "RENT"):**
+      - minimumLeaseTerm - Minimum lease term in months
+      - maximumLeaseTerm - Maximum lease term in months  
+      - depositAmount - Security deposit amount
+      - isPetFriendly - Whether pets are allowed
+      - utilitiesIncluded - Whether utilities are included
+      - utilitiesDetails - Details about included utilities
+      
+      **For Sale Listings (listingType: "SALE"):**
+      - isNegotiable - Whether price is negotiable
+      - titleDeedAvailable - Whether title deed is available
+      
+      **For Both Types:**
+      - title, description, price, bedrooms, bathrooms
+      - amenities, isFurnished, location details
+      - images (up to 10)
     `
   })
   @ApiConsumes('multipart/form-data')
@@ -421,6 +482,12 @@ export class HousingGatewayController {
     const storagePath = `houses/${req.user.accountId}`;
     
     this.logger.log(`Creating new house listing for user ${requesterUuid}`);
+    this.logger.debug(`Listing Type: ${dto.listingType}`);
+    if (dto.listingType === 'RENT') {
+      this.logger.debug(`Rental details - Lease Term: ${dto.minimumLeaseTerm}-${dto.maximumLeaseTerm} months, Pet Friendly: ${dto.isPetFriendly}, Utilities: ${dto.utilitiesIncluded}`);
+    } else if (dto.listingType === 'SALE') {
+      this.logger.debug(`Sale details - Negotiable: ${dto.isNegotiable}, Title Deed: ${dto.titleDeedAvailable}`);
+    }
     this.logger.debug(`Client info: ${JSON.stringify({
       device: clientInfo?.device,
       deviceType: clientInfo?.deviceType,
@@ -882,6 +949,40 @@ export class HousingGatewayController {
     required: false,
     description: 'Filter by creator ID',
     type: String
+  })
+  @ApiQuery({ 
+    name: 'listingType', 
+    required: false,
+    description: 'Filter by listing type (rent or sale)',
+    enum: ['RENT', 'SALE'],
+    example: 'RENT'
+  })
+  @ApiQuery({ 
+    name: 'propertyType', 
+    required: false,
+    description: 'Filter by property type',
+    enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO']
+  })
+  @ApiQuery({ 
+    name: 'minBedrooms', 
+    required: false,
+    description: 'Minimum number of bedrooms',
+    type: Number,
+    example: 2
+  })
+  @ApiQuery({ 
+    name: 'minPrice', 
+    required: false,
+    description: 'Minimum price in KES',
+    type: Number,
+    example: 20000
+  })
+  @ApiQuery({ 
+    name: 'maxPrice', 
+    required: false,
+    description: 'Maximum price in KES',
+    type: Number,
+    example: 100000
   })
   @ApiResponse({ 
     status: 200, 

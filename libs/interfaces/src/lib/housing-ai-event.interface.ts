@@ -65,6 +65,22 @@ export interface HousingAIEvent {
       accountId?: string;
       listingCreatorId?: string;  // The person who listed the property (owner) - maps to providerId
       status?: string;
+      
+      // ======================================================
+      // NEW RENTAL FIELDS
+      // ======================================================
+      minimumLeaseTerm?: number | null;   // Minimum lease term in months
+      maximumLeaseTerm?: number | null;   // Maximum lease term in months
+      depositAmount?: number | null;       // Security deposit amount in KES
+      isPetFriendly?: boolean;             // Whether pets are allowed
+      utilitiesIncluded?: boolean;         // Whether utilities are included in rent
+      utilitiesDetails?: string | null;    // Details about which utilities are included
+      
+      // ======================================================
+      // NEW SALE FIELDS
+      // ======================================================
+      isNegotiable?: boolean;              // Whether price is negotiable
+      titleDeedAvailable?: boolean;        // Whether title deed is available
     };
     
     // User context for housing recommendations (ENHANCED) - matches UserHousingPreferences schema
@@ -111,6 +127,19 @@ export interface HousingAIEvent {
       userType?: 'PROVIDER' | 'BENEFICIARY' | 'BOTH';
       userTrustScore?: number;
       userVerificationLevel?: 'NONE' | 'BASIC' | 'VERIFIED';
+      
+      // ======================================================
+      // NEW RENTAL PREFERENCES FOR USER CONTEXT
+      // ======================================================
+      preferredLeaseTerm?: number;          // Preferred lease term in months
+      requiresPetFriendly?: boolean;         // Whether they need pet-friendly
+      requiresUtilitiesIncluded?: boolean;   // Whether they need utilities included
+      
+      // ======================================================
+      // NEW SALE PREFERENCES FOR USER CONTEXT
+      // ======================================================
+      requiresNegotiable?: boolean;          // Whether they need negotiable price
+      requiresTitleDeed?: boolean;           // Whether they need title deed available
     };
     
     // Pre-computed match scores (can be calculated by analytics service)
@@ -139,6 +168,19 @@ export interface HousingAIEvent {
       
       // Amenity match
       amenityMatchCount?: number;
+      
+      // ======================================================
+      // NEW RENTAL MATCH SCORES
+      // ======================================================
+      leaseTermMatch?: boolean;              // Whether lease term matches preference
+      petFriendlyMatch?: boolean;            // Whether pet policy matches
+      utilitiesMatch?: boolean;              // Whether utilities inclusion matches
+      
+      // ======================================================
+      // NEW SALE MATCH SCORES
+      // ======================================================
+      negotiableMatch?: boolean;             // Whether negotiability matches
+      titleDeedMatch?: boolean;              // Whether title deed availability matches
     };
   };
 }

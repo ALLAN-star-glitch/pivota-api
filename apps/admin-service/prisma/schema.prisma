@@ -906,6 +906,18 @@ model SmartMatchyHousing {
   housingYearBuilt Int?
   housingPetPolicy String?  // "ALLOWED", "NOT_ALLOWED", "CASE_BY_CASE"
   
+  // ==================== NEW RENTAL FIELDS ====================
+  listingMinimumLeaseTerm Int?     // Minimum lease term in months
+  listingMaximumLeaseTerm Int?     // Maximum lease term in months
+  listingDepositAmount Float?      // Security deposit amount in KES
+  listingIsPetFriendly Boolean?    // Whether pets are allowed
+  listingUtilitiesIncluded Boolean? // Whether utilities are included
+  listingUtilitiesDetails String?  // Details about which utilities are included
+  
+  // ==================== NEW SALE FIELDS ====================
+  listingIsNegotiable Boolean?     // Whether price is negotiable
+  listingTitleDeedAvailable Boolean? // Whether title deed is available
+  
   // ==================== LISTING OWNER ====================
   listingOwnerId  String?  // Who owns the listing (maps to providerId in base)
   
@@ -916,6 +928,15 @@ model SmartMatchyHousing {
   bathroomsMatch  Boolean?
   propertyTypeMatch Boolean?
   furnishedMatch  Boolean?
+  
+  // ==================== NEW RENTAL MATCH SCORES ====================
+  leaseTermMatch  Boolean?  // Whether lease term matches user preference
+  petFriendlyMatch Boolean? // Whether pet policy matches user preference
+  utilitiesMatch  Boolean?  // Whether utilities inclusion matches user preference
+  
+  // ==================== NEW SALE MATCH SCORES ====================
+  negotiableMatch Boolean?  // Whether negotiability matches user preference
+  titleDeedMatch  Boolean?  // Whether title deed availability matches user preference
   
   // ==================== VIEWING TRACKING ====================
   viewingId       String?   // ID of the viewing if this record is for a viewing event
@@ -932,6 +953,12 @@ model SmartMatchyHousing {
   @@index([isWithinBudget])
   @@index([listingOwnerId])
   @@index([viewingStatus])
+  @@index([listingMinimumLeaseTerm])
+  @@index([listingIsPetFriendly])
+  @@index([listingIsNegotiable])
+  @@index([leaseTermMatch])
+  @@index([petFriendlyMatch])
+  @@index([negotiableMatch])
 }
 
 // ===================== USER HOUSING PREFERENCES =====================
@@ -964,6 +991,18 @@ model UserHousingPreferences {
   preferredTypes  Json?    // Array of preferred property types (matches profile service)
   preferredHousingType  String?   // "RENTAL", "SALE", "SHORT_STAY"
   
+  // ==================== NEW RENTAL PREFERENCES ====================
+  searchType            String?   // "RENT", "BUY", "BOTH"
+  isLookingForRental    Boolean?  // Whether specifically looking for rental
+  isLookingToBuy        Boolean?  // Whether specifically looking to buy
+  preferredLeaseTerm    Int?      // Preferred lease term in months
+  requiresPetFriendly   Boolean?  // Whether they need pet-friendly properties
+  requiresUtilitiesIncluded Boolean? // Whether they need utilities included
+  
+  // ==================== NEW SALE PREFERENCES ====================
+  requiresNegotiable    Boolean?  // Whether they need negotiable price
+  requiresTitleDeed     Boolean?  // Whether they need title deed available
+  
   // ==================== AMENITIES ====================
   favoriteAmenities Json?
   prefersFurnished Boolean?
@@ -981,6 +1020,9 @@ model UserHousingPreferences {
   updatedAt       DateTime @updatedAt
   
   @@index([seekerId])
+  @@index([searchType])  // Add index for faster filtering by search type
+  @@index([isLookingForRental])  // Index for rental seeker queries
+  @@index([isLookingToBuy])      // Index for buyer queries
 }
 
 // ===================== USER EMPLOYMENT PREFERENCES =====================

@@ -113,6 +113,20 @@ message HousingSeekerProfileData {
   optional int32 searchRadiusKm = 15;
   optional bool hasAgent = 16;
   optional string agentUuid = 17;
+  // NEW FIELDS (matching profile service)
+  optional string searchType = 18;           // "RENT", "BUY", "BOTH"
+  optional bool isLookingForRental = 19;     // true/false
+  optional bool isLookingToBuy = 20;         // true/false
+  // Rental fields
+  optional int32 minimumLeaseTerm = 21;
+  optional int32 maximumLeaseTerm = 22;
+  optional double depositAmount = 23;
+  optional bool isPetFriendly = 24;
+  optional bool utilitiesIncluded = 25;
+  optional string utilitiesDetails = 26;
+  // Sale fields
+  optional bool isNegotiable = 27;
+  optional bool titleDeedAvailable = 28;
 }
 
 message SupportBeneficiaryProfileData {
@@ -149,6 +163,10 @@ message PropertyOwnerProfileData {
   optional int32 propertyCount = 9;
   repeated string propertyTypes = 10;
   optional string propertyPurpose = 11;  // "PRIMARY", "INVESTMENT", "BOTH"
+  // NEW FIELDS (matching profile service)
+  optional string listingType = 12;       // "RENT", "SALE", "BOTH"
+  optional bool isListingForRent = 13;    // true/false
+  optional bool isListingForSale = 14;    // true/false
 }
 
 // ------------------ Organization Profile Data ------------------

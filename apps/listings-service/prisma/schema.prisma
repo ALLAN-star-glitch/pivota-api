@@ -383,7 +383,7 @@ model Rating {
 }
 
 /// =====================================================================
-///                            HOUSING (Asset-Driven)
+///                            HOUSING (Asset-Driven) - UPDATED
 /// =====================================================================
 model HouseListing {
   id           String   @id @default(cuid())
@@ -405,29 +405,43 @@ model HouseListing {
   subCategoryId String?
   subCategory   Category? @relation("HouseSubcategory", fields: [subCategoryId], references: [id])
   
+  // Listing type for rent vs sale - Values: "RENT", "SALE"
   listingType  String
+  
   price        Float
   currency     String   @default("KES")
 
   ownerEmail   String?
   
-  // Property details - Add these new fields
+  // Property details
   bedrooms     Int?
   bathrooms    Int?
   amenities    String[] @default([])
   isFurnished  Boolean  @default(false)
   
-  // NEW FIELDS FOR AI TRAINING
+  // AI Training fields
   squareFootage Int?    // Total area in square feet/meters
   yearBuilt    Int?     // Construction year
-  propertyType String?  // 'APARTMENT' | 'HOUSE' | 'CONDO' | 'TOWNHOUSE' | 'VILLA' | 'STUDIO'
+  propertyType String?  // Validated against PROPERTY_TYPES constant
+  
+  // Rental-specific fields
+  minimumLeaseTerm   Int?    // Minimum lease duration in months
+  maximumLeaseTerm   Int?    // Maximum lease duration in months
+  depositAmount      Float?  // Security deposit amount
+  isPetFriendly      Boolean @default(false)
+  utilitiesIncluded  Boolean @default(false)
+  utilitiesDetails   String? // Which utilities are included (water, electricity, internet, etc.)
+  
+  // Sale-specific fields
+  isNegotiable       Boolean @default(true)  // For sale price
+  titleDeedAvailable Boolean @default(false) // Important for Kenyan property market
   
   // Location
   locationCity         String
   locationNeighborhood String?
   address              String?
   
-  status       String   @default("AVAILABLE")
+  status       String   @default("AVAILABLE") // AVAILABLE, RENTED, SOLD, PENDING, UNAVAILABLE
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -440,6 +454,9 @@ model HouseListing {
   @@index([creatorId])
   @@index([accountId])
   @@index([status])
+  @@index([listingType])
+  @@index([propertyType])
+  @@index([price])
 }
 
 model HouseImage {

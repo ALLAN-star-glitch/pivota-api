@@ -218,6 +218,7 @@ model JobSeekerProfile {
   @@map("job_seeker_profiles")
 }
 
+// UPDATED: PropertyOwnerProfile with rent/sale listing types
 model PropertyOwnerProfile {
   id                     String   @id @default(cuid())
   accountUuid            String   @unique
@@ -234,6 +235,10 @@ model PropertyOwnerProfile {
   propertyCount          Int?
   propertyTypes          Json?    @default("[]")
   propertyPurpose        String?
+  // NEW FIELDS FOR RENT VS SALE LISTINGS
+  listingType            String?  // "RENT", "SALE", "BOTH" - What type of listings they offer
+  isListingForRent       Boolean? @default(false)
+  isListingForSale       Boolean? @default(false)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
   account                Account  @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
@@ -241,9 +246,11 @@ model PropertyOwnerProfile {
   @@index([accountUuid])
   @@index([isProfessional])
   @@index([isVerifiedOwner])
+  @@index([listingType])
   @@map("property_owner_profiles")
 }
 
+// UPDATED: HousingSeekerProfile with search type preferences
 model HousingSeekerProfile {
   id                     String    @id @default(cuid())
   accountUuid            String    @unique
@@ -264,12 +271,17 @@ model HousingSeekerProfile {
   searchRadiusKm         Int?      @default(10)
   hasAgent               Boolean   @default(false)
   agentUuid              String?
+  // NEW FIELDS FOR SEARCH TYPE (RENT vs BUY)
+  searchType             String?   // "RENT", "BUY", "BOTH" - What they're looking for
+  isLookingForRental     Boolean?  @default(false)
+  isLookingToBuy         Boolean?  @default(false)
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
   account                Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([maxBudget])
+  @@index([searchType])
   @@map("housing_seeker_profiles")
 }
 

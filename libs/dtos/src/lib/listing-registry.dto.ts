@@ -3,7 +3,8 @@ import { ServiceOfferingResponseDto } from './contractors-response.dto';
 import { HouseListingResponseDto } from './housing.responses.dto';
 import { JobPostResponseDto } from './jobs-responses.dto';
 import { SupportProgramResponseDto } from './social-support-response.dto';
-import { IsOptional, IsUUID, IsString, IsIn } from 'class-validator';
+import { IsOptional, IsUUID, IsString, IsIn, IsNumber, Min, IsInt } from 'class-validator';
+import { Type } from 'class-transformer';
 
 
 /* -------------------------------------------------------------------------- */
@@ -96,7 +97,6 @@ export class AdminListingFilterDto {
   @IsUUID()
   accountId?: string;
 
-  
   @ApiPropertyOptional({ 
     description: 'Filter by the unique UUID of the user who created the listing',
     example: 'a123b456-c789-d012-e345-f67890abcdef' 
@@ -124,4 +124,108 @@ export class AdminListingFilterDto {
   @IsString()
   @IsIn(['JOBS', 'HOUSING', 'SOCIAL_SUPPORT', 'SERVICES'])
   vertical?: 'JOBS' | 'HOUSING' | 'SOCIAL_SUPPORT' | 'SERVICES';
+
+  // ======================================================
+  // NEW HOUSING-SPECIFIC FILTERS
+  // ======================================================
+
+  @ApiPropertyOptional({ 
+    description: 'Filter housing listings by type (rent or sale)',
+    enum: ['RENT', 'SALE'],
+    example: 'RENT'
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['RENT', 'SALE'])
+  listingType?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Filter housing listings by property type',
+    enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO'],
+    example: 'APARTMENT'
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO'])
+  propertyType?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Minimum number of bedrooms for housing listings',
+    example: 2,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  minBedrooms?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Minimum price for housing listings (in KES)',
+    example: 20000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  minPrice?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Maximum price for housing listings (in KES)',
+    example: 100000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  maxPrice?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Filter by minimum lease term in months (for rental listings)',
+    example: 6,
+    minimum: 1
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  minLeaseTerm?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Filter by pet friendly status (for rental listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Boolean)
+  isPetFriendly?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Filter by utilities included status (for rental listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Boolean)
+  utilitiesIncluded?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Filter by negotiable price status (for sale listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Boolean)
+  isNegotiable?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Filter by title deed available status (for sale listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Boolean)
+  titleDeedAvailable?: boolean;
 }

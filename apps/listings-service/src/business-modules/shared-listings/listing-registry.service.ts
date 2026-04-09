@@ -77,6 +77,16 @@ export class ListingRegistryService {
         ...(query.status && { status: query.status }),
       };
 
+      // Build housing-specific filter with new fields
+      const housingFilter: Prisma.HouseListingWhereInput = {
+        ...baseFilter,
+        ...(query.listingType && { listingType: query.listingType }),
+        ...(query.propertyType && { propertyType: query.propertyType }),
+        ...(query.minBedrooms !== undefined && { bedrooms: { gte: query.minBedrooms } }),
+        ...(query.minPrice !== undefined && { price: { gte: query.minPrice } }),
+        ...(query.maxPrice !== undefined && { price: { lte: query.maxPrice } }),
+      };
+
       // Query only the relevant vertical if specified, otherwise query all
       const [jobs, houses, services, support] = await Promise.all([
         (!query.vertical || query.vertical === 'JOBS') 
@@ -84,7 +94,7 @@ export class ListingRegistryService {
           : Promise.resolve([]),
         
         (!query.vertical || query.vertical === 'HOUSING')
-          ? this.prisma.houseListing.findMany({ where: baseFilter as Prisma.HouseListingWhereInput, include: { category: true } })
+          ? this.prisma.houseListing.findMany({ where: housingFilter, include: { category: true } })
           : Promise.resolve([]),
         
         (!query.vertical || query.vertical === 'SERVICES')
@@ -96,6 +106,12 @@ export class ListingRegistryService {
           : Promise.resolve([]),
       ]);
 
+      // Calculate active counts with proper status checks
+      const activeJobs = jobs.filter(i => i.status === 'ACTIVE').length;
+      const activeHouses = houses.filter(i => i.status === 'AVAILABLE').length;
+      const activeSupport = support.filter(i => i.status === 'ACTIVE').length;
+      const activeServices = services.length;
+
       const data: ListingRegistryDataDto = {
         jobs: jobs as unknown as JobPostResponseDto[],
         houses: houses as unknown as HouseListingResponseDto[],
@@ -103,10 +119,16 @@ export class ListingRegistryService {
         support: support as unknown as SupportProgramResponseDto[],
         metadata: {
           totalCount: jobs.length + houses.length + services.length + support.length,
-          appliedFilters: query as Record<string, unknown>
+          activeCount: activeJobs + activeHouses + activeServices + activeSupport,
+          appliedFilters: {
+            ...query,
+            ...(query.minPrice && { minPrice: query.minPrice }),
+            ...(query.maxPrice && { maxPrice: query.maxPrice }),
+          } as Record<string, unknown>
         }
       };
 
+      this.logger.log(`✅ Admin retrieved ${data.metadata.totalCount} total listings (${data.metadata.activeCount} active)`);
       return BaseResponseDto.ok(data, 'Admin listings retrieved successfully');
     } catch (error) {
       const err = error as Error;

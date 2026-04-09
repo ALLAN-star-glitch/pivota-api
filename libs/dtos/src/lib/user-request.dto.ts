@@ -471,6 +471,36 @@ export class SkilledProfessionalProfileDataDto {
 }
 
 export class HousingSeekerProfileDataDto {
+  // NEW FIELDS FOR RENTAL VS PURCHASE
+  @ApiPropertyOptional({ 
+    description: 'Type of housing search',
+    example: 'RENT',
+    enum: ['RENT', 'BUY', 'BOTH']
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['RENT', 'BUY', 'BOTH'])
+  searchType?: string; // RENT, BUY, or BOTH
+
+  @ApiPropertyOptional({ 
+    description: 'Whether specifically looking for rental properties',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  isLookingForRental?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Whether specifically looking to buy property',
+    example: false,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  isLookingToBuy?: boolean;
+
+  // Existing fields below
   @ApiPropertyOptional({ 
     description: 'Minimum bedrooms',
     example: 1,
@@ -645,6 +675,35 @@ export class PropertyOwnerProfileDataDto {
   @IsOptional()
   @IsBoolean()
   isProfessional?: boolean;
+
+  // NEW FIELDS FOR RENTAL VS SALE LISTINGS
+  @ApiPropertyOptional({ 
+    description: 'Type of property listings',
+    example: 'RENT',
+    enum: ['RENT', 'SALE', 'BOTH']
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['RENT', 'SALE', 'BOTH'])
+  listingType?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Whether listing properties for rent',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  isListingForRent?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Whether listing properties for sale',
+    example: false,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  isListingForSale?: boolean;
 
   // For ORGANIZATION accounts: required if isProfessional is true
   @ApiPropertyOptional({ 

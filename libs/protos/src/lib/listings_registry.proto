@@ -26,6 +26,12 @@ message AdminListingFilterRequest {
   optional string creatorId = 2;
   optional string status = 3;
   optional string vertical = 4; // JOBS, HOUSING, SOCIAL_SUPPORT, SERVICES
+  // NEW FILTERS FOR HOUSING
+  optional string listingType = 5; // RENT or SALE
+  optional string propertyType = 6; // APARTMENT, HOUSE, CONDO, etc.
+  optional int32 minBedrooms = 7;
+  optional double minPrice = 8;
+  optional double maxPrice = 9;
 }
 
 // ==========================================
@@ -74,6 +80,29 @@ message HouseListingProto {
   float price = 4;
   string locationCity = 5;
   google.protobuf.Timestamp createdAt = 6;
+  
+  // NEW FIELDS FOR BETTER DISPLAY AND FILTERING
+  string listingType = 7;        // RENT or SALE
+  optional int32 bedrooms = 8;
+  optional string locationNeighborhood = 9;
+  optional string imageUrl = 10;
+  optional string accountName = 11;
+  
+  // NEW RENTAL FIELDS
+  optional int32 minimumLeaseTerm = 12;   // in months
+  optional int32 maximumLeaseTerm = 13;   // in months
+  optional double depositAmount = 14;     // security deposit
+  optional bool isPetFriendly = 15;
+  optional bool utilitiesIncluded = 16;
+  
+  // NEW SALE FIELDS
+  optional bool isNegotiable = 17;
+  optional bool titleDeedAvailable = 18;
+  
+  // AI TRAINING FIELDS
+  optional int32 squareFootage = 19;
+  optional int32 yearBuilt = 20;
+  optional string propertyType = 21;      // APARTMENT, HOUSE, CONDO, etc.
 }
 
 message ServiceOfferingProto {

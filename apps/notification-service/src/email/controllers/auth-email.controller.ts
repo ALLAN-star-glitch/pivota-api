@@ -65,17 +65,24 @@ export class AuthEmailController {
    * Handle user onboarded event - Send welcome email
    */
   @EventPattern('user.onboarded', Transport.RMQ)
-  async handleUserOnboarded(
-    @Payload() data: UserOnboardedEventDto,
-    @Ctx() context: RmqContext
-  ) {
-    this.logger.debug(`[RMQ] User onboarded event for: ${data.email}`);
-    await this.processEvent(
-      context,
-      () => this.authEmailService.sendUserWelcome(data),
-      data.email
-    );
-  }
+async handleUserOnboarded(
+  @Payload() data: UserOnboardedEventDto,
+  @Ctx() context: RmqContext
+) {
+  // 🔍 CRITICAL DEBUG - Log the entire payload
+  console.log('🔍🔍🔍 ========== USER ONBOARDED EVENT RECEIVED ==========');
+  console.log('📧 Email:', data.email);
+  console.log('📋 Profile Type:', data.profileType);
+  console.log('📊 Profile Data:', JSON.stringify(data.profileData, null, 2));
+  console.log('🔍🔍🔍 ===================================================');
+  
+  this.logger.debug(`[RMQ] User onboarded event for: ${data.email}`);
+  await this.processEvent(
+    context,
+    () => this.authEmailService.sendUserWelcome(data),
+    data.email
+  );
+}
 
   /**
    * Handle Google signup event - Send Google welcome email
@@ -125,7 +132,7 @@ export class AuthEmailController {
 async handleOtpRequested(
   @Payload() data: SendOtpEventDto,
   @Ctx() context: RmqContext
-) {
+) { 
   console.log('🔥🔥🔥 ========== OTP REQUEST RECEIVED ========== 🔥🔥🔥');
   console.log('📧 Email:', data.email);
   console.log('🔢 Code:', data.code);

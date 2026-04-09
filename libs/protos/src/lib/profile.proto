@@ -153,6 +153,10 @@ message HousingSeekerProfileData {
   optional int32 searchRadiusKm = 15;
   optional bool hasAgent = 16;
   optional string agentUuid = 17;
+  // NEW FIELDS
+  optional string searchType = 18;           // "RENT", "BUY", "BOTH"
+  optional bool isLookingForRental = 19;     // true/false
+  optional bool isLookingToBuy = 20;         // true/false
 }
 
 message SupportBeneficiaryProfileData {
@@ -190,6 +194,10 @@ message PropertyOwnerProfileData {
   optional int32 propertyCount = 9;
   repeated string propertyTypes = 10;
   optional string propertyPurpose = 11;  // "PRIMARY", "INVESTMENT", "BOTH"
+  // NEW FIELDS
+  optional string listingType = 12;       // "RENT", "SALE", "BOTH"
+  optional bool isListingForRent = 13;    // true/false
+  optional bool isListingForSale = 14;    // true/false
 }
 
 // ======================================================
@@ -429,6 +437,10 @@ message UpdateHousingSeekerProfileRequest {
   optional int32 searchRadiusKm = 16;
   optional bool hasAgent = 17;
   optional string agentUuid = 18;
+  // NEW FIELDS
+  optional string searchType = 19;           // "RENT", "BUY", "BOTH"
+  optional bool isLookingForRental = 20;     // true/false
+  optional bool isLookingToBuy = 21;         // true/false
 }
 
 message UpdatePropertyOwnerProfileRequest {
@@ -441,6 +453,10 @@ message UpdatePropertyOwnerProfileRequest {
   repeated string serviceAreas = 7;
   optional bool usesAgent = 8;
   optional string managingAgentUuid = 9;
+  // NEW FIELDS
+  optional string listingType = 10;       // "RENT", "SALE", "BOTH"
+  optional bool isListingForRent = 11;    // true/false
+  optional bool isListingForSale = 12;    // true/false
 }
 
 message UpdateSupportBeneficiaryProfileRequest {
@@ -851,8 +867,6 @@ message HousingSeekerData {
   repeated string preferredCities = 7;
   optional string moveInDate = 8;
   optional bool hasAgent = 9;
-  
-  // Add missing fields
   repeated string preferredNeighborhoods = 10;
   optional string leaseDuration = 11;
   optional int32 householdSize = 12;
@@ -862,6 +876,10 @@ message HousingSeekerData {
   optional double longitude = 16;
   optional int32 searchRadiusKm = 17;
   optional string agentUuid = 18;
+  // NEW FIELDS
+  optional string searchType = 19;           // "RENT", "BUY", "BOTH"
+  optional bool isLookingForRental = 20;     // true/false
+  optional bool isLookingToBuy = 21;         // true/false
 }
 
 message PropertyOwnerProfileResponse {
@@ -888,6 +906,10 @@ message PropertyOwnerData {
   optional int32 propertyCount = 11;
   repeated string propertyTypes = 12;
   optional string propertyPurpose = 13;
+  // NEW FIELDS
+  optional string listingType = 14;       // "RENT", "SALE", "BOTH"
+  optional bool isListingForRent = 15;    // true/false
+  optional bool isListingForSale = 16;    // true/false
 }
 
 message SupportBeneficiaryProfileResponse {

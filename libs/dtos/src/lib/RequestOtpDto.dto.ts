@@ -1,6 +1,7 @@
-import { IsEmail, IsIn, IsNotEmpty, IsOptional, Matches } from 'class-validator';
+import { IsEmail, IsIn, IsNotEmpty, IsOptional, Matches, ValidateIf } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OtpPurpose, OtpPurposeEnum } from '@pivota-api/shared-redis';
+import { KENYAN_PHONE_REGEX } from '@pivota-api/constants';
 
 export class RequestOtpDto {
   @ApiProperty({
@@ -11,15 +12,16 @@ export class RequestOtpDto {
   @IsNotEmpty()
   email!: string;
 
- @ApiPropertyOptional({
-  description: 'Phone number (required for signup to check uniqueness)',
-  example: '+254712345678',
-})
-@IsOptional()
-@Matches(/^(?:\+254|0)?[17]\d{8}$/, { 
-  message: 'Phone number must be a valid Kenyan number (e.g., +254712345678 or 0712345678)' 
-})
-phone?: string;
+@ApiPropertyOptional({ 
+    description: 'Kenyan phone number in international or local format',
+    example: '+254712345678' 
+  })
+  @IsOptional()
+  @ValidateIf((o) => o.phone !== '' && o.phone !== null && o.phone !== undefined)
+  @Matches(KENYAN_PHONE_REGEX, { 
+    message: 'Please provide a valid Kenyan phone number' 
+  })
+  phone?: string;
 }
 
 export class RequestOtpQueryDto {

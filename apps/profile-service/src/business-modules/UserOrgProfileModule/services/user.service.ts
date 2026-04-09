@@ -334,6 +334,7 @@ private async updateActiveProfiles(
         if (!housingData.preferredTypes?.length) missing.push('preferredTypes');
         if (!housingData.preferredCities?.length) missing.push('preferredCities');
         if (!housingData.minBudget || !housingData.maxBudget) missing.push('budget');
+        if (!housingData.searchType) missing.push('searchType'); 
         break;
       }
 
@@ -341,6 +342,7 @@ private async updateActiveProfiles(
         const ownerData = data as PropertyOwnerProfileDataDto;
         if (!ownerData.preferredPropertyTypes?.length) missing.push('preferredPropertyTypes');
         if (!ownerData.serviceAreas?.length) missing.push('serviceAreas');
+        if (!ownerData.listingType) missing.push('listingType'); 
         break;
       }
 
@@ -428,6 +430,9 @@ private async updateActiveProfiles(
       searchRadiusKm: profile.searchRadiusKm ?? undefined,
       hasAgent: profile.hasAgent,
       agentUuid: profile.agentUuid ?? undefined,
+      searchType: profile.searchType ?? undefined,              // ADD THIS
+      isLookingForRental: profile.isLookingForRental ?? undefined,  // ADD THIS
+      isLookingToBuy: profile.isLookingToBuy ?? undefined,      // ADD THIS
     };
   }
 
@@ -444,6 +449,9 @@ private async updateActiveProfiles(
     serviceAreas: this.parseJsonField<string[]>(profile.serviceAreas, []),
     usesAgent: profile.usesAgent,
     managingAgentUuid: profile.managingAgentUuid ?? undefined,
+    listingType: profile.listingType ?? undefined,            // ADD THIS
+    isListingForRent: profile.isListingForRent ?? undefined,  // ADD THIS
+    isListingForSale: profile.isListingForSale ?? undefined,  // ADD THIS
   };
 }
 
@@ -578,7 +586,7 @@ async createIndividualAccountWithProfiles(
       lastValueFrom(
         this.rbacGrpc.GetRoleIdByType({ roleType }).pipe(
           timeout(5000),
-          catchError(() => throwError(() => new Error('RBAC service unavailable')))
+          catchError(() => throwError(() => new Error('Oops! We are experiencing admin system downtime. Please try again later.'))) // send the user non-technical message, but log the actual error for debugging
         )
       ),
       lastValueFrom(
@@ -678,6 +686,8 @@ async createIndividualAccountWithProfiles(
 
     // ============ STEP 5: QUEUE BUSINESS PROFILE CREATION (Non-blocking) ============
     if (profileToCreate && this.isIndividualProfile(profileToCreate.type)) {
+      this.logger.log(`🔍 Queueing profile data for ${profileToCreate.type}:`);
+      this.logger.log(`🔍 profileData: ${JSON.stringify(profileToCreate.data, null, 2)}`);
       await this.queue.addJob(
         'profile-queue',
         'create-business-profile',
@@ -920,6 +930,9 @@ async createHousingSeekerProfile(
         searchRadiusKm: data.searchRadiusKm ?? 10,
         hasAgent: data.hasAgent ?? false,
         agentUuid: data.agentUuid,
+        searchType: data.searchType,                                    // ADD THIS
+        isLookingForRental: data.isLookingForRental ?? false,          // ADD THIS
+        isLookingToBuy: data.isLookingToBuy ?? false,                  // ADD THIS
       }
     });
 
@@ -984,6 +997,9 @@ async createHousingSeekerProfile(
         isVerifiedOwner: false,
         usesAgent: data.usesAgent ?? false,
         managingAgentUuid: data.managingAgentUuid,
+        listingType: data.listingType,                                // ADD THIS
+        isListingForRent: data.isListingForRent ?? false,            // ADD THIS
+        isListingForSale: data.isListingForSale ?? false,            // ADD THIS
       }
     });
 
@@ -1487,6 +1503,9 @@ async getUserProfileByUuid(
         searchRadiusKm: data.searchRadiusKm,
         hasAgent: data.hasAgent,
         agentUuid: data.agentUuid,
+        searchType: data.searchType,                                  // ADD THIS
+        isLookingForRental: data.isLookingForRental,                  // ADD THIS
+        isLookingToBuy: data.isLookingToBuy,                          // ADD THIS
       },
       create: {
         accountUuid,
@@ -1507,6 +1526,9 @@ async getUserProfileByUuid(
         searchRadiusKm: data.searchRadiusKm ?? 10,
         hasAgent: data.hasAgent ?? false,
         agentUuid: data.agentUuid,
+        searchType: data.searchType,                                  // ADD THIS
+        isLookingForRental: data.isLookingForRental ?? false,        // ADD THIS
+        isLookingToBuy: data.isLookingToBuy ?? false,                // ADD THIS
       },
     });
 
@@ -1542,6 +1564,9 @@ async getUserProfileByUuid(
         serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
         usesAgent: data.usesAgent,
         managingAgentUuid: data.managingAgentUuid,
+        listingType: data.listingType,                                // ADD THIS
+        isListingForRent: data.isListingForRent,                      // ADD THIS
+        isListingForSale: data.isListingForSale,                      // ADD THIS
       },
       create: {
         accountUuid,
@@ -1554,6 +1579,9 @@ async getUserProfileByUuid(
         isVerifiedOwner: false,
         usesAgent: data.usesAgent ?? false,
         managingAgentUuid: data.managingAgentUuid,
+        listingType: data.listingType,                                // ADD THIS
+        isListingForRent: data.isListingForRent ?? false,            // ADD THIS
+        isListingForSale: data.isListingForSale ?? false,            // ADD THIS
       },
     });
 
@@ -2157,6 +2185,9 @@ private async emitHousingPreferencesEvent(
         latitude: profileData.latitude,
         longitude: profileData.longitude,
         searchRadiusKm: profileData.searchRadiusKm,
+        searchType: profileData.searchType,                    // ADD THIS
+        isLookingForRental: profileData.isLookingForRental,    // ADD THIS
+        isLookingToBuy: profileData.isLookingToBuy,            // ADD THIS
       }
     };
 

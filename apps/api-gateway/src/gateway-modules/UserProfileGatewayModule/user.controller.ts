@@ -372,6 +372,29 @@ export class UserController {
       - User wants to find housing
       - Setting housing preferences
       - Property search optimization
+      
+      ---
+      ## 📋 Supported Search Types
+      | Type | Description |
+      |------|-------------|
+      | RENT | Looking for rental properties only |
+      | BUY | Looking to buy property only |
+      | BOTH | Open to both rent and buy |
+      
+      ---
+      ## 🏠 Rental Preferences
+      | Field | Description |
+      |-------|-------------|
+      | preferredLeaseTerm | Preferred lease duration in months |
+      | requiresPetFriendly | Need pet-friendly properties |
+      | requiresUtilitiesIncluded | Need utilities included |
+      
+      ---
+      ## 💰 Sale Preferences
+      | Field | Description |
+      |-------|-------------|
+      | requiresNegotiable | Need negotiable price |
+      | requiresTitleDeed | Need title deed available |
     `
   })
   @ApiBody({ type: HousingSeekerProfileDataDto })
@@ -396,6 +419,8 @@ export class UserController {
     }
 
     this.logger.log(`API-GW: Creating housing seeker profile for account ${accountUuid}`);
+    this.logger.debug(`Search Type: ${data.searchType}, Looking for Rent: ${data.isLookingForRental}, Looking to Buy: ${data.isLookingToBuy}`);
+    
     return this.userService.createHousingSeekerProfile(accountUuid, data);
   }
 
@@ -421,6 +446,22 @@ export class UserController {
       - User wants to list properties
       - Property management onboarding
       - Rental property listing
+      
+      ---
+      ## 📋 Supported Listing Types
+      | Type | Description |
+      |------|-------------|
+      | RENT | Listing properties for rent only |
+      | SALE | Listing properties for sale only |
+      | BOTH | Listing both rent and sale properties |
+      
+      ---
+      ## 🏠 Rental Listings
+      Properties for rent will include rental-specific fields like lease terms, pet policies, etc.
+      
+      ---
+      ## 💰 Sale Listings
+      Properties for sale will include sale-specific fields like negotiability, title deed, etc.
     `
   })
   @ApiBody({ type: PropertyOwnerProfileDataDto })
@@ -432,7 +473,7 @@ export class UserController {
         { $ref: getSchemaPath(BaseResponseDto) },
         { properties: { data: { $ref: getSchemaPath(PropertyOwnerProfileResponseDto) } } }
       ],
-    },
+    }, 
   })
   async createPropertyOwnerProfile(
     @Body() data: PropertyOwnerProfileDataDto,
@@ -445,6 +486,8 @@ export class UserController {
     }
 
     this.logger.log(`API-GW: Creating property owner profile for account ${accountUuid}`);
+    this.logger.debug(`Listing Type: ${data.listingType}, Listing for Rent: ${data.isListingForRent}, Listing for Sale: ${data.isListingForSale}`);
+    
     return this.userService.createPropertyOwnerProfile(accountUuid, data);
   }
 
@@ -587,6 +630,8 @@ export class UserController {
       
       ---
       ## 📝 Updatable Fields
+      
+      ### Basic Preferences
       | Field | Description |
       |-------|-------------|
       | minBedrooms | Minimum bedrooms |
@@ -596,6 +641,26 @@ export class UserController {
       | preferredTypes | Preferred property types |
       | preferredCities | Preferred cities |
       | moveInDate | Move-in date |
+      
+      ### Search Type (New)
+      | Field | Description |
+      |-------|-------------|
+      | searchType | RENT, BUY, or BOTH |
+      | isLookingForRental | Whether looking for rental |
+      | isLookingToBuy | Whether looking to buy |
+      
+      ### Rental Preferences (New)
+      | Field | Description |
+      |-------|-------------|
+      | preferredLeaseTerm | Preferred lease term in months |
+      | requiresPetFriendly | Need pet-friendly properties |
+      | requiresUtilitiesIncluded | Need utilities included |
+      
+      ### Sale Preferences (New)
+      | Field | Description |
+      |-------|-------------|
+      | requiresNegotiable | Need negotiable price |
+      | requiresTitleDeed | Need title deed available |
     `
   })
   @ApiBody({ type: HousingSeekerProfileDataDto })
@@ -625,6 +690,8 @@ export class UserController {
     };
 
     this.logger.log(`API-GW: Updating housing seeker profile for account ${accountUuid}`);
+    this.logger.debug(`Search Type: ${data.searchType}, Looking for Rent: ${data.isLookingForRental}, Looking to Buy: ${data.isLookingToBuy}`);
+    
     return this.userService.updateHousingSeekerProfile(dto);
   }
 
@@ -647,6 +714,8 @@ export class UserController {
       
       ---
       ## 📝 Updatable Fields
+      
+      ### Basic Information
       | Field | Description |
       |-------|-------------|
       | isProfessional | Whether licensed professional |
@@ -655,6 +724,13 @@ export class UserController {
       | yearsInBusiness | Years in business |
       | preferredPropertyTypes | Preferred property types |
       | serviceAreas | Service areas |
+      
+      ### Listing Type (New)
+      | Field | Description |
+      |-------|-------------|
+      | listingType | RENT, SALE, or BOTH |
+      | isListingForRent | Whether listing for rent |
+      | isListingForSale | Whether listing for sale |
     `
   })
   @ApiBody({ type: PropertyOwnerProfileDataDto })
@@ -684,6 +760,8 @@ export class UserController {
     };
 
     this.logger.log(`API-GW: Updating property owner profile for account ${accountUuid}`);
+    this.logger.debug(`Listing Type: ${data.listingType}, Listing for Rent: ${data.isListingForRent}, Listing for Sale: ${data.isListingForSale}`);
+    
     return this.userService.updatePropertyOwnerProfile(dto);
   }
 

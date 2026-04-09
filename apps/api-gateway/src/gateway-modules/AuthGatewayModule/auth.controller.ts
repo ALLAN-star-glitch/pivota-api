@@ -93,330 +93,438 @@ export class AuthController {
    * @returns Created user details and account information
    */
   @Post('signup')
-  @Public()
-  @UseGuards(ThrottlerGuard)  // IP-based rate limiting at gateway level
-  @Throttle({ default: { limit: 10, ttl: 60000 } })  // 10 requests per IP/minute
-  @Version('1')
-  @ApiTags('Auth - Registration')
-  @ApiHeader({
-    name: 'referer',
-    description: 'Source URL - for traffic source analysis (optional)',
-    required: false,
-    schema: { type: 'string', example: 'https://google.com/search?q=pivota' }
-  })
-  @ApiOperation({ 
-    summary: 'Complete registration after OTP verification',
-    description: `
-      Completes the registration process after OTP verification.
-      
-      **Access Control:** Public endpoint - no authentication required.
-      
-      **Assigned Role:** Individual users receive the \`Individual\` role.
-      
-      ... (rest of your existing documentation) ...
-    `
-  })
-  @ApiBody({ 
-    type: UserSignupRequestDto,
-    examples: {
-      'Job Seeker Registration': {
-        summary: 'Complete job seeker registration',
-        value: {
+@Public()
+@UseGuards(ThrottlerGuard)  // IP-based rate limiting at gateway level
+@Throttle({ default: { limit: 10, ttl: 60000 } })  // 10 requests per IP/minute
+@Version('1')
+@ApiTags('Auth - Registration')
+@ApiHeader({
+  name: 'referer',
+  description: 'Source URL - for traffic source analysis (optional)',
+  required: false,
+  schema: { type: 'string', example: 'https://google.com/search?q=pivota' }
+})
+@ApiOperation({ 
+  summary: 'Complete registration after OTP verification',
+  description: `
+    Completes the registration process after OTP verification.
+    
+    **Access Control:** Public endpoint - no authentication required.
+    
+    **Assigned Role:** Individual users receive the \`Individual\` role.
+  `
+})
+@ApiBody({ 
+  type: UserSignupRequestDto,
+  examples: {
+    'Job Seeker Registration': {
+      summary: 'Complete job seeker registration',
+      value: {
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane.doe@example.com',
+        password: 'SecurePass123',
+        phone: '0712345678',
+        planSlug: 'free-forever',
+        code: '123456',
+        primaryPurpose: 'FIND_JOB',
+        jobSeekerData: {
+          headline: 'Senior Full Stack Developer',
+          isActivelySeeking: true,
+          skills: ['JavaScript', 'TypeScript', 'React', 'Node.js'],
+          industries: ['FinTech', 'HealthTech'],
+          jobTypes: ['FULL_TIME', 'REMOTE'],
+          seniorityLevel: 'SENIOR',
+          expectedSalary: 250000,
+          workAuthorization: ['Citizen', 'Work Permit'],
+          linkedInUrl: 'linkedin.com/in/janedoe',
+          githubUrl: 'github.com/janedoe'
+        }
+      }
+    },
+    'Skilled Professional Registration': {
+      summary: 'Complete skilled professional registration',
+      value: {
+        firstName: 'John',
+        lastName: 'Smith',
+        email: 'john.smith@example.com',
+        password: 'SecurePass123',
+        phone: '0723456789',
+        code: '123456',
+        primaryPurpose: 'OFFER_SKILLED_SERVICES',
+        skilledProfessionalData: {
+          title: 'Master Electrician',
+          profession: 'ELECTRICIAN',
+          specialties: ['Wiring', 'Solar Installation', 'Security Systems'],
+          serviceAreas: ['Nairobi', 'Kiambu', 'Machakos'],
+          yearsExperience: 8,
+          licenseNumber: 'EBK/1234/2020',
+          hourlyRate: 800,
+          availableToday: true,
+          availableWeekends: true
+        }
+      }
+    },
+    'Agent Registration': {
+      summary: 'Complete agent registration',
+      value: {
+        firstName: 'Mary',
+        lastName: 'Njeri',
+        email: 'mary.njeri@example.com',
+        password: 'SecurePass123',
+        phone: '0734567890',
+        code: '123456',
+        primaryPurpose: 'WORK_AS_AGENT',
+        intermediaryAgentData: {
+          agentType: 'HOUSING_AGENT',
+          specializations: ['RESIDENTIAL', 'COMMERCIAL', 'LUXURY'],
+          serviceAreas: ['Nairobi', 'Kiambu', 'Mombasa'],
+          licenseNumber: 'ERB/5678/2021',
+          yearsExperience: 5,
+          agencyName: 'Prime Properties Agency',
+          commissionRate: 5.0,
+          about: 'Specializing in luxury apartments in Nairobi'
+        }
+      }
+    },
+    'Housing Seeker Registration - Looking to Rent': {
+      summary: 'Housing seeker looking to rent',
+      value: {
+        firstName: 'Peter',
+        lastName: 'Omondi',
+        email: 'peter.omondi@example.com',
+        password: 'SecurePass123',
+        phone: '0745678901',
+        code: '123456',
+        primaryPurpose: 'FIND_HOUSING',
+        housingSeekerData: {
+          searchType: 'RENT',
+          isLookingForRental: true,
+          isLookingToBuy: false,
+          minBedrooms: 2,
+          maxBedrooms: 4,
+          minBudget: 25000,
+          maxBudget: 60000,
+          preferredTypes: ['APARTMENT', 'HOUSE'],
+          preferredCities: ['Nairobi', 'Kiambu'],
+          preferredNeighborhoods: ['Kilimani', 'Lavington', 'Westlands'],
+          moveInDate: '2026-04-15',
+          leaseDuration: '1_YEAR',
+          householdSize: 4,
+          hasPets: true,
+          petDetails: 'One dog',
+          searchRadiusKm: 15
+        }
+      }
+    },
+    'Housing Seeker Registration - Looking to Buy': {
+      summary: 'Housing seeker looking to buy property',
+      value: {
+        firstName: 'James',
+        lastName: 'Mwangi',
+        email: 'james.mwangi@example.com',
+        password: 'SecurePass123',
+        phone: '0756789012',
+        code: '123456',
+        primaryPurpose: 'FIND_HOUSING',
+        housingSeekerData: {
+          searchType: 'BUY',
+          isLookingForRental: false,
+          isLookingToBuy: true,
+          minBedrooms: 3,
+          maxBedrooms: 5,
+          minBudget: 5000000,
+          maxBudget: 10000000,
+          preferredTypes: ['HOUSE', 'VILLA'],
+          preferredCities: ['Nairobi', 'Kiambu'],
+          preferredNeighborhoods: ['Runda', 'Karen', 'Lavington'],
+          householdSize: 5,
+          searchRadiusKm: 20
+        }
+      }
+    },
+    'Housing Seeker Registration - Both Rent and Buy': {
+      summary: 'Housing seeker open to both rent and buy',
+      value: {
+        firstName: 'Lucy',
+        lastName: 'Wanjiku',
+        email: 'lucy.wanjiku@example.com',
+        password: 'SecurePass123',
+        phone: '0767890123',
+        code: '123456',
+        primaryPurpose: 'FIND_HOUSING',
+        housingSeekerData: {
+          searchType: 'BOTH',
+          isLookingForRental: true,
+          isLookingToBuy: true,
+          minBedrooms: 2,
+          maxBedrooms: 3,
+          minBudget: 30000,
+          maxBudget: 50000,
+          preferredTypes: ['APARTMENT', 'CONDO'],
+          preferredCities: ['Nairobi'],
+          preferredNeighborhoods: ['Kilimani', 'Westlands'],
+          householdSize: 3,
+          searchRadiusKm: 10
+        }
+      }
+    },
+    'Support Beneficiary Registration': {
+      summary: 'Complete support beneficiary registration',
+      value: {
+        firstName: 'Grace',
+        lastName: 'Atieno',
+        email: 'grace.atieno@example.com',
+        password: 'SecurePass123',
+        phone: '0756789012',
+        code: '123456',
+        primaryPurpose: 'GET_SOCIAL_SUPPORT',
+        supportBeneficiaryData: {
+          needs: ['FOOD', 'SHELTER', 'MEDICAL'],
+          urgentNeeds: ['FOOD'],
+          familySize: 4,
+          city: 'Nairobi',
+          neighborhood: 'Kawangware',
+          prefersAnonymity: true,
+          consentToShare: false,
+          languagePreference: ['ENGLISH', 'SWAHILI']
+        }
+      }
+    },
+    'Employer Registration': {
+      summary: 'Complete employer registration (hiring employees)',
+      value: {
+        firstName: 'Michael',
+        lastName: 'Njenga',
+        email: 'michael.njenga@example.com',
+        password: 'SecurePass123',
+        phone: '0767890123',
+        code: '123456',
+        primaryPurpose: 'HIRE_EMPLOYEES',
+        employerData: {
+          businessName: 'Njenga Tech Solutions',
+          isRegistered: true,
+          yearsExperience: 5,
+          industry: 'Technology',
+          companySize: '11-50',
+          description: 'Software development and IT consulting',
+          preferredSkills: ['JavaScript', 'Python', 'React', 'Node.js'],
+          remotePolicy: 'HYBRID'
+        }
+      }
+    },
+    'Property Owner Registration - Rental Listings': {
+      summary: 'Property owner listing properties for rent',
+      value: {
+        firstName: 'Grace',
+        lastName: 'Wanjiku',
+        email: 'grace.wanjiku@example.com',
+        password: 'SecurePass123',
+        phone: '0778901234',
+        code: '123456',
+        primaryPurpose: 'LIST_PROPERTIES',
+        propertyOwnerData: {
+          listingType: 'RENT',
+          isListingForRent: true,
+          isListingForSale: false,
+          isProfessional: false,
+          propertyCount: 3,
+          propertyTypes: ['APARTMENT', 'HOUSE'],
+          propertyPurpose: 'INVESTMENT',
+          preferredPropertyTypes: ['APARTMENT', 'HOUSE'],
+          serviceAreas: ['Nairobi', 'Kiambu']
+        }
+      }
+    },
+    'Property Owner Registration - Sale Listings': {
+      summary: 'Property owner listing properties for sale',
+      value: {
+        firstName: 'David',
+        lastName: 'Kimani',
+        email: 'david.kimani@example.com',
+        password: 'SecurePass123',
+        phone: '0789012345',
+        code: '123456',
+        primaryPurpose: 'LIST_PROPERTIES',
+        propertyOwnerData: {
+          listingType: 'SALE',
+          isListingForRent: false,
+          isListingForSale: true,
+          isProfessional: true,
+          licenseNumber: 'ERB/12345/2023',
+          companyName: 'Kimani Properties Ltd',
+          yearsInBusiness: 8,
+          preferredPropertyTypes: ['HOUSE', 'COMMERCIAL', 'LAND'],
+          serviceAreas: ['Nairobi', 'Kiambu', 'Machakos']
+        }
+      }
+    },
+    'Property Owner Registration - Both Rent and Sale': {
+      summary: 'Property owner listing both rentals and sales',
+      value: {
+        firstName: 'Esther',
+        lastName: 'Muthoni',
+        email: 'esther.muthoni@example.com',
+        password: 'SecurePass123',
+        phone: '0790123456',
+        code: '123456',
+        primaryPurpose: 'LIST_PROPERTIES',
+        propertyOwnerData: {
+          listingType: 'BOTH',
+          isListingForRent: true,
+          isListingForSale: true,
+          isProfessional: false,
+          propertyCount: 5,
+          propertyTypes: ['APARTMENT', 'HOUSE', 'COMMERCIAL'],
+          propertyPurpose: 'BOTH',
+          preferredPropertyTypes: ['APARTMENT', 'HOUSE', 'COMMERCIAL'],
+          serviceAreas: ['Nairobi', 'Kiambu']
+        }
+      }
+    },
+    'Just Exploring Registration': {
+      summary: 'Just exploring (no profile created)',
+      value: {
+        firstName: 'Sarah',
+        lastName: 'Kamau',
+        email: 'sarah.kamau@example.com',
+        password: 'SecurePass123',
+        phone: '0789012345',
+        code: '123456',
+        primaryPurpose: 'JUST_EXPLORING'
+      }
+    },
+    'Minimal Registration': {
+      summary: 'Minimal registration with only required fields',
+      value: {
+        firstName: 'James',
+        lastName: 'Kariuki',
+        email: 'james.kariuki@example.com',
+        password: 'SecurePass123',
+        phone: '0790123456',
+        code: '123456'
+      }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 201, 
+  description: 'Registration successful - Account and profiles created',
+  schema: {
+    example: {
+      success: true,
+      message: 'Signup successful',
+      code: 'CREATED',
+      data: {
+        account: {
+          uuid: '123e4567-e89b-12d3-a456-426614174000',
+          accountCode: 'ACC123456789',
+          type: 'INDIVIDUAL'
+        },
+        user: {
+          uuid: '123e4567-e89b-12d3-a456-426614174001',
+          userCode: 'USR123456789',
           firstName: 'Jane',
           lastName: 'Doe',
           email: 'jane.doe@example.com',
-          password: 'SecurePass123',
           phone: '0712345678',
-          planSlug: 'free-forever',
-          code: '123456',
-          primaryPurpose: 'FIND_JOB',
-          jobSeekerData: {
-            headline: 'Senior Full Stack Developer',
-            isActivelySeeking: true,
-            skills: ['JavaScript', 'TypeScript', 'React', 'Node.js'],
-            industries: ['FinTech', 'HealthTech'],
-            jobTypes: ['FULL_TIME', 'REMOTE'],
-            seniorityLevel: 'SENIOR',
-            expectedSalary: 250000,
-            workAuthorization: ['Citizen', 'Work Permit'],
-            linkedInUrl: 'linkedin.com/in/janedoe',
-            githubUrl: 'github.com/janedoe'
-          }
-        }
-      },
-      'Skilled Professional Registration': {
-        summary: 'Complete skilled professional registration',
-        value: {
-          firstName: 'John',
-          lastName: 'Smith',
-          email: 'john.smith@example.com',
-          password: 'SecurePass123',
-          phone: '0723456789',
-          code: '123456',
-          primaryPurpose: 'OFFER_SKILLED_SERVICES',
-          skilledProfessionalData: {
-            title: 'Master Electrician',
-            profession: 'ELECTRICIAN',
-            specialties: ['Wiring', 'Solar Installation', 'Security Systems'],
-            serviceAreas: ['Nairobi', 'Kiambu', 'Machakos'],
-            yearsExperience: 8,
-            licenseNumber: 'EBK/1234/2020',
-            hourlyRate: 800,
-            availableToday: true,
-            availableWeekends: true
-          }
-        }
-      },
-      'Agent Registration': {
-        summary: 'Complete agent registration',
-        value: {
-          firstName: 'Mary',
-          lastName: 'Njeri',
-          email: 'mary.njeri@example.com',
-          password: 'SecurePass123',
-          phone: '0734567890',
-          code: '123456',
-          primaryPurpose: 'WORK_AS_AGENT',
-          intermediaryAgentData: {
-            agentType: 'HOUSING_AGENT',
-            specializations: ['RESIDENTIAL', 'COMMERCIAL', 'LUXURY'],
-            serviceAreas: ['Nairobi', 'Kiambu', 'Mombasa'],
-            licenseNumber: 'ERB/5678/2021',
-            yearsExperience: 5,
-            agencyName: 'Prime Properties Agency',
-            commissionRate: 5.0,
-            about: 'Specializing in luxury apartments in Nairobi'
-          }
-        }
-      },
-      'Housing Seeker Registration': {
-        summary: 'Complete housing seeker registration',
-        value: {
-          firstName: 'Peter',
-          lastName: 'Omondi',
-          email: 'peter.omondi@example.com',
-          password: 'SecurePass123',
-          phone: '0745678901',
-          code: '123456',
-          primaryPurpose: 'FIND_HOUSING',
-          housingSeekerData: {
-            minBedrooms: 2,
-            maxBedrooms: 4,
-            minBudget: 25000,
-            maxBudget: 60000,
-            preferredTypes: ['APARTMENT', 'HOUSE'],
-            preferredCities: ['Nairobi', 'Kiambu'],
-            preferredNeighborhoods: ['Kilimani', 'Lavington', 'Westlands'],
-            moveInDate: '2026-04-15',
-            leaseDuration: '1_YEAR',
-            householdSize: 4,
-            hasPets: true,
-            petDetails: 'One dog',
-            searchRadiusKm: 15
-          }
-        }
-      },
-      'Support Beneficiary Registration': {
-        summary: 'Complete support beneficiary registration',
-        value: {
-          firstName: 'Grace',
-          lastName: 'Atieno',
-          email: 'grace.atieno@example.com',
-          password: 'SecurePass123',
-          phone: '0756789012',
-          code: '123456',
-          primaryPurpose: 'GET_SOCIAL_SUPPORT',
-          supportBeneficiaryData: {
-            needs: ['FOOD', 'SHELTER', 'MEDICAL'],
-            urgentNeeds: ['FOOD'],
-            familySize: 4,
-            city: 'Nairobi',
-            neighborhood: 'Kawangware',
-            prefersAnonymity: true,
-            consentToShare: false,
-            languagePreference: ['ENGLISH', 'SWAHILI']
-          }
-        }
-      },
-      'Employer Registration': {
-        summary: 'Complete employer registration (hiring employees)',
-        value: {
-          firstName: 'Michael',
-          lastName: 'Njenga',
-          email: 'michael.njenga@example.com',
-          password: 'SecurePass123',
-          phone: '0767890123',
-          code: '123456',
-          primaryPurpose: 'HIRE_EMPLOYEES',
-          employerData: {
-            businessName: 'Njenga Tech Solutions',
-            isRegistered: true,
-            yearsExperience: 5,
-            industry: 'Technology',
-            companySize: '11-50',
-            description: 'Software development and IT consulting',
-            preferredSkills: ['JavaScript', 'Python', 'React', 'Node.js'],
-            remotePolicy: 'HYBRID'
-          }
-        }
-      },
-      'Property Owner Registration': {
-        summary: 'Complete property owner registration (listing properties)',
-        value: {
-          firstName: 'Grace',
-          lastName: 'Wanjiku',
-          email: 'grace.wanjiku@example.com',
-          password: 'SecurePass123',
-          phone: '0778901234',
-          code: '123456',
-          primaryPurpose: 'LIST_PROPERTIES',
-          propertyOwnerData: {
-            isProfessional: false,
-            propertyCount: 3,
-            propertyTypes: ['APARTMENT', 'HOUSE'],
-            propertyPurpose: 'INVESTMENT',
-            preferredPropertyTypes: ['APARTMENT', 'HOUSE', 'COMMERCIAL'],
-            serviceAreas: ['Nairobi', 'Kiambu']
-          }
-        }
-      },
-      'Just Exploring Registration': {
-        summary: 'Just exploring (no profile created)',
-        value: {
-          firstName: 'Sarah',
-          lastName: 'Kamau',
-          email: 'sarah.kamau@example.com',
-          password: 'SecurePass123',
-          phone: '0789012345',
-          code: '123456',
-          primaryPurpose: 'JUST_EXPLORING'
-        }
-      },
-      'Minimal Registration': {
-        summary: 'Minimal registration with only required fields',
-        value: {
-          firstName: 'James',
-          lastName: 'Kariuki',
-          email: 'james.kariuki@example.com',
-          password: 'SecurePass123',
-          phone: '0790123456',
-          code: '123456'
-        }
-      }
-    }
-  })
-  @ApiResponse({ 
-    status: 201, 
-    description: 'Registration successful - Account and profiles created',
-    schema: {
-      example: {
-        success: true,
-        message: 'Signup successful',
-        code: 'CREATED',
-        data: {
-          account: {
-            uuid: '123e4567-e89b-12d3-a456-426614174000',
-            accountCode: 'ACC123456789',
-            type: 'INDIVIDUAL'
-          },
-          user: {
-            uuid: '123e4567-e89b-12d3-a456-426614174001',
-            userCode: 'USR123456789',
-            firstName: 'Jane',
-            lastName: 'Doe',
-            email: 'jane.doe@example.com',
-            phone: '0712345678',
-            status: 'ACTIVE',
-            roleName: 'Individual'
-          },
-          profile: {
-            bio: null,
-            gender: null,
-            dateOfBirth: null,
-            nationalId: null,
-            profileImage: null
-          },
-          completion: {
-            accountCompleted: true,
-            profileCompleted: 30,
-            documentsCompleted: 0
-          }
+          status: 'ACTIVE',
+          roleName: 'Individual'
         },
-        error: null
-      }
+        profile: {
+          bio: null,
+          gender: null,
+          dateOfBirth: null,
+          nationalId: null,
+          profileImage: null
+        },
+        completion: {
+          accountCompleted: true,
+          profileCompleted: 30,
+          documentsCompleted: 0
+        }
+      },
+      error: null
     }
-  })
-  @ApiResponse({ 
-    status: 400, 
-    description: 'Bad Request - Validation errors'
-  })
-  @ApiResponse({ 
-    status: 401, 
-    description: 'Unauthorized - Invalid or expired OTP'
-  })
-  @ApiResponse({ 
-    status: 409, 
-    description: 'Conflict - Email already registered'
-  })
-  @ApiResponse({ 
-    status: 429, 
-    description: 'Too Many Requests - OTP rate limit exceeded'
-  })
-  @ApiResponse({ 
-    status: 500, 
-    description: 'Internal Server Error - Unexpected system error'
-  })
-  @ApiResponse({ 
-    status: 503, 
-    description: 'Service Unavailable - Profile or RBAC service unavailable'
-  })
-  async signup(
-    @Body() signupDto: UserSignupRequestDto,
-    @ClientInfo() clientInfo: AuthClientInfoDto,
-    @Headers('referer') referer?: string,  
-  ): Promise<BaseResponseDto<SignupResponseDto>> {
-    // ... existing implementation remains exactly the same
-    this.logger.log(`📩 Signup request: ${signupDto.email}`);
-     
-    this.logger.debug(`[GATEWAY] Client info received for signup:`);
-    this.logger.debug(`📱 Device: ${clientInfo.device} (${clientInfo.deviceType})`);
-    this.logger.debug(`💻 OS: ${clientInfo.os} ${clientInfo.osVersion || ''}`);
-    this.logger.debug(`🌐 Browser: ${clientInfo.browser} ${clientInfo.browserVersion || ''}`);
-    this.logger.debug(`📍 IP: ${clientInfo.ipAddress}`);
-    this.logger.debug(`🤖 Is Bot: ${clientInfo.isBot}`);
-    this.logger.debug(`🔗 Referer: ${referer || 'Direct'}`);
-    this.logger.debug(`🎯 Primary Purpose: ${signupDto.primaryPurpose || 'Not specified'}`);
-    
-    if (signupDto.jobSeekerData) {
-      this.logger.debug(`📝 Using jobSeekerData for FIND_JOB`);
-    } else if (signupDto.skilledProfessionalData) {
-      this.logger.debug(`📝 Using skilledProfessionalData for OFFER_SKILLED_SERVICES`);
-    } else if (signupDto.intermediaryAgentData) {
-      this.logger.debug(`📝 Using intermediaryAgentData for WORK_AS_AGENT`);
-    } else if (signupDto.housingSeekerData) {
-      this.logger.debug(`📝 Using housingSeekerData for FIND_HOUSING`);
-    } else if (signupDto.supportBeneficiaryData) {
-      this.logger.debug(`📝 Using supportBeneficiaryData for GET_SOCIAL_SUPPORT`);
-    } else if (signupDto.employerData) {
-      this.logger.debug(`📝 Using employerData for HIRE_EMPLOYEES`);
-    } else if (signupDto.propertyOwnerData) {
-      this.logger.debug(`📝 Using propertyOwnerData for LIST_PROPERTIES`);
-    } else if (signupDto.profileData) {
-      this.logger.debug(`⚠️ Deprecated profileData field used - please update to use specific fields`);
-    }
-    
-    const response = await this.authService.signup(signupDto, clientInfo);
-    
-    if (!response.success) {
-      this.logger.warn(`⚠️ Signup failed for ${signupDto.email}: ${response.message}`);
-      throw response;
-    } else { 
-      this.logger.log(`✅ Signup successful for: ${signupDto.email}`);
-      
-    }
-    
-    return response;
   }
+})
+@ApiResponse({ 
+  status: 400, 
+  description: 'Bad Request - Validation errors'
+})
+@ApiResponse({ 
+  status: 401, 
+  description: 'Unauthorized - Invalid or expired OTP'
+})
+@ApiResponse({ 
+  status: 409, 
+  description: 'Conflict - Email already registered'
+})
+@ApiResponse({ 
+  status: 429, 
+  description: 'Too Many Requests - OTP rate limit exceeded'
+})
+@ApiResponse({ 
+  status: 500, 
+  description: 'Internal Server Error - Unexpected system error'
+})
+@ApiResponse({ 
+  status: 503, 
+  description: 'Service Unavailable - Profile or RBAC service unavailable'
+})
+async signup(
+  @Body() signupDto: UserSignupRequestDto,
+  @ClientInfo() clientInfo: AuthClientInfoDto,
+  @Headers('referer') referer?: string,  
+): Promise<BaseResponseDto<SignupResponseDto>> {
+  // ... existing implementation remains exactly the same
+  this.logger.log(`📩 Signup request: ${signupDto.email}`);
+   
+  this.logger.debug(`[GATEWAY] Client info received for signup:`);
+  this.logger.debug(`📱 Device: ${clientInfo.device} (${clientInfo.deviceType})`);
+  this.logger.debug(`💻 OS: ${clientInfo.os} ${clientInfo.osVersion || ''}`);
+  this.logger.debug(`🌐 Browser: ${clientInfo.browser} ${clientInfo.browserVersion || ''}`);
+  this.logger.debug(`📍 IP: ${clientInfo.ipAddress}`);
+  this.logger.debug(`🤖 Is Bot: ${clientInfo.isBot}`);
+  this.logger.debug(`🔗 Referer: ${referer || 'Direct'}`);
+  this.logger.debug(`🎯 Primary Purpose: ${signupDto.primaryPurpose || 'Not specified'}`);
+  
+  if (signupDto.jobSeekerData) {
+    this.logger.debug(`📝 Using jobSeekerData for FIND_JOB`);
+  } else if (signupDto.skilledProfessionalData) {
+    this.logger.debug(`📝 Using skilledProfessionalData for OFFER_SKILLED_SERVICES`);
+  } else if (signupDto.intermediaryAgentData) {
+    this.logger.debug(`📝 Using intermediaryAgentData for WORK_AS_AGENT`);
+  } else if (signupDto.housingSeekerData) {
+    this.logger.debug(`📝 Using housingSeekerData for FIND_HOUSING`);
+    this.logger.debug(`   Search Type: ${signupDto.housingSeekerData.searchType || 'Not specified'}`);
+    this.logger.debug(`   Looking for Rental: ${signupDto.housingSeekerData.isLookingForRental}`);
+    this.logger.debug(`   Looking to Buy: ${signupDto.housingSeekerData.isLookingToBuy}`);
+  } else if (signupDto.supportBeneficiaryData) {
+    this.logger.debug(`📝 Using supportBeneficiaryData for GET_SOCIAL_SUPPORT`);
+  } else if (signupDto.employerData) {
+    this.logger.debug(`📝 Using employerData for HIRE_EMPLOYEES`);
+  } else if (signupDto.propertyOwnerData) {
+    this.logger.debug(`📝 Using propertyOwnerData for LIST_PROPERTIES`);
+    this.logger.debug(`   Listing Type: ${signupDto.propertyOwnerData.listingType || 'Not specified'}`);
+    this.logger.debug(`   Listing for Rent: ${signupDto.propertyOwnerData.isListingForRent}`);
+    this.logger.debug(`   Listing for Sale: ${signupDto.propertyOwnerData.isListingForSale}`);
+  } else if (signupDto.profileData) {
+    this.logger.debug(`⚠️ Deprecated profileData field used - please update to use specific fields`);
+  }
+  
+  const response = await this.authService.signup(signupDto, clientInfo);
+  
+  if (!response.success) {
+    this.logger.warn(`⚠️ Signup failed for ${signupDto.email}: ${response.message}`);
+    throw response;
+  } else { 
+    this.logger.log(`✅ Signup successful for: ${signupDto.email}`);
+    
+  }
+  
+  return response;
+}
 
   /**
    * Register a new organization

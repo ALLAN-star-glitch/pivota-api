@@ -399,7 +399,7 @@ async signup(
       profileImage: signupDto.profileImage,
       primaryPurpose: signupDto.primaryPurpose,
       profiles: [],
-    };
+    }; 
 
     // Map profile data
     if (signupDto.jobSeekerData) {
