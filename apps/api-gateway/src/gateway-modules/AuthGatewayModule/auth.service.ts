@@ -19,6 +19,7 @@ import {
   ResetPasswordDto,
   AuthClientInfoDto,
   SignupResponseDto,
+  GoogleOnboardingDataDto,
 } from '@pivota-api/dtos';
 import { BaseRefreshTokenResponseGrpc, JwtPayload } from '@pivota-api/interfaces';
 import { OtpPurpose } from '@pivota-api/shared-redis';
@@ -60,12 +61,11 @@ interface AuthServiceGrpc {
     data: { userUuid: string; email: string; role: string; accountId: string }
   ): Observable<BaseResponseDto<TokenPairDto>>;
 
-  googleLogin(
-    data: {
-      token: string;
-      clientInfo?: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>;
-    }
-  ): Observable<BaseResponseDto<LoginResponseDto>>;
+googleLogin(data: {
+    token: string;
+    clientInfo: AuthClientInfoDto;
+    onboardingData?: GoogleOnboardingDataDto;
+  }): Observable<BaseResponseDto<LoginResponseDto>>;
 
   requestPasswordReset(
     data: RequestOtpDto
@@ -373,27 +373,50 @@ async signupOrganisation(
   }
 
   /** ------------------ Google Login ------------------ */
-  async googleLogin(
-    token: string,
-    clientInfo: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
-    res: Response
-  ): Promise<BaseResponseDto<LoginResponseDto>> {
-    this.logger.log('📩 Calling Auth microservice for Google login');
+async googleLogin(
+  token: string,
+  clientInfo: AuthClientInfoDto,
+  res: Response,
+  onboardingData?: GoogleOnboardingDataDto  
+): Promise<BaseResponseDto<LoginResponseDto>> {
+  this.logger.log('📩 Calling Auth microservice for Google login');
 
-    const grpcPayload = { token, clientInfo };
-    const grpcResponse = await firstValueFrom(this.authGrpc.googleLogin(grpcPayload));
-
-    this.logger.debug(`📩 Google Auth response: ${JSON.stringify(grpcResponse)}`);
-
-    if (!grpcResponse.success || !grpcResponse.data) {
-      return BaseResponseDto.fail(grpcResponse.message, grpcResponse.code);
-    }
-
-    const loginData = grpcResponse.data;
-    this.setAuthCookies(res, loginData.accessToken, loginData.refreshToken);
-
-    return BaseResponseDto.ok(loginData, grpcResponse.message, grpcResponse.code);
+  // Prepare gRPC payload with onboarding data if provided
+  const grpcPayload: any = { 
+    token, 
+    clientInfo 
+  };
+  
+  // Add onboarding data if present
+  if (onboardingData) {
+    grpcPayload.onboardingData = {
+      primaryPurpose: onboardingData.primaryPurpose,
+      jobSeekerData: onboardingData.jobSeekerData,
+      housingSeekerData: onboardingData.housingSeekerData,
+      skilledProfessionalData: onboardingData.skilledProfessionalData,
+      intermediaryAgentData: onboardingData.intermediaryAgentData,
+      supportBeneficiaryData: onboardingData.supportBeneficiaryData,
+      employerData: onboardingData.employerData,
+      propertyOwnerData: onboardingData.propertyOwnerData,
+    };
+    
+    this.logger.log(`📦 Google Login with onboarding data - Purpose: ${onboardingData.primaryPurpose}`);
+    this.logger.debug(`Onboarding data: ${JSON.stringify(onboardingData)}`);
   }
+  
+  const grpcResponse = await firstValueFrom(this.authGrpc.googleLogin(grpcPayload));
+
+  this.logger.debug(`📩 Google Auth response: ${JSON.stringify(grpcResponse)}`);
+
+  if (!grpcResponse.success || !grpcResponse.data) {
+    return BaseResponseDto.fail(grpcResponse.message, grpcResponse.code);
+  }
+
+  const loginData = grpcResponse.data;
+  this.setAuthCookies(res, loginData.accessToken, loginData.refreshToken);
+
+  return BaseResponseDto.ok(loginData, grpcResponse.message, grpcResponse.code);
+}
 
   /** ------------------ Refresh ------------------ */
   async refresh(refreshToken: string, res: Response): Promise<BaseResponseDto<TokenPairDto>> {

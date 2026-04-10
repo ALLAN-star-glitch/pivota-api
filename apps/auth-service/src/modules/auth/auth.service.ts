@@ -33,6 +33,7 @@ import {
   CreateAccountWithProfilesRequestDto,
   AccountResponseDto,
   SignupResponseDto,
+  GoogleLoginRequestDto,
 } from '@pivota-api/dtos';
 import { firstValueFrom, lastValueFrom, Observable } from 'rxjs';
 import { BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
@@ -311,7 +312,7 @@ async signup(
   let profileType: string | null = null;
   let profileDataForEmail: any = null;
 
-  this.logger.log(`📝 Signup attempt: ${signupDto.email}`);
+  this.logger.log(`Signup attempt: ${signupDto.email}`);
 
   try {
     // 1. Get signup rate limit configuration using unified function
@@ -697,7 +698,7 @@ async signup(
       }
     );
 
-    // ✅ STEP 8: Generate tokens for auto-login
+    //  STEP 8: Generate tokens for auto-login
     // Fetch the full profile data to generate tokens
     const profileDataForTokens = await firstValueFrom(
       this.getProfileGrpcService().getUserProfileByUuid({ userUuid: userData.uuid })
@@ -713,7 +714,7 @@ async signup(
 
     this.logger.log(`✅ Signup completed and tokens generated for: ${signupDto.email}`);
 
-    // ✅ Return success with tokens for auto-login (no user DTO - frontend decodes token)
+    //  Return success with tokens for auto-login (no user DTO - frontend decodes token)
     return BaseResponseDto.ok(
       {
         message: 'Signup successful',
@@ -970,7 +971,7 @@ async organisationSignup(
        7. NOTIFICATIONS & ANALYTICS
     ====================================================== */
 
-    // ✅ Send organization welcome email via RabbitMQ - NO client info
+    //  Send organization welcome email via RabbitMQ - NO client info
     this.notificationBus.emit('organization.onboarded', {
       accountId: orgResponse.data.account.accountCode,
       name: dto.name,
@@ -980,7 +981,7 @@ async organisationSignup(
       plan: 'Free Forever',
     });
 
-    // ✅ Send admin notification via RabbitMQ - New organization registration
+    //  Send admin notification via RabbitMQ - New organization registration
     this.notificationBus.emit('admin.new.organization.registration', {
       recipientEmail: process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com',
       organizationName: dto.name,
@@ -991,7 +992,7 @@ async organisationSignup(
       plan: 'Free Forever'
     });
 
-    // ✅ Send analytics via Kafka - WITH client info
+    //  Send analytics via Kafka - WITH client info
     this.kafkaClient.emit('organization.registered', {
       organizationUuid: orgResponse.data.uuid,
       organizationName: dto.name,
@@ -1258,31 +1259,70 @@ async login(
   }
 
 async signInWithGoogle(
-  idToken: string, 
-  clientInfo?: AuthClientInfoDto
+  clientInfo?: AuthClientInfoDto,
+  googleLoginRequest?: GoogleLoginRequestDto
 ): Promise<BaseResponseDto<LoginResponseDto>> {
   try {
     const profileGrpc = this.getProfileGrpcService();
     
+    // Extract token and onboarding data from the request
+    const token = googleLoginRequest?.token;
+    const onboardingData = googleLoginRequest?.onboardingData;
+    
+    if (!token) {
+      throw new UnauthorizedException('Google token is required');
+    }
+    
     // 1. VERIFY GOOGLE TOKEN
+    this.logger.log('🔍 [Google Auth] Verifying Google token...');
     const ticket = await this.googleClient.verifyIdToken({
-      idToken,
+      idToken: token,
       audience: [
         process.env.GOOGLE_CLIENT_ID,
         '407408718192.apps.googleusercontent.com'
       ]
     });
     
-    const payload = ticket.getPayload(); 
+    const payload = ticket.getPayload();
+    
+    // LOG EVERYTHING FROM GOOGLE PAYLOAD
+    this.logger.log('=========================================');
+    this.logger.log('🔍 [Google Auth] GOOGLE TOKEN PAYLOAD:');
+    this.logger.log(`🔍 Email: ${payload?.email}`);
+    this.logger.log(`🔍 Email Verified: ${payload?.email_verified}`);
+    this.logger.log(`🔍 Given Name (given_name): "${payload?.given_name}"`);
+    this.logger.log(`🔍 Family Name (family_name): "${payload?.family_name}"`);
+    this.logger.log(`🔍 Full Name (name): "${payload?.name}"`);
+    this.logger.log(`🔍 Subject ID (sub): ${payload?.sub}`);
+    this.logger.log(`🔍 Picture: ${payload?.picture || 'Not provided'}`);
+    this.logger.log(`🔍 Locale: ${payload?.locale || 'Not provided'}`);
+    this.logger.log('=========================================');
+    
     if (!payload || !payload.email) {
       throw new UnauthorizedException('Invalid Google token');
     }
 
-    const { sub: googleProviderId, email, given_name, family_name } = payload;
+    const { sub: googleProviderId, email } = payload;
     let profileData: UserProfileResponseDto;
     let isNewProvisioning = false;
+    let givenName = payload?.given_name;
+    let familyName = payload?.family_name;
+
+    if (givenName === 'undefined' || givenName === 'null') {
+      givenName = '';
+    }
+    if (familyName === 'undefined' || familyName === 'null') {
+      familyName = '';
+    }
+
+    const firstName = givenName || 'User';
+    const lastName = familyName || '';
+
+    // Log what we extracted
+    this.logger.log(`🔍 [Google Auth] Extracted - Email: ${email}`);
 
     // 2. IDENTITY LOOKUP
+    this.logger.log(`🔍 [Google Auth] Looking up credential for email: ${email}`);
     const credential = await this.prisma.credential.findFirst({
       where: {
         OR: [{ googleProviderId }, { email }]
@@ -1290,6 +1330,7 @@ async signInWithGoogle(
     });
 
     if (credential) {
+      this.logger.log(`🔍 [Google Auth] Existing credential found for user: ${credential.userUuid}`);
       // --- PATH A: EXISTING CREDENTIAL ---
       if (!credential.googleProviderId) {
         await this.prisma.credential.update({
@@ -1322,6 +1363,7 @@ async signInWithGoogle(
       });
 
     } else {
+      this.logger.log(`🔍 [Google Auth] No existing credential found, checking profile service...`);
       // --- PATH B: NO CREDENTIAL FOUND ---
       try {
         const existingProfile = await firstValueFrom(
@@ -1329,6 +1371,7 @@ async signInWithGoogle(
         );
 
         if (existingProfile?.success && existingProfile.data) {
+          this.logger.log(`🔍 [Google Auth] Existing profile found in profile service for: ${email}`);
           profileData = existingProfile.data;
           await this.prisma.credential.create({
             data: { 
@@ -1362,23 +1405,40 @@ async signInWithGoogle(
         isNewProvisioning = true;
         this.logger.log(`[Google Auth] New user detected: ${email}. Provisioning...`);
         
-        const userUuid = randomUUID();
+        // Log what we're sending to profile service
+        this.logger.log('=========================================');
+        this.logger.log('🔍 [Google Auth] Creating account with:');
+        this.logger.log(`🔍 First Name (from Google): "${givenName}"`);
+        this.logger.log(`🔍 Last Name (from Google): "${familyName}"`);
+        this.logger.log(`🔍 Will use: firstName = "${firstName}"`);
+        this.logger.log(`🔍 Will use: lastName = "${lastName}"`);
+        this.logger.log(`🔍 Primary Purpose: ${onboardingData?.primaryPurpose || 'not provided'}`);
+        this.logger.log('=========================================');
 
-        // Build the CreateAccountWithProfilesRequestDto for Google signup using oneof fields
-        const createAccountDto: CreateAccountWithProfilesRequestDto = {
+        // USE ONBOARDING DATA IF PROVIDED
+        const createAccountDto: any = {
           accountType: 'INDIVIDUAL',
           email: email,
           password: '', // No password for Google signup
           phone: null,
           planSlug: 'free-forever',
           otpCode: '', // No OTP needed for Google signup
-          firstName: given_name || 'User',
-          lastName: family_name || '',
+          firstName: firstName,  // Use cleaned value
+          lastName: lastName,     // Use cleaned value
           profileImage: null,
-          primaryPurpose: undefined, // No purpose set yet
-          // No profile data fields are set initially for Google signup
-          profiles: [], // No profiles created initially for Google signup
+          primaryPurpose: onboardingData?.primaryPurpose,
+          // Pass profile data from onboarding
+          jobSeekerData: onboardingData?.jobSeekerData,
+          housingSeekerData: onboardingData?.housingSeekerData,
+          skilledProfessionalData: onboardingData?.skilledProfessionalData,
+          intermediaryAgentData: onboardingData?.intermediaryAgentData,
+          supportBeneficiaryData: onboardingData?.supportBeneficiaryData,
+          employerData: onboardingData?.employerData,
+          propertyOwnerData: onboardingData?.propertyOwnerData,
+          profiles: [],
         };
+
+        this.logger.log(`[Google Auth] Calling profile service with: firstName="${createAccountDto.firstName}", lastName="${createAccountDto.lastName}"`);
 
         // Call the method for creating individual account with profiles
         const createResponse = await firstValueFrom(
@@ -1386,44 +1446,82 @@ async signInWithGoogle(
         );
 
         if (!createResponse.success || !createResponse.data) {
+          this.logger.error(`[Google Auth] Profile creation failed: ${createResponse.message}`);
           throw new Error('Profile creation failed via gRPC');
         }
 
+        this.logger.log(`[Google Auth] Profile creation successful!`);
+
+        // ✅ FIX: Extract user data from response (matching signup method pattern)
+        const accountData = createResponse.data;
+        const userData = accountData.users?.[0];
+
+        if (!userData) {
+          this.logger.error(`[Google Auth] No user found in account data for ${email}`);
+          throw new Error('No user found in created account');
+        }
+
+        this.logger.log(`[Google Auth] User created with UUID: ${userData.uuid}`);
+
+        // Save credentials using the user UUID from the response
         await this.prisma.credential.create({
-          data: { userUuid, email, googleProviderId, mfaEnabled: true, passwordHash: null },
+          data: { 
+            userUuid: userData.uuid, 
+            email, 
+            googleProviderId, 
+            mfaEnabled: true, 
+            passwordHash: null 
+          },
         });
 
+        // Fetch the full profile using the correct user UUID
         const fullProfile = await firstValueFrom(
-          profileGrpc.getUserProfileByUuid({ userUuid })
+          profileGrpc.getUserProfileByUuid({ userUuid: userData.uuid })
         );
         profileData = fullProfile.data;
 
-        // ✅ Send welcome email via RabbitMQ - NO client info
+        // Send welcome email with profile data if available
+        const profileType = onboardingData?.primaryPurpose 
+          ? this.mapPurposeToProfileType(onboardingData.primaryPurpose)
+          : null;
+        
+        const profileDataForEmail = this.extractProfileDataForEmail(
+          onboardingData?.primaryPurpose,
+          onboardingData
+        );
+
         this.notificationBus.emit('user.onboarded', {
           accountId: profileData.account.accountCode,
           firstName: profileData.user.firstName,
           email: profileData.user.email,
           plan: 'Free Forever',
+          profileType: profileType,
+          profileData: profileDataForEmail,
         });
 
-        // ✅ Send admin notification via RabbitMQ - New user registration
+        // Send admin notification
         this.notificationBus.emit('admin.new.registration', {
-          recipientEmail: process.env.ADMIN_NOTIFICATION_EMAIL || 'admin@pivotaconnect.com',
+          adminEmail: process.env.ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com',
           userEmail: email,
-          userName: `${given_name || 'User'} ${family_name || ''}`.trim(),
+          userName: `${firstName} ${lastName}`.trim(),
           accountType: 'INDIVIDUAL',
           registrationMethod: 'GOOGLE',
           registrationDate: new Date().toISOString(),
-          plan: 'Free Forever'
+          plan: 'Free Forever',
+          primaryPurpose: onboardingData?.primaryPurpose || 'JUST_EXPLORING',
+          profileType: profileType,
         });
 
-        // ✅ Track new user registration in Kafka - WITH client info
+        // Track new user registration in Kafka
         this.kafkaClient.emit('user.registered', {
-          userUuid,
+          userUuid: userData.uuid,
           email,
           accountId: profileData.account.accountCode,
           plan: 'free-forever',
           registrationMethod: 'GOOGLE',
+          primaryPurpose: onboardingData?.primaryPurpose || 'JUST_EXPLORING',
+          profileType: profileType,
+          hasProfileData: !!profileType,
           signupSource: {
             device: clientInfo?.device,
             deviceType: clientInfo?.deviceType,
@@ -1441,8 +1539,7 @@ async signInWithGoogle(
     // 3. GENERATE SESSIONS & TOKENS
     const { accessToken, refreshToken } = await this.generateTokens(profileData, clientInfo);
 
-    // 4. TRIGGER LOGIN NOTIFICATION (Consistent with manual login)
-    // Only send "New Login" email if it's NOT a brand new signup (avoid double emailing)
+    // 4. TRIGGER LOGIN NOTIFICATION
     if (!isNewProvisioning) {
       const isOrgAccount = profileData.account.type === 'ORGANIZATION';
       const adminRoles = ['Business System Admin'];
@@ -1473,9 +1570,13 @@ async signInWithGoogle(
       this.notificationBus.emit('user.login.email', loginEmailPayload);
     }
 
+    const successMessage = isNewProvisioning 
+  ? 'Signup successful' 
+  : 'Login successful';
+
     return {
       success: true,
-      message: 'Authentication successful',
+      message: successMessage,
       code: 'OK',
       data: {
         id: profileData.user.uuid,
@@ -1503,8 +1604,8 @@ async signInWithGoogle(
   } catch (err) {
     const errorMessage = err.details || err.message;
     this.logger.error(`[Google Auth] Failure: ${errorMessage}`);
+    this.logger.error(`[Google Auth] Error stack: ${err.stack}`);
 
-    // Track error in Kafka
     this.kafkaClient.emit('user.login.error', {
       error: errorMessage,
       method: 'GOOGLE',
@@ -1519,6 +1620,43 @@ async signInWithGoogle(
     });
 
     throw new UnauthorizedException(`Google Auth failed: ${errorMessage}`);
+  }
+}
+
+// Helper methods to add to your AuthService
+private mapPurposeToProfileType(primaryPurpose: string): string | null {
+  const purposeMap: Record<string, string> = {
+    'FIND_JOB': 'JOB_SEEKER',
+    'OFFER_SKILLED_SERVICES': 'SKILLED_PROFESSIONAL',
+    'WORK_AS_AGENT': 'INTERMEDIARY_AGENT',
+    'FIND_HOUSING': 'HOUSING_SEEKER',
+    'GET_SOCIAL_SUPPORT': 'SUPPORT_BENEFICIARY',
+    'HIRE_EMPLOYEES': 'EMPLOYER',
+    'LIST_PROPERTIES': 'PROPERTY_OWNER',
+  };
+  return purposeMap[primaryPurpose] || null;
+}
+
+private extractProfileDataForEmail(primaryPurpose: string | undefined, onboardingData: any): any {
+  if (!primaryPurpose) return null;
+  
+  switch (primaryPurpose) {
+    case 'FIND_JOB':
+      return onboardingData?.jobSeekerData;
+    case 'OFFER_SKILLED_SERVICES':
+      return onboardingData?.skilledProfessionalData;
+    case 'WORK_AS_AGENT':
+      return onboardingData?.intermediaryAgentData;
+    case 'FIND_HOUSING':
+      return onboardingData?.housingSeekerData;
+    case 'GET_SOCIAL_SUPPORT':
+      return onboardingData?.supportBeneficiaryData;
+    case 'HIRE_EMPLOYEES':
+      return onboardingData?.employerData;
+    case 'LIST_PROPERTIES':
+      return onboardingData?.propertyOwnerData;
+    default:
+      return null;
   }
 }
 

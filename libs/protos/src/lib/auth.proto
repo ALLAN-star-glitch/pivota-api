@@ -212,6 +212,21 @@ message SocialServiceProviderProfileData {
   optional int32 yearsExperience = 18;
   repeated string qualifications = 19;
   optional string availability = 20;
+
+}
+
+// ======================================================
+// ONBOARDING DATA MESSAGE (NEW)
+// ======================================================
+
+message GoogleOnboardingData { optional string primaryPurpose = 1;
+  optional JobSeekerProfileData jobSeekerData = 2;
+  optional HousingSeekerProfileData housingSeekerData = 3;
+  optional SkilledProfessionalProfileData skilledProfessionalData = 4;
+  optional IntermediaryAgentProfileData intermediaryAgentData = 5;
+  optional SupportBeneficiaryProfileData supportBeneficiaryData = 6;
+  optional EmployerProfileData employerData = 7;
+  optional PropertyOwnerProfileData propertyOwnerData = 8;
 }
 
 // ======================================================
@@ -292,9 +307,11 @@ message VerifyMfaLoginRequest {
   ClientInfo clientInfo = 3;
 }
 
+// UPDATED: GoogleLoginRequest now includes onboardingData
 message GoogleLoginRequest {
   string token = 1;
   ClientInfo clientInfo = 2;
+  optional GoogleOnboardingData onboardingData = 3;  
 }
 
 message RefreshRequest { 

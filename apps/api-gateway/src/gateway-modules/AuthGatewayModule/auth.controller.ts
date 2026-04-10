@@ -716,30 +716,383 @@ async signup(
   }
 
   @Post('google')
-  @Public()
-  @Version('1')
-  @ApiTags('Auth - Login')
-  @ApiOperation({ 
-    summary: 'Login or Register using Google OAuth token',
-    description: `
-      Authenticates user with Google OAuth token.
-      
-      **Microservice:** Auth Service
-      **Authentication:** Not required (uses Google token)
-      
-      ... (rest of existing documentation) ...
-    `
-  })
-  @ApiBody({ type: GoogleLoginRequestDto })
-  @ApiResponse({ status: 200, description: 'Login successful' })
-  @ApiResponse({ status: 400, description: 'Invalid Google token' })
-  async googleLogin(
-    @Body() googleDto: GoogleLoginRequestDto,
-    @ClientInfo() clientInfo: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
-    @Res({ passthrough: true }) res: Response
-  ): Promise<BaseResponseDto<LoginResponseDto>> {
-    return this.authService.googleLogin(googleDto.token, clientInfo, res);
+@Public()
+@Version('1')
+@ApiTags('Auth - Login')
+@ApiOperation({ 
+  summary: 'Login or Register using Google OAuth token',
+  description: `
+    Authenticates user with Google OAuth token.
+    
+    **Microservice:** Auth Service
+    **Authentication:** Not required (uses Google token)
+    
+    **Onboarding Data:**
+    If the user is signing up for the first time, you can pass onboarding data 
+    collected from previous screens to create a complete user profile.
+    
+    **Supported Onboarding Data:**
+    - primaryPurpose: The user's main goal (FIND_JOB, FIND_HOUSING, etc.)
+    - jobSeekerData: Profile data for job seekers
+    - housingSeekerData: Profile data for housing seekers (with searchType, isLookingForRental, isLookingToBuy)
+    - skilledProfessionalData: Profile data for skilled professionals
+    - intermediaryAgentData: Profile data for agents
+    - supportBeneficiaryData: Profile data for support beneficiaries
+    - employerData: Profile data for employers
+    - propertyOwnerData: Profile data for property owners (with listingType, isListingForRent, isListingForSale)
+    
+    **Example with Onboarding Data:**
+    {
+      "token": "google_id_token_here",
+      "onboardingData": {
+        "primaryPurpose": "FIND_HOUSING",
+        "housingSeekerData": {
+          "searchType": "RENT",
+          "isLookingForRental": true,
+          "isLookingToBuy": false,
+          "minBudget": 25000,
+          "maxBudget": 60000,
+          "preferredCities": ["Nairobi", "Kiambu"],
+          "preferredTypes": ["APARTMENT", "HOUSE"]
+        }
+      }
+    }
+  `
+})
+@ApiBody({ 
+  type: GoogleLoginRequestDto,
+  examples: {
+    'Login Only': {
+      summary: 'Simple login (no onboarding data)',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...'
+      }
+    },
+    'Login with Job Seeker Onboarding': {
+      summary: 'Login with job seeker profile data',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'FIND_JOB',
+          jobSeekerData: {
+            headline: 'Senior Full Stack Developer',
+            isActivelySeeking: true,
+            skills: ['JavaScript', 'TypeScript', 'React', 'Node.js'],
+            industries: ['FinTech', 'HealthTech'],
+            jobTypes: ['FULL_TIME', 'REMOTE'],
+            seniorityLevel: 'SENIOR',
+            expectedSalary: 250000,
+            workAuthorization: ['Citizen'],
+            linkedInUrl: 'linkedin.com/in/janedoe'
+          }
+        }
+      }
+    },
+    'Login with Housing Seeker Onboarding (Rent)': {
+      summary: 'Login with housing seeker - looking to rent',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'FIND_HOUSING',
+          housingSeekerData: {
+            searchType: 'RENT',
+            isLookingForRental: true,
+            isLookingToBuy: false,
+            minBedrooms: 2,
+            maxBedrooms: 4,
+            minBudget: 25000,
+            maxBudget: 60000,
+            preferredTypes: ['APARTMENT', 'HOUSE'],
+            preferredCities: ['Nairobi', 'Kiambu'],
+            preferredNeighborhoods: ['Kilimani', 'Lavington', 'Westlands'],
+            moveInDate: '2026-04-15',
+            householdSize: 4,
+            hasPets: true,
+            petDetails: 'One dog'
+          }
+        }
+      }
+    },
+    'Login with Housing Seeker Onboarding (Buy)': {
+      summary: 'Login with housing seeker - looking to buy',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'FIND_HOUSING',
+          housingSeekerData: {
+            searchType: 'BUY',
+            isLookingForRental: false,
+            isLookingToBuy: true,
+            minBedrooms: 3,
+            maxBedrooms: 5,
+            minBudget: 5000000,
+            maxBudget: 10000000,
+            preferredTypes: ['HOUSE', 'VILLA'],
+            preferredCities: ['Nairobi', 'Kiambu'],
+            preferredNeighborhoods: ['Runda', 'Karen', 'Lavington'],
+            householdSize: 5
+          }
+        }
+      }
+    },
+    'Login with Housing Seeker Onboarding (Both)': {
+      summary: 'Login with housing seeker - both rent and buy',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'FIND_HOUSING',
+          housingSeekerData: {
+            searchType: 'BOTH',
+            isLookingForRental: true,
+            isLookingToBuy: true,
+            minBedrooms: 2,
+            maxBedrooms: 3,
+            minBudget: 30000,
+            maxBudget: 50000,
+            preferredTypes: ['APARTMENT', 'CONDO'],
+            preferredCities: ['Nairobi'],
+            preferredNeighborhoods: ['Kilimani', 'Westlands'],
+            householdSize: 3
+          }
+        }
+      }
+    },
+    'Login with Skilled Professional Onboarding': {
+      summary: 'Login with skilled professional profile data',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'OFFER_SKILLED_SERVICES',
+          skilledProfessionalData: {
+            title: 'Master Electrician',
+            profession: 'ELECTRICIAN',
+            specialties: ['Wiring', 'Solar Installation', 'Security Systems'],
+            serviceAreas: ['Nairobi', 'Kiambu', 'Machakos'],
+            yearsExperience: 8,
+            licenseNumber: 'EBK/1234/2020',
+            hourlyRate: 800,
+            availableToday: true,
+            availableWeekends: true
+          }
+        }
+      }
+    },
+    'Login with Agent Onboarding': {
+      summary: 'Login with agent profile data',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'WORK_AS_AGENT',
+          intermediaryAgentData: {
+            agentType: 'HOUSING_AGENT',
+            specializations: ['RESIDENTIAL', 'COMMERCIAL', 'LUXURY'],
+            serviceAreas: ['Nairobi', 'Kiambu', 'Mombasa'],
+            licenseNumber: 'ERB/5678/2021',
+            yearsExperience: 5,
+            agencyName: 'Prime Properties Agency',
+            commissionRate: 5.0,
+            about: 'Specializing in luxury apartments in Nairobi'
+          }
+        }
+      }
+    },
+    'Login with Support Beneficiary Onboarding': {
+      summary: 'Login with support beneficiary profile data',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'GET_SOCIAL_SUPPORT',
+          supportBeneficiaryData: {
+            needs: ['FOOD', 'SHELTER', 'MEDICAL'],
+            urgentNeeds: ['FOOD'],
+            familySize: 4,
+            city: 'Nairobi',
+            neighborhood: 'Kawangware',
+            prefersAnonymity: true,
+            consentToShare: false,
+            languagePreference: ['ENGLISH', 'SWAHILI']
+          }
+        }
+      }
+    },
+    'Login with Employer Onboarding': {
+      summary: 'Login with employer profile data',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'HIRE_EMPLOYEES',
+          employerData: {
+            businessName: 'Njenga Tech Solutions',
+            isRegistered: true,
+            yearsExperience: 5,
+            industry: 'Technology',
+            companySize: '11-50',
+            description: 'Software development and IT consulting',
+            preferredSkills: ['JavaScript', 'Python', 'React', 'Node.js'],
+            remotePolicy: 'HYBRID'
+          }
+        }
+      }
+    },
+    'Login with Property Owner Onboarding (Rent)': {
+      summary: 'Login with property owner - rental listings',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'LIST_PROPERTIES',
+          propertyOwnerData: {
+            listingType: 'RENT',
+            isListingForRent: true,
+            isListingForSale: false,
+            isProfessional: false,
+            propertyCount: 3,
+            propertyTypes: ['APARTMENT', 'HOUSE'],
+            propertyPurpose: 'INVESTMENT',
+            preferredPropertyTypes: ['APARTMENT', 'HOUSE'],
+            serviceAreas: ['Nairobi', 'Kiambu']
+          }
+        }
+      }
+    },
+    'Login with Property Owner Onboarding (Sale)': {
+      summary: 'Login with property owner - sale listings',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'LIST_PROPERTIES',
+          propertyOwnerData: {
+            listingType: 'SALE',
+            isListingForRent: false,
+            isListingForSale: true,
+            isProfessional: true,
+            licenseNumber: 'ERB/12345/2023',
+            companyName: 'Kimani Properties Ltd',
+            yearsInBusiness: 8,
+            preferredPropertyTypes: ['HOUSE', 'COMMERCIAL', 'LAND'],
+            serviceAreas: ['Nairobi', 'Kiambu', 'Machakos']
+          }
+        }
+      }
+    },
+    'Login with Property Owner Onboarding (Both)': {
+      summary: 'Login with property owner - both rent and sale',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'LIST_PROPERTIES',
+          propertyOwnerData: {
+            listingType: 'BOTH',
+            isListingForRent: true,
+            isListingForSale: true,
+            isProfessional: false,
+            propertyCount: 5,
+            propertyTypes: ['APARTMENT', 'HOUSE', 'COMMERCIAL'],
+            propertyPurpose: 'BOTH',
+            preferredPropertyTypes: ['APARTMENT', 'HOUSE', 'COMMERCIAL'],
+            serviceAreas: ['Nairobi', 'Kiambu']
+          }
+        }
+      }
+    },
+    'Login with Just Exploring': {
+      summary: 'Login with just exploring (no profile created)',
+      value: {
+        token: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjY0Z...',
+        onboardingData: {
+          primaryPurpose: 'JUST_EXPLORING'
+        }
+      }
+    }
   }
+})
+@ApiResponse({ 
+  status: 200, 
+  description: 'Login successful',
+  schema: {
+    example: {
+      success: true,
+      message: 'Authentication successful',
+      code: 'OK',
+      data: {
+        id: '123e4567-e89b-12d3-a456-426614174000',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        userCode: 'USR123456789',
+        accountId: '123e4567-e89b-12d3-a456-426614174001',
+        email: 'user@gmail.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        phone: '+254712345678',
+        status: 'ACTIVE',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        accessToken: 'eyJhbGciOiJIUzI1NiIs...',
+        refreshToken: 'eyJhbGciOiJIUzI1NiIs...'
+      },
+      error: null
+    }
+  }
+})
+@ApiResponse({ 
+  status: 400, 
+  description: 'Invalid Google token',
+  schema: {
+    example: {
+      success: false,
+      message: 'Invalid Google token',
+      code: 'UNAUTHORIZED',
+      data: null,
+      error: { code: 'INVALID_TOKEN', message: 'Google token verification failed' }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 409, 
+  description: 'Conflict - Email already registered with different method',
+  schema: {
+    example: {
+      success: false,
+      message: 'This email is already registered. Please login instead.',
+      code: 'CONFLICT',
+      data: null,
+      error: { code: 'EMAIL_EXISTS', userExists: true }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 500, 
+  description: 'Internal server error',
+  schema: {
+    example: {
+      success: false,
+      message: 'An error occurred during authentication',
+      code: 'INTERNAL_ERROR',
+      data: null,
+      error: { code: 'INTERNAL', message: 'Unexpected error' }
+    }
+  }
+})
+async googleLogin(
+  @Body() googleDto: GoogleLoginRequestDto,
+  @ClientInfo() clientInfo: AuthClientInfoDto,
+  @Res({ passthrough: true }) res: Response
+): Promise<BaseResponseDto<LoginResponseDto>> {
+  const { token, onboardingData } = googleDto;
+  
+  // Log the request
+  this.logger.log(`🔑 Google Login request received`);
+  this.logger.debug(`📱 Device: ${clientInfo?.device || 'Unknown'}`);
+  this.logger.debug(`📍 IP: ${clientInfo?.ipAddress || 'Unknown'}`);
+  
+  if (onboardingData?.primaryPurpose) {
+    this.logger.log(`📝 Google Login with onboarding data - Purpose: ${onboardingData.primaryPurpose}`);
+    this.logger.debug(`Onboarding data: ${JSON.stringify(onboardingData, null, 2)}`);
+  } else {
+    this.logger.log(`📝 Google Login without onboarding data (existing user or just login)`);
+  }
+  
+  // Call the auth service with token, client info, and onboarding data
+  return this.authService.googleLogin(token, clientInfo, res, onboardingData);
+}
 
   @Post('logout')
   @UseGuards(JwtAuthGuard, PermissionsGuard)

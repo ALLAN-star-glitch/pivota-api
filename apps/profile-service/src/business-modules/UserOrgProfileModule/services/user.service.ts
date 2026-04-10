@@ -516,13 +516,44 @@ private async updateActiveProfiles(
 async createIndividualAccountWithProfiles(
   data: CreateAccountWithProfilesRequestDto
 ): Promise<BaseResponseDto<AccountResponseDto>> {
+  // Log the entire incoming data
+  this.logger.log('=========================================');
+  this.logger.log('🔍 [PROFILE SERVICE] createIndividualAccountWithProfiles called');
+  this.logger.log(`🔍 Email: ${data.email}`);
+  this.logger.log(`🔍 FirstName: ${data.firstName}`);
+  this.logger.log(`🔍 LastName: ${data.lastName}`);
+  this.logger.log(`🔍 Phone: ${data.phone}`);
+  this.logger.log(`🔍 PlanSlug: ${data.planSlug || 'free-forever'}`);
+  this.logger.log(`🔍 PrimaryPurpose: ${data.primaryPurpose || 'NOT PROVIDED'}`);
+  this.logger.log(`🔍 Has jobSeekerData: ${!!data.jobSeekerData}`);
+  this.logger.log(`🔍 Has housingSeekerData: ${!!data.housingSeekerData}`);
+  this.logger.log(`🔍 Has skilledProfessionalData: ${!!data.skilledProfessionalData}`);
+  this.logger.log(`🔍 Has intermediaryAgentData: ${!!data.intermediaryAgentData}`);
+  this.logger.log(`🔍 Has supportBeneficiaryData: ${!!data.supportBeneficiaryData}`);
+  this.logger.log(`🔍 Has employerData: ${!!data.employerData}`);
+  this.logger.log(`🔍 Has propertyOwnerData: ${!!data.propertyOwnerData}`);
+  
+  if (data.housingSeekerData) {
+    this.logger.log(`🔍 HousingSeekerData details: ${JSON.stringify(data.housingSeekerData, null, 2)}`);
+  }
+  
+  this.logger.log('=========================================');
+
   // Early validation
   if (data.accountType !== "INDIVIDUAL") {
+    this.logger.error('❌ Account type is not INDIVIDUAL');
     return BaseResponseDto.fail('This method is for individual accounts only', 'BAD_REQUEST');
   }
 
-  if (!data.firstName || !data.lastName) {
-    return BaseResponseDto.fail('First name and last name are required for individual accounts', 'BAD_REQUEST');
+  // ✅ FIX: Only require first name, last name is optional
+  if (!data.firstName) {
+    this.logger.error('❌ First name missing');
+    return BaseResponseDto.fail('First name is required for individual accounts', 'BAD_REQUEST');
+  }
+  
+  // Handle empty last name
+  if (data.lastName === undefined || data.lastName === null) {
+    data.lastName = '';
   }
 
   // Determine profile to create
@@ -538,31 +569,44 @@ async createIndividualAccountWithProfiles(
     switch (data.primaryPurpose) {
       case 'FIND_JOB':
         profileData = data.jobSeekerData;
+        this.logger.debug(`Using jobSeekerData: ${JSON.stringify(profileData)}`);
         break;
       case 'OFFER_SKILLED_SERVICES':
         profileData = data.skilledProfessionalData;
+        this.logger.debug(`Using skilledProfessionalData: ${JSON.stringify(profileData)}`);
         break;
       case 'WORK_AS_AGENT':
         profileData = data.intermediaryAgentData;
+        this.logger.debug(`Using intermediaryAgentData: ${JSON.stringify(profileData)}`);
         break;
       case 'FIND_HOUSING':
         profileData = data.housingSeekerData;
+        this.logger.debug(`Using housingSeekerData: ${JSON.stringify(profileData)}`);
         break;
       case 'GET_SOCIAL_SUPPORT':
         profileData = data.supportBeneficiaryData;
+        this.logger.debug(`Using supportBeneficiaryData: ${JSON.stringify(profileData)}`);
         break;
       case 'HIRE_EMPLOYEES':
         profileData = data.employerData;
+        this.logger.debug(`Using employerData: ${JSON.stringify(profileData)}`);
         break;
       case 'LIST_PROPERTIES':
         profileData = data.propertyOwnerData;
+        this.logger.debug(`Using propertyOwnerData: ${JSON.stringify(profileData)}`);
         break;
+      default:
+        this.logger.warn(`Unknown primary purpose: ${data.primaryPurpose}`);
     }
     
     if (profileType && profileData) {
       profileToCreate = { type: profileType, data: profileData };
-      this.logger.debug(`Profile to create: ${profileType}`);
+      this.logger.log(`✅ Profile to create: ${profileType}`);
+    } else {
+      this.logger.warn(`⚠️ No profile to create - profileType: ${profileType}, has profileData: ${!!profileData}`);
     }
+  } else {
+    this.logger.log(`ℹ️ No profile to create (primaryPurpose: ${data.primaryPurpose || 'not provided'})`);
   }
 
   // Generate codes
@@ -572,56 +616,76 @@ async createIndividualAccountWithProfiles(
   const normalizedEmail = StringUtils.normalizeEmail(data.email);
   const normalizedPhone = PhoneUtils.normalize(data.phone || '');
   
-  this.logger.log(`Creating individual account for: ${normalizedEmail} with profile: ${profileToCreate?.type || 'none'}`);
-
+  // DECLARE VARIABLES AT THE TOP BEFORE USING THEM
   const accountUuid = randomUUID();
   const userUuid = randomUUID();
   const targetPlanSlug = data.planSlug || 'free-forever';
   const isPremium = targetPlanSlug !== 'free-forever';
   const roleType = 'Individual';
 
+  this.logger.log(`Creating individual account for: ${normalizedEmail}`);
+  this.logger.log(`Account UUID: ${accountUuid}`);
+  this.logger.log(`User UUID: ${userUuid}`);
+
   try {
     // ============ STEP 1: Parallel service calls (both CRITICAL) ============
+    this.logger.log('🔍 Calling RBAC service to get Role ID...');
     const [roleRes, planRes] = await Promise.all([
       lastValueFrom(
         this.rbacGrpc.GetRoleIdByType({ roleType }).pipe(
           timeout(5000),
-          catchError(() => throwError(() => new Error('Oops! We are experiencing admin system downtime. Please try again later.'))) // send the user non-technical message, but log the actual error for debugging
+          catchError((err) => {
+            this.logger.error(`❌ RBAC service error: ${err.message}`);
+            return throwError(() => new Error('Oops! We are experiencing admin system downtime. Please try again later.'));
+          })
         )
       ),
       lastValueFrom(
         this.plansGrpc.GetPlanIdBySlug({ slug: targetPlanSlug }).pipe(
           timeout(5000),
-          catchError(() => throwError(() => new Error('Plans service unavailable')))
+          catchError((err) => {
+            this.logger.error(`❌ Plans service error: ${err.message}`);
+            return throwError(() => new Error('Plans service unavailable'));
+          })
         )
       ),
     ]);
 
+    this.logger.log(`✅ Role ID: ${roleRes?.data?.roleId}`);
+    this.logger.log(`✅ Plan ID: ${planRes?.data?.planId}`);
+
     if (!roleRes?.data?.roleId) {
+      this.logger.error('❌ Role ID not found');
       return BaseResponseDto.fail(`Role ${roleType} not found`, 'NOT_FOUND');
     }
     if (!planRes?.data?.planId) {
+      this.logger.error('❌ Plan ID not found');
       return BaseResponseDto.fail(`Plan ${targetPlanSlug} not found`, 'NOT_FOUND');
     }
 
-    // ============ STEP 2: Database transaction (ONLY account, user, individual profile) ============
+    // ============ STEP 2: Database transaction ============
+    this.logger.log('🔍 Starting database transaction...');
     await this.prisma.$transaction(async (tx) => {
-      // Create Account
+      this.logger.log('🔍 Creating account...');
+      const accountName = data.lastName 
+        ? `${data.firstName} ${data.lastName}`.trim()
+        : data.firstName;
       const account = await tx.account.create({
         data: {
           uuid: accountUuid,
           accountCode,
           type: "INDIVIDUAL",
-          name: `${data.firstName} ${data.lastName}`.trim(),
+          name: accountName,
           status: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
           userRole: roleType,
-          activeProfiles: '[]', // Empty initially, will be updated by worker
+          activeProfiles: '[]',
           isVerified: false,
           verifiedFeatures: StringUtils.stringifyJsonField([]),
         },
       });
+      this.logger.log(`✅ Account created: ${account.uuid}`);
 
-      // Create User and Individual Profile in parallel
+      this.logger.log('🔍 Creating user and individual profile...');
       await Promise.all([
         tx.user.create({
           data: {
@@ -639,17 +703,20 @@ async createIndividualAccountWithProfiles(
           data: {
             accountUuid: account.uuid,
             firstName: data.firstName,
-            lastName: data.lastName,
+            lastName: data.lastName || '',
             profileImage: data.profileImage,
           },
         }),
       ]);
+      this.logger.log(`✅ User and individual profile created`);
     }, {
       timeout: 15000,
       isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
     });
+    this.logger.log('✅ Database transaction completed successfully');
 
-    // ============ STEP 3: Assign Role (CRITICAL - must succeed) ============
+    // ============ STEP 3: Assign Role ============
+    this.logger.log('🔍 Assigning role to user...');
     const roleAssignment = await lastValueFrom(
       this.rbacGrpc.AssignRoleToUser({
         userUuid: userUuid,
@@ -658,14 +725,16 @@ async createIndividualAccountWithProfiles(
     );
 
     if (!roleAssignment?.success) {
+      this.logger.error('❌ Role assignment failed, rolling back account creation');
       await this.prisma.account.delete({ where: { uuid: accountUuid } });
       return BaseResponseDto.fail('Failed to assign user role. Account creation rolled back.', 'INTERNAL_ERROR');
     }
 
     this.logger.log(`✅ Role assigned successfully for user ${userUuid}`);
 
-    // ============ STEP 4: Handle Subscription (CRITICAL for free plans) ============
+    // ============ STEP 4: Handle Subscription ============
     if (!isPremium) {
+      this.logger.log('🔍 Creating subscription for free plan...');
       const subscriptionResult = await lastValueFrom(
         this.subscriptionGrpc.SubscribeToPlan({
           subscriberUuid: accountUuid,
@@ -677,6 +746,7 @@ async createIndividualAccountWithProfiles(
       );
 
       if (!subscriptionResult?.success) {
+        this.logger.error('❌ Subscription creation failed, rolling back account creation');
         await this.prisma.account.delete({ where: { uuid: accountUuid } });
         return BaseResponseDto.fail('Failed to create subscription. Account creation rolled back.', 'INTERNAL_ERROR');
       }
@@ -684,10 +754,11 @@ async createIndividualAccountWithProfiles(
       this.logger.log(`✅ Subscription created successfully for account ${accountUuid}`);
     }
 
-    // ============ STEP 5: QUEUE BUSINESS PROFILE CREATION (Non-blocking) ============
+    // ============ STEP 5: QUEUE BUSINESS PROFILE CREATION ============
     if (profileToCreate && this.isIndividualProfile(profileToCreate.type)) {
-      this.logger.log(`🔍 Queueing profile data for ${profileToCreate.type}:`);
-      this.logger.log(`🔍 profileData: ${JSON.stringify(profileToCreate.data, null, 2)}`);
+      this.logger.log(`🔍 Queueing profile data for ${profileToCreate.type}`);
+      this.logger.log(`🔍 Profile data: ${JSON.stringify(profileToCreate.data, null, 2)}`);
+      
       await this.queue.addJob(
         'profile-queue',
         'create-business-profile',
@@ -706,9 +777,12 @@ async createIndividualAccountWithProfiles(
         }
       );
       this.logger.log(`✅ Queued business profile creation for ${profileToCreate.type}`);
+    } else {
+      this.logger.log(`ℹ️ No profile to queue (profileToCreate: ${!!profileToCreate}, isIndividual: ${profileToCreate ? this.isIndividualProfile(profileToCreate.type) : 'N/A'})`);
     }
 
-    // ============ STEP 6: Return success immediately ============
+    // ============ STEP 6: Return success ============
+    this.logger.log('🔍 Fetching created account data...');
     const accountData = await this.getAccountByUuid(accountUuid);
     
     this.logger.log(`✅ Successfully created account for ${normalizedEmail}`);
@@ -728,26 +802,33 @@ async createIndividualAccountWithProfiles(
     );
 
   } catch (error) {
-    this.logger.error(`Account creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    this.logger.error(`❌ Account creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    this.logger.error(`❌ Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
+    
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      this.logger.error(`❌ Prisma error code: ${error.code}`);
+      this.logger.error(`❌ Prisma error meta: ${JSON.stringify(error.meta)}`);
+      
+      if (error.code === 'P2002') {
+        const target = error.meta?.target as string[];
+        this.logger.error(`❌ Unique constraint violation on: ${target?.join(', ')}`);
+        if (target?.includes('email')) {
+          return BaseResponseDto.fail('Email already exists', 'ALREADY_EXISTS');
+        }
+        if (target?.includes('phone')) {
+          return BaseResponseDto.fail('Phone number already exists', 'ALREADY_EXISTS');
+        }
+        return BaseResponseDto.fail('Email or phone already exists', 'ALREADY_EXISTS');
+      }
+    }
     
     try {
       await this.prisma.account.delete({ where: { uuid: accountUuid } });
       this.logger.log(`🧹 Cleaned up account ${accountUuid} after failure`);
     } catch (cleanupError) {
-      // Account might not have been created yet
+      this.logger.warn(`⚠️ Could not clean up account: ${cleanupError.message}`);
     }
-    
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      const target = error.meta?.target as string[];
-      if (target?.includes('email')) {
-        return BaseResponseDto.fail('Email already exists', 'ALREADY_EXISTS');
-      }
-      if (target?.includes('phone')) {
-        return BaseResponseDto.fail('Phone number already exists', 'ALREADY_EXISTS');
-      }
-      return BaseResponseDto.fail('Email or phone already exists', 'ALREADY_EXISTS');
-    }
-    
+     
     return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
   }
 }

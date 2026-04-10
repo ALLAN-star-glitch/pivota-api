@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Controller, Logger } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
@@ -15,7 +16,9 @@ import {
   ResetPasswordDto,
   SessionDto,
   AuthClientInfoDto,
-  SignupResponseDto, // Keep this import
+  SignupResponseDto,
+  GoogleOnboardingDataDto,
+  GoogleLoginRequestDto, // Keep this import
 } from '@pivota-api/dtos';
 import { OtpPurpose } from '@pivota-api/shared-redis';
 
@@ -105,16 +108,56 @@ export class AuthController {
   /* ======================================================
      GOOGLE LOGIN - UPDATED with full AuthClientInfoDto
   ====================================================== */
-  @GrpcMethod('AuthService', 'GoogleLogin')
-  async handleGoogleLoginGrpc(
-    data: { 
-      token: string; 
-      clientInfo?: AuthClientInfoDto  // Use full AuthClientInfoDto
-    }
-  ): Promise<BaseResponseDto<LoginResponseDto>> {
-    this.logger.log(`gRPC: Google Login from ${data.clientInfo?.device || 'Unknown'}`);
-    return await this.authService.signInWithGoogle(data.token, data.clientInfo);
+@GrpcMethod('AuthService', 'GoogleLogin')
+async handleGoogleLoginGrpc(
+  data: { 
+    token: string; 
+    clientInfo?: AuthClientInfoDto;
+    onboardingData?: GoogleOnboardingDataDto;
   }
+): Promise<BaseResponseDto<LoginResponseDto>> {
+  this.logger.log(`gRPC: Google Login from ${data.clientInfo?.device || 'Unknown'}`);
+  
+  // Construct the GoogleLoginRequestDto to match the service method signature
+  const googleLoginRequest: GoogleLoginRequestDto = {
+    token: data.token,
+    onboardingData: data.onboardingData
+  };
+  
+  // Log if onboarding data is present
+  if (data.onboardingData?.primaryPurpose) {
+    this.logger.log(`gRPC: Google Login with onboarding purpose: ${data.onboardingData.primaryPurpose}`);
+    
+    // Optional: Log specific profile data types for debugging
+    if (data.onboardingData.jobSeekerData) {
+      this.logger.debug(`gRPC: Includes jobSeekerData`);
+    }
+    if (data.onboardingData.housingSeekerData) {
+      this.logger.debug(`gRPC: Includes housingSeekerData - Search Type: ${data.onboardingData.housingSeekerData.searchType}`);
+    }
+    if (data.onboardingData.skilledProfessionalData) {
+      this.logger.debug(`gRPC: Includes skilledProfessionalData`);
+    }
+    if (data.onboardingData.intermediaryAgentData) {
+      this.logger.debug(`gRPC: Includes intermediaryAgentData`);
+    }
+    if (data.onboardingData.supportBeneficiaryData) {
+      this.logger.debug(`gRPC: Includes supportBeneficiaryData`);
+    }
+    if (data.onboardingData.employerData) {
+      this.logger.debug(`gRPC: Includes employerData`);
+    }
+    if (data.onboardingData.propertyOwnerData) {
+      this.logger.debug(`gRPC: Includes propertyOwnerData - Listing Type: ${data.onboardingData.propertyOwnerData.listingType}`);
+    }
+  }
+  
+  // Pass clientInfo and the constructed GoogleLoginRequestDto to the service
+  return await this.authService.signInWithGoogle(
+    data.clientInfo,
+    googleLoginRequest
+  );
+}
 
   /* ======================================================
      REFRESH TOKEN
