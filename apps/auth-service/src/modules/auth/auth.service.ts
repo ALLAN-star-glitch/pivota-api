@@ -644,10 +644,10 @@ async signup(
     );
 
     // Queue admin notification
-    const adminEmail = process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com';
+    const adminEmail = process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'onboarding@pivotaconnect.com';
     await this.queue.addJob(
       'email-queue',
-      'admin-notification',
+      'admin-notification', 
       {
         to: adminEmail,
         userEmail: signupDto.email,
@@ -983,7 +983,7 @@ async organisationSignup(
 
     //  Send admin notification via RabbitMQ - New organization registration
     this.notificationBus.emit('admin.new.organization.registration', {
-      recipientEmail: process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com',
+      recipientEmail: process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'onboarding@pivotaconnect.com',
       organizationName: dto.name,
       adminName: `${dto.adminFirstName} ${dto.adminLastName}`,
       adminEmail: dto.email,
@@ -1279,7 +1279,8 @@ async signInWithGoogle(
       idToken: token,
       audience: [
         process.env.GOOGLE_CLIENT_ID,
-        '407408718192.apps.googleusercontent.com'
+        '407408718192.apps.googleusercontent.com',
+        '759373816085-4o3n6e05g7ck3k6nb3f016c4civles7h.apps.googleusercontent.com'
       ]
     });
     
@@ -1413,8 +1414,11 @@ async signInWithGoogle(
         this.logger.log(`🔍 Will use: firstName = "${firstName}"`);
         this.logger.log(`🔍 Will use: lastName = "${lastName}"`);
         this.logger.log(`🔍 Primary Purpose: ${onboardingData?.primaryPurpose || 'not provided'}`);
+        this.logger.log(`🔍 Profile Picture: ${payload?.picture ? '✅ Provided' : '❌ Not provided'}`);
         this.logger.log('=========================================');
 
+        const pictureUrl = payload?.picture;
+        
         // USE ONBOARDING DATA IF PROVIDED
         const createAccountDto: any = {
           accountType: 'INDIVIDUAL',
@@ -1425,7 +1429,7 @@ async signInWithGoogle(
           otpCode: '', // No OTP needed for Google signup
           firstName: firstName,  // Use cleaned value
           lastName: lastName,     // Use cleaned value
-          profileImage: null,
+          profileImage: pictureUrl || null,  // Google profile picture URL
           primaryPurpose: onboardingData?.primaryPurpose,
           // Pass profile data from onboarding
           jobSeekerData: onboardingData?.jobSeekerData,
@@ -1438,7 +1442,7 @@ async signInWithGoogle(
           profiles: [],
         };
 
-        this.logger.log(`[Google Auth] Calling profile service with: firstName="${createAccountDto.firstName}", lastName="${createAccountDto.lastName}"`);
+        this.logger.log(`[Google Auth] Calling profile service with: firstName="${createAccountDto.firstName}", lastName="${createAccountDto.lastName}", hasProfileImage=${!!createAccountDto.profileImage}`);
 
         // Call the method for creating individual account with profiles
         const createResponse = await firstValueFrom(
@@ -1452,7 +1456,7 @@ async signInWithGoogle(
 
         this.logger.log(`[Google Auth] Profile creation successful!`);
 
-        // ✅ FIX: Extract user data from response (matching signup method pattern)
+        // Extract user data from response (matching signup method pattern)
         const accountData = createResponse.data;
         const userData = accountData.users?.[0];
 
@@ -1501,7 +1505,7 @@ async signInWithGoogle(
 
         // Send admin notification
         this.notificationBus.emit('admin.new.registration', {
-          adminEmail: process.env.ADMIN_NOTIFICATION_EMAIL || 'allanmathenge67@gmail.com',
+          adminEmail: process.env.ADMIN_NOTIFICATION_EMAIL || 'onboarding@pivotaconnect.com',
           userEmail: email,
           userName: `${firstName} ${lastName}`.trim(),
           accountType: 'INDIVIDUAL',
@@ -1571,8 +1575,8 @@ async signInWithGoogle(
     }
 
     const successMessage = isNewProvisioning 
-  ? 'Signup successful' 
-  : 'Login successful';
+      ? 'Signup successful' 
+      : 'Login successful';
 
     return {
       success: true,

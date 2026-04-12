@@ -66,7 +66,7 @@ import { ProfileWorker } from '../../../workers/profile.worker';
         options: {
           package: 'subscriptions',
           protoPath: SUBSCRIPTIONS_PROTO_PATH,
-          url: process.env.ADMIN_SERVICE_GRPC_URL || 'localhost:50040',
+          url: process.env.SUBSCRIPTIONS_GRPC_URL || 'localhost:50040',
         },
       },
       {
@@ -75,7 +75,7 @@ import { ProfileWorker } from '../../../workers/profile.worker';
         options: {
           package: 'plans',
           protoPath: PLANS_PROTO_PATH,
-          url: process.env.ADMIN_SERVICE_GRPC_URL || 'localhost:50050',
+          url: process.env.PLANS_SERVICE_GRPC_URL || 'localhost:50050',
         },
       }
     ]),

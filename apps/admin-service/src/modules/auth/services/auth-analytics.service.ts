@@ -2,7 +2,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { startOfDay, startOfHour } from 'date-fns';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../../../generated/prisma/client';
 
 @Injectable()
 export class AuthAnalyticsService {

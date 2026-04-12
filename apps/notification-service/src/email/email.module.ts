@@ -38,9 +38,9 @@ import { SecurityEmailController } from './controllers/security-email.controller
         const smtpPass = configService.get('SMTP_PASS');
         const fromEmail = configService.get('MAIL_FROM_EMAIL');
         const fromName = configService.get('MAIL_FROM_NAME', 'PivotaConnect');
-        const connectionTimeout = configService.get('SMTP_CONNECTION_TIMEOUT', 30000);
-        const greetingTimeout = configService.get('SMTP_GREETING_TIMEOUT', 30000);
-        const socketTimeout = configService.get('SMTP_SOCKET_TIMEOUT', 30000);
+        const connectionTimeout = Number(configService.get('SMTP_CONNECTION_TIMEOUT', 30000));
+        const greetingTimeout = Number(configService.get('SMTP_GREETING_TIMEOUT', 30000));
+        const socketTimeout = Number(configService.get('SMTP_SOCKET_TIMEOUT', 30000));
         
         // Log each configuration value (mask sensitive data)
         logger.log(`📧 SMTP_HOST: ${smtpHost || '❌ NOT SET'}`);

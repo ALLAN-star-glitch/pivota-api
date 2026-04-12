@@ -7,6 +7,8 @@ import { ClientKafka } from '@nestjs/microservices';
 import { StringUtils } from '@pivota-api/utils';
 import { createBusinessProfile, BusinessProfileType } from '../business-modules/utils/business-profiles-creator.utils';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '@pivota-api/shared-storage';
+import { downloadAndStoreGoogleProfilePicture } from '../business-modules/utils/google-profile-picture.utils';
 
 @Injectable()
 export class ProfileWorker {
@@ -18,6 +20,7 @@ export class ProfileWorker {
     private queue: QueueService,
     private prisma: PrismaService,
     @Inject('KAFKA_ANALYTICS_CLIENT') private analyticsKafkaClient: ClientKafka,
+    private storageService: StorageService, // Add this
   ) {
     console.log('🔥 ProfileWorker CONSTRUCTOR called');
     
@@ -73,6 +76,10 @@ export class ProfileWorker {
           switch (name) {
             case 'create-business-profile':
               await this.createBusinessProfile(data);
+              break;
+              
+            case 'download-profile-picture':
+              await this.downloadProfilePicture(data);
               break;
               
             case 'housing-preferences-updated':
@@ -162,6 +169,61 @@ export class ProfileWorker {
       this.logger.error(`❌ Failed to create business profile: ${error.message}`);
       this.logger.error(error.stack);
       throw error;
+    }
+  }
+
+  //  NEW: Handle profile picture download
+  private async downloadProfilePicture(data: {
+    userUuid: string;
+    pictureUrl: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  }): Promise<void> {
+    console.log(`📸 Downloading profile picture for user: ${data.userUuid}`);
+    this.logger.log(`📸 Downloading profile picture for user: ${data.userUuid}`);
+    
+    try {
+      const result = await downloadAndStoreGoogleProfilePicture(
+        data.pictureUrl,
+        data.email,
+        data.firstName,
+        data.lastName,
+        this.storageService,
+        this.logger
+      );
+      
+      if (result.success && result.url) {
+        // Update the user's profile image in the database
+        await this.prisma.user.update({
+          where: { uuid: data.userUuid },
+          data: { profileImage: result.url }
+        });
+        
+        // Get account UUID and update individual profile
+        const user = await this.prisma.user.findUnique({
+          where: { uuid: data.userUuid },
+          select: { accountUuid: true }
+        });
+        
+        if (user?.accountUuid) {
+          await this.prisma.individualProfile.update({
+            where: { accountUuid: user.accountUuid },
+            data: { profileImage: result.url }
+          });
+        }
+        
+        console.log(`✅ Profile picture updated for user: ${data.userUuid}`);
+        this.logger.log(`✅ Profile picture updated for user: ${data.userUuid}`);
+      } else {
+        console.warn(`⚠️ Failed to download profile picture for user: ${data.userUuid} - ${result.error}`);
+        this.logger.warn(`⚠️ Failed to download profile picture for user: ${data.userUuid} - ${result.error}`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ Failed to download profile picture: ${error.message}`);
+      this.logger.error(`❌ Failed to download profile picture: ${error.message}`);
+      // Don't throw - this is a non-critical operation
     }
   }
 }

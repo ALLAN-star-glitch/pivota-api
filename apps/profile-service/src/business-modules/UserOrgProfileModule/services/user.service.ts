@@ -50,8 +50,8 @@ import { catchError, lastValueFrom, Observable, throwError, timeout } from 'rxjs
 import { ProfileType, JobType, SeniorityLevel, PropertyType, SupportNeed, AgentType, AccountType } from '@pivota-api/constants';
 import { BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
 import { PhoneUtils, StringUtils } from '@pivota-api/utils';
-import { BusinessProfileType, createBusinessProfile } from '../../utils/business-profiles-creator.utils';
 import { QueueService } from '@pivota-api/shared-redis';
+import { StorageService } from '@pivota-api/shared-storage';
 
 
 // ==================== Type Definitions ====================
@@ -137,6 +137,7 @@ export class UserService implements OnModuleInit {
   private rbacGrpc: RbacServiceGrpc;
   private subscriptionGrpc: SubscriptionServiceGrpc;
   private plansGrpc: PlansServiceGrpc;
+  private readonly storageService: StorageService;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -644,8 +645,8 @@ async createIndividualAccountWithProfiles(
         this.plansGrpc.GetPlanIdBySlug({ slug: targetPlanSlug }).pipe(
           timeout(5000),
           catchError((err) => {
-            this.logger.error(`❌ Plans service error: ${err.message}`);
-            return throwError(() => new Error('Plans service unavailable'));
+            this.logger.error(`❌ Admin service error: ${err.message}`);
+            return throwError(() => new Error('Admin service unavailable'));
           })
         )
       ),
@@ -793,6 +794,30 @@ async createIndividualAccountWithProfiles(
         'Account created. Payment required.',
         'PAYMENT_REQUIRED'
       );
+    }
+
+    // ============ STEP 7: QUEUE PROFILE PICTURE DOWNLOAD (if provided) ============
+    if (data.profileImage && data.profileImage.startsWith('https://lh3.googleusercontent.com/')) {
+      this.logger.log(`📸 Queuing profile picture download for user: ${userUuid}`);
+      
+      await this.queue.addJob(
+        'profile-queue',
+        'download-profile-picture',
+        {
+          userUuid: userUuid,
+          pictureUrl: data.profileImage,
+          email: normalizedEmail,
+          firstName: data.firstName,
+          lastName: data.lastName,
+        },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: true,
+          removeOnFail: false,
+        }
+      );
+      this.logger.log(`✅ Queued profile picture download for user: ${userUuid}`);
     }
     
     return BaseResponseDto.ok(

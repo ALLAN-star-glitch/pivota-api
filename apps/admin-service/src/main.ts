@@ -46,7 +46,7 @@ async function bootstrap() {
     options: { 
       package: 'subscriptions',
       protoPath: SUBSCRIPTIONS_PROTO_PATH,
-      url: '0.0.0.0:50040',
+      url: process.env.SUBSCRIPTIONS_GRPC_URL || '0.0.0.0:50040',
     },
   }); 
 
