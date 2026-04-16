@@ -95,6 +95,12 @@ async function bootstrap() {
   customSiteTitle: 'Pivota API Docs',
 });
 
+ const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.get('/api-json', (req, res) => {
+    res.json(document);
+  });
+  logger.log('📄 OpenAPI JSON available at /api-json');
+
   const port = configService.get<number>('API_GATEWAY_PORT') || 3000;
   
   logger.log(`📖 Swagger docs available at http://localhost:${port}`);

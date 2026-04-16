@@ -1,0 +1,26 @@
+# redocly.yml - CORRECT STRUCTURE
+extends:
+  - recommended
+
+# Theme configuration goes at the root level
+theme:
+  openapi:
+    theme:
+      colors:
+        primary:
+          main: '#0F52BA'  # Sapphire
+        secondary:
+          main: '#E2725B'  # Terracotta
+        success:
+          main: '#FFD700'  # Golden Yellow
+        error:
+          main: '#FF0000'  # Red
+      sidebar:
+        backgroundColor: '#F5F2EB'  # Soft Sand
+        textColor: '#0F52BA'
+        activeBgColor: '#E2725B'
+      rightPanel:
+        backgroundColor: '#808080'  # Grey
+        textColor: '#F5F2EB'
+
+# Remove any custom rules like path-excludes-patterns unless you have plugins

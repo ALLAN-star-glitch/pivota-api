@@ -1,24 +1,10 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import { AuthClientInfoDto } from '@pivota-api/dtos';
 import * as requestIp from 'request-ip';
 import * as UAParser from 'ua-parser-js';
 
-export interface ClientInfoDto {
-  ipAddress: string;
-  userAgent: string;
-  device: string;
-  deviceType: 'MOBILE' | 'TABLET' | 'DESKTOP' | 'BOT' | 'UNKNOWN';
-  os: string;
-  osVersion?: string;
-  browser?: string;
-  browserVersion?: string;
-  isMobile: boolean;
-  isTablet: boolean;
-  isDesktop: boolean;
-  isBot: boolean;
-}
-
 export const ClientInfo = createParamDecorator(
-  (data: unknown, ctx: ExecutionContext): ClientInfoDto => {
+  (data: unknown, ctx: ExecutionContext): AuthClientInfoDto => {
     const request = ctx.switchToHttp().getRequest();
 
     // IP extraction
@@ -33,7 +19,7 @@ export const ClientInfo = createParamDecorator(
     const parser = new UAParser.UAParser(userAgent);
     const uaResult = parser.getResult();
     
-    // Enhanced browser detection for Chrome
+    // Enhanced browser detection
     let browserName = uaResult.browser.name;
     let browserVersion = uaResult.browser.version;
     
@@ -73,6 +59,9 @@ export const ClientInfo = createParamDecorator(
       }
     }
 
+    // Android app detection (OkHttp, Retrofit, or custom Android app)
+    const isAndroidApp = /okhttp|retrofit|android|nativeapp/i.test(userAgent);
+    
     // Get device info from headers or parse
     const deviceHeader = request.headers['x-device'] || '';
     const osHeader = request.headers['x-os'] || '';
@@ -91,46 +80,147 @@ export const ClientInfo = createParamDecorator(
       deviceType = 'BOT';
       isBot = true;
     } else {
-      const deviceTypeHeader = request.headers['x-device-type'] || '';
+      // ✅ PRIORITY 1: Check custom headers FIRST (most reliable)
+      const deviceTypeHeader = request.headers['x-device-type'];
+      const isTabletHeader = request.headers['x-is-tablet'];
+      const isMobileHeader = request.headers['x-is-mobile'];
       
       if (deviceTypeHeader) {
-        deviceType = deviceTypeHeader.toUpperCase() as any;
+        // Use explicit device type from client
+        const headerValue = deviceTypeHeader.toString().toUpperCase();
+        deviceType = headerValue as any;
         isMobile = deviceType === 'MOBILE';
         isTablet = deviceType === 'TABLET';
         isDesktop = deviceType === 'DESKTOP';
-      } else {
+        
+        console.log(`✅ Using header device type: ${deviceType}`);
+      } 
+      else if (isTabletHeader !== undefined) {
+        // Use explicit isTablet boolean
+        isTablet = isTabletHeader === 'true';
+        isMobile = !isTablet;
+        deviceType = isTablet ? 'TABLET' : 'MOBILE';
+        
+        console.log(`✅ Using isTablet header: ${isTablet}`);
+      }
+      else if (isMobileHeader !== undefined) {
+        // Use explicit isMobile boolean
+        isMobile = isMobileHeader === 'true';
+        isTablet = !isMobile;
+        deviceType = isMobile ? 'MOBILE' : 'TABLET';
+        
+        console.log(`✅ Using isMobile header: ${isMobile}`);
+      }
+      else if (isAndroidApp) {
+        // Only fall back to Android app detection if no device type headers
+        deviceType = 'MOBILE';
+        isMobile = true;
+        
+        console.log(`⚠️ No device headers, defaulting Android app to MOBILE`);
+      } 
+      else {
+        // ✅ PRIORITY 2: Fall back to UA parsing for web browsers
         const device = uaResult.device;
         
-        if (device.type === 'mobile') {
+        // Special handling for Android emulators (often misidentified)
+        const isEmulator = userAgent.includes('Android') && 
+                          (userAgent.includes('sdk_gphone') || 
+                           userAgent.includes('Generic') || 
+                           userAgent.includes('Emulator') ||
+                           userAgent.includes('Ranchu'));
+        
+        if (isEmulator) {
+          // Emulators are typically phones, not tablets
           deviceType = 'MOBILE';
           isMobile = true;
-        } else if (device.type === 'tablet') {
+          console.log(`📱 Detected emulator, setting as MOBILE`);
+        }
+        else if (device.type === 'mobile') {
+          deviceType = 'MOBILE';
+          isMobile = true;
+          console.log(`📱 UA detected as MOBILE`);
+        } 
+        else if (device.type === 'tablet') {
           deviceType = 'TABLET';
           isTablet = true;
-        } else {
+          console.log(`📱 UA detected as TABLET`);
+        } 
+        else {
           // Check user agent for mobile indicators
           if (/mobile|iphone|ipod|android|blackberry|opera mini|iemobile|wpdesktop/i.test(userAgent)) {
             deviceType = 'MOBILE';
             isMobile = true;
+            console.log(`📱 UA regex detected as MOBILE`);
           } else {
             deviceType = 'DESKTOP';
             isDesktop = true;
+            console.log(`💻 Detected as DESKTOP`);
           }
         }
       }
     }
     
+    // ✅ Android app override: trust client headers completely if present
+    const deviceTypeHeader = request.headers['x-device-type'];
+    if (isAndroidApp && deviceTypeHeader) {
+      const forcedDeviceType = deviceTypeHeader.toString().toUpperCase();
+      deviceType = forcedDeviceType as any;
+      isMobile = forcedDeviceType === 'MOBILE';
+      isTablet = forcedDeviceType === 'TABLET';
+      isDesktop = forcedDeviceType === 'DESKTOP';
+      
+      console.log(`🤖 Android app override: forcing ${forcedDeviceType}`);
+    }
+    
     // Get device name
-    const device = deviceHeader 
+    let device = deviceHeader 
       || uaResult.device.model 
       || (deviceType === 'MOBILE' ? 'Mobile Device' 
           : deviceType === 'TABLET' ? 'Tablet' 
           : deviceType === 'DESKTOP' ? 'Computer' 
           : 'Unknown Device');
     
-    // Get OS info
-    const os = osHeader || uaResult.os.name || 'Unknown OS';
-    const osVersion = osVersionHeader || uaResult.os.version || undefined;
+    // Override device name for Android apps
+    if (isAndroidApp) {
+      if (isTablet) {
+        device = deviceHeader || 'Android Tablet';
+      } else if (isMobile) {
+        device = deviceHeader || 'Android Phone';
+      }
+    }
+    
+    // Get OS info - prioritize Android for apps
+    let os = osHeader || uaResult.os.name || 'Unknown OS';
+    let osVersion = osVersionHeader || uaResult.os.version || undefined;
+    
+    // If it's an Android app but OS wasn't detected, set it
+    if (isAndroidApp && os === 'Unknown OS') {
+      os = 'Android';
+      // Try to extract Android version from user agent
+      const androidVersionMatch = userAgent.match(/Android\s([0-9.]+)/);
+      if (androidVersionMatch && !osVersion) {
+        osVersion = androidVersionMatch[1];
+      }
+    }
+
+    // For Android apps, set browser to 'Native App' if no browser detected
+    if (isAndroidApp && (!browserName || browserName === 'Unknown')) {
+      browserName = 'Native App';
+    }
+
+    // Comprehensive debug logging
+    console.log(`📊 Client Info Summary:`, {
+      deviceType,
+      isTablet,
+      isMobile,
+      isAndroidApp,
+      device,
+      os,
+      browser: browserName,
+      hasDeviceTypeHeader: !!request.headers['x-device-type'],
+      hasIsTabletHeader: !!request.headers['x-is-tablet'],
+      userAgentPreview: userAgent.substring(0, 100)
+    });
 
     return {
       ipAddress: ip,
@@ -141,7 +231,6 @@ export const ClientInfo = createParamDecorator(
       osVersion,
       browser: browserName || 'Unknown',
       browserVersion: browserVersion || undefined,
-      isMobile,
       isTablet,
       isDesktop,
       isBot,

@@ -75,4 +75,30 @@ export class AuthClientInfoDto {
   @IsOptional()
   @IsBoolean()
   isBot?: boolean;
+
+  // ========== MISSING PROPERTIES TO ADD ==========
+
+  @ApiPropertyOptional({
+    description: 'Whether the client is a mobile device',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  isMobile?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether the client is a tablet device',
+    example: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  isTablet?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether the client is a desktop device',
+    example: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  isDesktop?: boolean;
 }

@@ -8,9 +8,9 @@ import {
   Res,
   UseGuards,
   Req,
-  Get,
+  Get, 
   Query,
-  Delete,
+  Delete, 
   UseInterceptors, 
 } from '@nestjs/common';
 import { Response } from 'express';
@@ -54,7 +54,6 @@ import { Public } from '../../decorators/public.decorator';
 import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
 import { ThrottlerGuard, Throttle} from '@nestjs/throttler';
 import { Headers } from '@nestjs/common';
-import { OtpPurpose, OtpPurposeEnum } from '@pivota-api/shared-redis';
 import { TimeoutInterceptor } from '@pivota-api/interceptors';
 
 @ApiTags('Auth')
