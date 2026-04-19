@@ -121,4 +121,52 @@ export class StorageService {
       throw new InternalServerErrorException('Could not generate secure link');
     }
   }
+
+
+  // Add this method to StorageService
+
+/**
+ * Downloads a file from a bucket
+ * @param path - File path in the bucket
+ * @param bucketName - Name of the bucket
+ * @returns File buffer and metadata
+ */
+async downloadFile(
+  path: string, 
+  bucketName = 'pivota-public'
+): Promise<{ data: Buffer; mimeType: string; fileName: string }> {
+  try {
+    // If path is a full URL, extract the path
+    let filePath = path;
+    if (path.startsWith('http')) {
+      const parts = path.split(`${bucketName}/`);
+      filePath = parts.length > 1 ? parts[1] : path;
+    }
+
+    const { data, error } = await this.supabase.storage
+      .from(bucketName)
+      .download(filePath);
+
+    if (error) {
+      this.logger.error(`Supabase download failed: ${error.message}`);
+      throw error;
+    }
+
+    // Convert Blob to Buffer
+    const buffer = Buffer.from(await data.arrayBuffer());
+    
+    // Extract file name from path
+    const fileName = filePath.split('/').pop() || 'download';
+
+    return {
+      data: buffer,
+      mimeType: data.type,
+      fileName,
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown download error';
+    this.logger.error(`Download Error: ${errorMessage}`);
+    throw new Error(`Could not download file: ${errorMessage}`);
+  }
+}
 }

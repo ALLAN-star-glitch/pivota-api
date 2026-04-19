@@ -1164,99 +1164,88 @@ async login(
 
 
   // ------------------ Refresh Token ------------------
-  async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>> {
-    if (!refreshToken) throw new UnauthorizedException('Refresh token is required');
+async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>> {
+  if (!refreshToken) throw new UnauthorizedException('Refresh token is required');
 
-    try {
-      // 1. Verify the JWT integrity and expiration
-      const payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken);
-      
-      // 2. Database Lookup: Find all active sessions for this user
-      const sessions = await this.prisma.session.findMany({
-        where: { 
-          userUuid: payload.userUuid, 
-          revoked: false,
-          expiresAt: { gt: new Date() } // Ensure session hasn't naturally expired in DB
-        },
-      });
+  try {
+    // 1. Verify the JWT integrity and expiration
+    const payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken);
+    
+    // 2. Database Lookup: Find all active sessions for this user
+    const sessions = await this.prisma.session.findMany({
+      where: { 
+        userUuid: payload.userUuid, 
+        revoked: false,
+        expiresAt: { gt: new Date() }
+      },
+    });
 
-      // 3. Verify the hashed token matches the one in our database
-      const validSession = sessions.find((s) => bcrypt.compareSync(refreshToken, s.hashedToken));
-      
-      if (!validSession) {
-        this.logger.warn(`[AUTH] Refresh attempt with invalid/revoked token for user: ${payload.userUuid}`);
-        throw new UnauthorizedException('Invalid or revoked refresh token');
-      }
-
-      // 4. Update the "Last Active" timestamp for the current session
-      // This confirms the user is still active on this specific device/connection
-      await this.prisma.session.update({
-        where: { id: validSession.id },
-        data: { lastActiveAt: new Date() }
-      });
-
-      // 5. Fetch fresh user profile details via gRPC
-      const userGrpcService = this.getProfileGrpcService();
-      const profileResponse = await firstValueFrom(
-        userGrpcService.getUserProfileByUuid({ userUuid: payload.userUuid })
-      );
-
-      if (!profileResponse?.success || !profileResponse.data) {
-        throw new UnauthorizedException('User profile no longer exists');
-      }
-
-      // 6. Issue a New Token Pair
-      // Pass the existing session context (device, ip, etc.) to the new session record
-      const tokens = await this.generateTokens(
-        profileResponse.data,
-        {
-          device: validSession.device,
-          ipAddress: validSession.ipAddress,
-          userAgent: validSession.userAgent,
-          os: validSession.os
-        }
-      );
-
-      // 7. Revoke the old session used for this refresh (Token Rotation)
-      // This prevents the same refresh token from being used multiple times
-      await this.prisma.session.update({
-        where: { id: validSession.id },
-        data: { revoked: true }
-      });
-
-      return {
-        success: true,
-        message: 'Tokens refreshed successfully',
-        code: 'OK',
-        data: tokens, // Standardized to 'data' to match your other DTOs
-        error: null,
-      } as BaseResponseDto<TokenPairDto>;
-
-    } catch (err: unknown) {
-      this.logger.error(`[AUTH] Refresh Token Error: ${err instanceof Error ? err.message : 'Unknown'}`);
-      
-      if (err instanceof UnauthorizedException) {
-        return {
-          success: false,
-          message: err.message,
-          code: 'UNAUTHORIZED',
-          data: null as any,
-          error: { code: 'AUTH_FAILURE', message: err.message }
-        } as BaseResponseDto<TokenPairDto>;
-      }
-
-      return {
-        success: false,
-        message: 'Token refresh failed due to a system error',
-        code: 'INTERNAL',
-        data: null as any,
-        error: { 
-          code: 'INTERNAL', 
-          message: err instanceof Error ? err.message : 'Refresh failed' 
-        },
-      } as BaseResponseDto<TokenPairDto>;
+    // 3. Verify the hashed token matches the one in our database
+    const validSession = sessions.find((s) => bcrypt.compareSync(refreshToken, s.hashedToken));
+    
+    if (!validSession) {
+      this.logger.warn(`[AUTH] Refresh attempt with invalid/revoked token for user: ${payload.userUuid}`);
+      throw new UnauthorizedException('Invalid or revoked refresh token');
     }
+
+    // 4. Update the "Last Active" timestamp for the current session
+    await this.prisma.session.update({
+      where: { id: validSession.id },
+      data: { lastActiveAt: new Date() }
+    });
+
+    // 5. Fetch fresh user profile details via gRPC
+    const userGrpcService = this.getProfileGrpcService();
+    const profileResponse = await firstValueFrom(
+      userGrpcService.getUserProfileByUuid({ userUuid: payload.userUuid })
+    );
+
+    if (!profileResponse?.success || !profileResponse.data) {
+      throw new UnauthorizedException('User profile no longer exists');
+    }
+
+    // 6. Issue a New Token Pair
+    const tokens = await this.generateTokens(
+      profileResponse.data,
+      {
+        device: validSession.device,
+        ipAddress: validSession.ipAddress,
+        userAgent: validSession.userAgent,
+        os: validSession.os
+      }
+    );
+
+    // 7. Revoke the old session used for this refresh (Token Rotation)
+    await this.prisma.session.update({
+      where: { id: validSession.id },
+      data: { revoked: true }
+    });
+
+    // ✅ FIXED: Return using BaseResponseDto.ok() method for consistency
+    return BaseResponseDto.ok(
+      tokens,
+      'Tokens refreshed successfully',
+      'OK'
+    );
+
+  } catch (err: unknown) {
+    this.logger.error(`[AUTH] Refresh Token Error: ${err instanceof Error ? err.message : 'Unknown'}`);
+    
+    if (err instanceof UnauthorizedException) {
+      return BaseResponseDto.fail(
+        err.message,
+        'UNAUTHORIZED',
+        { code: 'AUTH_FAILURE', message: err.message }
+      );
+    }
+
+    return BaseResponseDto.fail(
+      'Token refresh failed due to a system error',
+      'INTERNAL_ERROR',
+      { code: 'INTERNAL', message: err instanceof Error ? err.message : 'Refresh failed' }
+    );
   }
+}
 
 async signInWithGoogle(
   clientInfo?: AuthClientInfoDto,

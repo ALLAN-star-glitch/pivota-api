@@ -43,3 +43,32 @@ export const documentFileFilter = (
   }
   callback(null, true);
 };
+
+export const portfolioFileFilter = (
+  _req: Request, 
+  file: Express.Multer.File, 
+  callback: FileFilterCallback
+): void => {
+  // Allowed MIME types for portfolio items (images + documents)
+  const allowedMimeTypes = [
+    // Images
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    // Documents
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ];
+  
+  // Allowed extensions as fallback
+  const allowedExtensions = /\.(jpg|jpeg|png|webp|pdf|doc|docx)$/i;
+  
+  if (!allowedMimeTypes.includes(file.mimetype) && !allowedExtensions.test(file.originalname)) {
+    return callback(
+      new BadRequestException('Only images (JPG, PNG, WEBP) and documents (PDF, DOC, DOCX) are allowed for portfolio items.'),
+      false,
+    );
+  }
+  callback(null, true);
+};

@@ -15,8 +15,10 @@ import {
   Version,
   Logger,
   HttpStatus,
+  Res,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -29,8 +31,15 @@ import {
 import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
 import { JwtRequest } from '@pivota-api/interfaces';
 import { BaseResponseDto } from '@pivota-api/dtos';
-import { imageFileFilter, documentFileFilter } from '@pivota-api/filters';
-import { MediaService, MediaUploadMultipleResponseDto, MediaUploadResponseDto } from '../services/media.service';
+import { imageFileFilter, documentFileFilter, portfolioFileFilter } from '@pivota-api/filters';
+import { 
+  MediaService, 
+  MediaUploadResponseDto, 
+  MediaUploadMultipleResponseDto,
+  PortfolioResponseDto,
+  PortfolioItemDto,
+  CertificationResponseDto,
+} from '../services/media.service';
 
 @ApiTags('Profile Media')
 @ApiBearerAuth()
@@ -186,19 +195,65 @@ export class MediaController {
   }
 
   // ===========================================================
+  // CV RETRIEVAL
+  // ===========================================================
+
+  @Get('cv')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Get CV signed URL',
+    description: 'Get a signed URL for the authenticated user\'s CV document (valid for 1 hour)'
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'CV retrieved successfully'
+  })
+  async getCV(
+    @Req() req: JwtRequest
+  ): Promise<BaseResponseDto<{ url: string; fileName: string }>> {
+    const response = await this.mediaService.getCV(req);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  @Get('cv/download')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Download CV/Resume',
+    description: 'Download the CV document for the authenticated user'
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'CV downloaded successfully'
+  })
+  async downloadCV(
+    @Req() req: JwtRequest,
+    @Res() res: Response
+  ): Promise<void> {
+    const response = await this.mediaService.downloadCV(req);
+    if (!response.success) throw response;
+    
+    const { buffer, mimeType, fileName } = response.data;
+    
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  }
+
+  // ===========================================================
   // JOB SEEKER PORTFOLIO
   // ===========================================================
 
   @Post('portfolio/job-seeker')
   @Version('1')
-  @UseInterceptors(FilesInterceptor('files', 10, {
-    fileFilter: imageFileFilter,
+  @UseInterceptors(FilesInterceptor('files', 5, {
+    fileFilter: portfolioFileFilter,
     limits: { fileSize: 5 * 1024 * 1024 }
   }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ 
-    summary: 'Upload job seeker portfolio images',
-    description: 'Upload up to 10 portfolio images for job seeker profile (max 5MB each)'
+    summary: 'Upload job seeker portfolio items',
+    description: 'Upload up to 5 portfolio items for job seeker profile (max 5MB each)'
   })
   @ApiBody({
     schema: {
@@ -207,20 +262,20 @@ export class MediaController {
         files: { 
           type: 'array', 
           items: { type: 'string', format: 'binary' },
-          description: 'Portfolio images for job seeker'
+          description: 'Portfolio items (images or documents)'
         }
       }
     }
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Job seeker portfolio images uploaded successfully'
+    description: 'Job seeker portfolio items uploaded successfully'
   })
   async uploadJobSeekerPortfolio(
     @UploadedFiles() files: Express.Multer.File[],
     @Req() req: JwtRequest
   ): Promise<BaseResponseDto<MediaUploadMultipleResponseDto>> {
-    const response = await this.mediaService.uploadJobSeekerPortfolioImages(files, req);
+    const response = await this.mediaService.uploadJobSeekerPortfolioItems(files, req);
     if (!response.success) throw response;
     return response;
   }
@@ -228,43 +283,124 @@ export class MediaController {
   @Get('portfolio/job-seeker')
   @Version('1')
   @ApiOperation({ 
-    summary: 'Get job seeker portfolio images',
-    description: 'Get all portfolio images for job seeker profile'
+    summary: 'Get all job seeker portfolio items',
+    description: 'Get all portfolio items for job seeker profile'
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Portfolio images retrieved successfully'
+    description: 'Portfolio items retrieved successfully'
   })
-  async getJobSeekerPortfolio(
+  async getAllJobSeekerPortfolio(
     @Req() req: JwtRequest
-  ): Promise<BaseResponseDto<{ urls: string[] }>> {
-    const response = await this.mediaService.getJobSeekerPortfolioImages(req);
+  ): Promise<BaseResponseDto<PortfolioResponseDto>> {
+    const response = await this.mediaService.getJobSeekerPortfolioItems(req);
     if (!response.success) throw response;
     return response;
   }
 
-  @Delete('portfolio/job-seeker/:imageUrl')
+  @Get('portfolio/job-seeker/:itemUrl')
   @Version('1')
   @ApiOperation({ 
-    summary: 'Delete job seeker portfolio image',
-    description: 'Delete a specific portfolio image from job seeker profile'
+    summary: 'Get a specific job seeker portfolio item',
+    description: 'Get a specific portfolio item from job seeker profile'
   })
   @ApiParam({ 
-    name: 'imageUrl', 
-    description: 'URL of the image to delete (URL encoded)',
-    example: 'https%3A%2F%2Fcdn.pivota.com%2Fportfolio%2Faccount-123%2Fimage.jpg'
+    name: 'itemUrl', 
+    description: 'URL of the item to retrieve (URL encoded)',
+    example: 'https%3A%2F%2Fcdn.pivota.com%2Fportfolio%2Faccount-123%2Ffile.jpg'
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Portfolio image deleted successfully'
+    description: 'Portfolio item retrieved successfully'
   })
-  async deleteJobSeekerPortfolioImage(
-    @Param('imageUrl') imageUrl: string,
+  async getJobSeekerPortfolioItem(
+    @Param('itemUrl') itemUrl: string,
+    @Req() req: JwtRequest
+  ): Promise<BaseResponseDto<PortfolioItemDto>> {
+    const decodedUrl = decodeURIComponent(itemUrl);
+    const response = await this.mediaService.getJobSeekerPortfolioItem(decodedUrl, req);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  @Get('portfolio/job-seeker/path/:path')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Get job seeker portfolio item by path',
+    description: 'Get a specific portfolio item from job seeker profile using its path'
+  })
+  @ApiParam({ 
+    name: 'path', 
+    description: 'Path of the item to retrieve (URL encoded)',
+    example: 'portfolio%2Faccount-123%2Ffile.jpg'
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Portfolio item retrieved successfully'
+  })
+  async getJobSeekerPortfolioItemByPath(
+    @Param('path') path: string,
+    @Req() req: JwtRequest
+  ): Promise<BaseResponseDto<PortfolioItemDto>> {
+    const decodedPath = decodeURIComponent(path);
+    const response = await this.mediaService.getJobSeekerPortfolioItemByPath(decodedPath, req);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  @Delete('portfolio/job-seeker/:itemUrl')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Delete job seeker portfolio item',
+    description: 'Delete a specific portfolio item from job seeker profile'
+  })
+  @ApiParam({ 
+    name: 'itemUrl', 
+    description: 'URL of the item to delete (URL encoded)',
+    example: 'https%3A%2F%2Fcdn.pivota.com%2Fportfolio%2Faccount-123%2Ffile.jpg'
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Portfolio item deleted successfully'
+  })
+  async deleteJobSeekerPortfolioItem(
+    @Param('itemUrl') itemUrl: string,
     @Req() req: JwtRequest
   ): Promise<BaseResponseDto<null>> {
-    // Decode the URL parameter
-    const decodedUrl = decodeURIComponent(imageUrl);
-    const response = await this.mediaService.deleteJobSeekerPortfolioImage(decodedUrl, req);
+    const decodedUrl = decodeURIComponent(itemUrl);
+    const response = await this.mediaService.deleteJobSeekerPortfolioItem(decodedUrl, req);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  @Delete('portfolio/job-seeker/bulk')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Bulk delete job seeker portfolio items',
+    description: 'Delete multiple portfolio items from job seeker profile'
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['itemUrls'],
+      properties: {
+        itemUrls: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of item URLs to delete'
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Portfolio items deleted successfully'
+  })
+  async bulkDeleteJobSeekerPortfolioItems(
+    @Body() data: { itemUrls: string[] },
+    @Req() req: JwtRequest
+  ): Promise<BaseResponseDto<null>> {
+    const response = await this.mediaService.bulkDeleteJobSeekerPortfolioItems(data.itemUrls, req);
     if (!response.success) throw response;
     return response;
   }
@@ -275,14 +411,14 @@ export class MediaController {
 
   @Post('portfolio/skilled-professional')
   @Version('1')
-  @UseInterceptors(FilesInterceptor('files', 10, {
-    fileFilter: imageFileFilter,
+  @UseInterceptors(FilesInterceptor('files', 5, {
+    fileFilter: portfolioFileFilter,
     limits: { fileSize: 5 * 1024 * 1024 }
   }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ 
-    summary: 'Upload skilled professional portfolio images',
-    description: 'Upload up to 10 portfolio images for skilled professional profile (max 5MB each)'
+    summary: 'Upload skilled professional portfolio items',
+    description: 'Upload up to 5 portfolio items for skilled professional profile (max 5MB each)'
   })
   @ApiBody({
     schema: {
@@ -291,20 +427,20 @@ export class MediaController {
         files: { 
           type: 'array', 
           items: { type: 'string', format: 'binary' },
-          description: 'Portfolio images for skilled professional'
+          description: 'Portfolio items (images or documents)'
         }
       }
     }
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Skilled professional portfolio images uploaded successfully'
+    description: 'Skilled professional portfolio items uploaded successfully'
   })
   async uploadSkilledProfessionalPortfolio(
     @UploadedFiles() files: Express.Multer.File[],
     @Req() req: JwtRequest
   ): Promise<BaseResponseDto<MediaUploadMultipleResponseDto>> {
-    const response = await this.mediaService.uploadSkilledProfessionalPortfolioImages(files, req);
+    const response = await this.mediaService.uploadSkilledProfessionalPortfolioItems(files, req);
     if (!response.success) throw response;
     return response;
   }
@@ -312,42 +448,124 @@ export class MediaController {
   @Get('portfolio/skilled-professional')
   @Version('1')
   @ApiOperation({ 
-    summary: 'Get skilled professional portfolio images',
-    description: 'Get all portfolio images for skilled professional profile'
+    summary: 'Get all skilled professional portfolio items',
+    description: 'Get all portfolio items for skilled professional profile'
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Portfolio images retrieved successfully'
+    description: 'Portfolio items retrieved successfully'
   })
-  async getSkilledProfessionalPortfolio(
+  async getAllSkilledProfessionalPortfolio(
     @Req() req: JwtRequest
-  ): Promise<BaseResponseDto<{ urls: string[] }>> {
-    const response = await this.mediaService.getSkilledProfessionalPortfolioImages(req);
+  ): Promise<BaseResponseDto<PortfolioResponseDto>> {
+    const response = await this.mediaService.getSkilledProfessionalPortfolioItems(req);
     if (!response.success) throw response;
     return response;
   }
 
-  @Delete('portfolio/skilled-professional/:imageUrl')
+  @Get('portfolio/skilled-professional/:itemUrl')
   @Version('1')
   @ApiOperation({ 
-    summary: 'Delete skilled professional portfolio image',
-    description: 'Delete a specific portfolio image from skilled professional profile'
+    summary: 'Get a specific skilled professional portfolio item',
+    description: 'Get a specific portfolio item from skilled professional profile'
   })
   @ApiParam({ 
-    name: 'imageUrl', 
-    description: 'URL of the image to delete (URL encoded)',
-    example: 'https%3A%2F%2Fcdn.pivota.com%2Fportfolio%2Faccount-123%2Fimage.jpg'
+    name: 'itemUrl', 
+    description: 'URL of the item to retrieve (URL encoded)',
+    example: 'https%3A%2F%2Fcdn.pivota.com%2Fportfolio%2Faccount-123%2Ffile.jpg'
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Portfolio image deleted successfully'
+    description: 'Portfolio item retrieved successfully'
   })
-  async deleteSkilledProfessionalPortfolioImage(
-    @Param('imageUrl') imageUrl: string,
+  async getSkilledProfessionalPortfolioItem(
+    @Param('itemUrl') itemUrl: string,
+    @Req() req: JwtRequest
+  ): Promise<BaseResponseDto<PortfolioItemDto>> {
+    const decodedUrl = decodeURIComponent(itemUrl);
+    const response = await this.mediaService.getSkilledProfessionalPortfolioItem(decodedUrl, req);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  @Get('portfolio/skilled-professional/path/:path')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Get skilled professional portfolio item by path',
+    description: 'Get a specific portfolio item from skilled professional profile using its path'
+  })
+  @ApiParam({ 
+    name: 'path', 
+    description: 'Path of the item to retrieve (URL encoded)',
+    example: 'portfolio%2Faccount-123%2Ffile.jpg'
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Portfolio item retrieved successfully'
+  })
+  async getSkilledProfessionalPortfolioItemByPath(
+    @Param('path') path: string,
+    @Req() req: JwtRequest
+  ): Promise<BaseResponseDto<PortfolioItemDto>> {
+    const decodedPath = decodeURIComponent(path);
+    const response = await this.mediaService.getSkilledProfessionalPortfolioItemByPath(decodedPath, req);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  @Delete('portfolio/skilled-professional/:itemUrl')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Delete skilled professional portfolio item',
+    description: 'Delete a specific portfolio item from skilled professional profile'
+  })
+  @ApiParam({ 
+    name: 'itemUrl', 
+    description: 'URL of the item to delete (URL encoded)',
+    example: 'https%3A%2F%2Fcdn.pivota.com%2Fportfolio%2Faccount-123%2Ffile.jpg'
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Portfolio item deleted successfully'
+  })
+  async deleteSkilledProfessionalPortfolioItem(
+    @Param('itemUrl') itemUrl: string,
     @Req() req: JwtRequest
   ): Promise<BaseResponseDto<null>> {
-    const decodedUrl = decodeURIComponent(imageUrl);
-    const response = await this.mediaService.deleteSkilledProfessionalPortfolioImage(decodedUrl, req);
+    const decodedUrl = decodeURIComponent(itemUrl);
+    const response = await this.mediaService.deleteSkilledProfessionalPortfolioItem(decodedUrl, req);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  @Delete('portfolio/skilled-professional/bulk')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Bulk delete skilled professional portfolio items',
+    description: 'Delete multiple portfolio items from skilled professional profile'
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['itemUrls'],
+      properties: {
+        itemUrls: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of item URLs to delete'
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Portfolio items deleted successfully'
+  })
+  async bulkDeleteSkilledProfessionalPortfolioItems(
+    @Body() data: { itemUrls: string[] },
+    @Req() req: JwtRequest
+  ): Promise<BaseResponseDto<null>> {
+    const response = await this.mediaService.bulkDeleteSkilledProfessionalPortfolioItems(data.itemUrls, req);
     if (!response.success) throw response;
     return response;
   }
@@ -395,45 +613,257 @@ export class MediaController {
   @Get('certifications')
   @Version('1')
   @ApiOperation({ 
-    summary: 'Get certifications',
+    summary: 'Get all certifications',
     description: 'Get all certification documents for skilled professional profile'
   })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Certifications retrieved successfully'
   })
-  async getCertifications(
+  async getAllCertifications(
     @Req() req: JwtRequest
-  ): Promise<BaseResponseDto<{ urls: string[] }>> {
+  ): Promise<BaseResponseDto<CertificationResponseDto>> {
     const response = await this.mediaService.getCertifications(req);
     if (!response.success) throw response;
     return response;
   }
 
-  @Delete('certifications/:certificationUrl')
+  @Get('certifications/path/:path')
   @Version('1')
   @ApiOperation({ 
-    summary: 'Delete certification',
-    description: 'Delete a specific certification document'
+    summary: 'Get certification by path',
+    description: 'Get a fresh signed URL for a certification using its stored path'
   })
   @ApiParam({ 
-    name: 'certificationUrl', 
-    description: 'URL of the certification to delete (URL encoded)',
-    example: 'https%3A%2F%2Fcdn.pivota-private.com%2Fcertifications%2Faccount-123%2Fcert.pdf'
+    name: 'path', 
+    description: 'Stored path of the certification (URL encoded)',
+    example: 'certifications%2Ff8d274ab-7720-4be1-9496-66b0db727193%2Ffile.pdf'
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Certification retrieved successfully'
+  })
+  async getCertificationByPath(
+    @Param('path') path: string,
+    @Req() req: JwtRequest
+  ): Promise<BaseResponseDto<{ url: string; path: string; fileName: string }>> {
+    const decodedPath = decodeURIComponent(path);
+    const response = await this.mediaService.getCertificationByPath(decodedPath, req);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  @Get('certifications/download/:path')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Download certification',
+    description: 'Download a specific certification document by its stored path'
+  })
+  @ApiParam({ 
+    name: 'path', 
+    description: 'Stored path of the certification to download (URL encoded)',
+    example: 'certifications%2Ff8d274ab-7720-4be1-9496-66b0db727193%2Ffile.pdf'
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Certification downloaded successfully'
+  })
+  async downloadCertificationByPath(
+    @Param('path') path: string,
+    @Req() req: JwtRequest,
+    @Res() res: Response
+  ): Promise<void> {
+    const decodedPath = decodeURIComponent(path);
+    const response = await this.mediaService.downloadCertificationByPath(decodedPath, req);
+    if (!response.success) throw response;
+    
+    const { buffer, mimeType, fileName } = response.data;
+    
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  }
+
+  @Delete('certifications/path/:path')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Delete certification by path',
+    description: 'Delete a specific certification document using its stored path'
+  })
+  @ApiParam({ 
+    name: 'path', 
+    description: 'Stored path of the certification to delete (URL encoded)',
+    example: 'certifications%2Ff8d274ab-7720-4be1-9496-66b0db727193%2Ffile.pdf'
   })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Certification deleted successfully'
   })
-  async deleteCertification(
-    @Param('certificationUrl') certificationUrl: string,
+  async deleteCertificationByPath(
+    @Param('path') path: string,
     @Req() req: JwtRequest
   ): Promise<BaseResponseDto<null>> {
-    const decodedUrl = decodeURIComponent(certificationUrl);
-    const response = await this.mediaService.deleteCertification(decodedUrl, req);
+    const decodedPath = decodeURIComponent(path);
+    const response = await this.mediaService.deleteCertificationByPath(decodedPath, req);
     if (!response.success) throw response;
     return response;
   }
+
+  @Delete('certifications/bulk')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Bulk delete certifications',
+    description: 'Delete multiple certification documents'
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['paths'],
+      properties: {
+        paths: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of certification paths to delete'
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Certifications deleted successfully'
+  })
+  async bulkDeleteCertificationsByPaths(
+    @Body() data: { paths: string[] },
+    @Req() req: JwtRequest
+  ): Promise<BaseResponseDto<null>> {
+    const response = await this.mediaService.bulkDeleteCertificationsByPaths(data.paths, req);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  @Post('certifications/bulk-download')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Bulk download certifications',
+    description: 'Download multiple certification documents as a ZIP file'
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['paths'],
+      properties: {
+        paths: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of certification paths to download'
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Certifications downloaded successfully'
+  })
+  async bulkDownloadCertifications(
+    @Body() data: { paths: string[] },
+    @Req() req: JwtRequest,
+    @Res() res: Response
+  ): Promise<void> {
+    const response = await this.mediaService.bulkDownloadCertifications(data.paths, req);
+    if (!response.success) throw response;
+    
+    const { buffer, fileName } = response.data;
+    
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  }
+
+
+
+  // ===========================================================
+// JOB SEEKER PORTFOLIO - BULK DOWNLOAD
+// ===========================================================
+
+@Post('portfolio/job-seeker/bulk-download')
+@Version('1')
+@ApiOperation({ 
+  summary: 'Bulk download job seeker portfolio items',
+  description: 'Download multiple portfolio items as a ZIP file'
+})
+@ApiBody({
+  schema: {
+    type: 'object',
+    required: ['itemUrls'],
+    properties: {
+      itemUrls: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Array of item URLs to download'
+      }
+    }
+  }
+})
+@ApiResponse({
+  status: HttpStatus.OK,
+  description: 'Portfolio items downloaded successfully'
+})
+async bulkDownloadJobSeekerPortfolioItems(
+  @Body() data: { itemUrls: string[] },
+  @Req() req: JwtRequest,
+  @Res() res: Response
+): Promise<void> {
+  const response = await this.mediaService.bulkDownloadJobSeekerPortfolioItems(data.itemUrls, req);
+  if (!response.success) throw response;
+  
+  const { buffer, fileName } = response.data;
+  
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.send(buffer);
+}
+
+// ===========================================================
+// SKILLED PROFESSIONAL PORTFOLIO - BULK DOWNLOAD
+// ===========================================================
+
+@Post('portfolio/skilled-professional/bulk-download')
+@Version('1')
+@ApiOperation({ 
+  summary: 'Bulk download skilled professional portfolio items',
+  description: 'Download multiple portfolio items as a ZIP file'
+})
+@ApiBody({
+  schema: {
+    type: 'object',
+    required: ['itemUrls'],
+    properties: {
+      itemUrls: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Array of item URLs to download'
+      }
+    }
+  }
+})
+@ApiResponse({
+  status: HttpStatus.OK,
+  description: 'Portfolio items downloaded successfully'
+})
+async bulkDownloadSkilledProfessionalPortfolioItems(
+  @Body() data: { itemUrls: string[] },
+  @Req() req: JwtRequest,
+  @Res() res: Response
+): Promise<void> {
+  const response = await this.mediaService.bulkDownloadSkilledProfessionalPortfolioItems(data.itemUrls, req);
+  if (!response.success) throw response;
+  
+  const { buffer, fileName } = response.data;
+  
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.send(buffer);
+}
 
   // ===========================================================
   // GENERIC FILE DELETE

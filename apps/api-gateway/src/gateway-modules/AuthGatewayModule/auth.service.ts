@@ -53,7 +53,7 @@ interface AuthServiceGrpc {
 
   refresh(
     data: { refreshToken: string }
-  ): Observable<BaseRefreshTokenResponseGrpc<TokenPairDto>>;
+  ): Observable<BaseResponseDto<TokenPairDto>>;
 
   logout(data: { userId: string }): Observable<{ message: string }>;
 
@@ -422,13 +422,13 @@ async googleLogin(
   async refresh(refreshToken: string, res: Response): Promise<BaseResponseDto<TokenPairDto>> {
     const refreshResp = await firstValueFrom(this.authGrpc.refresh({ refreshToken }));
 
-    if (!refreshResp.success || !refreshResp.tokens) {
+    if (!refreshResp.success || !refreshResp.data) {
         return BaseResponseDto.fail(refreshResp.message, refreshResp.code);
     }
 
-    this.setAuthCookies(res, refreshResp.tokens.accessToken, refreshResp.tokens.refreshToken);
+    this.setAuthCookies(res, refreshResp.data.accessToken, refreshResp.data.refreshToken);
 
-    return BaseResponseDto.ok(refreshResp.tokens, refreshResp.message, refreshResp.code);
+    return BaseResponseDto.ok(refreshResp.data, refreshResp.message, refreshResp.code);
   }
 
   /** ------------------ Logout (Enhanced) ------------------ */

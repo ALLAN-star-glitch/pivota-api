@@ -456,7 +456,7 @@ message BaseRefreshTokenResponse {
   bool success = 1;
   string message = 2;
   string code = 3;
-  RefreshTokenResponse tokens = 4;
+  RefreshTokenResponse data = 4;
   ErrorPayload error = 5;
 }
 
