@@ -430,7 +430,7 @@ export class UserService {
   async updateJobSeekerProfile(
     dto: UpdateJobSeekerGrpcRequestDto
   ): Promise<BaseResponseDto<JobSeekerProfileResponseDto>> {
-    this.logger.log(`Forwarding job seeker update for user: ${dto.userUuid}`);
+    this.logger.log(`Forwarding job seeker update for user: ${dto.accountUuid}`);
 
     try {
       const res = await firstValueFrom(this.grpcService.UpdateJobSeekerProfile(dto));
@@ -441,7 +441,7 @@ export class UserService {
 
       return BaseResponseDto.fail(res.message || 'Job profile update failed', res.code || 'INTERNAL_ERROR');
     } catch (err) {
-      this.logger.error(`gRPC Error updating job profile for ${dto.userUuid}`, err);
+      this.logger.error(`gRPC Error updating job profile for ${dto.accountUuid}`, err);
       return BaseResponseDto.fail('Profile service communication error', 'SERVICE_UNAVAILABLE');
     }
   }
@@ -592,34 +592,6 @@ export class UserService {
     } catch (err) {
       this.logger.error(`gRPC Error during provider onboarding for ${dto.userUuid}`, err);
       return BaseResponseDto.fail('Profile service communication error', 'SERVICE_UNAVAILABLE');
-    }
-  }
-
-  // ======================================================
-  // STORAGE UTILITY METHODS
-  // ======================================================
-  
-  async uploadToStorage(
-    file: Express.Multer.File, 
-    folder: string, 
-    bucketName = 'pivota-public'
-  ): Promise<string> {
-    return this.storage.uploadFile(file, folder, bucketName);
-  }
-
-  async deleteFromStorage(
-    urls: string[], 
-    bucketName = 'pivota-public'
-  ): Promise<void> {
-    if (!urls || urls.length === 0) return;
-
-    try {
-      this.logger.warn(`Initiating storage cleanup for ${urls.length} files in ${bucketName}`);
-      await this.storage.deleteFiles(urls, bucketName);
-    } catch (error) {
-      this.logger.error(
-        `Failed to clean up orphaned profile files: ${error instanceof Error ? error.message : 'Unknown Error'}`
-      );
     }
   }
 }

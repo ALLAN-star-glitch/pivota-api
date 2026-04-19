@@ -30,6 +30,12 @@ import {
   ProfileCompletionDto,
   mapIndividualPurposeToProfileType,
   ProfileToCreateDto,
+  UpdatePropertyOwnerGrpcRequestDto,
+  UpdateSupportBeneficiaryGrpcRequestDto,
+  UpdateHousingSeekerGrpcRequestDto,
+  UpdateIntermediaryAgentGrpcRequestDto,
+  UpdateSkilledProfessionalGrpcRequestDto,
+  UpdateJobSeekerGrpcRequestDto,
 } from '@pivota-api/dtos';
 import { 
   Prisma,
@@ -41,7 +47,10 @@ import {
   IntermediaryAgentProfile,
   IndividualProfile,
   User,
-  Account 
+  Account, 
+  BusinessType,
+  SearchType,
+  ListingType
 } from '../../../../generated/prisma/client';
 import { RpcException, ClientGrpc, ClientKafka } from '@nestjs/microservices';
 import { randomUUID } from 'crypto';
@@ -682,6 +691,8 @@ async createIndividualAccountWithProfiles(
           activeProfiles: '[]',
           isVerified: false,
           verifiedFeatures: StringUtils.stringifyJsonField([]),
+          isBusiness: data.isBusiness ?? false,
+          businessType: data.businessType ? (data.businessType as BusinessType) : null,
         },
       });
       this.logger.log(`✅ Account created: ${account.uuid}`);
@@ -706,6 +717,10 @@ async createIndividualAccountWithProfiles(
             firstName: data.firstName,
             lastName: data.lastName || '',
             profileImage: data.profileImage,
+            businessName: data.businessName ?? null,
+            logo: data.logo ?? null,
+            operatesAsBusiness: data.isBusiness ?? false,
+            coverPhoto: data.coverPhoto ?? null,
           },
         }),
       ]);
@@ -1036,7 +1051,7 @@ async createHousingSeekerProfile(
         searchRadiusKm: data.searchRadiusKm ?? 10,
         hasAgent: data.hasAgent ?? false,
         agentUuid: data.agentUuid,
-        searchType: data.searchType,                                    // ADD THIS
+        searchType: data.searchType ? (data.searchType as SearchType) : null,                                    // ADD THIS
         isLookingForRental: data.isLookingForRental ?? false,          // ADD THIS
         isLookingToBuy: data.isLookingToBuy ?? false,                  // ADD THIS
       }
@@ -1103,7 +1118,7 @@ async createHousingSeekerProfile(
         isVerifiedOwner: false,
         usesAgent: data.usesAgent ?? false,
         managingAgentUuid: data.managingAgentUuid,
-        listingType: data.listingType,                                // ADD THIS
+        listingType: data.listingType ? (data.listingType as ListingType) : null,                                // ADD THIS
         isListingForRent: data.isListingForRent ?? false,            // ADD THIS
         isListingForSale: data.isListingForSale ?? false,            // ADD THIS
       }
@@ -1361,6 +1376,10 @@ async getUserProfileByUuid(
           dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
           nationalId: dto.nationalId,
           profileImage: dto.profileImage,
+          businessName: dto.businessName,
+          logo: dto.logo,
+          operatesAsBusiness: dto.operatesAsBusiness,
+          coverPhoto: dto.coverPhoto,
         },
       });
 
@@ -1373,6 +1392,16 @@ async getUserProfileByUuid(
           },
         });
       }
+
+      if (dto.isBusiness !== undefined || dto.businessType !== undefined) {
+      await this.prisma.account.update({
+        where: { uuid: user.accountUuid },
+        data: {
+          isBusiness: dto.isBusiness,
+          businessType: dto.businessType ? (dto.businessType as BusinessType) : null,
+        },
+      });
+    }
 
       // Handle old image deletion if needed
       if (dto.profileImage && dto.oldImageUrl && dto.oldImageUrl !== dto.profileImage) {
@@ -1391,53 +1420,62 @@ async getUserProfileByUuid(
   /**
    * Update job seeker profile
    */
-  async updateJobSeekerProfile(
-  accountUuid: string,
-  data: JobSeekerProfileDataDto
+async updateJobSeekerProfile(
+  data: UpdateJobSeekerGrpcRequestDto
 ): Promise<BaseResponseDto<JobSeekerProfileResponseDto>> {
   try {
+    // Build update object dynamically, excluding undefined values
+    const updateData: any = {};
+
+    if (data.headline !== undefined) updateData.headline = data.headline;
+    if (data.isActivelySeeking !== undefined) updateData.isActivelySeeking = data.isActivelySeeking;
+    if (data.skills !== undefined) updateData.skills = StringUtils.stringifyJsonField(data.skills);
+    if (data.industries !== undefined) updateData.industries = StringUtils.stringifyJsonField(data.industries);
+    if (data.jobTypes !== undefined) updateData.jobTypes = StringUtils.stringifyJsonField(data.jobTypes);
+    if (data.seniorityLevel !== undefined) updateData.seniorityLevel = data.seniorityLevel;
+    if (data.expectedSalary !== undefined) updateData.expectedSalary = data.expectedSalary;
+    if (data.workAuthorization !== undefined) updateData.workAuthorization = StringUtils.stringifyJsonField(data.workAuthorization);
+    if (data.cvUrl !== undefined) updateData.cvUrl = data.cvUrl;
+    if (data.portfolioImages !== undefined) updateData.portfolioImages = StringUtils.stringifyJsonField(data.portfolioImages);
+    if (data.linkedInUrl !== undefined) updateData.linkedInUrl = data.linkedInUrl;
+    if (data.githubUrl !== undefined) updateData.githubUrl = data.githubUrl;
+    if (data.portfolioUrl !== undefined) updateData.portfolioUrl = data.portfolioUrl;
+    if (data.hasAgent !== undefined) updateData.hasAgent = data.hasAgent;
+    if (data.agentUuid !== undefined) updateData.agentUuid = data.agentUuid;
+    
+    // Only update cvLastUpdated if cvUrl is provided and not undefined
+    if (data.cvUrl !== undefined) {
+      updateData.cvLastUpdated = data.cvUrl ? new Date() : null;
+    }
+
+    // Build create object with defaults (use null for optional fields)
+    const createData = {
+      accountUuid: data.accountUuid,
+      headline: data.headline ?? '',
+      isActivelySeeking: data.isActivelySeeking ?? true,
+      skills: StringUtils.stringifyJsonField(data.skills ?? []),
+      industries: StringUtils.stringifyJsonField(data.industries ?? []),
+      jobTypes: StringUtils.stringifyJsonField(data.jobTypes ?? []),
+      seniorityLevel: data.seniorityLevel ?? null,
+      expectedSalary: data.expectedSalary ?? null,
+      workAuthorization: StringUtils.stringifyJsonField(data.workAuthorization ?? []),
+      cvUrl: data.cvUrl ?? null,
+      portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
+      linkedInUrl: data.linkedInUrl ?? null,
+      githubUrl: data.githubUrl ?? null,
+      portfolioUrl: data.portfolioUrl ?? null,
+      hasAgent: data.hasAgent ?? false,
+      agentUuid: data.agentUuid ?? null,
+      cvLastUpdated: data.cvUrl ? new Date() : null,
+    };
+
     const profile = await this.prisma.jobSeekerProfile.upsert({
-      where: { accountUuid },
-      update: {
-        headline: data.headline,
-        isActivelySeeking: data.isActivelySeeking,
-        skills: StringUtils.stringifyJsonField(data.skills ?? []),
-        industries: StringUtils.stringifyJsonField(data.industries ?? []),
-        jobTypes: StringUtils.stringifyJsonField(data.jobTypes ?? []),
-        seniorityLevel: data.seniorityLevel,
-        expectedSalary: data.expectedSalary,
-        workAuthorization: StringUtils.stringifyJsonField(data.workAuthorization ?? []),
-        cvUrl: data.cvUrl,
-        portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
-        linkedInUrl: data.linkedInUrl,
-        githubUrl: data.githubUrl,
-        portfolioUrl: data.portfolioUrl,
-        hasAgent: data.hasAgent,
-        agentUuid: data.agentUuid,
-        cvLastUpdated: data.cvUrl ? new Date() : undefined,
-      },
-      create: {
-        accountUuid,
-        headline: data.headline,
-        isActivelySeeking: data.isActivelySeeking ?? true,
-        skills: StringUtils.stringifyJsonField(data.skills ?? []),
-        industries: StringUtils.stringifyJsonField(data.industries ?? []),
-        jobTypes: StringUtils.stringifyJsonField(data.jobTypes ?? []),
-        seniorityLevel: data.seniorityLevel,
-        expectedSalary: data.expectedSalary,
-        workAuthorization: StringUtils.stringifyJsonField(data.workAuthorization ?? []),
-        cvUrl: data.cvUrl,
-        portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
-        linkedInUrl: data.linkedInUrl,
-        githubUrl: data.githubUrl,
-        portfolioUrl: data.portfolioUrl,
-        hasAgent: data.hasAgent ?? false,
-        agentUuid: data.agentUuid,
-        cvLastUpdated: data.cvUrl ? new Date() : undefined,
-      },
+      where: { accountUuid: data.accountUuid },
+      update: updateData,
+      create: createData,
     });
 
-    await this.updateActiveProfiles(accountUuid, "JOB_SEEKER", 'add');
+    await this.updateActiveProfiles(data.accountUuid, "JOB_SEEKER", 'add');
 
     const completion = this.calculateProfileCompletion("JOB_SEEKER", data);
     const missingFields = this.getMissingFields("JOB_SEEKER", data);
@@ -1454,42 +1492,41 @@ async getUserProfileByUuid(
 }
 
  async updateSkilledProfessionalProfile(
-  accountUuid: string,
-  data: SkilledProfessionalProfileDataDto
+  data: UpdateSkilledProfessionalGrpcRequestDto
 ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
   try {
     const profile = await this.prisma.skilledProfessionalProfile.upsert({
-      where: { accountUuid },
+      where: { accountUuid: data.accountUuid },
       update: {
-        title: data.title,
-        profession: data.profession,
+        title: data.title ? data.title : null,
+        profession: data.profession ? data.profession : null,
         specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
         serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
-        yearsExperience: data.yearsExperience,
-        licenseNumber: data.licenseNumber,
-        insuranceInfo: data.insuranceInfo,
-        hourlyRate: data.hourlyRate,
-        dailyRate: data.dailyRate,
-        paymentTerms: data.paymentTerms,
-        availableToday: data.availableToday,
-        availableWeekends: data.availableWeekends,
-        emergencyService: data.emergencyService,
+        yearsExperience: data.yearsExperience ? data.yearsExperience : null,
+        licenseNumber: data.licenseNumber ? data.licenseNumber : null,
+        insuranceInfo: data.insuranceInfo ? data.insuranceInfo : null,
+        hourlyRate: data.hourlyRate ? data.hourlyRate : null,
+        dailyRate: data.dailyRate ? data.dailyRate : null,
+        paymentTerms: data.paymentTerms ? data.paymentTerms : null,
+        availableToday: data.availableToday ? data.availableToday : null,
+        availableWeekends: data.availableWeekends ? data.availableWeekends : null,
+        emergencyService: data.emergencyService ? data.emergencyService : null,
         portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
         certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
       },
       create: {
-        accountUuid,
+        accountUuid: data.accountUuid,
         uuid: randomUUID(),
-        title: data.title,
-        profession: data.profession,
+        title: data.title ? data.title : null,
+        profession: data.profession ? data.profession : null,
         specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
         serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
-        yearsExperience: data.yearsExperience,
-        licenseNumber: data.licenseNumber,
-        insuranceInfo: data.insuranceInfo,
-        hourlyRate: data.hourlyRate,
-        dailyRate: data.dailyRate,
-        paymentTerms: data.paymentTerms,
+        yearsExperience: data.yearsExperience ? data.yearsExperience : null,
+        licenseNumber: data.licenseNumber ? data.licenseNumber : null,
+        insuranceInfo: data.insuranceInfo ? data.insuranceInfo : null,
+        hourlyRate: data.hourlyRate ? data.hourlyRate : null,
+        dailyRate: data.dailyRate ? data.dailyRate : null,
+        paymentTerms: data.paymentTerms ? data.paymentTerms : null,
         availableToday: data.availableToday ?? false,
         availableWeekends: data.availableWeekends ?? true,
         emergencyService: data.emergencyService ?? false,
@@ -1498,7 +1535,7 @@ async getUserProfileByUuid(
       },
     });
 
-    await this.updateActiveProfiles(accountUuid, "SKILLED_PROFESSIONAL", 'add');
+    await this.updateActiveProfiles(data.accountUuid, "SKILLED_PROFESSIONAL", 'add');
 
     const completion = this.calculateProfileCompletion("SKILLED_PROFESSIONAL", data);
     const missingFields = this.getMissingFields("SKILLED_PROFESSIONAL", data);
@@ -1515,12 +1552,11 @@ async getUserProfileByUuid(
 }
 
  async updateIntermediaryAgentProfile(
-  accountUuid: string,
-  data: IntermediaryAgentProfileDataDto
+  data: UpdateIntermediaryAgentGrpcRequestDto
 ): Promise<BaseResponseDto<IntermediaryAgentProfileResponseDto>> {
   try {
     const profile = await this.prisma.intermediaryAgentProfile.upsert({
-      where: { accountUuid },
+      where: { accountUuid: data.accountUuid },
       update: {
         agentType: data.agentType,
         specializations: StringUtils.stringifyJsonField(data.specializations ?? []),
@@ -1543,7 +1579,7 @@ async getUserProfileByUuid(
         clientTypes: StringUtils.stringifyJsonField(data.clientTypes ?? []),
       },
       create: {
-        accountUuid,
+        accountUuid: data.accountUuid,
         uuid: randomUUID(),
         agentType: data.agentType,
         specializations: StringUtils.stringifyJsonField(data.specializations ?? []),
@@ -1568,7 +1604,7 @@ async getUserProfileByUuid(
       },
     });
 
-    await this.updateActiveProfiles(accountUuid, "INTERMEDIARY_AGENT", 'add');
+    await this.updateActiveProfiles(data.accountUuid, "INTERMEDIARY_AGENT", 'add');
 
     const completion = this.calculateProfileCompletion("INTERMEDIARY_AGENT", data);
     const missingFields = this.getMissingFields("INTERMEDIARY_AGENT", data);
@@ -1585,12 +1621,11 @@ async getUserProfileByUuid(
 }
 
  async updateHousingSeekerProfile(
-  accountUuid: string,
-  data: HousingSeekerProfileDataDto
+  data: UpdateHousingSeekerGrpcRequestDto
 ): Promise<BaseResponseDto<HousingSeekerProfileResponseDto>> {
   try {
     const profile = await this.prisma.housingSeekerProfile.upsert({
-      where: { accountUuid },
+      where: { accountUuid: data.accountUuid },
       update: {
         minBedrooms: data.minBedrooms,
         maxBedrooms: data.maxBedrooms,
@@ -1609,12 +1644,12 @@ async getUserProfileByUuid(
         searchRadiusKm: data.searchRadiusKm,
         hasAgent: data.hasAgent,
         agentUuid: data.agentUuid,
-        searchType: data.searchType,                                  // ADD THIS
+        searchType: data.searchType ? (data.searchType as SearchType) : null,                                  // ADD THIS
         isLookingForRental: data.isLookingForRental,                  // ADD THIS
         isLookingToBuy: data.isLookingToBuy,                          // ADD THIS
       },
       create: {
-        accountUuid,
+        accountUuid: data.accountUuid,
         minBedrooms: data.minBedrooms ?? 0,
         maxBedrooms: data.maxBedrooms ?? 5,
         minBudget: data.minBudget,
@@ -1632,13 +1667,13 @@ async getUserProfileByUuid(
         searchRadiusKm: data.searchRadiusKm ?? 10,
         hasAgent: data.hasAgent ?? false,
         agentUuid: data.agentUuid,
-        searchType: data.searchType,                                  // ADD THIS
+        searchType: data.searchType ? (data.searchType as SearchType) : null,                                  // ADD THIS
         isLookingForRental: data.isLookingForRental ?? false,        // ADD THIS
         isLookingToBuy: data.isLookingToBuy ?? false,                // ADD THIS
       },
     });
 
-    await this.updateActiveProfiles(accountUuid, "HOUSING_SEEKER", 'add');
+    await this.updateActiveProfiles(data.accountUuid, "HOUSING_SEEKER", 'add');
 
     const completion = this.calculateProfileCompletion("HOUSING_SEEKER", data);
     const missingFields = this.getMissingFields("HOUSING_SEEKER", data);
@@ -1655,12 +1690,11 @@ async getUserProfileByUuid(
 }
 
   async updatePropertyOwnerProfile(
-  accountUuid: string,
-  data: PropertyOwnerProfileDataDto
+  data: UpdatePropertyOwnerGrpcRequestDto
 ): Promise<BaseResponseDto<PropertyOwnerProfileResponseDto>> {
   try {
     const profile = await this.prisma.propertyOwnerProfile.upsert({
-      where: { accountUuid },
+      where: { accountUuid: data.accountUuid },
       update: {
         isProfessional: data.isProfessional,
         licenseNumber: data.licenseNumber,
@@ -1670,12 +1704,12 @@ async getUserProfileByUuid(
         serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
         usesAgent: data.usesAgent,
         managingAgentUuid: data.managingAgentUuid,
-        listingType: data.listingType,                                // ADD THIS
+        listingType: data.listingType ? (data.listingType as ListingType) : null,                                // ADD THIS
         isListingForRent: data.isListingForRent,                      // ADD THIS
         isListingForSale: data.isListingForSale,                      // ADD THIS
       },
       create: {
-        accountUuid,
+        accountUuid: data.accountUuid,
         isProfessional: data.isProfessional ?? false,
         licenseNumber: data.licenseNumber,
         companyName: data.companyName,
@@ -1685,13 +1719,13 @@ async getUserProfileByUuid(
         isVerifiedOwner: false,
         usesAgent: data.usesAgent ?? false,
         managingAgentUuid: data.managingAgentUuid,
-        listingType: data.listingType,                                // ADD THIS
+        listingType: data.listingType ? (data.listingType as ListingType) : null,                                // ADD THIS
         isListingForRent: data.isListingForRent ?? false,            // ADD THIS
         isListingForSale: data.isListingForSale ?? false,            // ADD THIS
       },
     });
 
-    await this.updateActiveProfiles(accountUuid, "PROPERTY_OWNER", 'add');
+    await this.updateActiveProfiles(data.accountUuid, "PROPERTY_OWNER", 'add');
 
     const completion = this.calculateProfileCompletion("PROPERTY_OWNER", data);
     const missingFields = this.getMissingFields('PROPERTY_OWNER', data);
@@ -1708,12 +1742,11 @@ async getUserProfileByUuid(
 }
 
 async updateSupportBeneficiaryProfile(
-  accountUuid: string,
-  data: SupportBeneficiaryProfileDataDto
+  data: UpdateSupportBeneficiaryGrpcRequestDto
 ): Promise<BaseResponseDto<SupportBeneficiaryProfileResponseDto>> {
   try {
     const profile = await this.prisma.supportBeneficiaryProfile.upsert({
-      where: { accountUuid },
+      where: { accountUuid: data.accountUuid },
       update: {
         needs: StringUtils.stringifyJsonField(data.needs ?? []),
         urgentNeeds: StringUtils.stringifyJsonField(data.urgentNeeds ?? []),
@@ -1734,7 +1767,7 @@ async updateSupportBeneficiaryProfile(
         caseWorkerUuid: data.caseWorkerUuid,
       },
       create: {
-        accountUuid,
+        accountUuid: data.accountUuid,
         needs: StringUtils.stringifyJsonField(data.needs ?? []),
         urgentNeeds: StringUtils.stringifyJsonField(data.urgentNeeds ?? []),
         familySize: data.familySize,
@@ -1756,7 +1789,7 @@ async updateSupportBeneficiaryProfile(
       },
     });
 
-    await this.updateActiveProfiles(accountUuid, "SUPPORT_BENEFICIARY", 'add');
+    await this.updateActiveProfiles(data.accountUuid, "SUPPORT_BENEFICIARY", 'add');
 
     const completion = this.calculateProfileCompletion("SUPPORT_BENEFICIARY", data);
     const missingFields = this.getMissingFields("SUPPORT_BENEFICIARY", data);
@@ -1863,6 +1896,9 @@ private mapToAccountResponse(account: AccountWithIndividualProfiles): AccountRes
     activeProfiles: activeProfiles,
     isVerified: account.isVerified,
     verifiedFeatures: verifiedFeatures,
+
+    isBusiness: account.isBusiness ?? false,
+    businessType: account.businessType as BusinessType | undefined,
     
     individualProfile: account.individualProfile ? {
       accountUuid: account.individualProfile.accountUuid,
@@ -1976,14 +2012,21 @@ private mapToAccountResponse(account: AccountWithIndividualProfiles): AccountRes
 }
 
 private mapToUserProfileResponse(user: UserWithAccount): UserProfileResponseDto {
-  // Map the account response - this will now have access to user.account.users
+  // Get the account response which contains all profiles
   const accountResponse = this.mapToAccountResponse(user.account);
 
   return {
-    account: accountResponse,
+    // Account info from UserSignupDataDto
+    account: {
+      uuid: accountResponse.uuid,
+      accountCode: accountResponse.accountCode,
+      type: accountResponse.type,
+      isBusiness: accountResponse.isBusiness,  // ADD THIS
+      businessType: accountResponse.businessType,  // ADD THIS
+    },
     user: {
       uuid: user.uuid,
-      userCode: user.userCode,  
+      userCode: user.userCode,
       firstName: user.account.individualProfile?.firstName ?? '',
       lastName: user.account.individualProfile?.lastName ?? '',
       email: user.email,
@@ -1997,8 +2040,27 @@ private mapToUserProfileResponse(user: UserWithAccount): UserProfileResponseDto 
       dateOfBirth: user.account.individualProfile?.dateOfBirth?.toISOString(),
       nationalId: user.account.individualProfile?.nationalId ?? undefined,
       profileImage: user.account.individualProfile?.profileImage ?? undefined,
+
+      businessName: user.account.individualProfile?.businessName ?? undefined,
+      logo: user.account.individualProfile?.logo ?? undefined,
+      operatesAsBusiness: user.account.individualProfile?.operatesAsBusiness ?? false,
+      coverPhoto: user.account.individualProfile?.coverPhoto ?? undefined,
     },
     completion: accountResponse.completion,
+    
+    // FLATTEN THE PROFILES - move them from account to top level
+    jobSeekerProfile: accountResponse.jobSeekerProfile,
+    skilledProfessionalProfile: accountResponse.skilledProfessionalProfile,
+    housingSeekerProfile: accountResponse.housingSeekerProfile,
+    propertyOwnerProfile: accountResponse.propertyOwnerProfile,
+    supportBeneficiaryProfile: accountResponse.supportBeneficiaryProfile,
+    intermediaryAgentProfile: accountResponse.intermediaryAgentProfile,
+    
+    // Organization related (if any)
+    organization: accountResponse.organizationProfile,
+    organizationProfile: accountResponse.organizationProfile,
+    individualProfile: accountResponse.individualProfile,
+    
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };
@@ -2010,29 +2072,29 @@ private mapToUserProfileResponse(user: UserWithAccount): UserProfileResponseDto 
   ): JobSeekerProfileResponseDto {
     return {
       id: profile.id,
-      headline: profile.headline ?? undefined,
+      headline: profile.headline ?? null,
       isActivelySeeking: profile.isActivelySeeking,
       skills: this.parseJsonField<string[]>(profile.skills, []),
       industries: this.parseJsonField<string[]>(profile.industries, []),
       jobTypes: this.parseJsonField<JobType[]>(profile.jobTypes, []),
       seniorityLevel: profile.seniorityLevel as SeniorityLevel | undefined,
-      noticePeriod: profile.noticePeriod ?? undefined,
-      expectedSalary: profile.expectedSalary ?? undefined,
+      noticePeriod: profile.noticePeriod ?? null,
+      expectedSalary: profile.expectedSalary ?? null,
       workAuthorization: this.parseJsonField<string[]>(profile.workAuthorization, []),
       cvUrl: profile.cvUrl ?? undefined,
       cvLastUpdated: profile.cvLastUpdated?.toISOString(),
       portfolioImages: this.parseJsonField<string[]>(profile.portfolioImages, []),
-      linkedInUrl: profile.linkedInUrl ?? undefined,
-      githubUrl: profile.githubUrl ?? undefined,
-      portfolioUrl: profile.portfolioUrl ?? undefined,
+      linkedInUrl: profile.linkedInUrl ?? null,
+      githubUrl: profile.githubUrl ?? null,
+      portfolioUrl: profile.portfolioUrl ?? null,
       hasAgent: profile.hasAgent,
-      agentUuid: profile.agentUuid ?? undefined,
+      agentUuid: profile.agentUuid ?? null,
       matchScoreWeight: profile.cvUrl ? 100 : 50,
       completion: completion ? {
         percentage: completion,
         missingFields: missingFields || [],
         isComplete: (completion || 0) >= 80,
-      } : undefined,
+      } : null,
     };
   }
 
@@ -2044,7 +2106,7 @@ private mapToUserProfileResponse(user: UserWithAccount): UserProfileResponseDto 
     return {
       id: profile.id,
       uuid: profile.uuid,
-      title: profile.title ?? undefined,
+      title: profile.title ?? null,
       profession: profile.profession ?? undefined,
       specialties: this.parseJsonField<string[]>(profile.specialties, []),
       serviceAreas: this.parseJsonField<string[]>(profile.serviceAreas, []),

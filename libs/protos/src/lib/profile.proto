@@ -275,6 +275,11 @@ message CreateIndividualAccountWithProfilesRequest {
     PropertyOwnerProfileData propertyOwnerData = 17;          // ADD THIS for LIST_PROPERTIES
   }
   repeated ProfileToCreate profiles = 18;                     // Update number from 16 to 18
+  optional bool isBusiness = 19;
+  optional string businessType = 20;      // "FOR_PROFIT", "NON_PROFIT", "GOVERNMENT"
+  optional string businessName = 21;
+  optional string logo = 22;
+  optional string coverPhoto = 23;
 }
 
 message ProfileToCreate {
@@ -363,6 +368,9 @@ message CreateOrganizationAccountWithProfilesRequest {
   optional string planSlug = 18;
   repeated string purposes = 19;
   map<string, OrganizationProfileDataEntry> profileData = 20;
+  optional bool isBusiness = 21;      // Should always be true for organizations
+  optional string businessType = 22;  // "FOR_PROFIT", "NON_PROFIT", "GOVERNMENT"
+  optional string coverPhoto = 23;
 }
 
 message OrganizationProfileDataEntry {
@@ -547,6 +555,9 @@ message UpdateOrganizationPropertyOwnerProfileRequest {
   repeated string serviceAreas = 7;
   optional bool usesAgent = 8;
   optional string managingAgentUuid = 9;
+  optional string listingType = 10;       // "RENT", "SALE", "BOTH"
+  optional bool isListingForRent = 11;    // true/false
+  optional bool isListingForSale = 12;    // true/false
 }
 
 message UpdateOrganizationSkilledProfessionalProfileRequest {
@@ -600,6 +611,7 @@ message UpdateOrgProfileRequest {
   optional string organizationType = 6;
   optional string about = 7;
   optional string logo = 8;
+  optional string coverPhoto = 9;
 }
 
 message RemoveProfileRequest {
@@ -699,6 +711,10 @@ message IndividualProfileData {
   optional string dateOfBirth = 6;
   optional string nationalId = 7;
   optional string profileImage = 8;
+  optional string businessName = 9;
+  optional string logo = 10;
+  optional bool operatesAsBusiness = 11;
+  optional string coverPhoto = 12;
 }
 
 // ======================================================
@@ -748,6 +764,7 @@ message OrgProfileData {
   optional PropertyOwnerProfileData propertyOwnerProfile = 23;
   optional SkilledProfessionalProfileData skilledProfessionalProfile = 24;
   optional IntermediaryAgentProfileData intermediaryAgentProfile = 25;
+  optional string coverPhoto = 26;
 }
 
 // ======================================================
@@ -758,6 +775,8 @@ message AccountBase {
   string uuid = 1;
   string accountCode = 2;
   string type = 3; 
+  bool isBusiness = 4;
+  optional string businessType = 5; 
 }
 
 message AdminResponse {

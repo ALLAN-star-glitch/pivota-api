@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ACCOUNT_TYPES, AccountType, AGENT_TYPES, AgentType, JOB_TYPES, JobType, KENYAN_PHONE_REGEX, OrganizationPurpose, PROFILE_TYPES, ProfileType, PROPERTY_TYPES, PropertyType, SENIORITY_LEVELS, SeniorityLevel, SERVICE_PROVIDER_TYPES, ServiceProviderType, SUPPORT_NEEDS, SupportNeed } from '@pivota-api/constants';
+import { ACCOUNT_TYPES, AccountType, AGENT_TYPES, AgentType, BUSINESS_TYPES, JOB_TYPES, JobType, KENYAN_PHONE_REGEX, LISTING_TYPES, OrganizationPurpose, PROFILE_TYPES, ProfileType, PROPERTY_TYPES, PropertyType, SEARCH_TYPES, SENIORITY_LEVELS, SeniorityLevel, SERVICE_PROVIDER_TYPES, ServiceProviderType, SUPPORT_NEEDS, SupportNeed } from '@pivota-api/constants';
 import { Transform } from 'class-transformer';
 import { 
   IsArray, 
@@ -475,11 +475,11 @@ export class HousingSeekerProfileDataDto {
   @ApiPropertyOptional({ 
     description: 'Type of housing search',
     example: 'RENT',
-    enum: ['RENT', 'BUY', 'BOTH']
+    enum:  SEARCH_TYPES
   })
   @IsOptional()
   @IsString()
-  @IsIn(['RENT', 'BUY', 'BOTH'])
+  @IsIn(SEARCH_TYPES)
   searchType?: string; // RENT, BUY, or BOTH
 
   @ApiPropertyOptional({ 
@@ -680,11 +680,11 @@ export class PropertyOwnerProfileDataDto {
   @ApiPropertyOptional({ 
     description: 'Type of property listings',
     example: 'RENT',
-    enum: ['RENT', 'SALE', 'BOTH']
+    enum: LISTING_TYPES
   })
   @IsOptional()
   @IsString()
-  @IsIn(['RENT', 'SALE', 'BOTH'])
+  @IsIn(LISTING_TYPES)
   listingType?: string;
 
   @ApiPropertyOptional({ 
@@ -1519,6 +1519,37 @@ export class UpdateFullUserProfileDto extends BaseUpdateProfileDto {
   @IsOptional()
   @IsUrl()
   oldImageUrl?: string;  
+
+  // NEW FIELDS
+  @ApiPropertyOptional({ description: 'Whether the account operates as a business' })
+  @IsOptional()
+  @IsBoolean()
+  isBusiness?: boolean;
+
+  @ApiPropertyOptional({ description: 'Type of business', enum: BUSINESS_TYPES })
+  @IsOptional()
+  @IsIn(BUSINESS_TYPES)
+  businessType?: string;
+
+  @ApiPropertyOptional({ description: 'Business name for sole proprietors' })
+  @IsOptional()
+  @IsString()
+  businessName?: string;
+
+   @ApiPropertyOptional({ description: 'Business logo URL' })
+  @IsOptional()
+  @IsUrl()
+  logo?: string;
+
+  @ApiPropertyOptional({ description: 'Cover photo URL' })
+  @IsOptional()
+  @IsUrl()
+  coverPhoto?: string;
+
+  @ApiPropertyOptional({ description: 'Whether the individual operates as a business' })
+  @IsOptional()
+  @IsBoolean()
+  operatesAsBusiness?: boolean;
 }
 
 /* ======================================================
@@ -1591,6 +1622,46 @@ export class CreateAccountWithProfilesRequestDto {
   @IsOptional()
   @IsUrl()
   profileImage?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Whether this account operates as a business',
+    example: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  isBusiness?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Type of business',
+    enum: BUSINESS_TYPES,
+    example: 'FOR_PROFIT'
+  })
+  @ValidateIf((o) => o.isBusiness === true)
+  @IsIn(BUSINESS_TYPES)
+  businessType?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Business name (for sole proprietors/freelancers)',
+    example: 'John\'s Plumbing Services'
+  })
+  @ValidateIf((o) => o.isBusiness === true)
+  @IsOptional()
+  @IsString()
+  businessName?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Business logo URL',
+    example: 'https://cdn.pivota.com/logos/john-plumbing.jpg'
+  })
+  @ValidateIf((o) => o.isBusiness === true)
+  @IsOptional()
+  @IsUrl()
+  logo?: string;
+
+    @ApiPropertyOptional({ description: 'Cover photo URL' })
+  @IsOptional()
+  @IsUrl()
+  coverPhoto?: string;
 
   @ApiPropertyOptional({ enum: INDIVIDUAL_PURPOSES })
   @IsOptional()
@@ -1678,7 +1749,7 @@ export class UpdateJobSeekerGrpcRequestDto extends UpdateJobSeekerProfileRequest
   @ApiProperty({ description: 'Target user UUID' })
   @IsUUID()
   @IsNotEmpty()
-  userUuid!: string;
+  accountUuid!: string;
 }
 
 export class UpdateSkilledProfessionalGrpcRequestDto extends UpdateSkilledProfessionalProfileRequestDto {

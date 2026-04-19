@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AccountBaseDto, EmployerProfileResponseDto, OrganizationBaseDto, OrganizationProfileResponseDto, SocialServiceProviderProfileResponseDto } from './organisation-response.dto';
-import { ACCOUNT_TYPES, AccountType, AGENT_TYPES, AgentType, JOB_TYPES, JobType, PROFILE_TYPES, ProfileType, PROPERTY_TYPES, PropertyType, SENIORITY_LEVELS, SeniorityLevel, SERVICE_PROVIDER_TYPES, ServiceProviderType, SUPPORT_NEEDS, SupportNeed } from '@pivota-api/constants';
+import { ACCOUNT_TYPES, AccountType, AGENT_TYPES, AgentType, BUSINESS_TYPES, JOB_TYPES, JobType, PROFILE_TYPES, ProfileType, PROPERTY_TYPES, PropertyType, SENIORITY_LEVELS, SeniorityLevel, SERVICE_PROVIDER_TYPES, ServiceProviderType, SUPPORT_NEEDS, SupportNeed } from '@pivota-api/constants';
 
 /* ======================================================
    1. PROFILE COMPLETION DTO
@@ -66,6 +66,18 @@ export class UserProfileDataDto {
 
   @ApiPropertyOptional({ example: 'https://cdn.pivota.com/profiles/u123.jpg' })
   profileImage?: string;
+
+   @ApiPropertyOptional({ example: 'Jane\'s Consulting Services' })
+  businessName?: string;
+
+  @ApiPropertyOptional({ example: 'https://cdn.pivota.com/logos/jane-consulting.jpg' })
+  logo?: string;
+
+  @ApiPropertyOptional({ example: false })
+  operatesAsBusiness?: boolean;
+
+  @ApiPropertyOptional({ example: 'https://cdn.pivota.com/covers/profile-banner.jpg' })
+  coverPhoto?: string;
 }
 
 /* ======================================================
@@ -80,6 +92,18 @@ export class IndividualProfileResponseDto extends UserProfileDataDto {
 
   @ApiProperty({ example: 'Doe' })
   lastName!: string;
+
+  @ApiPropertyOptional({ example: 'Jane\'s Consulting Services' })
+  override businessName?: string;
+
+  @ApiPropertyOptional({ example: 'https://cdn.pivota.com/logos/jane-consulting.jpg' })
+  override logo?: string;
+
+  @ApiPropertyOptional({ example: false })
+  override operatesAsBusiness?: boolean;
+
+  @ApiPropertyOptional({ example: 'https://cdn.pivota.com/covers/profile-banner.jpg' })
+  override coverPhoto?: string;
 
   @ApiPropertyOptional({ type: ProfileCompletionDto })
   completion?: ProfileCompletionDto;
@@ -331,6 +355,15 @@ export class HousingSeekerProfileResponseDto {
   @ApiPropertyOptional({ example: '550e8400-e29b-41d4-a716-446655440000' })
   agentUuid?: string;
 
+  @ApiPropertyOptional({ enum: ['RENT', 'BUY', 'BOTH'], example: 'RENT' })
+  searchType?: string;
+
+  @ApiPropertyOptional({ example: true })
+  isLookingForRental?: boolean;
+
+  @ApiPropertyOptional({ example: false })
+  isLookingToBuy?: boolean;
+
   @ApiPropertyOptional({ type: ProfileCompletionDto })
   completion?: ProfileCompletionDto;
 }
@@ -371,6 +404,15 @@ export class PropertyOwnerProfileResponseDto {
 
   @ApiPropertyOptional({ example: '550e8400-e29b-41d4-a716-446655440000' })
   managingAgentUuid?: string;
+
+  @ApiPropertyOptional({ enum: ['RENT', 'SALE', 'BOTH'], example: 'RENT' })
+  listingType?: string;
+
+  @ApiPropertyOptional({ example: true })
+  isListingForRent?: boolean;
+
+  @ApiPropertyOptional({ example: false })
+  isListingForSale?: boolean;
 
   @ApiPropertyOptional({ type: ProfileCompletionDto })
   completion?: ProfileCompletionDto;
@@ -635,6 +677,12 @@ export class AccountResponseDto {
 
   @ApiProperty({ example: 'GeneralUser' })
   userRole!: string;
+
+  @ApiPropertyOptional({ example: false })
+  isBusiness?: boolean;
+
+  @ApiPropertyOptional({ enum: BUSINESS_TYPES, example: 'FOR_PROFIT' })
+  businessType?: string;
 
   @ApiProperty({ 
     example: ['JOB_SEEKER', 'SKILLED_PROFESSIONAL'],

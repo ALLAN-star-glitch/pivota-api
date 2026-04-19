@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ProfileCompletionDto } from './user-response.dto';
-import { ACCOUNT_TYPES, AccountType, AGENT_TYPES, AgentType, ORGANIZATION_TYPES, OrganizationType, ProfileType, PropertyType, SERVICE_PROVIDER_TYPES, ServiceProviderType } from '@pivota-api/constants';
+import { ACCOUNT_TYPES, AccountType, AGENT_TYPES, AgentType, BUSINESS_TYPES, ORGANIZATION_TYPES, OrganizationType, ProfileType, PropertyType, SERVICE_PROVIDER_TYPES, ServiceProviderType } from '@pivota-api/constants';
 
 /* ======================================================
    SHARED BASE DTOs (PUBLIC-SAFE)
@@ -26,6 +26,12 @@ export class AccountBaseDto {
     example: 'ORGANIZATION',
   })
   type!: AccountType;
+
+  @ApiPropertyOptional({ example: false })
+  isBusiness?: boolean;
+
+  @ApiPropertyOptional({ enum: BUSINESS_TYPES, example: 'FOR_PROFIT' })
+  businessType?: string;
 }
 
 /* ------------------ Organization Base ------------------ */
@@ -171,8 +177,13 @@ OrganizationProfileResponseDto extends OrganizationBaseDto {
   @ApiPropertyOptional({ type: ProfileCompletionDto })
   completion?: ProfileCompletionDto;
 
+  @ApiPropertyOptional({ example: 'https://cdn.pivota.com/covers/org-banner.jpg' })
+  coverPhoto?: string;
+
   @ApiProperty({ example: '2026-01-05T12:00:00Z' })
   createdAt!: Date;
+
+
 
   @ApiProperty({ example: '2026-01-05T15:30:00Z' })
   updatedAt!: Date;

@@ -20,6 +20,12 @@ import {
   PropertyOwnerProfileDataDto,
   SupportBeneficiaryProfileDataDto,
   IntermediaryAgentProfileDataDto,
+  UpdatePropertyOwnerGrpcRequestDto,
+  UpdateSupportBeneficiaryGrpcRequestDto,
+  UpdateHousingSeekerGrpcRequestDto,
+  UpdateIntermediaryAgentGrpcRequestDto,
+  UpdateSkilledProfessionalGrpcRequestDto,
+  UpdateJobSeekerGrpcRequestDto,
 } from '@pivota-api/dtos';
 import { ProfileType } from '@pivota-api/constants';
 
@@ -183,10 +189,10 @@ export class UserController {
    */
   @GrpcMethod('ProfileService', 'UpdateJobSeekerProfile')
   async handleUpdateJobSeekerProfile(
-    @Payload() data: { accountUuid: string; data: JobSeekerProfileDataDto },
+    @Payload() data: UpdateJobSeekerGrpcRequestDto,
   ): Promise<BaseResponseDto<JobSeekerProfileResponseDto>> {
     this.logger.log(`[gRPC] UpdateJobSeekerProfile for account: ${data.accountUuid}`);
-    return this.userService.updateJobSeekerProfile(data.accountUuid, data.data);
+    return this.userService.updateJobSeekerProfile(data);
   }
 
   /**
@@ -194,10 +200,10 @@ export class UserController {
    */
   @GrpcMethod('ProfileService', 'UpdateSkilledProfessionalProfile')
   async handleUpdateSkilledProfessionalProfile(
-    @Payload() data: { accountUuid: string; data: SkilledProfessionalProfileDataDto },
+    @Payload() data: UpdateSkilledProfessionalGrpcRequestDto,
   ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
     this.logger.log(`[gRPC] UpdateSkilledProfessionalProfile for account: ${data.accountUuid}`);
-    return this.userService.updateSkilledProfessionalProfile(data.accountUuid, data.data);
+    return this.userService.updateSkilledProfessionalProfile(data);
   }
 
   /**
@@ -205,10 +211,10 @@ export class UserController {
    */
   @GrpcMethod('ProfileService', 'UpdateIntermediaryAgentProfile')
   async handleUpdateIntermediaryAgentProfile(
-    @Payload() data: { accountUuid: string; data: IntermediaryAgentProfileDataDto },
+    @Payload() data: UpdateIntermediaryAgentGrpcRequestDto,
   ): Promise<BaseResponseDto<IntermediaryAgentProfileResponseDto>> {
     this.logger.log(`[gRPC] UpdateIntermediaryAgentProfile for account: ${data.accountUuid}`);
-    return this.userService.updateIntermediaryAgentProfile(data.accountUuid, data.data);
+    return this.userService.updateIntermediaryAgentProfile(data);
   }
 
   /**
@@ -216,10 +222,10 @@ export class UserController {
    */
   @GrpcMethod('ProfileService', 'UpdateHousingSeekerProfile')
   async handleUpdateHousingSeekerProfile(
-    @Payload() data: { accountUuid: string; data: HousingSeekerProfileDataDto },
+    @Payload() data: UpdateHousingSeekerGrpcRequestDto,
   ): Promise<BaseResponseDto<HousingSeekerProfileResponseDto>> {
     this.logger.log(`[gRPC] UpdateHousingSeekerProfile for account: ${data.accountUuid}`);
-    return this.userService.updateHousingSeekerProfile(data.accountUuid, data.data);
+    return this.userService.updateHousingSeekerProfile(data);
   }
 
   /**
@@ -227,21 +233,21 @@ export class UserController {
    */
   @GrpcMethod('ProfileService', 'UpdatePropertyOwnerProfile')
   async handleUpdatePropertyOwnerProfile(
-    @Payload() data: { accountUuid: string; data: PropertyOwnerProfileDataDto },
+    @Payload() data: UpdatePropertyOwnerGrpcRequestDto,
   ): Promise<BaseResponseDto<PropertyOwnerProfileResponseDto>> {
     this.logger.log(`[gRPC] UpdatePropertyOwnerProfile for account: ${data.accountUuid}`);
-    return this.userService.updatePropertyOwnerProfile(data.accountUuid, data.data);
-  }
+    return this.userService.updatePropertyOwnerProfile(data);
+  } 
 
   /**
    * Update Support Beneficiary Profile
    */
   @GrpcMethod('ProfileService', 'UpdateSupportBeneficiaryProfile')
   async handleUpdateSupportBeneficiaryProfile(
-    @Payload() data: { accountUuid: string; data: SupportBeneficiaryProfileDataDto },
+    @Payload() data: UpdateSupportBeneficiaryGrpcRequestDto,
   ): Promise<BaseResponseDto<SupportBeneficiaryProfileResponseDto>> {
     this.logger.log(`[gRPC] UpdateSupportBeneficiaryProfile for account: ${data.accountUuid}`);
-    return this.userService.updateSupportBeneficiaryProfile(data.accountUuid, data.data);
+    return this.userService.updateSupportBeneficiaryProfile(data);
   }
 
   // ======================================================

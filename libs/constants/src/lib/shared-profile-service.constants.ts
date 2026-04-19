@@ -81,6 +81,61 @@ export type JobType = typeof JOB_TYPES[number];
 export const SENIORITY_LEVELS = ['ENTRY', 'INTERMEDIATE', 'SENIOR', 'LEAD', 'EXECUTIVE', 'EXPERIENCED'] as const;
 export type SeniorityLevel = typeof SENIORITY_LEVELS[number];
 
+
+// ======================================================
+// BUSINESS TYPES (For accounts operating as businesses)
+// ======================================================
+export const BUSINESS_TYPES = ['FOR_PROFIT', 'NON_PROFIT', 'GOVERNMENT'] as const;
+export type BusinessType = typeof BUSINESS_TYPES[number];
+
+// ======================================================
+// VERIFICATION DOCUMENT TYPES
+// ======================================================
+export const VERIFICATION_DOCUMENT_TYPES = [
+  'ID_VERIFICATION',
+  'BUSINESS_REGISTRATION',
+  'TAX_PIN',
+  'BUSINESS_PERMIT',
+  'PROFESSIONAL_LICENSE',
+  'TRADE_CERTIFICATE',
+  'PRACTICING_CERTIFICATE',
+  'REFERENCE_LETTER',
+  'TITLE_DEED',
+  'LEASE_AGREEMENT',
+  'OWNERSHIP_AUTHORIZATION',
+  'INSURANCE_CERTIFICATE',
+  'POLICE_CLEARANCE',
+  'RECOMMENDATION_LETTER'
+] as const;
+export type VerificationDocumentType = typeof VERIFICATION_DOCUMENT_TYPES[number];
+
+
+// ======================================================
+// VERIFICATION STATUSES
+// ======================================================
+export const VERIFICATION_STATUSES = [
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+  'EXPIRED'
+] as const;
+export type VerificationStatus = typeof VERIFICATION_STATUSES[number];
+
+
+
+// ======================================================
+// LISTING TYPES (For property owners - what they list)
+// ======================================================
+export const LISTING_TYPES = ['RENT', 'SALE', 'BOTH'] as const;
+export type ListingType = typeof LISTING_TYPES[number];
+
+
+// ======================================================
+// SEARCH TYPES (For housing seekers - what they want)
+// ======================================================
+export const SEARCH_TYPES = ['RENT', 'BUY', 'BOTH'] as const;
+export type SearchType = typeof SEARCH_TYPES[number];
+
 // ======================================================
 // PROPERTY TYPES (For housing listings)
 // ======================================================

@@ -7,7 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { Prisma } from '../../../../generated/prisma/client';
+import { ListingType, Prisma } from '../../../../generated/prisma/client';
 import {  
   BaseResponseDto,
   RoleIdResponse,
@@ -561,6 +561,8 @@ export class OrganisationService implements OnModuleInit {
             ]),
             isVerified: false,
             verifiedFeatures: StringUtils.stringifyJsonField([]),
+            isBusiness: true,  // Organizations are always businesses
+            businessType: data.businessType ?? null,
           },
         });
 
@@ -613,6 +615,7 @@ export class OrganisationService implements OnModuleInit {
           website: data.website,
           about: data.about,
           logo: data.logo,
+          coverPhoto: data.coverPhoto ?? null, 
           orgCode: `ORG-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
           verificationStatus: 'PENDING',
         },
@@ -1075,6 +1078,7 @@ export class OrganisationService implements OnModuleInit {
       typeSlug?: string;  // ✅ Change from 'type' to 'typeSlug'
       about?: string;
       logo?: string;
+      coverPhoto?: string; 
     } = {};
     
     if (data.website !== undefined) updateData.website = data.website;
@@ -1084,6 +1088,7 @@ export class OrganisationService implements OnModuleInit {
     if (data.organizationType !== undefined) updateData.typeSlug = data.organizationType;  // ✅ Use typeSlug
     if (data.about !== undefined) updateData.about = data.about;
     if (data.logo !== undefined) updateData.logo = data.logo;
+    if (data.coverPhoto !== undefined) updateData.coverPhoto = data.coverPhoto;
 
     if (Object.keys(updateData).length > 0) {
       await this.prisma.organizationProfile.update({
@@ -1279,6 +1284,9 @@ export class OrganisationService implements OnModuleInit {
           serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           usesAgent: data.usesAgent,
           managingAgentUuid: data.managingAgentUuid,
+          listingType: data.listingType ? (data.listingType as ListingType) : null,
+          isListingForRent: data.isListingForRent,
+          isListingForSale: data.isListingForSale,
         },
         create: {
           accountUuid,
@@ -1291,6 +1299,9 @@ export class OrganisationService implements OnModuleInit {
           isVerifiedOwner: false,
           usesAgent: data.usesAgent ?? false,
           managingAgentUuid: data.managingAgentUuid,
+          listingType: data.listingType ? (data.listingType as ListingType) : null,
+          isListingForRent: data.isListingForRent ?? false,
+          isListingForSale: data.isListingForSale ?? false,
         },
       });
 
@@ -2052,6 +2063,8 @@ private mapToOrganizationProfileResponse(
       uuid: org.account.uuid,
       accountCode: org.account.accountCode,
       type: org.account.type as AccountType,
+      isBusiness: org.account.isBusiness,
+      businessType: org.account.businessType,
     },
     admin: adminUser ? {
       uuid: adminUser.uuid,
@@ -2143,6 +2156,9 @@ private mapToOrganizationProfileResponse(
       isVerifiedOwner: profile.isVerifiedOwner,
       usesAgent: profile.usesAgent,
       managingAgentUuid: profile.managingAgentUuid ?? undefined,
+      listingType: profile.listingType ? (profile.listingType as ListingType) : null,
+      isListingForRent: profile.isListingForRent ?? undefined,
+      isListingForSale: profile.isListingForSale ?? undefined,
       completion: completion ? {
         percentage: completion,
         missingFields: missingFields || [],

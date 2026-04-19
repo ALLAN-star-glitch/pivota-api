@@ -7,17 +7,102 @@ datasource db {
   provider = "postgresql"
 }
 
+// ======================================================
+// ENUMS
+// ======================================================
+
+enum BusinessType {
+  FOR_PROFIT
+  NON_PROFIT
+  GOVERNMENT
+}
+
+enum VerificationDocumentType {
+  ID_VERIFICATION
+  BUSINESS_REGISTRATION
+  TAX_PIN
+  BUSINESS_PERMIT
+  PROFESSIONAL_LICENSE
+  TRADE_CERTIFICATE
+  PRACTICING_CERTIFICATE
+  REFERENCE_LETTER
+  TITLE_DEED
+  LEASE_AGREEMENT
+  OWNERSHIP_AUTHORIZATION
+  INSURANCE_CERTIFICATE
+  POLICE_CLEARANCE
+  RECOMMENDATION_LETTER
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum ListingType {
+  RENT
+  SALE
+  BOTH
+}
+
+enum SearchType {
+  RENT
+  BUY
+  BOTH
+}
+
+enum AccountType {
+  INDIVIDUAL
+  ORGANIZATION
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_PAYMENT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_PAYMENT
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  CANCELLED
+  EXPIRED
+}
+
+enum OrganizationVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+// ======================================================
+// MODELS
+// ======================================================
+
 model Account {
   id                           String                        @id @default(cuid())
   uuid                         String                        @unique @default(uuid())
   accountCode                  String                        @unique
-  type                         String                        @default("INDIVIDUAL")
+  type                         AccountType                   @default(INDIVIDUAL)
   createdAt                    DateTime                      @default(now())
   updatedAt                    DateTime                      @updatedAt
   name                         String?
   isVerified                   Boolean                       @default(false)
-  status                       String                        @default("ACTIVE")
+  status                       AccountStatus                 @default(ACTIVE)
   activeProfiles               Json                          @default("[]")
+  isBusiness                   Boolean                       @default(false)
+  businessType                 BusinessType?
   userRole                     String                        @default("GeneralUser")
   verifiedFeatures             Json                          @default("[]")
   individualProfile            IndividualProfile?
@@ -45,7 +130,7 @@ model User {
   email                   String                   @unique
   phone                   String?                  @unique
   roleName                String                   @default("GeneralUser")
-  status                  String                   @default("ACTIVE")
+  status                  UserStatus               @default(ACTIVE)
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   profileImage            String?
@@ -62,45 +147,50 @@ model User {
 }
 
 model IndividualProfile {
-  id           String    @id @default(cuid())
-  accountUuid  String    @unique
-  firstName    String?
-  lastName     String?
-  bio          String?
-  gender       String?
-  dateOfBirth  DateTime?
-  nationalId   String?   @unique
-  profileImage String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  account      Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
+  id                String    @id @default(cuid())
+  accountUuid       String    @unique
+  firstName         String?
+  lastName          String?
+  bio               String?
+  gender            String?
+  businessName      String?
+  logo              String?
+  operatesAsBusiness Boolean   @default(false)
+  coverPhoto        String?
+  dateOfBirth       DateTime?
+  nationalId        String?   @unique
+  profileImage      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  account           Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([nationalId])
 }
 
 model OrganizationProfile {
-  id                 String                   @id @default(cuid())
+  id                 String                        @id @default(cuid())
   about              String?
   website            String?
   officialEmail      String?
   officialPhone      String?
-  registrationNo     String?                  @unique
-  kraPin             String?                  @unique
+  registrationNo     String?                       @unique
+  kraPin             String?                       @unique
   physicalAddress    String?
   logo               String?
-  accountUuid        String                   @unique
-  createdAt          DateTime                 @default(now())
+  coverPhoto         String?
+  accountUuid        String                        @unique
+  createdAt          DateTime                      @default(now())
   name               String
-  updatedAt          DateTime                 @updatedAt
-  orgCode            String?                  @unique
-  uuid               String                   @unique @default(uuid())
-  verificationStatus String                   @default("PENDING")
+  updatedAt          DateTime                      @updatedAt
+  orgCode            String?                       @unique
+  uuid               String                        @unique @default(uuid())
+  verificationStatus OrganizationVerificationStatus @default(PENDING)
   typeSlug           String?
   invitations        OrganizationInvitation[]
   members            OrganizationMember[]
-  account            Account                  @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-  type               OrganizationType?        @relation(fields: [typeSlug], references: [slug])
+  account            Account                       @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
+  type               OrganizationType?             @relation(fields: [typeSlug], references: [slug])
 
   @@index([accountUuid])
   @@index([typeSlug])
@@ -128,7 +218,7 @@ model OrganizationInvitation {
   email              String
   organizationUuid   String
   token              String              @unique
-  status             String              @default("PENDING")
+  status             InvitationStatus    @default(PENDING)
   roleName           String              @default("GeneralUser")
   invitedByUserUuid  String
   message            String?
@@ -193,7 +283,7 @@ model JobSeekerProfile {
   id                String    @id @default(cuid())
   accountUuid       String    @unique
   headline          String
-  expectedSalary    Float
+  expectedSalary    Float?
   skills            Json      @default("[]")
   jobTypes          Json      @default("[]")
   isActivelySeeking Boolean   @default(false)
@@ -218,30 +308,28 @@ model JobSeekerProfile {
   @@map("job_seeker_profiles")
 }
 
-// UPDATED: PropertyOwnerProfile with rent/sale listing types
 model PropertyOwnerProfile {
-  id                     String   @id @default(cuid())
-  accountUuid            String   @unique
+  id                     String        @id @default(cuid())
+  accountUuid            String        @unique
   companyName            String?
   businessName           String?
-  preferredPropertyTypes Json     @default("[]")
-  serviceAreas           Json     @default("[]")
-  isProfessional         Boolean  @default(false)
+  preferredPropertyTypes Json          @default("[]")
+  serviceAreas           Json          @default("[]")
+  isProfessional         Boolean       @default(false)
   licenseNumber          String?
   yearsInBusiness        Int?
-  isVerifiedOwner        Boolean  @default(false)
-  usesAgent              Boolean  @default(false)
+  isVerifiedOwner        Boolean       @default(false)
+  usesAgent              Boolean       @default(false)
   managingAgentUuid      String?
   propertyCount          Int?
-  propertyTypes          Json?    @default("[]")
+  propertyTypes          Json?         @default("[]")
   propertyPurpose        String?
-  // NEW FIELDS FOR RENT VS SALE LISTINGS
-  listingType            String?  // "RENT", "SALE", "BOTH" - What type of listings they offer
-  isListingForRent       Boolean? @default(false)
-  isListingForSale       Boolean? @default(false)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  account                Account  @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
+  listingType            ListingType?
+  isListingForRent       Boolean?      @default(false)
+  isListingForSale       Boolean?      @default(false)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  account                Account       @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([isProfessional])
@@ -250,34 +338,32 @@ model PropertyOwnerProfile {
   @@map("property_owner_profiles")
 }
 
-// UPDATED: HousingSeekerProfile with search type preferences
 model HousingSeekerProfile {
-  id                     String    @id @default(cuid())
-  accountUuid            String    @unique
+  id                     String        @id @default(cuid())
+  accountUuid            String        @unique
   minBudget              Float
   maxBudget              Float
-  preferredTypes         Json      @default("[]")
-  preferredCities        Json      @default("[]")
-  minBedrooms            Int       @default(0)
-  maxBedrooms            Int       @default(5)
-  preferredNeighborhoods Json      @default("[]")
+  preferredTypes         Json          @default("[]")
+  preferredCities        Json          @default("[]")
+  minBedrooms            Int           @default(0)
+  maxBedrooms            Int           @default(5)
+  preferredNeighborhoods Json          @default("[]")
   moveInDate             DateTime?
   leaseDuration          String?
-  householdSize          Int?      @default(1)
-  hasPets                Boolean?  @default(false)
+  householdSize          Int?          @default(1)
+  hasPets                Boolean?      @default(false)
   petDetails             String?
   latitude               Float?
   longitude              Float?
-  searchRadiusKm         Int?      @default(10)
-  hasAgent               Boolean   @default(false)
+  searchRadiusKm         Int?          @default(10)
+  hasAgent               Boolean       @default(false)
   agentUuid              String?
-  // NEW FIELDS FOR SEARCH TYPE (RENT vs BUY)
-  searchType             String?   // "RENT", "BUY", "BOTH" - What they're looking for
-  isLookingForRental     Boolean?  @default(false)
-  isLookingToBuy         Boolean?  @default(false)
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
-  account                Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
+  searchType             SearchType?
+  isLookingForRental     Boolean?      @default(false)
+  isLookingToBuy         Boolean?      @default(false)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  account                Account       @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([maxBudget])
@@ -355,33 +441,33 @@ model SupportBeneficiaryProfile {
 }
 
 model SkilledProfessionalProfile {
-  id                String   @id @default(cuid())
-  uuid              String   @unique @default(uuid())
-  accountUuid       String   @unique
-  title             String
-  profession        String
-  specialties       Json     @default("[]")
-  serviceAreas      Json     @default("[]")
-  yearsExperience   Int
+  id                String    @id @default(cuid())
+  uuid              String    @unique @default(uuid())
+  accountUuid       String    @unique
+  title             String?
+  profession        String?
+  specialties       Json      @default("[]")
+  serviceAreas      Json      @default("[]")
+  yearsExperience   Int?
   licenseNumber     String?
   insuranceInfo     String?
   hourlyRate        Float?
   dailyRate         Float?
   paymentTerms      String?
-  availableToday    Boolean? @default(false)
-  availableWeekends Boolean? @default(true)
-  emergencyService  Boolean? @default(false)
-  isVerified        Boolean  @default(false)
-  averageRating     Float    @default(0.0)
-  totalReviews      Int      @default(0)
-  completedJobs     Int      @default(0)
+  availableToday    Boolean?  @default(false)
+  availableWeekends Boolean?  @default(true)
+  emergencyService  Boolean?  @default(false)
+  isVerified        Boolean   @default(false)
+  averageRating     Float     @default(0.0)
+  totalReviews      Int       @default(0)
+  completedJobs     Int       @default(0)
   completionRate    Float?
-  portfolioImages   Json     @default("[]")
-  portfolioVideos   Json     @default("[]")
-  certifications    Json     @default("[]")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  account           Account  @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
+  portfolioImages   Json      @default("[]")
+  portfolioVideos   Json      @default("[]")
+  certifications    Json      @default("[]")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  account           Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@index([accountUuid])
   @@index([profession])
@@ -433,10 +519,10 @@ model IntermediaryAgentProfile {
 }
 
 model AccountVerification {
-  id              String    @id @default(cuid())
+  id              String                  @id @default(cuid())
   accountUuid     String
-  type            String
-  status          String    @default("PENDING")
+  type            VerificationDocumentType
+  status          VerificationStatus      @default(PENDING)
   documentUrl     String?
   documentType    String?
   rejectionReason String?
@@ -444,9 +530,9 @@ model AccountVerification {
   expiresAt       DateTime?
   verifiedBy      String?
   verifiedByUuid  String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  account         Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  account         Account                 @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
 
   @@unique([accountUuid, type])
   @@index([accountUuid])

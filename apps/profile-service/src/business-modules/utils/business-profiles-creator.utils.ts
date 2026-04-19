@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 // apps/profile-service/src/utils/business-profiles-creator.utils.ts
 
-import { Prisma } from '../../../generated/prisma/client';
+import { ListingType, Prisma, SearchType } from '../../../generated/prisma/client';
 import { randomUUID } from 'crypto';
 import { StringUtils, PhoneUtils } from '@pivota-api/utils';
 
@@ -334,7 +334,7 @@ export async function createBusinessProfile(
           searchRadiusKm: housingData.searchRadiusKm ?? 10,
           hasAgent: housingData.hasAgent ?? false,
           agentUuid: housingData.agentUuid,
-          searchType: housingData.searchType,
+          searchType: housingData.searchType ? (housingData.searchType as SearchType) : null,
           isLookingForRental: housingData.isLookingForRental ?? false,
           isLookingToBuy: housingData.isLookingToBuy ?? false,
         },
@@ -375,7 +375,7 @@ export async function createBusinessProfile(
           propertyCount: ownerData.propertyCount,
           propertyTypes: StringUtils.stringifyJsonField(ownerData.propertyTypes ?? []),
           propertyPurpose: ownerData.propertyPurpose,
-          listingType: ownerData.listingType,
+          listingType: ownerData.listingType ? (ownerData.listingType as ListingType) : null,
           isListingForRent: ownerData.isListingForRent ?? false,
           isListingForSale: ownerData.isListingForSale ?? false,
         },
