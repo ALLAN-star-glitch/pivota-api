@@ -1,4 +1,4 @@
-// apps/gateway/src/modules/profile/media.controller.ts
+
 
 import {
   Controller,
@@ -30,15 +30,10 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
 import { JwtRequest } from '@pivota-api/interfaces';
-import { BaseResponseDto } from '@pivota-api/dtos';
+import { BaseResponseDto, BulkDeleteResultDto, CertificationResponseDto, MediaUploadMultipleResponseDto, MediaUploadResponseDto, PortfolioItemDto, PortfolioResponseDto } from '@pivota-api/dtos';
 import { imageFileFilter, documentFileFilter, portfolioFileFilter } from '@pivota-api/filters';
 import { 
   MediaService, 
-  MediaUploadResponseDto, 
-  MediaUploadMultipleResponseDto,
-  PortfolioResponseDto,
-  PortfolioItemDto,
-  CertificationResponseDto,
 } from '../services/media.service';
 
 @ApiTags('Profile Media')
@@ -399,7 +394,7 @@ export class MediaController {
   async bulkDeleteJobSeekerPortfolioItems(
     @Body() data: { itemUrls: string[] },
     @Req() req: JwtRequest
-  ): Promise<BaseResponseDto<null>> {
+  ): Promise<BaseResponseDto<BulkDeleteResultDto>> {
     const response = await this.mediaService.bulkDeleteJobSeekerPortfolioItems(data.itemUrls, req);
     if (!response.success) throw response;
     return response;
@@ -564,7 +559,7 @@ export class MediaController {
   async bulkDeleteSkilledProfessionalPortfolioItems(
     @Body() data: { itemUrls: string[] },
     @Req() req: JwtRequest
-  ): Promise<BaseResponseDto<null>> {
+  ): Promise<BaseResponseDto<BulkDeleteResultDto>> {
     const response = await this.mediaService.bulkDeleteSkilledProfessionalPortfolioItems(data.itemUrls, req);
     if (!response.success) throw response;
     return response;
@@ -735,7 +730,7 @@ export class MediaController {
   async bulkDeleteCertificationsByPaths(
     @Body() data: { paths: string[] },
     @Req() req: JwtRequest
-  ): Promise<BaseResponseDto<null>> {
+  ): Promise<BaseResponseDto<BulkDeleteResultDto>> {
     const response = await this.mediaService.bulkDeleteCertificationsByPaths(data.paths, req);
     if (!response.success) throw response;
     return response;

@@ -443,7 +443,7 @@ async googleLogin(
   /** ------------------ Get User From Payload ------------------ */
   async getUserFromPayload(payload: JwtPayload): Promise<UserResponseDto> {
     const userResponse = await firstValueFrom(
-      this.userGrpc.getUserProfileByUuid({ userUuid: payload.userUuid })
+      this.userGrpc.getUserProfileByUuid({ userUuid: payload.sub })
     );
 
     this.logger.debug(`User Response: ${JSON.stringify(userResponse.data)}`)

@@ -8,6 +8,7 @@ export interface InvitationAcceptedNewUserEventPayload {
   firstName: string;
   lastName: string;
   phone: string;
+  accountUuid: string;
 }
 
 export interface InvitationAcceptedExistingUserEventPayload {

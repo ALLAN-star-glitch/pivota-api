@@ -10,6 +10,8 @@ import { RBAC_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH, PLANS_PROTO_PATH } from '@pi
 import { OrganisationService } from './organisation.service';
 import { UserService } from './user.service';
 import { ProfileWorker } from '../../../workers/profile.worker';
+import { MediaService } from './media.service';
+import { MediaController } from '../controllers/media.controller';
 
 @Module({
   imports: [
@@ -80,11 +82,12 @@ import { ProfileWorker } from '../../../workers/profile.worker';
       }
     ]),
   ],
-  controllers: [UserController, OrganisationController],
+  controllers: [UserController, OrganisationController, MediaController],
   providers: [
     UserService,
     OrganisationService,
     ProfileWorker,
+    MediaService
   ],
   exports: [OrganisationService],
 })

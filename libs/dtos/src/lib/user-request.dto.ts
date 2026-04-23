@@ -1711,6 +1711,8 @@ export class CreateAccountWithProfilesRequestDto {
   @IsOptional()
   @IsObject()
   profiles?: ProfileToCreateDto[];
+
+  skipEventEmission?: boolean;  // When true, Profile Service won't emit account.created event
 }
 
 /* ======================================================

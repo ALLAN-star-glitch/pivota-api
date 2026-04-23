@@ -160,7 +160,7 @@ export class SubscriptionsGatewayController {
     @Body() dto: SubscribeToPlanDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<SubscriptionResponseDto>> {
-    const userUuid = req.user.userUuid;
+    const userUuid = req.user.sub;
     this.logger.debug(
       `REST assignPlan request by user=${userUuid}: ${JSON.stringify(dto)}`,
     );

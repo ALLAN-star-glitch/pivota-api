@@ -1,16 +1,15 @@
+// libs/interfaces/src/lib/jwt-payload.interface.ts
 export interface JwtPayload {
-  userUuid: string;    // The human (e.g., "user_123")
-  userName: string;    // Denormalized (e.g., "John Doe")
+  // Standard JWT claims
+  sub: string;        // userUuid
+  jti: string;        // tokenId
+  iat: number;        // issued at
   
-  accountId: string;   // The billing/owner entity (e.g., "acc_456")
-  accountName: string; // Denormalized (e.g., "Pivota NGO" or "John Doe")
-  
-  accountType: "INDIVIDUAL" | "ORGANIZATION"; // Helps UI logic
-
-  tokenId: string;  // The ID of the specific session
-
+  // Custom claims
   email: string;
+  accountId: string;
   role: string;
+  accountType: 'INDIVIDUAL' | 'ORGANIZATION';
   organizationUuid?: string;
   planSlug?: string;
 }

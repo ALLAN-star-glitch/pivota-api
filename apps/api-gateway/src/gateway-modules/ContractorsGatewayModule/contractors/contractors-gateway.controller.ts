@@ -184,7 +184,7 @@ export class ContractorsGatewayController {
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
     
-    const { userUuid, accountId, role } = req.user;
+    const { sub, accountId, role } = req.user;
     
     // Define admin roles (Platform roles)
     const adminRoles = [
@@ -202,10 +202,10 @@ export class ContractorsGatewayController {
      * - General User: Forced to use their own IDs from the JWT.
      */
     if (isAdmin) {
-      dto.creatorId = dto.creatorId || userUuid;
+      dto.creatorId = dto.creatorId || sub;
       dto.accountId = dto.accountId || accountId;
     } else {
-      dto.creatorId = userUuid;
+      dto.creatorId = sub;
       dto.accountId = accountId;
     }
     

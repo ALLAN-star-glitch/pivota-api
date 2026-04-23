@@ -146,7 +146,7 @@ export class OrganisationGatewayController {
        return BaseResponseDto.fail('No organization associated with this account', 'BAD_REQUEST');
     }
 
-    this.logger.log(`API-GW: Onboarding Org ${orgUuid} via Token for Admin ${req.user.userUuid}`);
+    this.logger.log(`API-GW: Onboarding Org ${orgUuid} via Token for Admin ${req.user.sub}`);
     
     return this.organisationService.onboardOrganizationProvider({
       ...dto,
@@ -619,7 +619,7 @@ export class OrganisationGatewayController {
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<InviteMemberResponseDto>> {
     const orgUuid = req.user.organizationUuid;
-    const invitedByUserUuid = req.user.userUuid;
+    const invitedByUserUuid = req.user.sub;
 
     if (!orgUuid) {
       if (req.user.accountType !== 'ORGANIZATION') {
@@ -718,7 +718,7 @@ export class OrganisationGatewayController {
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<InvitationDetailsResponseDto[]>> {
     const orgUuid = req.user.organizationUuid;
-    const requestingUserUuid = req.user.userUuid;
+    const requestingUserUuid = req.user.sub;
 
     if (!orgUuid) {
       return BaseResponseDto.fail('No organization associated with this account', 'BAD_REQUEST');
@@ -754,7 +754,7 @@ export class OrganisationGatewayController {
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<null>> {
     const orgUuid = req.user.organizationUuid;
-    const requestedByUserUuid = req.user.userUuid;
+    const requestedByUserUuid = req.user.sub;
 
     if (!orgUuid) {
       return BaseResponseDto.fail('No organization associated with this account', 'BAD_REQUEST');
@@ -794,7 +794,7 @@ export class OrganisationGatewayController {
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<null>> {
     const orgUuid = req.user.organizationUuid;
-    const requestedByUserUuid = req.user.userUuid;
+    const requestedByUserUuid = req.user.sub;
 
     if (!orgUuid) {
       return BaseResponseDto.fail('No organization associated with this account', 'BAD_REQUEST');

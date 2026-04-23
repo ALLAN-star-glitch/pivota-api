@@ -119,7 +119,7 @@ export class UserController {
     description: 'Unauthorized' 
   })
   async getMe(@Req() req: JwtRequest): Promise<BaseResponseDto<UserProfileResponseDto>> {
-    const userUuid = req.user.userUuid;
+    const userUuid = req.user.sub;
     const response = await this.userService.getMyProfile(userUuid);
     if (!response.success) throw response;
     return response;
@@ -146,7 +146,7 @@ export class UserController {
     @Body() dto: UpdateOwnProfileRequestDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<UserProfileResponseDto>> {
-    const requesterUuid = req.user.userUuid;
+    const requesterUuid = req.user.sub;
     
     const internalDto: UpdateFullUserProfileDto = { 
       ...dto, 
@@ -633,7 +633,7 @@ export class UserController {
     @Body() dto: UpdateAdminProfileRequestDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<UserProfileResponseDto>> {
-    this.logger.log(`Admin ${req.user.userUuid} updating profile for ${userUuid}`);
+    this.logger.log(`Admin ${req.user.sub} updating profile for ${userUuid}`);
     
     const internalDto: UpdateFullUserProfileDto = { 
       ...dto, 

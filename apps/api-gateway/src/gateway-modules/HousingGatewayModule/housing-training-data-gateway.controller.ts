@@ -117,7 +117,7 @@ export class HousingTrainingDataGatewayController {
     @Query() query: TrainingDataSwaggerRequestDto,
     @Req() req: JwtRequest,
   ): Promise<TrainingDataWrapperResponseDto> {
-    this.logger.log(`🤖 AI Training: ${req.user.userUuid} requesting training dataset`);
+    this.logger.log(`🤖 AI Training: ${req.user.sub} requesting training dataset`);
     
     const dto: TrainingDataRequestDto = {
       ...query,
@@ -204,7 +204,7 @@ export class HousingTrainingDataGatewayController {
     @Query() query: StatsSwaggerRequestDto,
     @Req() req: JwtRequest,
   ): Promise<StatsWrapperResponseDto> {
-    this.logger.log(`🤖 AI Training: ${req.user.userUuid} requesting dataset stats`);
+    this.logger.log(`🤖 AI Training: ${req.user.sub} requesting dataset stats`);
     
     const dto: StatsRequestDto = {
       ...query,
@@ -287,7 +287,7 @@ export class HousingTrainingDataGatewayController {
     @Req() req: JwtRequest,
     @Res() res: Response,
   ): Promise<void> {
-    this.logger.log(`🤖 AI Training: ${req.user.userUuid} downloading training data in ${body.format} format`);
+    this.logger.log(`🤖 AI Training: ${req.user.sub} downloading training data in ${body.format} format`);
     
     const { format, params } = body;
     
@@ -432,7 +432,7 @@ export class HousingTrainingDataGatewayController {
     @Query() query: SampleSwaggerRequestDto,
     @Req() req: JwtRequest,
   ): Promise<SampleWrapperResponseDto> {
-    this.logger.log(`🤖 AI Training: ${req.user.userUuid} requesting sample data (size: ${query.size || 10})`);
+    this.logger.log(`🤖 AI Training: ${req.user.sub} requesting sample data (size: ${query.size || 10})`);
     
     const dto: SampleRequestDto = {
       ...query,

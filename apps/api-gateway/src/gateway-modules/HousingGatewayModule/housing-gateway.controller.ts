@@ -365,8 +365,8 @@ export class HousingGatewayController {
     @Query() query: GetListingQueryDto,
   ): Promise<BaseResponseDto<HouseListingResponseDto>> {
     
-    const sessionId = req.user?.tokenId;
-    const seekerId = req.user?.userUuid;
+    const sessionId = req.user?.jti;
+    const seekerId = req.user?.sub;
     
     this.logger.debug(`Device: ${clientInfo.device} (${clientInfo.deviceType})`);
     this.logger.debug(`OS: ${clientInfo.os} ${clientInfo.osVersion || ''}`);
@@ -478,7 +478,7 @@ export class HousingGatewayController {
     @ClientInfo() clientInfo: AuthClientInfoDto,
     @UploadedFiles() files: Array<Express.Multer.File>, 
   ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
-    const requesterUuid = req.user.userUuid;
+    const requesterUuid = req.user.sub;
     const storagePath = `houses/${req.user.accountId}`;
     
     this.logger.log(`Creating new house listing for user ${requesterUuid}`);
@@ -508,8 +508,6 @@ export class HousingGatewayController {
         subCategoryId: dto.subCategoryId,
         creatorId: requesterUuid,
         accountId: req.user.accountId,
-        creatorName: req.user.userName,
-        accountName: req.user.accountName,
         imageUrls: imageUrls,
         ownerEmail: req.user.email,
         clientInfo: clientInfo,
@@ -566,7 +564,7 @@ export class HousingGatewayController {
     const ownerId = req.user.accountId;
     
     if (!ownerId) {
-      this.logger.error(`Security Alert: User ${req.user.userUuid} attempted to fetch listings without an accountId`);
+      this.logger.error(`Security Alert: User ${req.user.sub} attempted to fetch listings without an accountId`);
       throw BaseResponseDto.fail('Account identification missing from session.', 'UNAUTHORIZED');
     }
 
@@ -643,10 +641,9 @@ export class HousingGatewayController {
       throw BaseResponseDto.fail('Unauthorized. Please login.', 'UNAUTHORIZED');
     }
     
-    const seekerId = req.user.userUuid;
-    const sessionId = req.user.tokenId;
+    const seekerId = req.user.sub;
+    const sessionId = req.user.jti; // JWT ID as session identifier
     const userEmail = req.user.email;
-    const userName = req.user.userName;
     const userRole = req.user.role;
     
     if (!seekerId) {
@@ -675,7 +672,6 @@ export class HousingGatewayController {
       userRole: userRole || 'USER',
       callerId: seekerId,
       callerEmail: userEmail,
-      callerName: userName,
       context: context
     };
     
@@ -735,14 +731,13 @@ export class HousingGatewayController {
     @Req() req: JwtRequest,
     @ClientInfo() clientInfo: AuthClientInfoDto,
   ): Promise<BaseResponseDto<HouseViewingResponseDto>> {
-    this.logger.log(`ADMIN ${req.user.userUuid} scheduling viewing for user ${body.targetViewerId} on listing ${listingId}`);
+    this.logger.log(`ADMIN ${req.user.sub} scheduling viewing for user ${body.targetViewerId} on listing ${listingId}`);
 
     const grpcDto: ScheduleAdminViewingGrpcRequestDto = {
       ...body,
       houseId: listingId,
-      callerId: req.user.userUuid,
+      callerId: req.user.sub,
       callerEmail: req.user.email,
-      callerName: req.user.userName,
       userRole: req.user.role,
       targetViewerId: body.targetViewerId,
       targetViewerEmail: body.targetViewerEmail,
@@ -762,7 +757,7 @@ export class HousingGatewayController {
       throw resp;
     }
 
-    this.logger.log(`Admin audit: ${req.user.userUuid} scheduled viewing for ${body.targetViewerId}`);
+    this.logger.log(`Admin audit: ${req.user.sub} scheduled viewing for ${body.targetViewerId}`);
     return resp;
   }
 
@@ -826,10 +821,10 @@ export class HousingGatewayController {
     @Req() req: JwtRequest,
     @UploadedFiles() files: Array<Express.Multer.File>,
   ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
-    const requesterUuid = req.user.userUuid;
+    const requesterUuid = req.user.sub;
     const storagePath = `houses/${req.user.accountId}`;
 
-    this.logger.log(`ADMIN ${req.user.userUuid} creating listing for account ${accountId}`);
+    this.logger.log(`ADMIN ${req.user.sub} creating listing for account ${accountId}`);
 
     const imageUrls = await this.housingService.uploadMultipleToStorage(
       files, 
@@ -844,7 +839,6 @@ export class HousingGatewayController {
         imageUrls, 
         accountId,
         creatorId: dto.creatorId || requesterUuid,
-        creatorName: req.user.userName,
         accountName: 'Admin Created', 
       };
 
@@ -899,17 +893,17 @@ export class HousingGatewayController {
     @Body() dto: UpdateAdminHouseListingRequestDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<HouseListingResponseDto>> {
-    this.logger.log(`ADMIN ${req.user.userUuid} updating listing ${id}`);
+    this.logger.log(`ADMIN ${req.user.sub} updating listing ${id}`);
 
     const sanitizedDto: UpdateHouseListingGrpcRequestDto = {
       ...dto,
       listingId: id,
-      callerId: req.user.userUuid,
+      callerId: req.user.sub,
       userRole: req.user.role,
     };
 
-    const resp = await this.executeHousingUpdate(sanitizedDto, req.user.userUuid, true);
-    
+    const resp = await this.executeHousingUpdate(sanitizedDto, req.user.sub, true);
+
     if (!resp.success) {
       this.logger.warn(`Admin update failed for listing ${id}: ${resp.message}`);
       throw resp;
@@ -995,12 +989,12 @@ export class HousingGatewayController {
   ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
     // Check if user has admin role (Individual and Member cannot access admin endpoints)
     if (req.user.role === 'Individual' || req.user.role === 'Member') {
-      this.logger.warn(`Unauthorized admin access attempt by ${req.user.role} ${req.user.userUuid}`);
+      this.logger.warn(`Unauthorized admin access attempt by ${req.user.role} ${req.user.sub}`);
       throw BaseResponseDto.fail('Unauthorized access to admin listings.', 'FORBIDDEN');
     }
-    
-    this.logger.log(`Admin ${req.user.userUuid} searching system listings`);
-    
+
+    this.logger.log(`Admin ${req.user.sub} searching system listings`);
+
     const resp = await this.housingService.getAdminListings(query);
     
     if (!resp.success) {

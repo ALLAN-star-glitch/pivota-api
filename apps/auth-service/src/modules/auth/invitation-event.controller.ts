@@ -36,6 +36,7 @@ export class InvitationEventController {
         firstName: data.firstName,
         lastName: data.lastName,
         phone: data.phone,
+        accountUuid: data.accountUuid,
       });
       
       this.logger.log(`[EVENT] Successfully processed invitation for new user: ${data.email}`);

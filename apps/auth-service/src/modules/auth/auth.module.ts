@@ -11,6 +11,7 @@ import { InvitationEventController } from './invitation-event.controller';
 import { SharedRedisModule } from '@pivota-api/shared-redis';
 import { EmailWorker } from '../../workers/email.worker';
 import { AnalyticsWorker } from '../../workers/analytics.worker';
+import { AccountConsumer } from '../../consumers/account.consumer';
 
 @Module({
   imports: [
@@ -68,7 +69,7 @@ import { AnalyticsWorker } from '../../workers/analytics.worker';
     ]),
   ],
   providers: [AuthService, EmailWorker, AnalyticsWorker],
-  controllers: [AuthController, InvitationEventController],
+  controllers: [AuthController, InvitationEventController, AccountConsumer],
   exports: [AuthService],
 })
 export class AuthModule {

@@ -7,7 +7,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ClientGrpc, ClientProxy, RpcException } from '@nestjs/microservices';
+import { ClientGrpc, ClientProxy } from '@nestjs/microservices';
 import * as bcrypt from 'bcrypt';
 import { ExtendedPrismaClient, PrismaService } from '../../prisma/prisma.service';
 import {
@@ -41,7 +41,7 @@ import { randomUUID } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import * as dotenv from 'dotenv';
 import { HttpService } from '@nestjs/axios';
-import { getRateLimitConfig, OtpPurpose, QueueService } from '@pivota-api/shared-redis';
+import { getRateLimitConfig, OtpPurpose, QueueService, RedisService } from '@pivota-api/shared-redis';
 
 
 
@@ -94,6 +94,8 @@ export class AuthService implements OnModuleInit {
   @Inject('KAFKA_SERVICE') private readonly kafkaClient: ClientProxy, 
 
   @Inject('NOTIFICATION_EVENT_BUS') private readonly notificationBus: ClientProxy,
+
+   private readonly redisService: RedisService,
 ) {
   this.prisma = this.prismaService.prisma;
 }
@@ -122,14 +124,37 @@ export class AuthService implements OnModuleInit {
   
 
  /** ------------------ Validate User ------------------ */
-async validateUser(email: string, password: string): Promise<UserProfileResponseDto | null> {
+async validateUser(
+  email: string, 
+  password: string, 
+  organizationUuid?: string
+): Promise<{ 
+  userUuid: string; 
+  accountUuid: string; 
+  email: string; 
+  status: string;
+  accountStatus: string;
+  memberStatus?: string;
+  isOrganizationMember: boolean;
+} | null> {
   const MAX_FAILED_ATTEMPTS = 5;
   const LOCKOUT_DURATION_MINUTES = 15;
 
   try {
-    // 1. FETCH CREDENTIAL (Identity Check)
+    // 1. FETCH CREDENTIAL with all needed fields
     const credential = await this.prisma.credential.findUnique({
       where: { email },
+      select: {
+        id: true,
+        userUuid: true,
+        accountUuid: true,
+        email: true,
+        passwordHash: true,
+        failedAttempts: true,
+        lockoutExpires: true,
+        accountStatus: true,
+        memberStatus: true,
+      }
     });
 
     if (!credential) {
@@ -137,9 +162,9 @@ async validateUser(email: string, password: string): Promise<UserProfileResponse
       return null;
     }
 
-    this.logger.debug(`[AUTH] Found Credential for: ${email}. UUID: ${credential.userUuid}`);
+    this.logger.debug(`[AUTH] Found Credential for: ${email}. UserUUID: ${credential.userUuid}, AccountUUID: ${credential.accountUuid}`);
 
-    // 2. CHECK LOCKOUT STATUS (Identity Level Protection)
+    // 2. CHECK LOCKOUT STATUS
     if (credential.lockoutExpires && credential.lockoutExpires > new Date()) {
       const remainingTime = Math.ceil((credential.lockoutExpires.getTime() - Date.now()) / 60000);
       this.logger.warn(`[AUTH] Blocked: ${email} locked for ${remainingTime} mins.`);
@@ -167,32 +192,42 @@ async validateUser(email: string, password: string): Promise<UserProfileResponse
       return null;
     }
 
-    // 4. FETCH PROFILE (Cross-Service gRPC Call)
-    const profileGrpcService = this.getProfileGrpcService();
-    this.logger.debug(`[gRPC OUTBOUND] Calling ProfileService for UUID: ${credential.userUuid}`);
+    // 4. CHECK STATUS based on login context
+    let effectiveStatus: string;
+    let isOrganizationMember = false;
 
-    const profileResponse = await firstValueFrom(
-      profileGrpcService.getUserProfileByUuid({ userUuid: credential.userUuid })
-    );
-
-    // Verify gRPC response integrity
-    if (!profileResponse?.success || !profileResponse.data) {
-      this.logger.error(`[SYNC ERROR] Profile data missing in Profile Service for UUID: ${credential.userUuid}`);
-      return null;
+    if (organizationUuid) {
+      // Organization login - check member status for this specific org
+      if (!credential.memberStatus) {
+        this.logger.warn(`[AUTH] User ${email} is not a member of any organization`);
+        throw new UnauthorizedException('You are not a member of any organization.');
+      }
+      
+      // For organization login, we need to verify the specific organization
+      // The credential.memberStatus should reflect the status for the primary org
+      // For multi-org support, you might need to query the specific org status
+      effectiveStatus = credential.memberStatus;
+      isOrganizationMember = true;
+      
+      this.logger.debug(`[AUTH] Organization login for ${email}, member status: ${effectiveStatus}`);
+    } else {
+      // Individual login - check account status
+      effectiveStatus = credential.accountStatus;
+      this.logger.debug(`[AUTH] Individual login for ${email}, account status: ${effectiveStatus}`);
     }
 
-    const fullProfileDto = profileResponse.data;
-
-    // 5. CHECK USER STATUS (Business Logic)
-    if (fullProfileDto.user.status !== 'ACTIVE') {
-      const statusMessage = fullProfileDto.user.status ? fullProfileDto.user.status.toLowerCase() : 'inactive';
-      this.logger.warn(`[AUTH] Blocked: User ${email} is currently ${statusMessage}`);
+    // 5. CHECK IF STATUS ALLOWS LOGIN
+    if (effectiveStatus !== 'ACTIVE') {
+      const statusMessage = effectiveStatus.toLowerCase();
+      this.logger.warn(`[AUTH] Blocked: ${email} account is ${statusMessage}`);
+      
+      if (effectiveStatus === 'PENDING_PAYMENT') {
+        throw new UnauthorizedException('Please complete payment to activate your account.');
+      }
       throw new UnauthorizedException(`Your account is ${statusMessage}.`);
     }
 
-    // 6. FINAL SUCCESS: RESET SECURITY & UPDATE GLOBAL ANCHOR
-    // We update 'lastLoginAt' here in Credentials, but detailed activity 
-    // tracking (IP/Device) happens in the 'generateTokens' session creation.
+    // 6. RESET SECURITY FIELDS ON SUCCESS
     await this.prisma.credential.update({
       where: { id: credential.id },
       data: { 
@@ -202,12 +237,20 @@ async validateUser(email: string, password: string): Promise<UserProfileResponse
       }
     });
 
-    this.logger.log(`[AUTH] Identity and Profile validated successfully for: ${email}`);
+    this.logger.log(`[AUTH] User validated successfully: ${email} (${organizationUuid ? 'Organization' : 'Individual'} login)`);
     
-    return fullProfileDto;
+    // Return minimal data needed for token generation
+    return {
+      userUuid: credential.userUuid,
+      accountUuid: credential.accountUuid,
+      email: credential.email,
+      status: effectiveStatus,
+      accountStatus: credential.accountStatus,
+      memberStatus: credential.memberStatus || undefined,
+      isOrganizationMember,
+    };
 
   } catch (err: unknown) {
-    // Re-throw specific UnauthorizedExceptions (like Lockout messages)
     if (err instanceof UnauthorizedException) throw err;
     
     this.logger.error('[AUTH] Critical error in validateUser flow');
@@ -229,8 +272,6 @@ async generateTokens(
 
   this.logger.debug(`[AUTH] Generating tokens for User: ${userData.uuid} in Account: ${accountData.uuid}`);
 
-  const fullName = `${userData.firstName} ${userData.lastName}`.trim();
-
   // 1. Fetch the User Role via gRPC
   const rbacService = this.getRbacGrpcService();
   const userRoleResponse = await firstValueFrom(
@@ -239,20 +280,21 @@ async generateTokens(
   const roleType = userRoleResponse?.role?.roleType ?? 'Individual';
 
   const tokenId = `${userData.uuid}-${Date.now()}`;
+  const now = Math.floor(Date.now() / 1000);
 
-  // 2. Prepare JWT Payload
+  // 2. Prepare JWT Payload with standard claims
   const payload: JwtPayload = {
-    userUuid: userData.uuid,
+    // Standard claims (RFC 7519)
+    sub: userData.uuid,
+    jti: tokenId,
+    iat: now,
+    
+    // Custom claims
     email: userData.email,
-    role: roleType,
-    tokenId: tokenId,
     accountId: accountData.uuid,
-    userName: fullName,
-    organizationUuid: orgData?.uuid,
-    accountName: accountData.type === 'ORGANIZATION' && orgData?.name 
-      ? orgData.name 
-      : fullName,
+    role: roleType,
     accountType: accountData.type as 'INDIVIDUAL' | 'ORGANIZATION',
+    organizationUuid: orgData?.uuid,
   };
 
   // 3. Sign Access and Refresh Tokens
@@ -270,13 +312,13 @@ async generateTokens(
       tokenId: tokenId,
       hashedToken,
       
-      // Basic client info (already present)
+      // Basic client info
       device: clientInfo?.device,
       ipAddress: clientInfo?.ipAddress,
       userAgent: clientInfo?.userAgent,
       os: clientInfo?.os,
       
-      // NEW rich client info fields
+      // Rich client info fields
       deviceType: clientInfo?.deviceType,
       osVersion: clientInfo?.osVersion,
       browser: clientInfo?.browser,
@@ -315,7 +357,7 @@ async signup(
   this.logger.log(`Signup attempt: ${signupDto.email}`);
 
   try {
-    // 1. Get signup rate limit configuration using unified function
+    // 1. Get signup rate limit configuration
     const signupLimit = getRateLimitConfig('SIGNUP_ATTEMPTS');
     
     // 2. Check rate limit for signup attempts
@@ -335,7 +377,7 @@ async signup(
       );
     }
 
-    // 3. Verify OTP using unified function for OTP config
+    // 3. Verify OTP
     const verificationResult = await this.verifyOtp({
       email: signupDto.email,
       code: signupDto.code,
@@ -343,7 +385,6 @@ async signup(
     });
 
     if (!verificationResult.success || !verificationResult.data?.verified) {
-      // Increment failed attempt counter
       await this.queue.incrementRateLimit(
         signupDto.email,
         'signup_attempts',
@@ -400,9 +441,10 @@ async signup(
       profileImage: signupDto.profileImage,
       primaryPurpose: signupDto.primaryPurpose,
       profiles: [],
+      skipEventEmission: true,
     }; 
 
-    // Map profile data
+    // Map profile data (keep as is)
     if (signupDto.jobSeekerData) {
       createAccountDto.jobSeekerData = signupDto.jobSeekerData;
       profileType = 'JOB_SEEKER';
@@ -477,8 +519,7 @@ async signup(
       firstValueFrom(profileGrpcService.createIndividualAccountWithProfiles(createAccountDto))
     ]);
 
-    if (!profileResponse.success || !profileResponse.data) {
-      // Increment rate limit counter on profile creation failure
+    if (!profileResponse || !profileResponse.data) {
       await this.queue.incrementRateLimit(
         signupDto.email,
         'signup_attempts',
@@ -525,7 +566,6 @@ async signup(
     const userData = accountData.users?.[0];
     
     if (!userData) {
-      // Increment rate limit counter when no user data returned
       await this.queue.incrementRateLimit(
         signupDto.email,
         'signup_attempts',
@@ -537,21 +577,25 @@ async signup(
       return BaseResponseDto.fail('Invalid response from profile service', 'INTERNAL_ERROR');
     }
 
-    // 6. Save credentials (OTP already deleted by verifyOtp)
+    const roleType = accountData.userRole || 'GeneralUser';
+    // 6. Save credentials with accountUuid
     await this.prisma.credential.create({
       data: {
         userUuid: userData.uuid,
+        accountUuid: accountData.uuid,
         passwordHash: hashedPassword,
         email: signupDto.email,
         phone: signupDto.phone || null,
         mfaEnabled: true,
+        accountStatus: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
+        role: roleType,
       },
     });
 
     // 7. Reset rate limit on successful signup
     await this.queue.resetRateLimit(signupDto.email, 'signup_attempts');
 
-    // ============ PREMIUM BRANCH: PAYMENT HAND-OFF ============
+    // ============ PREMIUM BRANCH: PAYMENT HAND-OFF (keep as is) ============
     if (isPremium && profileResponse.code === 'PAYMENT_REQUIRED') {
       try {
         const paymentPayload = {
@@ -574,7 +618,6 @@ async signup(
           )
         );
 
-        // Queue payment pending email
         await this.queue.addJob(
           'email-queue',
           'payment-pending-email',
@@ -620,9 +663,8 @@ async signup(
       }
     }
 
-    // ============ FREE PLAN - QUEUE BACKGROUND JOBS ============
+    // ============ FREE PLAN - QUEUE BACKGROUND JOBS (keep as is) ============
     
-    // Queue welcome email
     await this.queue.addJob(
       'email-queue',
       'welcome-email',
@@ -643,7 +685,6 @@ async signup(
       }
     );
 
-    // Queue admin notification
     const adminEmail = process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'onboarding@pivotaconnect.com';
     await this.queue.addJob(
       'email-queue',
@@ -667,7 +708,6 @@ async signup(
       }
     );
 
-    // Queue analytics event
     await this.queue.addJob(
       'analytics-queue',
       'user-registered',
@@ -698,23 +738,54 @@ async signup(
       }
     );
 
-    //  STEP 8: Generate tokens for auto-login
-    // Fetch the full profile data to generate tokens
-    const profileDataForTokens = await firstValueFrom(
-      this.getProfileGrpcService().getUserProfileByUuid({ userUuid: userData.uuid })
-    );
+    // ✅ Generate tokens with standard JWT claims
+    const tokenId = `${userData.uuid}-${Date.now()}`;
+    const now = Math.floor(Date.now() / 1000);
 
-    if (!profileDataForTokens?.success || !profileDataForTokens.data) {
-      this.logger.error(`Failed to get profile data for token generation for user: ${userData.uuid}`);
-      return BaseResponseDto.fail('Signup succeeded but failed to generate session', 'INTERNAL_ERROR');
-    }
 
-    // Generate access and refresh tokens
-    const { accessToken, refreshToken } = await this.generateTokens(profileDataForTokens.data, clientInfo);
+    const payload: JwtPayload = {
+      // Standard claims
+      sub: userData.uuid,
+      jti: tokenId,
+      iat: now,
+      
+      // Custom claims
+      email: signupDto.email,
+      accountId: accountData.uuid,
+      role: roleType,
+      accountType: 'INDIVIDUAL',
+      organizationUuid: null,
+      planSlug: targetPlanSlug,
+    };
+
+    const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
+    const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
+
+    const hashedToken = await bcrypt.hash(refreshToken, 10);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await this.prisma.session.create({
+      data: {
+        userUuid: userData.uuid,
+        tokenId: tokenId,
+        hashedToken,
+        device: clientInfo?.device,
+        ipAddress: clientInfo?.ipAddress,
+        userAgent: clientInfo?.userAgent,
+        os: clientInfo?.os,
+        deviceType: clientInfo?.deviceType,
+        osVersion: clientInfo?.osVersion,
+        browser: clientInfo?.browser,
+        browserVersion: clientInfo?.browserVersion,
+        isBot: clientInfo?.isBot,
+        lastActiveAt: new Date(),
+        expiresAt,
+        revoked: false,
+      },
+    });
 
     this.logger.log(`✅ Signup completed and tokens generated for: ${signupDto.email}`);
 
-    //  Return success with tokens for auto-login (no user DTO - frontend decodes token)
     return BaseResponseDto.ok(
       {
         message: 'Signup successful',
@@ -730,7 +801,6 @@ async signup(
     const errorMessage = err instanceof Error ? err.message : 'Unexpected failure';
     this.logger.error(`[AUTH SIGNUP CRASH] ${errorMessage}`);
 
-    // Increment rate limit counter on unexpected errors
     try {
       const signupLimit = getRateLimitConfig('SIGNUP_ATTEMPTS');
       await this.queue.incrementRateLimit(
@@ -802,7 +872,6 @@ async organisationSignup(
     if (!validOtp) {
       this.logger.warn(`[AUTH] Org Signup blocked: Invalid OTP for ${dto.email}`);
       
-      // Track failed org signup in KAFKA (analytics)
       this.kafkaClient.emit('organization.signup.failed', {
         email: dto.email,
         organizationName: dto.name,
@@ -851,14 +920,12 @@ async organisationSignup(
 
     const profileGrpcService = this.getProfileGrpcService();
     
-    // 3. Call Profile Service with the correct method
+    // 3. Call Profile Service to create organization account
     const orgResponse = await firstValueFrom(
       profileGrpcService.createOrganizationAccountWithProfiles(createOrgProfileReq),
     );
 
-    // Properly capture Profile Service failures (duplicates, etc.)
     if (!orgResponse.success || !orgResponse.data) {
-      // Track profile failure in KAFKA
       this.kafkaClient.emit('organization.signup.failed', {
         email: dto.email,
         organizationName: dto.name,
@@ -881,14 +948,25 @@ async organisationSignup(
       );
     }
 
+    const orgData = orgResponse.data;
+    const adminData = orgData.admin;
+    const accountData = orgData.account;
+
     // 4. Save Admin Credentials Locally
     const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const targetPlanSlug = dto.planSlug || 'free-forever';
+    const isPremium = targetPlanSlug !== 'free-forever';
+
     await this.prisma.credential.create({
       data: {
         userUuid: adminUserUuid,
+        accountUuid: accountData.uuid,
         email: dto.email,
         passwordHash: hashedPassword,
+        phone: dto.phone || null,
         mfaEnabled: true,
+        accountStatus: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
+        memberStatus: 'ACTIVE',
       },
     });
 
@@ -900,15 +978,15 @@ async organisationSignup(
     /* ======================================================
        6. PREMIUM BRANCH: PAYMENT HAND-OFF
     ====================================================== */
-    if (orgResponse.code === 'PAYMENT_REQUIRED') {
+    if (isPremium && orgResponse.code === 'PAYMENT_REQUIRED') {
       try {
         const paymentPayload = {
-          accountUuid: orgResponse.data.account.uuid,
-          userUuid: orgResponse.data.admin.uuid,
+          accountUuid: accountData.uuid,
+          userUuid: adminData.uuid,
           email: dto.email,
           firstName: dto.adminFirstName,
           lastName: dto.adminLastName,
-          planSlug: dto.planSlug,
+          planSlug: targetPlanSlug,
           amount: 5000, 
           currency: 'KES',
           callbackUrl: 'https://app.pivota.com/onboarding/payment-status'
@@ -922,13 +1000,12 @@ async organisationSignup(
           )
         );
 
-        // Track premium org signup in KAFKA
         this.kafkaClient.emit('organization.signup.premium', {
-          organizationUuid: orgResponse.data.uuid,
+          organizationUuid: orgData.uuid,
           organizationName: dto.name,
           adminEmail: dto.email,
           adminUserUuid,
-          plan: dto.planSlug,
+          plan: targetPlanSlug,
           clientInfo: clientInfo ? {
             device: clientInfo.device,
             deviceType: clientInfo.deviceType,
@@ -940,9 +1017,9 @@ async organisationSignup(
 
         return BaseResponseDto.ok(
           {
-            organization: orgResponse.data,
-            admin: orgResponse.data.admin,
-            account: orgResponse.data.account,
+            organization: orgData,
+            admin: adminData,
+            account: accountData,
             redirectUrl: paymentInitResponse.data.redirectUrl,
             merchantReference: paymentInitResponse.data.merchantReference,
           } as unknown as OrganizationSignupDataDto,
@@ -956,9 +1033,9 @@ async organisationSignup(
 
         return BaseResponseDto.ok(
           {
-            organization: orgResponse.data,
-            admin: orgResponse.data.admin,
-            account: orgResponse.data.account,
+            organization: orgData,
+            admin: adminData,
+            account: accountData,
             redirectUrl: null,
           } as unknown as OrganizationSignupDataDto,
           'Organization registered. Our payment system is busy. Please login to complete subscription.',
@@ -971,17 +1048,17 @@ async organisationSignup(
        7. NOTIFICATIONS & ANALYTICS
     ====================================================== */
 
-    //  Send organization welcome email via RabbitMQ - NO client info
+    // Send organization welcome email
     this.notificationBus.emit('organization.onboarded', {
-      accountId: orgResponse.data.account.accountCode,
+      accountId: accountData.accountCode,
       name: dto.name,
-      adminFirstName: orgResponse.data.admin.firstName,
+      adminFirstName: adminData.firstName,
       adminEmail: dto.email,
       orgEmail: dto.officialEmail,
       plan: 'Free Forever',
     });
 
-    //  Send admin notification via RabbitMQ - New organization registration
+    // Send admin notification
     this.notificationBus.emit('admin.new.organization.registration', {
       recipientEmail: process.env.PIVOTA_ADMIN_NOTIFICATION_EMAIL || 'onboarding@pivotaconnect.com',
       organizationName: dto.name,
@@ -992,14 +1069,14 @@ async organisationSignup(
       plan: 'Free Forever'
     });
 
-    //  Send analytics via Kafka - WITH client info
+    // Send analytics via Kafka
     this.kafkaClient.emit('organization.registered', {
-      organizationUuid: orgResponse.data.uuid,
+      organizationUuid: orgData.uuid,
       organizationName: dto.name,
       adminUserUuid,
       adminEmail: dto.email,
-      accountId: orgResponse.data.account.accountCode,
-      plan: dto.planSlug || 'free-forever',
+      accountId: accountData.accountCode,
+      plan: targetPlanSlug,
       purposes: dto.purposes || [],
       signupSource: {
         device: clientInfo?.device,
@@ -1013,38 +1090,91 @@ async organisationSignup(
       }
     });
 
-    // 8. Return Success Response
+    // ✅ Generate tokens for auto-login with standard JWT claims
+    const tokenId = `${adminUserUuid}-${Date.now()}`;
+    const now = Math.floor(Date.now() / 1000);
+    const roleType = 'OrganizationAdmin';
+    
+    const payload: JwtPayload = {
+      // Standard claims
+      sub: adminUserUuid,
+      jti: tokenId,
+      iat: now,
+  
+      
+      // Custom claims
+      email: dto.email,
+      accountId: accountData.uuid,
+      role: roleType,
+      accountType: 'ORGANIZATION',
+      organizationUuid: orgData.uuid,
+      planSlug: targetPlanSlug,
+    };
+
+    const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
+    const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
+
+    const hashedToken = await bcrypt.hash(refreshToken, 10);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await this.prisma.session.create({
+      data: {
+        userUuid: adminUserUuid,
+        tokenId: tokenId,
+        hashedToken,
+        device: clientInfo?.device,
+        ipAddress: clientInfo?.ipAddress,
+        userAgent: clientInfo?.userAgent,
+        os: clientInfo?.os,
+        deviceType: clientInfo?.deviceType,
+        osVersion: clientInfo?.osVersion,
+        browser: clientInfo?.browser,
+        browserVersion: clientInfo?.browserVersion,
+        isBot: clientInfo?.isBot,
+        lastActiveAt: new Date(),
+        expiresAt,
+        revoked: false,
+      },
+    });
+
+    this.logger.log(`✅ Organization signup completed with auto-login for: ${dto.email}`);
+
+    // 8. Return Success Response with tokens
     return BaseResponseDto.ok(
       {
+        message: 'Organization created successfully',
+        accessToken,
+        refreshToken,
+        redirectTo: '/dashboard',
         organization: {
-          id: String(orgResponse.data.id),
-          uuid: orgResponse.data.uuid,
-          name: orgResponse.data.name,
-          orgCode: orgResponse.data.orgCode,
-          verificationStatus: orgResponse.data.verificationStatus,
-          type: orgResponse.data.type,
-          officialEmail: orgResponse.data.officialEmail,
-          officialPhone: orgResponse.data.officialPhone,
-          physicalAddress: orgResponse.data.physicalAddress,
-          website: orgResponse.data.website,
-          about: orgResponse.data.about,
-          logo: orgResponse.data.logo,
+          id: String(orgData.id),
+          uuid: orgData.uuid,
+          name: orgData.name,
+          orgCode: orgData.orgCode,
+          verificationStatus: orgData.verificationStatus,
+          type: orgData.type,
+          officialEmail: orgData.officialEmail,
+          officialPhone: orgData.officialPhone,
+          physicalAddress: orgData.physicalAddress,
+          website: orgData.website,
+          about: orgData.about,
+          logo: orgData.logo,
         },
         admin: {
-          uuid: orgResponse.data.admin.uuid,
-          email: orgResponse.data.admin.email,
-          roleName: orgResponse.data.admin.roleName,
-          userCode: orgResponse.data.admin.userCode,
-          firstName: orgResponse.data.admin.firstName,
-          lastName: orgResponse.data.admin.lastName,
-          phone: orgResponse.data.admin.phone
+          uuid: adminData.uuid,
+          email: adminData.email,
+          roleName: adminData.roleName,
+          userCode: adminData.userCode,
+          firstName: adminData.firstName,
+          lastName: adminData.lastName,
+          phone: adminData.phone
         },
         account: {
-          uuid: orgResponse.data.account.uuid,
-          type: orgResponse.data.account.type,
-          accountCode: orgResponse.data.account.accountCode,
+          uuid: accountData.uuid,
+          type: accountData.type,
+          accountCode: accountData.accountCode,
         }
-      } as OrganizationSignupDataDto,
+      } as unknown as OrganizationSignupDataDto,
       'Organization and Admin User created successfully',
       'CREATED'
     );
@@ -1053,7 +1183,6 @@ async organisationSignup(
     const message = err instanceof Error ? err.message : 'Unexpected Auth failure';
     this.logger.error(`[ORG SIGNUP CRASH] ${message}`);
 
-    // Track error in KAFKA
     this.kafkaClient.emit('organization.signup.error', {
       email: dto.email,
       organizationName: dto.name,
@@ -1072,16 +1201,16 @@ async organisationSignup(
   }
 }
 
-  // ------------------ Unified Login ------------------
+// ------------------ Unified Login (Optimized) ------------------
 async login(
   loginDto: LoginRequestDto,
 ): Promise<BaseResponseDto<LoginResponseDto>> {
+  const startTime = Date.now();
   this.logger.debug(`Login attempt for: ${loginDto.email}`);
 
   try {
-    // 1. Check rate limit for login attempts (early defense)
+    // 1. Check rate limit (fast - Redis)
     const loginLimit = getRateLimitConfig('LOGIN_ATTEMPTS');
-    
     const rateLimitResult = await this.queue.checkRateLimit(
       loginDto.email,
       'login_attempts',
@@ -1091,44 +1220,43 @@ async login(
     
     if (!rateLimitResult.allowed) {
       const minutesLeft = Math.ceil(rateLimitResult.resetInSeconds / 60);
-      this.logger.warn(`[AUTH] Login rate limit exceeded for ${loginDto.email}`);
       return BaseResponseDto.fail(
         loginLimit.errorMessage(minutesLeft),
         'TOO_MANY_REQUESTS'
       );
     }
     
-    // 2. Validate Credentials (database lockout is second layer)
-    const profile = await this.validateUser(loginDto.email, loginDto.password);
+    // 2. Validate credentials (optimized - single DB query, no gRPC)
+    const validatedUser = await this.validateUser(loginDto.email, loginDto.password);
 
-    if (!profile) {
-      // Increment rate limit counter on failed password
+    if (!validatedUser) {
       await this.queue.incrementRateLimit(
         loginDto.email,
         'login_attempts',
         loginLimit.maxAttempts,
         loginLimit.windowSeconds
       );
-      throw new UnauthorizedException('Invalid password or email');
+      throw new UnauthorizedException('Invalid email or password');
     }
 
-    // 3. Reset rate limit on successful password validation
+    // 3. Reset rate limit on success
     await this.queue.resetRateLimit(loginDto.email, 'login_attempts');
 
-    // 4. Trigger MFA Challenge (has its own rate limit)
-    await this.requestOtp({
-      email: loginDto.email,
-      purpose: "LOGIN_2FA",   
+    // 4. Queue OTP in background (non-blocking)
+    // Don't await - let it run in background
+    this.queueOtpInBackground(loginDto.email, 'LOGIN_2FA').catch(err => {
+      this.logger.error(`Background OTP failed for ${loginDto.email}: ${err.message}`);
     });
 
-    this.logger.log(`MFA challenge sent to: ${loginDto.email}`);
+    const elapsed = Date.now() - startTime;
+    this.logger.log(`Login stage 1 completed in ${elapsed}ms for: ${loginDto.email}`);
 
-    // 5. Return lean MFA response
+    // 5. Return immediately (don't wait for OTP)
     return BaseResponseDto.ok(
       { 
         message: 'MFA_REQUIRED',
-        email: profile.user.email,
-        uuid: profile.user.uuid
+        email: validatedUser.email,
+        uuid: validatedUser.userUuid
       } as LoginResponseDto,
       'MFA_REQUIRED',
       '2FA_PENDING'
@@ -1145,21 +1273,47 @@ async login(
       );
     }
 
-    if (err instanceof RpcException || (err as any)?.code !== undefined) {
-      const rpcErr = (err instanceof RpcException ? err.getError() : err) as any;
-      return BaseResponseDto.fail(
-        'Identity service communication failure',
-        'SERVICE_UNAVAILABLE',
-        { code: String(rpcErr.code), message: rpcErr.message }
-      );
-    }
-
     return BaseResponseDto.fail(
       'Internal server error',
       'INTERNAL_ERROR',
       { code: 'INTERNAL', message: err instanceof Error ? err.message : 'Login failed' }
     );
   }
+}
+
+// Add this helper method to queue OTP in background
+private async queueOtpInBackground(email: string, purpose: string): Promise<void> {
+  // Generate OTP
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60000);
+  
+  // Store OTP in database
+  await this.prisma.otp.upsert({
+    where: {
+      email_purpose: { email, purpose }
+    },
+    update: { code: otpCode, expiresAt, createdAt: new Date() },
+    create: { email, code: otpCode, purpose, expiresAt, createdAt: new Date() },
+  });
+  
+  // Queue email sending (fire and forget)
+  await this.queue.addJob(
+    'email-queue',
+    'send-otp',
+    {
+      to: email,
+      code: otpCode,
+      purpose: purpose,
+    },
+    {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 2000 },
+      removeOnComplete: true,
+      removeOnFail: false,
+    }
+  );
+  
+  this.logger.debug(`OTP ${otpCode} queued for ${email}`);
 }
 
 
@@ -1174,7 +1328,7 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
     // 2. Database Lookup: Find all active sessions for this user
     const sessions = await this.prisma.session.findMany({
       where: { 
-        userUuid: payload.userUuid, 
+        userUuid: payload.sub, 
         revoked: false,
         expiresAt: { gt: new Date() }
       },
@@ -1184,7 +1338,7 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
     const validSession = sessions.find((s) => bcrypt.compareSync(refreshToken, s.hashedToken));
     
     if (!validSession) {
-      this.logger.warn(`[AUTH] Refresh attempt with invalid/revoked token for user: ${payload.userUuid}`);
+      this.logger.warn(`[AUTH] Refresh attempt with invalid/revoked token for user: ${payload.sub}`);
       throw new UnauthorizedException('Invalid or revoked refresh token');
     }
 
@@ -1197,7 +1351,7 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
     // 5. Fetch fresh user profile details via gRPC
     const userGrpcService = this.getProfileGrpcService();
     const profileResponse = await firstValueFrom(
-      userGrpcService.getUserProfileByUuid({ userUuid: payload.userUuid })
+      userGrpcService.getUserProfileByUuid({ userUuid: payload.sub })
     );
 
     if (!profileResponse?.success || !profileResponse.data) {
@@ -1254,7 +1408,6 @@ async signInWithGoogle(
   try {
     const profileGrpc = this.getProfileGrpcService();
     
-    // Extract token and onboarding data from the request
     const token = googleLoginRequest?.token;
     const onboardingData = googleLoginRequest?.onboardingData;
     
@@ -1275,69 +1428,52 @@ async signInWithGoogle(
     
     const payload = ticket.getPayload();
     
-    // LOG EVERYTHING FROM GOOGLE PAYLOAD
-    this.logger.log('=========================================');
-    this.logger.log('🔍 [Google Auth] GOOGLE TOKEN PAYLOAD:');
-    this.logger.log(`🔍 Email: ${payload?.email}`);
-    this.logger.log(`🔍 Email Verified: ${payload?.email_verified}`);
-    this.logger.log(`🔍 Given Name (given_name): "${payload?.given_name}"`);
-    this.logger.log(`🔍 Family Name (family_name): "${payload?.family_name}"`);
-    this.logger.log(`🔍 Full Name (name): "${payload?.name}"`);
-    this.logger.log(`🔍 Subject ID (sub): ${payload?.sub}`);
-    this.logger.log(`🔍 Picture: ${payload?.picture || 'Not provided'}`);
-    this.logger.log(`🔍 Locale: ${payload?.locale || 'Not provided'}`);
-    this.logger.log('=========================================');
-    
     if (!payload || !payload.email) {
       throw new UnauthorizedException('Invalid Google token');
     }
 
     const { sub: googleProviderId, email } = payload;
-    let profileData: UserProfileResponseDto;
-    let isNewProvisioning = false;
-    let givenName = payload?.given_name;
-    let familyName = payload?.family_name;
+    let userUuid: string;
+    let accountUuid: string;
+    let isNewUser = false;
+    let accountStatus = 'ACTIVE';
+    let firstName = payload?.given_name || 'User';
+    let lastName = payload?.family_name || '';
+    const profileImage = payload?.picture || null;
 
-    if (givenName === 'undefined' || givenName === 'null') {
-      givenName = '';
-    }
-    if (familyName === 'undefined' || familyName === 'null') {
-      familyName = '';
-    }
+    // Clean up names
+    if (firstName === 'undefined' || firstName === 'null') firstName = 'User';
+    if (lastName === 'undefined' || lastName === 'null') lastName = '';
 
-    const firstName = givenName || 'User';
-    const lastName = familyName || '';
+    this.logger.log(`🔍 [Google Auth] Processing Google login for: ${email}`);
 
-    // Log what we extracted
-    this.logger.log(`🔍 [Google Auth] Extracted - Email: ${email}`);
-
-    // 2. IDENTITY LOOKUP
-    this.logger.log(`🔍 [Google Auth] Looking up credential for email: ${email}`);
-    const credential = await this.prisma.credential.findFirst({
+    // 2. CHECK IF CREDENTIAL EXISTS
+    const existingCredential = await this.prisma.credential.findFirst({
       where: {
         OR: [{ googleProviderId }, { email }]
       }
     });
 
-    if (credential) {
-      this.logger.log(`🔍 [Google Auth] Existing credential found for user: ${credential.userUuid}`);
-      // --- PATH A: EXISTING CREDENTIAL ---
-      if (!credential.googleProviderId) {
+    if (existingCredential) {
+      // PATH A: EXISTING USER - Login flow
+      this.logger.log(`🔍 [Google Auth] Existing user found: ${existingCredential.userUuid}`);
+      
+      userUuid = existingCredential.userUuid;
+      accountUuid = existingCredential.accountUuid;
+      accountStatus = existingCredential.accountStatus;
+      
+      // Link Google ID if not already linked
+      if (!existingCredential.googleProviderId) {
         await this.prisma.credential.update({
-          where: { id: credential.id },
+          where: { id: existingCredential.id },
           data: { googleProviderId }
         });
-        this.logger.log(`[Google Auth] Linked Google ID to existing email: ${email}`);
+        this.logger.log(`[Google Auth] Linked Google ID to existing account: ${email}`);
       }
-
-      const profileResponse = await firstValueFrom(
-        profileGrpc.getUserProfileByUuid({ userUuid: credential.userUuid })
-      );
-      profileData = profileResponse.data;
-
-      // Track existing user login in Kafka
+      
+      // Track existing user login
       this.kafkaClient.emit('user.login.google', {
-        userUuid: credential.userUuid,
+        userUuid,
         email,
         isNewUser: false,
         clientInfo: clientInfo ? {
@@ -1353,200 +1489,187 @@ async signInWithGoogle(
       });
 
     } else {
-      this.logger.log(`🔍 [Google Auth] No existing credential found, checking profile service...`);
-      // --- PATH B: NO CREDENTIAL FOUND ---
-      try {
-        const existingProfile = await firstValueFrom(
-          profileGrpc.getUserProfileByEmail({ email })
-        );
+      // PATH B: BRAND NEW USER - Create everything
+      isNewUser = true;
+      this.logger.log(`[Google Auth] New user detected: ${email}. Creating account...`);
+      
+      const createAccountDto: any = {
+        accountType: 'INDIVIDUAL',
+        email: email,
+        password: '',
+        phone: null,
+        planSlug: 'free-forever',
+        otpCode: '',
+        firstName: firstName,
+        lastName: lastName,
+        profileImage: profileImage,
+        primaryPurpose: onboardingData?.primaryPurpose,
+        jobSeekerData: onboardingData?.jobSeekerData,
+        housingSeekerData: onboardingData?.housingSeekerData,
+        skilledProfessionalData: onboardingData?.skilledProfessionalData,
+        intermediaryAgentData: onboardingData?.intermediaryAgentData,
+        supportBeneficiaryData: onboardingData?.supportBeneficiaryData,
+        employerData: onboardingData?.employerData,
+        propertyOwnerData: onboardingData?.propertyOwnerData,
+        profiles: [],
+        skipEventEmission: true,
+      };
 
-        if (existingProfile?.success && existingProfile.data) {
-          this.logger.log(`🔍 [Google Auth] Existing profile found in profile service for: ${email}`);
-          profileData = existingProfile.data;
-          await this.prisma.credential.create({
-            data: { 
-              userUuid: profileData.user.uuid, 
-              email, 
-              googleProviderId,
-              mfaEnabled: true,
-              passwordHash: null 
-            },
-          });
-          this.logger.log(`[Google Auth] Anchored Google login to pre-existing profile: ${email}`);
-          
-          // Track linked account in Kafka
-          this.kafkaClient.emit('user.account.linked', {
-            userUuid: profileData.user.uuid,
-            email,
-            provider: 'GOOGLE',
-            clientInfo: clientInfo ? {
-              device: clientInfo.device,
-              deviceType: clientInfo.deviceType,
-              os: clientInfo.os,
-              browser: clientInfo.browser,
-              isBot: clientInfo.isBot
-            } : null,
-            timestamp: new Date().toISOString()
-          });
-        }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      } catch (profileErr) {
-        // Truly brand new user
-        isNewProvisioning = true;
-        this.logger.log(`[Google Auth] New user detected: ${email}. Provisioning...`);
-        
-        // Log what we're sending to profile service
-        this.logger.log('=========================================');
-        this.logger.log('🔍 [Google Auth] Creating account with:');
-        this.logger.log(`🔍 First Name (from Google): "${givenName}"`);
-        this.logger.log(`🔍 Last Name (from Google): "${familyName}"`);
-        this.logger.log(`🔍 Will use: firstName = "${firstName}"`);
-        this.logger.log(`🔍 Will use: lastName = "${lastName}"`);
-        this.logger.log(`🔍 Primary Purpose: ${onboardingData?.primaryPurpose || 'not provided'}`);
-        this.logger.log(`🔍 Profile Picture: ${payload?.picture ? '✅ Provided' : '❌ Not provided'}`);
-        this.logger.log('=========================================');
+      const createResponse = await firstValueFrom(
+        profileGrpc.createIndividualAccountWithProfiles(createAccountDto)
+      );
 
-        const pictureUrl = payload?.picture;
-        
-        // USE ONBOARDING DATA IF PROVIDED
-        const createAccountDto: any = {
-          accountType: 'INDIVIDUAL',
-          email: email,
-          password: '', // No password for Google signup
-          phone: null,
-          planSlug: 'free-forever',
-          otpCode: '', // No OTP needed for Google signup
-          firstName: firstName,  // Use cleaned value
-          lastName: lastName,     // Use cleaned value
-          profileImage: pictureUrl || null,  // Google profile picture URL
-          primaryPurpose: onboardingData?.primaryPurpose,
-          // Pass profile data from onboarding
-          jobSeekerData: onboardingData?.jobSeekerData,
-          housingSeekerData: onboardingData?.housingSeekerData,
-          skilledProfessionalData: onboardingData?.skilledProfessionalData,
-          intermediaryAgentData: onboardingData?.intermediaryAgentData,
-          supportBeneficiaryData: onboardingData?.supportBeneficiaryData,
-          employerData: onboardingData?.employerData,
-          propertyOwnerData: onboardingData?.propertyOwnerData,
-          profiles: [],
-        };
-
-        this.logger.log(`[Google Auth] Calling profile service with: firstName="${createAccountDto.firstName}", lastName="${createAccountDto.lastName}", hasProfileImage=${!!createAccountDto.profileImage}`);
-
-        // Call the method for creating individual account with profiles
-        const createResponse = await firstValueFrom(
-          profileGrpc.createIndividualAccountWithProfiles(createAccountDto)
-        );
-
-        if (!createResponse.success || !createResponse.data) {
-          this.logger.error(`[Google Auth] Profile creation failed: ${createResponse.message}`);
-          throw new Error('Profile creation failed via gRPC');
-        }
-
-        this.logger.log(`[Google Auth] Profile creation successful!`);
-
-        // Extract user data from response (matching signup method pattern)
-        const accountData = createResponse.data;
-        const userData = accountData.users?.[0];
-
-        if (!userData) {
-          this.logger.error(`[Google Auth] No user found in account data for ${email}`);
-          throw new Error('No user found in created account');
-        }
-
-        this.logger.log(`[Google Auth] User created with UUID: ${userData.uuid}`);
-
-        // Save credentials using the user UUID from the response
-        await this.prisma.credential.create({
-          data: { 
-            userUuid: userData.uuid, 
-            email, 
-            googleProviderId, 
-            mfaEnabled: true, 
-            passwordHash: null 
-          },
-        });
-
-        // Fetch the full profile using the correct user UUID
-        const fullProfile = await firstValueFrom(
-          profileGrpc.getUserProfileByUuid({ userUuid: userData.uuid })
-        );
-        profileData = fullProfile.data;
-
-        // Send welcome email with profile data if available
-        const profileType = onboardingData?.primaryPurpose 
-          ? this.mapPurposeToProfileType(onboardingData.primaryPurpose)
-          : null;
-        
-        const profileDataForEmail = this.extractProfileDataForEmail(
-          onboardingData?.primaryPurpose,
-          onboardingData
-        );
-
-        this.notificationBus.emit('user.onboarded', {
-          accountId: profileData.account.accountCode,
-          firstName: profileData.user.firstName,
-          email: profileData.user.email,
-          plan: 'Free Forever',
-          profileType: profileType,
-          profileData: profileDataForEmail,
-        });
-
-        // Send admin notification
-        this.notificationBus.emit('admin.new.registration', {
-          adminEmail: process.env.ADMIN_NOTIFICATION_EMAIL || 'onboarding@pivotaconnect.com',
-          userEmail: email,
-          userName: `${firstName} ${lastName}`.trim(),
-          accountType: 'INDIVIDUAL',
-          registrationMethod: 'GOOGLE',
-          registrationDate: new Date().toISOString(),
-          plan: 'Free Forever',
-          primaryPurpose: onboardingData?.primaryPurpose || 'JUST_EXPLORING',
-          profileType: profileType,
-        });
-
-        // Track new user registration in Kafka
-        this.kafkaClient.emit('user.registered', {
-          userUuid: userData.uuid,
-          email,
-          accountId: profileData.account.accountCode,
-          plan: 'free-forever',
-          registrationMethod: 'GOOGLE',
-          primaryPurpose: onboardingData?.primaryPurpose || 'JUST_EXPLORING',
-          profileType: profileType,
-          hasProfileData: !!profileType,
-          signupSource: {
-            device: clientInfo?.device,
-            deviceType: clientInfo?.deviceType,
-            os: clientInfo?.os,
-            osVersion: clientInfo?.osVersion,
-            browser: clientInfo?.browser,
-            browserVersion: clientInfo?.browserVersion,
-            isBot: clientInfo?.isBot,
-            timestamp: new Date().toISOString()
-          }
-        });
+      if (!createResponse.success || !createResponse.data) {
+        this.logger.error(`[Google Auth] Profile creation failed: ${createResponse.message}`);
+        throw new Error('Profile creation failed');
       }
+
+      const accountData = createResponse.data;
+      const userData = accountData.users?.[0];
+
+      if (!userData) {
+        throw new Error('No user found in created account');
+      }
+
+      userUuid = userData.uuid;
+      accountUuid = accountData.uuid;
+      accountStatus = 'ACTIVE';
+
+      await this.prisma.credential.create({
+        data: {
+          userUuid,
+          accountUuid,
+          email,
+          googleProviderId,
+          mfaEnabled: true,
+          passwordHash: null,
+          accountStatus,
+        },
+      });
+
+      // Send welcome emails (keep these - they're async)
+      const profileType = onboardingData?.primaryPurpose 
+        ? this.mapPurposeToProfileType(onboardingData.primaryPurpose)
+        : null;
+      
+      const profileDataForEmail = this.extractProfileDataForEmail(
+        onboardingData?.primaryPurpose,
+        onboardingData
+      );
+
+      this.notificationBus.emit('user.onboarded', {
+        accountId: accountData.accountCode,
+        firstName: firstName,
+        email: email,
+        plan: 'Free Forever',
+        profileType: profileType,
+        profileData: profileDataForEmail,
+      });
+
+      this.notificationBus.emit('admin.new.registration', {
+        adminEmail: process.env.ADMIN_NOTIFICATION_EMAIL || 'onboarding@pivotaconnect.com',
+        userEmail: email,
+        userName: `${firstName} ${lastName}`.trim(),
+        accountType: 'INDIVIDUAL',
+        registrationMethod: 'GOOGLE',
+        registrationDate: new Date().toISOString(),
+        plan: 'Free Forever',
+        primaryPurpose: onboardingData?.primaryPurpose || 'JUST_EXPLORING',
+        profileType: profileType,
+      });
+
+      this.kafkaClient.emit('user.registered', {
+        userUuid,
+        email,
+        accountId: accountData.accountCode,
+        plan: 'free-forever',
+        registrationMethod: 'GOOGLE',
+        primaryPurpose: onboardingData?.primaryPurpose || 'JUST_EXPLORING',
+        profileType: profileType,
+        hasProfileData: !!profileType,
+        signupSource: {
+          device: clientInfo?.device,
+          deviceType: clientInfo?.deviceType,
+          os: clientInfo?.os,
+          osVersion: clientInfo?.osVersion,
+          browser: clientInfo?.browser,
+          browserVersion: clientInfo?.browserVersion,
+          isBot: clientInfo?.isBot,
+          timestamp: new Date().toISOString()
+        }
+      });
     }
 
-    // 3. GENERATE SESSIONS & TOKENS
-    const { accessToken, refreshToken } = await this.generateTokens(profileData, clientInfo);
+    // 3. CHECK ACCOUNT STATUS (using cached status)
+    if (accountStatus !== 'ACTIVE') {
+      this.logger.warn(`[Google Auth] Blocked login for ${email}: account status is ${accountStatus}`);
+      throw new UnauthorizedException(`Your account is ${accountStatus.toLowerCase()}.`);
+    }
 
-    // 4. TRIGGER LOGIN NOTIFICATION
-    if (!isNewProvisioning) {
-      const isOrgAccount = profileData.account.type === 'ORGANIZATION';
-      const adminRoles = ['Business System Admin'];
-      const isUserAdmin = isOrgAccount && adminRoles.includes(profileData.user.roleName);
+    // 4. GENERATE TOKENS with standard JWT claims
+    const tokenId = `${userUuid}-${Date.now()}`;
+    const now = Math.floor(Date.now() / 1000);
+    
+    // Get role from RBAC
+    const rbacService = this.getRbacGrpcService();
+    const userRoleResponse = await firstValueFrom(
+      rbacService.getUserRole({ userUuid })
+    );
+    const roleType = userRoleResponse?.role?.roleType ?? 'Individual';
 
+    const jwtPayload: JwtPayload = {
+      // Standard claims
+      sub: userUuid,
+      jti: tokenId,
+      iat: now,
+      
+      // Custom claims
+      email: email,
+      accountId: accountUuid,
+      role: roleType,
+      accountType: 'INDIVIDUAL',
+      organizationUuid: null,
+    };
+
+    const accessToken = await this.jwtService.signAsync(jwtPayload, { expiresIn: '15m' });
+    const refreshToken = await this.jwtService.signAsync(jwtPayload, { expiresIn: '7d' });
+
+    const hashedToken = await bcrypt.hash(refreshToken, 10);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await this.prisma.session.create({
+      data: {
+        userUuid: userUuid,
+        tokenId: tokenId,
+        hashedToken,
+        device: clientInfo?.device,
+        ipAddress: clientInfo?.ipAddress,
+        userAgent: clientInfo?.userAgent,
+        os: clientInfo?.os,
+        deviceType: clientInfo?.deviceType,
+        osVersion: clientInfo?.osVersion,
+        browser: clientInfo?.browser,
+        browserVersion: clientInfo?.browserVersion,
+        isBot: clientInfo?.isBot,
+        lastActiveAt: new Date(),
+        expiresAt,
+        revoked: false,
+      },
+    });
+
+    // 5. UPDATE LAST LOGIN
+    await this.prisma.credential.update({
+      where: { userUuid: userUuid },
+      data: { lastLoginAt: new Date() }
+    });
+
+    // 6. SEND LOGIN NOTIFICATION (for existing users only)
+    if (!isNewUser) {
       const loginEmailPayload = {
-        to: profileData.user.email,
-        firstName: profileData.user.firstName || 'User',
-        lastName: profileData.user.lastName || '',
-        organizationName: isOrgAccount ? profileData.organization?.name : undefined,
-        orgEmail: isUserAdmin ? profileData.organization?.officialEmail : undefined,
-        subject: isUserAdmin
-          ? `SECURITY: Admin Login to ${profileData.organization?.name}` 
-          : 'New Login to Your Pivota Account (via Google)',
+        to: email,
+        firstName: firstName,
+        lastName: lastName,
+        subject: 'New Login to Your Pivota Account (via Google)',
         device: clientInfo?.device || 'Unknown Device',
         deviceType: clientInfo?.deviceType,
         os: clientInfo?.os || 'Unknown OS',
@@ -1558,47 +1681,35 @@ async signInWithGoogle(
         timestamp: new Date().toISOString(),
         isBot: clientInfo?.isBot,
       };
-
-      this.logger.log(`[RMQ Emit] Sending Google login notification for: ${loginEmailPayload.to}`);
       this.notificationBus.emit('user.login.email', loginEmailPayload);
     }
 
-    const successMessage = isNewProvisioning 
-      ? 'Signup successful' 
-      : 'Login successful';
+    const successMessage = isNewUser ? 'Signup successful' : 'Login successful';
 
-    return {
-      success: true,
-      message: successMessage,
-      code: 'OK',
-      data: {
-        id: profileData.user.uuid,
-        uuid: profileData.user.uuid,
-        userCode: profileData.user.userCode,
-        accountId: profileData.account.uuid,
-        email: profileData.user.email,
-        firstName: profileData.user.firstName,
-        lastName: profileData.user.lastName,
-        phone: profileData.user.phone,
-        status: profileData.user.status,
-        createdAt: profileData.createdAt,
-        updatedAt: profileData.updatedAt,
+    return BaseResponseDto.ok(
+      {
+        id: userUuid,
+        uuid: userUuid,
+        userCode: '',
+        accountId: accountUuid,
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
+        phone: null,
+        status: accountStatus,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         accessToken,
         refreshToken,
-        organization: profileData.organization ? {
-          uuid: profileData.organization.uuid,
-          name: profileData.organization.name,
-          orgCode: profileData.organization.orgCode,
-          verificationStatus: profileData.organization.verificationStatus,
-        } : undefined
-      },
-    } as BaseResponseDto<LoginResponseDto>;
+      } as LoginResponseDto,
+      successMessage,
+      'OK'
+    );
 
   } catch (err) {
     const errorMessage = err.details || err.message;
     this.logger.error(`[Google Auth] Failure: ${errorMessage}`);
-    this.logger.error(`[Google Auth] Error stack: ${err.stack}`);
-
+    
     this.kafkaClient.emit('user.login.error', {
       error: errorMessage,
       method: 'GOOGLE',
@@ -1686,22 +1797,25 @@ async generateDevToken(
     
     const { user: userData, account: accountData, organization: organizationData } = profileResponse.data;
     const organizationUuid = organizationData?.uuid || null;
-    const fullName = `${userData.firstName} ${userData.lastName}`.trim();
 
     // 2. Generate Dev Token ID
     const devTokenId = `dev-${userUuid}-${Date.now()}`;
+    const now = Math.floor(Date.now() / 1000);
  
-    // 3. Prepare Payload
+    // 3. Prepare Payload with standard JWT claims
     const payload: JwtPayload = {
-      userUuid,
-      email,
-      role,
-      accountId,
-      organizationUuid,
-      tokenId: devTokenId,
-      userName: fullName,
-      accountName: accountData.type === 'ORGANIZATION' ? organizationData.name : fullName,
-      accountType: accountData.type
+      // Standard claims
+      sub: userUuid,
+      jti: devTokenId,
+      iat: now,
+
+      
+      // Custom claims
+      email: email,
+      accountId: accountId,
+      role: role,
+      accountType: accountData.type as 'INDIVIDUAL' | 'ORGANIZATION',
+      organizationUuid: organizationUuid,
     };
 
     // 4. Parallel token signing
@@ -2018,38 +2132,39 @@ async verifyMfaLogin(
   verifyDto: VerifyOtpDto,
   clientInfo?: AuthClientInfoDto
 ): Promise<BaseResponseDto<LoginResponseDto>> {
+  const startTime = Date.now();
   this.logger.debug(`MFA verification for: ${verifyDto.email}`);
 
   try {
-    // 1. Get MFA verification rate limit configuration
+    // 1. Rate limit check
+    let stepStart = Date.now();
     const mfaLimit = getRateLimitConfig('MFA_VERIFICATION');
-    
-    // 2. Check rate limit for OTP verification attempts
     const rateLimitResult = await this.queue.checkRateLimit(
       verifyDto.email,
       'mfa_verification',
       mfaLimit.maxAttempts,
       mfaLimit.windowSeconds
     );
+    this.logger.log(`⏱️ Step 1 (rate limit): ${Date.now() - stepStart}ms`);
     
     if (!rateLimitResult.allowed) {
       const minutesLeft = Math.ceil(rateLimitResult.resetInSeconds / 60);
-      this.logger.warn(`[AUTH] MFA verification rate limit exceeded for ${verifyDto.email}`);
       return BaseResponseDto.fail(
         mfaLimit.errorMessage(minutesLeft),
         'TOO_MANY_REQUESTS'
       );
     }
     
-    // 3. Verify OTP
+    // 2. Verify OTP
+    stepStart = Date.now();
     const verificationResult = await this.verifyOtp({
       email: verifyDto.email,
       code: verifyDto.code,
       purpose: 'LOGIN_2FA',
     });
+    this.logger.log(`⏱️ Step 2 (verify OTP): ${Date.now() - stepStart}ms`);
 
     if (!verificationResult.success || !verificationResult.data?.verified) {
-      // Increment failed attempt counter
       await this.queue.incrementRateLimit(
         verifyDto.email,
         'mfa_verification',
@@ -2063,52 +2178,103 @@ async verifyMfaLogin(
       );
     }
     
-    // 4. Reset rate limit on success
+    // 3. Reset rate limit
+    stepStart = Date.now();
     await this.queue.resetRateLimit(verifyDto.email, 'mfa_verification');
+    this.logger.log(`⏱️ Step 3 (reset rate limit): ${Date.now() - stepStart}ms`);
     
-    // 5. Get user credential
+    // 4. Get credential with role (✅ NO gRPC call needed!)
+    stepStart = Date.now();
     const credential = await this.prisma.credential.findUnique({
       where: { email: verifyDto.email },
-      select: { userUuid: true },
+      select: { 
+        userUuid: true, 
+        accountUuid: true, 
+        accountStatus: true,
+        memberStatus: true,
+        role: true,  // ✅ Get role directly from credential
+      },
     });
+    this.logger.log(`⏱️ Step 4 (get credential): ${Date.now() - stepStart}ms`);
 
     if (!credential) {
       return BaseResponseDto.fail('User not found', 'NOT_FOUND');
     }
 
-    // 6. Fetch user profile
-    let profileResponse;
-    try {
-      profileResponse = await firstValueFrom(
-        this.getProfileGrpcService().getUserProfileByUuid({ userUuid: credential.userUuid })
-      );
-    } catch (grpcError) {
-      this.logger.error(`gRPC error: ${grpcError.message}`);
-      return BaseResponseDto.fail('Profile service unavailable', 'SERVICE_UNAVAILABLE');
-    }
-
-    if (!profileResponse?.success || !profileResponse.data) {
-      return BaseResponseDto.fail('User profile not found', 'NOT_FOUND');
-    }
-
-    const profile = profileResponse.data;
-    const userData = profile.user;
-
-    // 7. Check user status
-    if (userData.status !== 'ACTIVE') {
+    // 5. Check account status
+    if (credential.accountStatus !== 'ACTIVE') {
       return BaseResponseDto.fail(
-        `Account is ${userData.status.toLowerCase()}`,
+        `Account is ${credential.accountStatus.toLowerCase()}`,
         'ACCOUNT_INACTIVE'
       );
     }
 
-    // 8. Generate tokens
-    const { accessToken, refreshToken } = await this.generateTokens(profile, clientInfo);
+    // 6. Role is already in credential - no gRPC call needed!
+    const roleType = credential.role;  // ✅ Instant, no network call
+    this.logger.log(`⏱️ Step 6 (role from credential): 0ms`);
 
-    // 9. Fire-and-forget notifications
-    this.sendLoginNotification(userData, profile, clientInfo);
+    // 7. Generate tokens
+    stepStart = Date.now();
+    const tokenId = `${credential.userUuid}-${Date.now()}`;
+    const now = Math.floor(Date.now() / 1000);
+    
+    const payload: JwtPayload = {
+      sub: credential.userUuid,
+      jti: tokenId,
+      iat: now,
+      email: verifyDto.email,
+      accountId: credential.accountUuid,
+      role: roleType,
+      accountType: 'INDIVIDUAL',
+      organizationUuid: null,
+    };
 
-    // 10. Return response
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(payload, { expiresIn: '15m' }),
+      this.jwtService.signAsync(payload, { expiresIn: '7d' })
+    ]);
+    this.logger.log(`⏱️ Step 7 (sign tokens): ${Date.now() - stepStart}ms`);
+
+    // 8. Create session
+    stepStart = Date.now();
+    const hashedToken = await bcrypt.hash(refreshToken, 10);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await this.prisma.session.create({
+      data: {
+        userUuid: credential.userUuid,
+        tokenId: tokenId,
+        hashedToken,
+        device: clientInfo?.device,
+        ipAddress: clientInfo?.ipAddress,
+        userAgent: clientInfo?.userAgent,
+        os: clientInfo?.os,
+        deviceType: clientInfo?.deviceType,
+        osVersion: clientInfo?.osVersion,
+        browser: clientInfo?.browser,
+        browserVersion: clientInfo?.browserVersion,
+        isBot: clientInfo?.isBot,
+        lastActiveAt: new Date(),
+        expiresAt,
+        revoked: false,
+      },
+    });
+    this.logger.log(`⏱️ Step 8 (create session): ${Date.now() - stepStart}ms`);
+
+    // 9. Update last login
+    stepStart = Date.now();
+    await this.prisma.credential.update({
+      where: { userUuid: credential.userUuid },
+      data: { lastLoginAt: new Date() }
+    });
+    this.logger.log(`⏱️ Step 9 (update last login): ${Date.now() - stepStart}ms`);
+
+    // 10. Send notification (async - don't await)
+    this.sendLoginNotificationAsync(verifyDto.email, credential.userUuid, clientInfo);
+
+    const totalTime = Date.now() - startTime;
+    this.logger.log(`✅ MFA verification completed in ${totalTime}ms for: ${verifyDto.email}`);
+
     return BaseResponseDto.ok(
       { 
         accessToken, 
@@ -2126,6 +2292,26 @@ async verifyMfaLogin(
       'INTERNAL_ERROR'
     );
   }
+}
+
+
+private async sendLoginNotificationAsync(email: string, userUuid: string, clientInfo?: AuthClientInfoDto): Promise<void> {
+  this.queue.addJob(
+    'email-queue',
+    'login-notification',
+    {
+      to: email,
+      userUuid: userUuid,
+      clientInfo: clientInfo,
+      timestamp: new Date().toISOString(),
+    },
+    {
+      attempts: 2,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: true,
+      removeOnFail: false,
+    }
+  ).catch(err => this.logger.error(`Failed to queue login notification: ${err.message}`));
 }
 
 // Helper method for fire-and-forget notifications
@@ -2315,6 +2501,7 @@ async getActiveSessions(userUuid: string): Promise<BaseResponseDto<SessionDto[]>
 async handleInvitationAcceptedNewUser(data: {
   email: string;
   userUuid: string;
+  accountUuid: string;  // ✅ Add this - organization account UUID
   organizationUuid: string;
   organizationName: string;
   roleName: string;
@@ -2332,6 +2519,18 @@ async handleInvitationAcceptedNewUser(data: {
 
     if (existingCredential) {
       this.logger.warn(`[INVITE] Credentials already exist for ${data.email}`);
+      
+      // If credential exists but doesn't have member status for this org, update it
+      if (!existingCredential.memberStatus) {
+        await this.prisma.credential.update({
+          where: { id: existingCredential.id },
+          data: { 
+            memberStatus: 'ACTIVE',
+            accountUuid: data.accountUuid
+          }
+        });
+        this.logger.log(`[INVITE] Updated existing credential with member status for ${data.email}`);
+      }
       return;
     }
 
@@ -2340,16 +2539,19 @@ async handleInvitationAcceptedNewUser(data: {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 48);
 
-    // 3. Create credential record with NO password hash
-    // Password will be set via setup flow - we don't need to store the result in a variable
+    // 3. Create credential record with organization context
     await this.prisma.credential.create({
       data: {
         userUuid: data.userUuid,
+        accountUuid: data.accountUuid,      // ✅ Organization account UUID
         email: data.email,
-        passwordHash: null, // No password yet
+        phone: data.phone || null,
+        passwordHash: null,                  // No password yet (will be set via setup)
         mfaEnabled: true,
         failedAttempts: 0,
         lastLoginAt: null,
+        accountStatus: 'ACTIVE',             // ✅ Organization account status
+        memberStatus: 'ACTIVE',              // ✅ User's status within this organization
       },
     });
 
@@ -2363,13 +2565,13 @@ async handleInvitationAcceptedNewUser(data: {
       },
     });
 
-    // 5. Create audit record (optional)
+    // 5. Create audit record
     await this.prisma.invitationAudit.create({
       data: {
         email: data.email,
         userUuid: data.userUuid,
         organizationUuid: data.organizationUuid,
-        invitedByUserUuid: 'system', // You might want to pass this
+        invitedByUserUuid: 'system',
         status: 'ACCEPTED',
         acceptedAt: new Date(),
       },
@@ -2380,12 +2582,14 @@ async handleInvitationAcceptedNewUser(data: {
       email: data.email,
       userUuid: data.userUuid,
       firstName: data.firstName,
+      lastName: data.lastName,
       setupToken,
       expiresAt: expiresAt.toISOString(),
       organizationName: data.organizationName,
+      organizationUuid: data.organizationUuid,
     });
 
-    this.logger.log(`[INVITE] Password setup token created for ${data.email}`);
+    this.logger.log(`[INVITE] Password setup token created for ${data.email} (Organization: ${data.organizationName})`);
 
   } catch (error) {
     this.logger.error(`[INVITE] Failed to create credentials for ${data.email}: ${error.message}`);
@@ -2574,27 +2778,35 @@ async resendPasswordSetupEmail(email: string): Promise<BaseResponseDto<null>> {
 async createInvitedUserCredentials(data: {
   email: string;
   userUuid: string;
+  accountUuid: string;  // ✅ Required - organization account UUID
   firstName: string;
   lastName: string;
   phone: string;
   organizationName: string;
+  organizationUuid: string;  // ✅ Required - organization UUID
+  roleName: string;  // ✅ Required - role within organization
 }): Promise<BaseResponseDto<null>> {
-  this.logger.log(`[gRPC] Creating credentials for invited user: ${data.email}`);
+  this.logger.log(`[gRPC] Creating credentials for invited user: ${data.email} (Organization: ${data.organizationName})`);
   
   try {
     await this.handleInvitationAcceptedNewUser({
-      ...data,
-      organizationUuid: '', // You might need this
-      roleName: 'GeneralUser',
+      email: data.email,
+      userUuid: data.userUuid,
+      accountUuid: data.accountUuid,      // ✅ Organization account UUID
+      organizationUuid: data.organizationUuid,
+      organizationName: data.organizationName,
+      roleName: data.roleName,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      phone: data.phone,
     });
     
     return BaseResponseDto.ok(null, 'Credentials created successfully', 'OK');
   } catch (error) {
+    this.logger.error(`[gRPC] Failed to create credentials for invited user: ${error.message}`);
     return BaseResponseDto.fail(error.message, 'INTERNAL_ERROR');
   }
 }
 }
 
-function getValidationRule(purpose: string) {
-  throw new Error('Function not implemented.');
-}
+

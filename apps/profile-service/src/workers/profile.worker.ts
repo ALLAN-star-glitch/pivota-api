@@ -87,6 +87,10 @@ export class ProfileWorker {
               this.analyticsKafkaClient.emit('housing.preferences.updated', data);
               this.logger.log(`✅ Housing preferences event emitted for user ${data.userUuid}`);
               break;
+
+              case 'emit-account-created-event':
+                await this.emitAccountCreatedEvent(data);
+              break;
               
             default:
               this.logger.warn(`Unknown profile job type: ${name}`);
@@ -226,4 +230,48 @@ export class ProfileWorker {
       // Don't throw - this is a non-critical operation
     }
   }
+
+
+  private async emitAccountCreatedEvent(data: {
+  userUuid: string;
+  accountUuid: string;
+  email: string;
+  phone: string;
+  firstName: string;
+  lastName: string;
+  accountStatus: string;
+  accountType: string;
+  roleName: string;
+  timestamp: string;
+}): Promise<void> {
+  console.log(`📤 Emitting account.created event for user: ${data.userUuid}`);
+  this.logger.log(`📤 Emitting account.created event for user: ${data.userUuid}`);
+  
+  try {
+    // Emit to Kafka for Auth Service to consume
+    this.analyticsKafkaClient.emit('account.created', {
+      event: 'account.created',
+      timestamp: data.timestamp,
+      data: {
+        userUuid: data.userUuid,
+        accountUuid: data.accountUuid,
+        email: data.email,
+        phone: data.phone,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        accountStatus: data.accountStatus,
+        accountType: data.accountType,
+        roleName: data.roleName,
+      }
+    });
+    
+    console.log(`✅ account.created event emitted for user: ${data.userUuid}`);
+    this.logger.log(`✅ account.created event emitted for user: ${data.userUuid}`);
+    
+  } catch (error) {
+    console.error(`❌ Failed to emit account.created event: ${error.message}`);
+    this.logger.error(`❌ Failed to emit account.created event: ${error.message}`);
+    throw error;
+  }
+}
 }

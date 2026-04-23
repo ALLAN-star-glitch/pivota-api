@@ -211,7 +211,7 @@ export class SharedListingsGatewayController {
   async getOwnListings(
     @Req() req: JwtRequest
   ): Promise<BaseResponseDto<ListingRegistryDataDto>> {
-    const requesterUuid = req.user.userUuid;
+    const requesterUuid = req.user.sub;
     const requesterAccountId = req.user.accountId;
 
     this.logger.log(`👤 User ${requesterUuid} accessing portfolio for account ${requesterAccountId}`);
@@ -454,7 +454,7 @@ export class SharedListingsGatewayController {
     @Query() query: AdminListingFilterDto,
     @Req() req: JwtRequest
   ): Promise<BaseResponseDto<ListingRegistryDataDto>> {
-    const requesterUuid = req.user.userUuid;
+    const requesterUuid = req.user.sub;
     const requesterAccountId = req.user.accountId;
     const requesterRole = req.user.role;
 

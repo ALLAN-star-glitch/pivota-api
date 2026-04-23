@@ -172,17 +172,14 @@ export class JobsController {
     @Body() dto: CreateJobPostDto,
     @Req() req: JwtRequest
   ): Promise<BaseResponseDto<JobPostCreateResponseDto>> {
-    const requesterUuid = req.user.userUuid;
+    const requesterUuid = req.user.sub;
     const accountId = req.user.accountId;
-    const creatorName = req.user.userName; 
-    const accountName = req.user.accountName; 
+  
 
     const sanitizedDto = {
       ...dto,
       creatorId: requesterUuid,
       accountId,
-      creatorName,
-      accountName,
     };
 
     this.logger.log(`👤 User ${requesterUuid} creating their own job`);
@@ -249,7 +246,7 @@ export class JobsController {
     @Body() dto: UpdateOwnJobPostRequestHttpDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
-    const userId = req.user.userUuid;
+    const userId = req.user.sub;
     const accId = req.user.accountId;
 
     const sanitizedDto: UpdateJobGrpcRequestDto = {
@@ -310,7 +307,7 @@ export class JobsController {
     @Req() req: JwtRequest,
     @Query() query: GetOwnJobsFilterDto,
   ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
-    const userId = req.user.userUuid;
+    const userId = req.user.sub;
     const { status } = query;
 
     this.logger.log(`👤 User ${userId} fetching listings. Filter: ${status ?? 'ALL'}`);
@@ -358,7 +355,7 @@ export class JobsController {
     @Param('id', ParseCuidPipe) id: string,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
-    const userId = req.user.userUuid;
+    const userId = req.user.sub;
     const accountId = req.user.accountId;
 
     const sanitizedDto: CloseJobGrpcRequestDto = {
@@ -428,7 +425,7 @@ export class JobsController {
     @Body() dto: CreateJobApplicationDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<JobApplicationResponseDto>> {
-    const userId = req.user.userUuid;
+    const userId = req.user.sub;
     this.logger.log(`📝 User ${userId} applying to job ${id}`);
     return this.jobsService.applyToJobPost(id, userId, dto);
   }
@@ -475,7 +472,7 @@ export class JobsController {
     @Req() req: JwtRequest,
     @Query() query: GetOwnApplicationsFilterDto,
   ): Promise<BaseResponseDto<JobApplicationResponseDto[]>> {
-    const userId = req.user.userUuid;
+    const userId = req.user.sub;
     this.logger.log(`👤 User ${userId} fetching their applications. Filter: ${query.status ?? 'ALL'}`);
     return this.jobsService.getOwnApplications(userId, query.status);
   }
@@ -521,7 +518,7 @@ export class JobsController {
     @Param('id', ParseCuidPipe) id: string,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<JobApplicationDetailResponseDto>> {
-    const userId = req.user.userUuid;
+    const userId = req.user.sub;
     const userRole = req.user.role;
     
     this.logger.log(`🔍 User ${userId} (${userRole}) requesting full details for application ${id}`);
@@ -599,9 +596,9 @@ export class JobsController {
       creatorId: dto.creatorId || null 
     };
 
-    this.logger.log(`👮 Admin ${req.user.userUuid} creating job for Account ${accountId} (Creator: ${dto.creatorId ?? 'Organization'})`);
+    this.logger.log(`👮 Admin ${req.user.sub} creating job for Account ${accountId} (Creator: ${dto.creatorId ?? 'Organization'})`);
     
-    const response = await this.executeJobCreation(finalData, req.user.userUuid);
+    const response = await this.executeJobCreation(finalData, req.user.sub);
 
     if (!response.success) {
       throw response; 
@@ -659,7 +656,7 @@ export class JobsController {
     @Body() dto: UpdateAdminJobPostRequestHttpDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
-    const requesterUuid = req.user.userUuid;
+    const requesterUuid = req.user.sub;
 
     const sanitizedDto: UpdateJobGrpcRequestDto = {
       ...dto,
@@ -718,7 +715,7 @@ export class JobsController {
     @Body() dto: CloseAdminJobPostRequestHttpDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<CloseJobPostResponseDto>> {
-    const requesterUuid = req.user.userUuid;
+    const requesterUuid = req.user.sub;
 
     const sanitizedDto: CloseJobGrpcRequestDto = {
       ...dto,
@@ -786,7 +783,7 @@ export class JobsController {
     @Req() req: JwtRequest,
     @Query() query: GetAdminJobsFilterDto,
   ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
-    const adminId = req.user.userUuid;
+    const adminId = req.user.sub;
     const actorRole = req.user.role;
 
     // Updated role check - Individual and Member cannot access admin endpoints
@@ -859,7 +856,7 @@ export class JobsController {
     @Req() req: JwtRequest,
     @Query() query: GetAdminApplicationsFilterDto,
   ): Promise<BaseResponseDto<JobApplicationResponseDto[]>> {
-    const adminId = req.user.userUuid;
+    const adminId = req.user.sub;
     
     // Updated role check - Individual, Member, ContentManagerAdmin cannot access admin endpoints
     if (req.user.role === 'Individual' || req.user.role === 'Member' || req.user.role === 'ContentManagerAdmin') {

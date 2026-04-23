@@ -50,7 +50,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     this.logger.debug(`Validating JWT payload for ${payload.email}`);
 
-    // 1. Get the response and cast to 'any' to avoid the DTO property error
+    // Get full user data from Auth Service (which fetches from cache/Profile Service)
     const response = await this.authService.getUserFromPayload(payload) as unknown as AuthServiceUserResponse;
 
     if (!response || !response.user) {
@@ -58,31 +58,35 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Invalid or expired token');
     }
 
-    // 2. Safely extract the nested objects
     const dbUser = response.user;
     const dbAccount = response.account;
     const dbOrganization = response.organization;
 
     this.logger.debug(
-      `✅ Authenticated user (${dbUser.firstName} ${dbUser.lastName}) ${dbUser.email} (UUID: ${payload.userUuid}) with role: ${dbUser.roleName}`,
+      `✅ Authenticated user (${dbUser.firstName} ${dbUser.lastName}) ${dbUser.email} (UUID: ${payload.sub}) with role: ${dbUser.roleName}`,
     );
 
     const rawRole = payload.role || dbUser.roleName;
     const normalizedRole = rawRole.replace(/\s+/g, '');
 
-    // 3. Return the flat object your Guards and Controllers expect
+    // Return enriched user object with data from database/cache
     return { 
-      ...dbUser,
-      userUuid: payload.userUuid,
-      tokenId: payload.tokenId,  
-      email: dbUser.email || payload.email,
+      // Core identity (from JWT)
+      userUuid: payload.sub,
+      email: payload.email,
       role: normalizedRole,
-      accountId: dbAccount?.uuid || payload.accountId,
-      organizationUuid: dbOrganization?.uuid || payload.organizationUuid,
+      accountId: payload.accountId,
+      tokenId: payload.jti,
+      
+      // Enriched data (from database/cache)
+      firstName: dbUser.firstName,
+      lastName: dbUser.lastName,
       userName: `${dbUser.firstName} ${dbUser.lastName}`,
-      accountName: dbAccount?.name || payload.accountName,
+      accountName: dbAccount?.name || '',
       accountType: dbAccount?.type || payload.accountType,
+      organizationUuid: dbOrganization?.uuid,
       planSlug: payload.planSlug,
+      status: dbUser.status,
     };
   }
 }

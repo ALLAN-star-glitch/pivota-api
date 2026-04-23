@@ -70,6 +70,52 @@ service ProfileService {
   rpc ResendInvitation(ResendInvitationRequest) returns (BaseResponse);
   rpc CancelInvitation(CancelInvitationRequest) returns (BaseResponse);
   rpc CheckInvitationStatus(CheckInvitationStatusRequest) returns (CheckInvitationStatusResponse);
+
+
+
+  // ======================================================
+  // MEDIA SERVICE METHODS
+  // ======================================================
+  
+  // Profile Picture
+  rpc UploadProfilePicture(UploadProfilePictureRequest) returns (MediaUploadResponse);
+  rpc UploadLogo(UploadLogoRequest) returns (MediaUploadResponse);
+  rpc UploadCoverPhoto(UploadCoverPhotoRequest) returns (MediaUploadResponse);
+  
+  // CV / Resume
+  rpc UploadCV(UploadCVRequest) returns (MediaUploadResponse);
+  rpc GetCV(GetCVRequest) returns (GetCVResponse);
+  rpc DownloadCV(DownloadCVRequest) returns (FileDownloadResponse);
+  
+  // Job Seeker Portfolio
+  rpc UploadJobSeekerPortfolioItems(UploadPortfolioRequest) returns (MediaUploadMultipleResponse);
+  rpc GetJobSeekerPortfolioItems(GetPortfolioRequest) returns (PortfolioResponse);
+  rpc GetJobSeekerPortfolioItem(GetPortfolioItemRequest) returns (PortfolioItemResponse);
+  rpc GetJobSeekerPortfolioItemByPath(GetPortfolioItemByPathRequest) returns (PortfolioItemResponse);
+  rpc DeleteJobSeekerPortfolioItem(DeletePortfolioItemRequest) returns (BaseResponse);
+  rpc BulkDeleteJobSeekerPortfolioItems(BulkDeletePortfolioRequest) returns (BulkDeleteResponse);
+  rpc BulkDownloadJobSeekerPortfolioItems(BulkDownloadPortfolioRequest) returns (ZipDownloadResponse);
+  
+  // Skilled Professional Portfolio
+  rpc UploadSkilledProfessionalPortfolioItems(UploadPortfolioRequest) returns (MediaUploadMultipleResponse);
+  rpc GetSkilledProfessionalPortfolioItems(GetPortfolioRequest) returns (PortfolioResponse);
+  rpc GetSkilledProfessionalPortfolioItem(GetPortfolioItemRequest) returns (PortfolioItemResponse);
+  rpc GetSkilledProfessionalPortfolioItemByPath(GetPortfolioItemByPathRequest) returns (PortfolioItemResponse);
+  rpc DeleteSkilledProfessionalPortfolioItem(DeletePortfolioItemRequest) returns (BaseResponse);
+  rpc BulkDeleteSkilledProfessionalPortfolioItems(BulkDeletePortfolioRequest) returns (BulkDeleteResponse);
+  rpc BulkDownloadSkilledProfessionalPortfolioItems(BulkDownloadPortfolioRequest) returns (ZipDownloadResponse);
+  
+  // Certifications
+  rpc UploadCertifications(UploadPortfolioRequest) returns (MediaUploadMultipleResponse);
+  rpc GetCertifications(GetCertificationsRequest) returns (CertificationResponse);
+  rpc GetCertificationByPath(GetCertificationByPathRequest) returns (GetCertificationByPathResponse);
+  rpc DownloadCertificationByPath(DownloadCertificationByPathRequest) returns (FileDownloadResponse);
+  rpc DeleteCertification(DeleteCertificationRequest) returns (BaseResponse);
+  rpc BulkDeleteCertifications(BulkDeleteCertificationsRequest) returns (BulkDeleteResponse);
+  rpc BulkDownloadCertifications(BulkDownloadCertificationsRequest) returns (ZipDownloadResponse);
+  
+  // Generic
+  rpc DeleteFile(DeleteFileRequest) returns (BaseResponse);
 }
 
 // ======================================================
@@ -280,6 +326,7 @@ message CreateIndividualAccountWithProfilesRequest {
   optional string businessName = 21;
   optional string logo = 22;
   optional string coverPhoto = 23;
+  optional bool skipEventEmission = 24; // NEW FIELD to control event emission
 }
 
 message ProfileToCreate {
@@ -1254,6 +1301,288 @@ message OrgListResponse {
 message ErrorPayload {
   string message = 1;
   int32 code = 2;
+}
+
+
+// ======================================================
+// MEDIA SERVICE MESSAGES
+// ======================================================
+
+// File upload message (for gRPC streaming)
+message FileData {
+  bytes buffer = 1;
+  string originalname = 2;
+  string mimetype = 3;
+  int64 size = 4;
+}
+
+// Profile Picture Requests
+message UploadProfilePictureRequest {
+  FileData file = 1;
+  string userUuid = 2;
+  string accountUuid = 3;
+}
+
+message UploadLogoRequest {
+  FileData file = 1;
+  string userUuid = 2;
+  string accountUuid = 3;
+}
+
+message UploadCoverPhotoRequest {
+  FileData file = 1;
+  string userUuid = 2;
+  string accountUuid = 3;
+}
+
+// CV Requests
+message UploadCVRequest {
+  FileData file = 1;
+  string accountUuid = 2;
+}
+
+message GetCVRequest {
+  string accountUuid = 1;
+}
+
+message GetCVResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  CVData data = 4;
+  ErrorPayload error = 5;
+}
+
+message CVData {
+  string url = 1;
+  string fileName = 2;
+  string path = 3;
+}
+
+message DownloadCVRequest {
+  string accountUuid = 1;
+}
+
+// Portfolio Requests
+message UploadPortfolioRequest {
+  repeated FileData files = 1;
+  string accountUuid = 2;
+}
+
+message GetPortfolioRequest {
+  string accountUuid = 1;
+}
+
+message DeletePortfolioItemRequest {
+  string imageUrl = 1;
+  string accountUuid = 2;
+}
+
+message BulkDeletePortfolioRequest {
+  repeated string imageUrls = 1;
+  string accountUuid = 2;
+}
+
+// Certification Requests
+message GetCertificationsRequest {
+  string accountUuid = 1;
+}
+
+message DeleteCertificationRequest {
+  string certPath = 1;
+  string accountUuid = 2;
+}
+
+message BulkDeleteCertificationsRequest {
+  repeated string certPaths = 1;
+  string accountUuid = 2;
+}
+
+// ======================================================
+// MEDIA RESPONSE MESSAGES
+// ======================================================
+
+// Single Media Upload Response
+message MediaUploadResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  MediaUploadData data = 4;
+  ErrorPayload error = 5;
+}
+
+message MediaUploadData {
+  string message = 1;
+  string url = 2;
+  string fileName = 3;
+  int64 fileSize = 4;
+  string mimeType = 5;
+}
+
+// Multiple Media Upload Response
+message MediaUploadMultipleResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  MediaUploadMultipleData data = 4;
+  ErrorPayload error = 5;
+}
+
+message MediaUploadMultipleData {
+  string message = 1;
+  repeated MediaUploadData items = 2;
+}
+
+// Portfolio Response
+message PortfolioResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  PortfolioData data = 4;
+  ErrorPayload error = 5;
+}
+
+message PortfolioData {
+  repeated PortfolioItem items = 1;
+  int32 total = 2;
+}
+
+message PortfolioItem {
+  string url = 1;
+  string fileName = 2;
+  int64 fileSize = 3;
+  string mimeType = 4;
+  string uploadedAt = 5;
+  int32 order = 6;
+}
+
+// Certification Response
+message CertificationResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  CertificationData data = 4;
+  ErrorPayload error = 5;
+}
+
+message CertificationData {
+  repeated CertificationItem items = 1;
+  int32 total = 2;
+}
+
+message CertificationItem {
+  string url = 1;
+  string path = 2;
+  string fileName = 3;
+  int64 fileSize = 4;
+  string mimeType = 5;
+  string uploadedAt = 6;
+}
+
+// File Download Response (for binary data)
+message FileDownloadResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  FileDownloadData data = 4;
+  ErrorPayload error = 5;
+}
+
+message FileDownloadData {
+  bytes buffer = 1;
+  string mimeType = 2;
+  string fileName = 3;
+}
+
+// Bulk Delete Response
+message BulkDeleteResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  BulkDeleteData data = 4;
+  ErrorPayload error = 5;
+}
+
+message BulkDeleteData {
+  int32 deletedCount = 1;
+  repeated string failedUrls = 2;
+}
+
+// Get single portfolio item
+message GetPortfolioItemRequest {
+  string imageUrl = 1;
+  string accountUuid = 2;
+}
+
+message GetPortfolioItemByPathRequest {
+  string path = 1;
+  string accountUuid = 2;
+}
+
+message PortfolioItemResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  PortfolioItem data = 4;
+  ErrorPayload error = 5;
+}
+
+// Bulk download portfolio
+message BulkDownloadPortfolioRequest {
+  repeated string itemUrls = 1;
+  string accountUuid = 2;
+}
+
+// Get certification by path
+message GetCertificationByPathRequest {
+  string path = 1;
+  string accountUuid = 2;
+}
+
+message GetCertificationByPathResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  CertificationByPathData data = 4;
+  ErrorPayload error = 5;
+}
+
+message CertificationByPathData {
+  string url = 1;
+  string path = 2;
+  string fileName = 3;
+}
+
+// Download certification by path
+message DownloadCertificationByPathRequest {
+  string path = 1;
+  string accountUuid = 2;
+}
+
+// Bulk download certifications
+message BulkDownloadCertificationsRequest {
+  repeated string paths = 1;
+  string accountUuid = 2;
+}
+
+// Zip download response
+message ZipDownloadResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  ZipDownloadData data = 4;
+  ErrorPayload error = 5;
+}
+
+message ZipDownloadData {
+  bytes buffer = 1;
+  string fileName = 2;
+}
+
+// Delete file
+message DeleteFileRequest {
+  string url = 1;
+  string bucketName = 2;
 }
 
 message Empty {}

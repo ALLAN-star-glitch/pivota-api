@@ -5,8 +5,8 @@ import { AUTH_PROTO_PATH, PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { UserService } from './services/user.service';
 import { SubscriptionsGatewayModule } from '../SubscriptionsGatewayModule/subscriptions-gateway.module';
 import { StorageService } from '@pivota-api/shared-storage';
-import { MediaController } from './controllers/media.controller';
 import { MediaService } from './services/media.service';
+import { MediaController } from './controllers/media.controller';
 
 @Module({
   imports: [

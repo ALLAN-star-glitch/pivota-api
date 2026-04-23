@@ -7,6 +7,8 @@ datasource db {
   provider = "postgresql"
 }
 
+// apps/auth-service/prisma/schema.prisma
+
 model Credential {
   id                  String               @id @default(cuid())
   passwordHash        String?
@@ -14,18 +16,33 @@ model Credential {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   userUuid            String               @unique
+  accountUuid         String               // Link to account in Profile Service
   email               String               @unique
+  phone               String?              @unique
   failedAttempts      Int                  @default(0)
   lastLoginAt         DateTime?
   lockoutExpires      DateTime?
   mfaEnabled          Boolean              @default(true)
   googleProviderId    String?              @unique
   uuid                String               @unique @default(uuid())
-  phone               String?              @unique
+  
+  
+  // ✅ Account status (synced from Profile Service)
+  accountStatus       String               @default("ACTIVE")  // ACTIVE, INACTIVE, SUSPENDED, PENDING_PAYMENT
+
+  role                String               @default("GeneralUser")
+  
+  // For organization members - their status within the org
+  memberStatus        String?              // Only for organization members
+  
   passwordSetupTokens PasswordSetupToken[]
+  sessions            Session[]
 
   @@index([userUuid])
+  @@index([accountUuid])
   @@index([email])
+  @@index([accountStatus])
+  @@index([memberStatus])
 }
 
 model Session {
@@ -51,6 +68,8 @@ model Session {
   isTablet       Boolean?
   osVersion      String?
   uuid           String    @unique @default(uuid())
+
+  credential     Credential @relation(fields: [userUuid], references: [userUuid])
 
   @@index([userUuid])
   @@index([revoked])

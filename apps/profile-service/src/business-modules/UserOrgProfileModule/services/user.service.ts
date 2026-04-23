@@ -555,13 +555,11 @@ async createIndividualAccountWithProfiles(
     return BaseResponseDto.fail('This method is for individual accounts only', 'BAD_REQUEST');
   }
 
-  // ✅ FIX: Only require first name, last name is optional
   if (!data.firstName) {
     this.logger.error('❌ First name missing');
     return BaseResponseDto.fail('First name is required for individual accounts', 'BAD_REQUEST');
   }
   
-  // Handle empty last name
   if (data.lastName === undefined || data.lastName === null) {
     data.lastName = '';
   }
@@ -626,7 +624,6 @@ async createIndividualAccountWithProfiles(
   const normalizedEmail = StringUtils.normalizeEmail(data.email);
   const normalizedPhone = PhoneUtils.normalize(data.phone || '');
   
-  // DECLARE VARIABLES AT THE TOP BEFORE USING THEM
   const accountUuid = randomUUID();
   const userUuid = randomUUID();
   const targetPlanSlug = data.planSlug || 'free-forever';
@@ -797,7 +794,47 @@ async createIndividualAccountWithProfiles(
       this.logger.log(`ℹ️ No profile to queue (profileToCreate: ${!!profileToCreate}, isIndividual: ${profileToCreate ? this.isIndividualProfile(profileToCreate.type) : 'N/A'})`);
     }
 
-    // ============ STEP 6: Return success ============
+    // ============ STEP 6: EMIT KAFKA EVENT FOR AUTH SERVICE ============
+
+// ============ EMIT KAFKA EVENT FOR AUTH SERVICE ============
+// Only emit if NOT skipped
+// ============ EMIT KAFKA EVENT FOR AUTH SERVICE ============
+// Only emit if NOT skipped
+if (!data.skipEventEmission) {
+  this.logger.log('📤 Emitting account.created event for Auth Service...');
+  
+  await this.queue.addJob(
+    'profile-queue',
+    'emit-account-created-event',
+    {
+      userUuid: userUuid,
+      accountUuid: accountUuid,
+      email: normalizedEmail,
+      phone: normalizedPhone,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      accountStatus: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
+      accountType: 'INDIVIDUAL',
+      roleName: roleType,
+      timestamp: new Date().toISOString(),
+    },
+    {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 2000 },
+      removeOnComplete: true,
+      removeOnFail: false,
+    }
+  );
+  
+  this.logger.log(`✅ Queued account.created event for user: ${userUuid}`);
+} else {
+  this.logger.log(`ℹ️ Skipping account.created event emission (skipEventEmission=true) for user: ${userUuid}`);
+}
+
+    
+
+
+    // ============ STEP 7: Return success ============
     this.logger.log('🔍 Fetching created account data...');
     const accountData = await this.getAccountByUuid(accountUuid);
     
@@ -811,7 +848,7 @@ async createIndividualAccountWithProfiles(
       );
     }
 
-    // ============ STEP 7: QUEUE PROFILE PICTURE DOWNLOAD (if provided) ============
+    // ============ STEP 8: QUEUE PROFILE PICTURE DOWNLOAD (if provided) ============
     if (data.profileImage && data.profileImage.startsWith('https://lh3.googleusercontent.com/')) {
       this.logger.log(`📸 Queuing profile picture download for user: ${userUuid}`);
       

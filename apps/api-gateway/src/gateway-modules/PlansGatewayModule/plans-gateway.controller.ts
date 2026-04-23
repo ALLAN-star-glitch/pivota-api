@@ -146,7 +146,7 @@ export class PlansGatewayController {
     @Body() dto: CreatePlanDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<PlanResponseDto>> {
-    const userId = req.user.userUuid;
+    const userId = req.user.sub;
     dto.userId = userId;
 
     this.logger.debug(
@@ -250,7 +250,7 @@ export class PlansGatewayController {
     @Body() dto: UpdatePlanDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<PlanResponseDto>> {
-    const userId = req.user.userUuid;
+    const userId = req.user.sub;
 
     this.logger.debug(
       `REST updatePlan request by user=${userId} for plan=${planId}: ${JSON.stringify(dto)}`,
@@ -330,7 +330,7 @@ export class PlansGatewayController {
     @Param('id') id: string,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<null>> {
-    const userId = req.user.userUuid;
+    const userId = req.user.sub;
 
     this.logger.debug(
       `REST deletePlan request by user=${userId}: planId=${id}`,

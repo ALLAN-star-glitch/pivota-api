@@ -17,7 +17,6 @@ async function bootstrap() {
   logger.log(`KAFKA_BROKERS = ${process.env.KAFKA_BROKERS}`);
   logger.log(`RABBITMQ_URL = ${process.env.RABBITMQ_URL}`);
 
-  // ✅ ENABLE LIFECYCLE HOOKS (This is critical for OnModuleInit, OnApplicationBootstrap, etc.)
   app.enableShutdownHooks();
 
   // ------------------- Kafka Microservice -------------------
@@ -26,11 +25,14 @@ async function bootstrap() {
     options: {
       client: {
         brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+        clientId: 'auth-service',
       },
       consumer: {
-        groupId: 'auth-service-consumer-v2-new',
+        groupId: 'auth-service-consumer',  // ✅ Use a consistent group ID
       },
-      subscribe: { fromBeginning: false },
+      subscribe: { 
+        fromBeginning: true  // ✅ Set to true to catch events
+      },
     },
   });
 
@@ -49,11 +51,11 @@ async function bootstrap() {
     transport: Transport.RMQ,
     options: {
       urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
-      queue: 'auth_service_queue', // unique queue for AUTH service
+      queue: 'auth_service_queue',
       queueOptions: {
         durable: true,
       },
-      noAck: true, // manual ack recommended for reliability
+      noAck: false,  // ✅ Set to false for manual acknowledgment
     },
   });
 

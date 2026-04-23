@@ -687,7 +687,7 @@ async signup(
   @ApiResponse({ status: 401, description: 'Authentication failed' })
   async verifyMfaLogin(
     @Body() dto: VerifyOtpDto,
-    @ClientInfo() clientInfo: Pick<SessionDto, 'device' | 'ipAddress' | 'userAgent' | 'os'>,
+    @ClientInfo() clientInfo: AuthClientInfoDto,
     @Res({ passthrough: true }) res: Response
   ): Promise<BaseResponseDto<LoginResponseDto>> {
     this.logger.log(`🛡️ MFA Login Verification for: ${dto.email}`);
@@ -1407,9 +1407,9 @@ async requestOtp(
     @Query('userUuid') targetUserUuid?: string,
   ): Promise<BaseResponseDto<null>> {
     // ... existing implementation remains exactly the same
-    const requesterUuid = req.user.userUuid;
+    const requesterUuid = req.user.sub;
     const requesterRole = req.user.role;
-    const currentTokenId = req.user.tokenId;
+    const currentTokenId = req.user.jti;
 
     const finalUserUuid = (targetUserUuid && targetUserUuid.trim() !== '') 
       ? targetUserUuid 
@@ -1462,7 +1462,7 @@ async requestOtp(
     @Query('userUuid') targetUserUuid?: string, 
   ): Promise<BaseResponseDto<SessionDto[]>> {
     // ... existing implementation remains exactly the same
-    const requesterUuid = req.user.userUuid;
+    const requesterUuid = req.user.sub;
     const requesterRole = req.user.role;
 
     const hasTarget = targetUserUuid && targetUserUuid.trim().length > 0;
