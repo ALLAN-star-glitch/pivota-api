@@ -410,7 +410,7 @@ export class HousingGatewayController {
   // ===========================================================
  
   @Post('listings')
-  @Permissions(P.HOUSING_CREATE_OWN)
+  //@Permissions(P.HOUSING_CREATE_OWN)
   @UseInterceptors(FilesInterceptor('images', 10, {
     fileFilter: imageFileFilter,
     limits: {

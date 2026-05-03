@@ -11,7 +11,8 @@ import {
   Get, 
   Query,
   Delete, 
-  UseInterceptors, 
+  UseInterceptors,
+  UnauthorizedException, 
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
@@ -1093,28 +1094,46 @@ async googleLogin(
   return this.authService.googleLogin(token, clientInfo, res, onboardingData);
 }
 
-  @Post('logout')
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Version('1')
-  @ApiBearerAuth()
-  @ApiTags('Auth - Login')
-  @ApiOperation({ 
-    summary: 'Logout user and clear JWT cookies',
-    description: `
-      Terminates current session and clears authentication cookies.
-      
-      **Microservice:** Auth Service
-      **Authentication:** Required (JWT cookie)
-      
-      ... (rest of existing documentation) ...
-    `
-  })
-  @ApiResponse({ status: 200, description: 'Logged out successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async logout(@Res({ passthrough: true }) res: Response) {
-    await this.authService.logout(res);
-    return { success: true, message: 'Logged out successfully' };
+@Post('logout')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@Version('1')
+@ApiBearerAuth()
+@ApiTags('Auth - Login')
+@ApiOperation({ 
+  summary: 'Logout user and clear JWT cookies',
+  description: `
+    Terminates current session and clears authentication cookies.
+    
+    **Microservice:** Auth Service
+    **Authentication:** Required (JWT cookie)
+    
+    ... (rest of existing documentation) ...
+  `
+})
+@ApiResponse({ status: 200, description: 'Logged out successfully' })
+@ApiResponse({ status: 401, description: 'Unauthorized' })
+async logout(
+  @Req() req: JwtRequest,
+  @Res({ passthrough: true }) res: Response
+) {
+  const userUuid = req.user?.sub;
+  const tokenId = req.user?.jti;
+  
+  if (!userUuid) {
+    throw new UnauthorizedException('User not authenticated');
   }
+  
+
+  const response = await this.authService.logout(userUuid, tokenId, res);
+  if (!response.success) {
+    this.logger.warn(`⚠️ Logout failed for user ${userUuid}: ${response.message}`);
+    throw response;
+  } else {
+    this.logger.log(`✅ Logout successful for user: ${userUuid}`);
+  }
+  
+  return response;
+}
 
   // ===========================================================
   // 🔐 AUTH - TOKEN MANAGEMENT
@@ -1427,10 +1446,20 @@ async requestOtp(
     const isTargetingSelf = finalUserUuid === requesterUuid;
 
     if (isTargetingSelf && (isGlobalLogout || isRevokingCurrentDevice)) {
-      await this.authService.logout(res);
+      // Pass userUuid and tokenId to logout for proper session revocation
+      await this.authService.logout(requesterUuid, currentTokenId, res);
     }
 
-    return this.authService.revokeSessions(finalUserUuid, tokenId);
+    
+
+    const response =  await this.authService.revokeSessions(finalUserUuid, tokenId);
+    if (!response.success) {
+      this.logger.warn(`⚠️ Failed to revoke session(s) for user ${finalUserUuid} by requester ${requesterUuid}: ${response.message}`);
+      throw response;
+    } else {
+      this.logger.log(`✅ Successfully revoked session(s) for user ${finalUserUuid} by requester ${requesterUuid}`);
+    }
+    return response;
   }
 
   @Get('sessions/active')

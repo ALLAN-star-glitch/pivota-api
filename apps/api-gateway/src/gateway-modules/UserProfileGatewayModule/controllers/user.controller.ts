@@ -120,6 +120,7 @@ export class UserController {
   })
   async getMe(@Req() req: JwtRequest): Promise<BaseResponseDto<UserProfileResponseDto>> {
     const userUuid = req.user.sub;
+    this.logger.log(`Fetching profile for user ${userUuid}`);
     const response = await this.userService.getMyProfile(userUuid);
     if (!response.success) throw response;
     return response;

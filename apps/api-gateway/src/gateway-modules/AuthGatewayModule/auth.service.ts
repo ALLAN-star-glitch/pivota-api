@@ -432,12 +432,38 @@ async googleLogin(
   }
 
   /** ------------------ Logout (Enhanced) ------------------ */
-  async logout(res: Response): Promise<void> {
-    // We clear the browser cookies
+ /** ------------------ Logout (Enhanced - Revokes Session) ------------------ */
+async logout(userUuid: string, tokenId: string, res: Response): Promise<BaseResponseDto<null>> {
+  this.logger.log(`🚨 Logout requested for user: ${userUuid}, tokenId: ${tokenId}`);
+  
+  try {
+    // 1. Revoke the session in the auth microservice
+    const revokeResponse = await this.revokeSessions(userUuid, tokenId);
+    
+    if (!revokeResponse.success) {
+      this.logger.warn(`⚠️ Failed to revoke session: ${revokeResponse.message}`);
+    } else {
+      this.logger.log(`✅ Session revoked successfully for user: ${userUuid}`);
+    }
+    
+    // 2. Clear cookies regardless of revocation result
     res.clearCookie('access_token');
     res.clearCookie('refresh_token');
+    
     this.logger.log('🍪 Auth cookies cleared');
+    
+    return BaseResponseDto.ok(null, 'Logged out successfully', 'OK');
+    
+  } catch (error) {
+    this.logger.error(`❌ Logout error: ${error.message}`);
+    
+    // Still clear cookies even if revocation fails
+    res.clearCookie('access_token');
+    res.clearCookie('refresh_token');
+    
+    return BaseResponseDto.ok(null, 'Logged out successfully', 'OK');
   }
+}
 
 
   /** ------------------ Get User From Payload ------------------ */

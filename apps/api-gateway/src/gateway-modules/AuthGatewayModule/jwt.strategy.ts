@@ -72,6 +72,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Return enriched user object with data from database/cache
     return { 
       // Core identity (from JWT)
+      sub: payload.sub,
       userUuid: payload.sub,
       email: payload.email,
       role: normalizedRole,
