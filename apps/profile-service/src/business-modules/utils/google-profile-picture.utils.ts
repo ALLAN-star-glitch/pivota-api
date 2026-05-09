@@ -14,24 +14,12 @@ export interface GoogleProfilePictureResult {
   error?: string;
 }
 
-/**
- * Download and store Google profile picture
- * 
- * @param pictureUrl - The Google profile picture URL from the token payload
- * @param email - User's email (used for folder naming)
- * @param firstName - User's first name
- * @param lastName - User's last name
- * @param storageService - Instance of StorageService
- * @param logger - Optional logger instance
- * @returns Promise with the stored URL or null if failed
- */
 export async function downloadAndStoreGoogleProfilePicture(
   pictureUrl: string | undefined,
-  email: string,
-  firstName: string,
-  lastName: string,
+  accountUuid: string,  // Use accountUuid
   storageService: StorageService,
-  logger?: Logger
+  logger?: Logger,
+  oldImageUrl?: string | null
 ): Promise<GoogleProfilePictureResult> {
   if (!pictureUrl) {
     if (logger) {
@@ -61,10 +49,9 @@ export async function downloadAndStoreGoogleProfilePicture(
     const contentType = response.headers.get('content-type') || 'image/jpeg';
     const fileExt = contentType.split('/')[1] || 'jpg';
     
-    // Create a unique filename
-    const sanitizedEmail = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '_');
+    // Create a unique filename using accountUuid
     const timestamp = Date.now();
-    const fileName = `${sanitizedEmail}-${timestamp}.${fileExt}`;
+    const fileName = `${accountUuid}-${timestamp}.${fileExt}`;
     
     // Create a multer-like file object for the storage service
     const mockFile: Express.Multer.File = {
@@ -80,15 +67,23 @@ export async function downloadAndStoreGoogleProfilePicture(
       path: '',
     };
     
-    // Upload to Supabase
-    const folder = `profiles/${sanitizedEmail}`;
+    // Upload to Supabase - use accountUuid for folder
+    const folder = `profiles/${accountUuid}`;
     const bucketName = 'pivota-public';
     
     if (logger) {
       logger.log(`📤 Uploading profile picture to storage: ${folder}/${fileName}`);
+      if (oldImageUrl) {
+        logger.log(`🗑️ Will delete old image: ${oldImageUrl}`);
+      }
     }
     
-    const uploadedUrl = await storageService.uploadFile(mockFile, folder, bucketName);
+    const uploadedUrl = await storageService.uploadFile(
+      mockFile, 
+      folder, 
+      bucketName,
+      oldImageUrl
+    );
     
     if (logger) {
       logger.log(`✅ Profile picture stored successfully at: ${uploadedUrl}`);

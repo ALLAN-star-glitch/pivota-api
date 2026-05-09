@@ -176,60 +176,60 @@ export class ProfileWorker {
     }
   }
 
-  //  NEW: Handle profile picture download
-  private async downloadProfilePicture(data: {
-    userUuid: string;
-    pictureUrl: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-  }): Promise<void> {
-    console.log(`📸 Downloading profile picture for user: ${data.userUuid}`);
-    this.logger.log(`📸 Downloading profile picture for user: ${data.userUuid}`);
+private async downloadProfilePicture(data: {
+  accountUuid: string;  // Change to accountUuid
+  pictureUrl: string;
+  oldImageUrl?: string | null;
+}): Promise<void> {
+  console.log(`📸 Downloading profile picture for account: ${data.accountUuid}`);
+  this.logger.log(`📸 Downloading profile picture for account: ${data.accountUuid}`);
+  
+  try {
+    // Get current profile image URL if not provided
+    let currentImageUrl = data.oldImageUrl;
     
-    try {
-      const result = await downloadAndStoreGoogleProfilePicture(
-        data.pictureUrl,
-        data.email,
-        data.firstName,
-        data.lastName,
-        this.storageService,
-        this.logger
-      );
-      
-      if (result.success && result.url) {
-        // Update the user's profile image in the database
-        await this.prisma.user.update({
-          where: { uuid: data.userUuid },
-          data: { profileImage: result.url }
-        });
-        
-        // Get account UUID and update individual profile
-        const user = await this.prisma.user.findUnique({
-          where: { uuid: data.userUuid },
-          select: { accountUuid: true }
-        });
-        
-        if (user?.accountUuid) {
-          await this.prisma.individualProfile.update({
-            where: { accountUuid: user.accountUuid },
-            data: { profileImage: result.url }
-          });
-        }
-        
-        console.log(`✅ Profile picture updated for user: ${data.userUuid}`);
-        this.logger.log(`✅ Profile picture updated for user: ${data.userUuid}`);
-      } else {
-        console.warn(`⚠️ Failed to download profile picture for user: ${data.userUuid} - ${result.error}`);
-        this.logger.warn(`⚠️ Failed to download profile picture for user: ${data.userUuid} - ${result.error}`);
-      }
-      
-    } catch (error) {
-      console.error(`❌ Failed to download profile picture: ${error.message}`);
-      this.logger.error(`❌ Failed to download profile picture: ${error.message}`);
-      // Don't throw - this is a non-critical operation
+    if (!currentImageUrl) {
+      const individualProfile = await this.prisma.individualProfile.findUnique({
+        where: { accountUuid: data.accountUuid },
+        select: { profileImage: true }
+      });
+      currentImageUrl = individualProfile?.profileImage;
     }
+    
+    const result = await downloadAndStoreGoogleProfilePicture(
+      data.pictureUrl,
+      data.accountUuid,  // Pass accountUuid
+      this.storageService,
+      this.logger,
+      currentImageUrl
+    );
+    
+    if (result.success && result.url) {
+      // Update individual profile (since profile picture lives there)
+      await this.prisma.individualProfile.update({
+        where: { accountUuid: data.accountUuid },
+        data: { profileImage: result.url }
+      });
+      
+      // Also update any users associated with this account
+      await this.prisma.user.updateMany({
+        where: { accountUuid: data.accountUuid },
+        data: { profileImage: result.url }
+      });
+      
+      console.log(`✅ Profile picture updated for account: ${data.accountUuid}`);
+      this.logger.log(`✅ Profile picture updated for account: ${data.accountUuid}`);
+    } else {
+      console.warn(`⚠️ Failed to download profile picture for account: ${data.accountUuid} - ${result.error}`);
+      this.logger.warn(`⚠️ Failed to download profile picture for account: ${data.accountUuid} - ${result.error}`);
+    }
+    
+  } catch (error) {
+    console.error(`❌ Failed to download profile picture: ${error.message}`);
+    this.logger.error(`❌ Failed to download profile picture: ${error.message}`);
+    // Don't throw - this is a non-critical operation
   }
+}
 
 
   private async emitAccountCreatedEvent(data: {

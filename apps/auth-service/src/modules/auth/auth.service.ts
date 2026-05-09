@@ -26,7 +26,6 @@ import {
   UserProfileResponseDto,
   VerifyOtpDto,
   RequestOtpDto,
-  SendOtpEventDto,
   ResetPasswordDto,
   SetupPasswordRequestDto,
   AuthClientInfoDto,
@@ -62,6 +61,12 @@ interface ProfileServiceGrpc {
   // Profile retrieval methods
   getUserProfileByEmail(data: { email: string }): Observable<BaseResponseDto<UserProfileResponseDto> | null>;
   getUserProfileByUuid(data: GetUserByUserUuidDto): Observable<BaseResponseDto<UserProfileResponseDto> | null>;
+
+  updateProfilePicture(data: {
+    accountUuid: string;
+    pictureUrl: string;
+    oldImageUrl?: string | null;
+  }): Observable<BaseResponseDto<null>>;
 }
 
 interface RbacServiceGrpc {
@@ -1439,7 +1444,7 @@ async signInWithGoogle(
     let accountStatus = 'ACTIVE';
     let firstName = payload?.given_name || 'User';
     let lastName = payload?.family_name || '';
-    const profileImage = payload?.picture || null;
+    const profileImage = payload?.picture?.replace('=s96-c', '=s400-c') || null;
 
     // Clean up names
     if (firstName === 'undefined' || firstName === 'null') firstName = 'User';
@@ -1471,6 +1476,32 @@ async signInWithGoogle(
         this.logger.log(`[Google Auth] Linked Google ID to existing account: ${email}`);
       }
       
+      //  NEW: Get current user profile to check if picture needs update
+      const userProfile = await firstValueFrom(
+        profileGrpc.getUserProfileByUuid({ userUuid })
+      );
+      
+      const currentProfileImage = userProfile?.data?.profile?.profileImage || 
+                                   userProfile?.data?.profile?.profileImage;
+      
+      const hasGooglePicture = profileImage && 
+                               profileImage.startsWith('https://lh3.googleusercontent.com/');
+      
+      // Check if Google has a picture AND it's different from current
+      if (hasGooglePicture && currentProfileImage !== profileImage) {
+        this.logger.log(`📸 Google profile picture changed for ${email}`);
+        this.logger.log(`   Old: ${currentProfileImage}`);
+        this.logger.log(`   New: ${profileImage}`);
+        
+        await firstValueFrom(
+          profileGrpc.updateProfilePicture({
+            accountUuid: accountUuid, 
+            pictureUrl: profileImage,
+            oldImageUrl: currentProfileImage,
+          })
+        );
+      }
+      
       // Track existing user login
       this.kafkaClient.emit('user.login.google', {
         userUuid,
@@ -1489,7 +1520,7 @@ async signInWithGoogle(
       });
 
     } else {
-      // PATH B: BRAND NEW USER - Create everything
+      // PATH B: BRAND NEW USER - Create everything (existing logic - unchanged)
       isNewUser = true;
       this.logger.log(`[Google Auth] New user detected: ${email}. Creating account...`);
       
@@ -1547,7 +1578,7 @@ async signInWithGoogle(
         },
       });
 
-      // Send welcome emails (keep these - they're async)
+      // Send welcome emails (keep existing logic)
       const profileType = onboardingData?.primaryPurpose 
         ? this.mapPurposeToProfileType(onboardingData.primaryPurpose)
         : null;
@@ -1600,17 +1631,16 @@ async signInWithGoogle(
       });
     }
 
-    // 3. CHECK ACCOUNT STATUS (using cached status)
+    // 3. CHECK ACCOUNT STATUS
     if (accountStatus !== 'ACTIVE') {
       this.logger.warn(`[Google Auth] Blocked login for ${email}: account status is ${accountStatus}`);
       throw new UnauthorizedException(`Your account is ${accountStatus.toLowerCase()}.`);
     }
 
-    // 4. GENERATE TOKENS with standard JWT claims
+    // 4. GENERATE TOKENS (existing logic - unchanged)
     const tokenId = `${userUuid}-${Date.now()}`;
     const now = Math.floor(Date.now() / 1000);
     
-    // Get role from RBAC
     const rbacService = this.getRbacGrpcService();
     const userRoleResponse = await firstValueFrom(
       rbacService.getUserRole({ userUuid })
@@ -1618,12 +1648,9 @@ async signInWithGoogle(
     const roleType = userRoleResponse?.role?.roleType ?? 'Individual';
 
     const jwtPayload: JwtPayload = {
-      // Standard claims
       sub: userUuid,
       jti: tokenId,
       iat: now,
-      
-      // Custom claims
       email: email,
       accountId: accountUuid,
       role: roleType,

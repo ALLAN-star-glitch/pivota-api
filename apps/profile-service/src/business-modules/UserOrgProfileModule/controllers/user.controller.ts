@@ -264,4 +264,15 @@ export class UserController {
     this.logger.log(`[gRPC] Removing profile ${data.profileType} from account: ${data.accountUuid}`);
     return this.userService.removeProfile(data.accountUuid, data.profileType);
   }
+
+    /**
+   * Update Profile Picture
+   */
+  @GrpcMethod('ProfileService', 'UpdateProfilePicture')
+async handleUpdateProfilePicture(
+  @Payload() data: { accountUuid: string; pictureUrl: string; oldImageUrl?: string },
+): Promise<BaseResponseDto<null>> {
+  this.logger.log(`[gRPC] UpdateProfilePicture for account: ${data.accountUuid}`);
+  return this.userService.updateProfilePicture(data);
+}
 }

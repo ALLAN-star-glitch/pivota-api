@@ -113,9 +113,20 @@ service ProfileService {
   rpc DeleteCertification(DeleteCertificationRequest) returns (BaseResponse);
   rpc BulkDeleteCertifications(BulkDeleteCertificationsRequest) returns (BulkDeleteResponse);
   rpc BulkDownloadCertifications(BulkDownloadCertificationsRequest) returns (ZipDownloadResponse);
+
+
+
+  rpc UpdateProfilePicture(UpdateProfilePictureRequest) returns (BaseResponse);
   
   // Generic
   rpc DeleteFile(DeleteFileRequest) returns (BaseResponse);
+}
+
+
+message UpdateProfilePictureRequest {
+  string accountUuid = 1;
+  string pictureUrl = 2;
+  optional string oldImageUrl = 3;
 }
 
 // ======================================================

@@ -17,7 +17,7 @@ import { AuthDevController } from './auth.dev.controller';
         options: {
           package: 'auth',
           protoPath: AUTH_PROTO_PATH,
-          url: 'localhost:50070',
+          url: 'localhost:50090',
         },
       },
       {

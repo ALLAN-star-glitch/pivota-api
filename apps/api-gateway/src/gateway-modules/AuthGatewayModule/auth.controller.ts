@@ -1282,7 +1282,7 @@ async requestOtp(
     
     if (!result.success) {
       this.logger.warn(`⚠️ OTP Request failed for ${email} [${purpose}]: ${result.message}`);
-      return result;
+      throw result;
     } 
     
     this.logger.log(`✅ OTP Request successful for ${email} [${purpose}]`);

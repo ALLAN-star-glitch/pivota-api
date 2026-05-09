@@ -848,28 +848,23 @@ if (!data.skipEventEmission) {
       );
     }
 
-    // ============ STEP 8: QUEUE PROFILE PICTURE DOWNLOAD (if provided) ============
     if (data.profileImage && data.profileImage.startsWith('https://lh3.googleusercontent.com/')) {
-      this.logger.log(`📸 Queuing profile picture download for user: ${userUuid}`);
+      this.logger.log(`📸 Queuing profile picture download for account: ${accountUuid}`);
       
       await this.queue.addJob(
         'profile-queue',
         'download-profile-picture',
         {
-          userUuid: userUuid,
+          accountUuid: accountUuid,  // Use accountUuid
           pictureUrl: data.profileImage,
-          email: normalizedEmail,
-          firstName: data.firstName,
-          lastName: data.lastName,
         },
-        {
+        { 
           attempts: 3,
           backoff: { type: 'exponential', delay: 5000 },
           removeOnComplete: true,
           removeOnFail: false,
         }
       );
-      this.logger.log(`✅ Queued profile picture download for user: ${userUuid}`);
     }
     
     return BaseResponseDto.ok(
@@ -2405,6 +2400,41 @@ private async emitHousingPreferencesEvent(
   } catch (error) {
     this.logger.error(`❌ EMIT: Failed to emit housing preferences event: ${error.message}`);
     this.logger.error(error.stack);
+  }
+}
+
+
+// In profile service (user.service.ts)
+async updateProfilePicture(
+  data: { accountUuid: string; pictureUrl: string; oldImageUrl?: string }
+): Promise<BaseResponseDto<null>> {
+  this.logger.log(`📸 Updating profile picture for account: ${data.accountUuid}`);
+  
+  try {
+    // Queue the download and store job
+    await this.queue.addJob(
+      'profile-queue',
+      'download-profile-picture',
+      {
+        accountUuid: data.accountUuid,
+        pictureUrl: data.pictureUrl,
+        oldImageUrl: data.oldImageUrl,
+      },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      }
+    );
+    
+    this.logger.log(`✅ Queued profile picture update for account: ${data.accountUuid}`);
+    
+    return BaseResponseDto.ok(null, 'Profile picture update queued', 'OK');
+    
+  } catch (error) {
+    this.logger.error(`Failed to queue profile picture update: ${error.message}`);
+    return BaseResponseDto.fail(error.message, 'INTERNAL_ERROR');
   }
 }
 }

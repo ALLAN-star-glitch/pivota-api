@@ -24,44 +24,52 @@ export class StorageService {
     });
   }
 
-  /**
-   * Uploads a file to a specified bucket.
-   */
-  async uploadFile(
-    file: Express.Multer.File, 
-    folder: string, 
-    bucketName = 'pivota-public'
-  ): Promise<string> {
-    try {
-      const fileExt = file.originalname.split('.').pop();
-      const fileName = `${folder}/${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
-
-      const { error } = await this.supabase.storage
-        .from(bucketName)
-        .upload(fileName, file.buffer, {
-          contentType: file.mimetype,
-          upsert: false,
-        });
-
-      if (error) {
-        this.logger.error(`Supabase upload failed: ${error.message}`);
-        throw error;
-      }
-
-      if (bucketName === 'pivota-public') {
-        const { data: urlData } = this.supabase.storage
-          .from(bucketName)
-          .getPublicUrl(fileName);
-        return urlData.publicUrl;
-      }
-
-      return fileName;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown storage error';
-      this.logger.error(`StorageService Error: ${errorMessage}`);
-      throw new Error(`Could not upload file to storage: ${errorMessage}`);
-    }
+ /**
+ * Uploads a file to a specified bucket with option to replace old file
+ */
+async uploadFile(
+  file: Express.Multer.File, 
+  folder: string, 
+  bucketName = 'pivota-public',
+  oldFileUrl?: string | null
+): Promise<string> {
+  // If oldFileUrl provided, delete it first
+  if (oldFileUrl && !oldFileUrl.includes('default-avatar') && !oldFileUrl.includes('ui-avatars')) {
+    await this.deleteFiles([oldFileUrl], bucketName);
+    this.logger.log(`Deleted old file: ${oldFileUrl}`);
   }
+
+  // Use existing upload logic
+  try {
+    const fileExt = file.originalname.split('.').pop();
+    const fileName = `${folder}/${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
+
+    const { error } = await this.supabase.storage
+      .from(bucketName)
+      .upload(fileName, file.buffer, {
+        contentType: file.mimetype,
+        upsert: false,
+      });
+
+    if (error) {
+      this.logger.error(`Supabase upload failed: ${error.message}`);
+      throw error;
+    }
+
+    if (bucketName === 'pivota-public') {
+      const { data: urlData } = this.supabase.storage
+        .from(bucketName)
+        .getPublicUrl(fileName);
+      return urlData.publicUrl;
+    }
+
+    return fileName;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown storage error';
+    this.logger.error(`StorageService Error: ${errorMessage}`);
+    throw new Error(`Could not upload file to storage: ${errorMessage}`);
+  }
+}
 
   /**
    * Deletes multiple files from a bucket.
