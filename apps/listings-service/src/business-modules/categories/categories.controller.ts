@@ -48,13 +48,21 @@ export class CategoriesController {
   }
 
   // ===================== FETCH ALL (WITH STATS) =====================
-  @GrpcMethod('CategoriesService', 'GetCategoriesByVertical')
+  @GrpcMethod('CategoriesService', 'GetCategories') 
   async getCategories(
     data: GetCategoriesRequestDto,
   ): Promise<BaseResponseDto<CategoryResponseDto[]>> {
-    this.logger.debug(`GetCategories request for vertical: ${data.vertical ?? 'ALL'}`);
+    this.logger.debug(`GetCategories request - Filters: ${JSON.stringify({
+      vertical: data.vertical ?? 'ALL',
+      type: data.type ?? 'ALL',
+      parentId: data.parentId ?? 'ALL',
+      hasSubcategories: data.hasSubcategories,
+      hasParent: data.hasParent,
+      search: data.search ?? 'NONE'
+    })}`);
     return this.categoriesService.getCategoriesWithStats(data);
   }
+
   
   // ===================== FETCH DISCOVERY (LIGHTWEIGHT) =====================
   @GrpcMethod('CategoriesService', 'GetDiscoveryMetadata')

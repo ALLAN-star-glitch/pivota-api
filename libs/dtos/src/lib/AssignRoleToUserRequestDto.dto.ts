@@ -1,4 +1,16 @@
+import { IsString, IsOptional, IsNotEmpty } from "class-validator";
+
 export class AssignRoleToUserRequestDto {
-  userUuid!: string; 
-  roleId!: string;
+  
+  @IsString()
+  @IsNotEmpty()
+  roleType!: string; 
+  
+  @IsString()
+  @IsOptional()
+  assignedBy?: string;
+  
+  @IsString()
+  @IsOptional()
+  reason?: string;
 }

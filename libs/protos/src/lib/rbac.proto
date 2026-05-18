@@ -47,7 +47,7 @@ message AssignPermissionToRoleRequest {
 //  Updated: use UUID instead of numeric userId
 message AssignRoleToUserRequest {
   string userUuid = 1;
-  string roleId = 2;
+  string roleType = 2;
 }
 
 // Updated: also use UUID for querying user roles

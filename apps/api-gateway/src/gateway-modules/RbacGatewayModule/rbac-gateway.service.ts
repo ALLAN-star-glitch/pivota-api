@@ -33,7 +33,7 @@ interface RbacServiceGrpc {
   updateRole(data: UpdateRoleRequestDto): Observable<BaseRoleResponseGrpc<RoleResponseDto>>;
   createPermission(data: CreatePermissionRequestDto): Observable<BasePermissionResponseGrpc<PermissionResponseDto>>;
   assignPermissionToRole(data: AssignPermissionToRoleRequestDto): Observable<BaseRolePermissionResponseGrpc<RolePermissionResponseDto>>
-  assignRoleToUser(data: AssignRoleToUserRequestDto): Observable<BaseUserRoleResponseGrpc<UserRoleResponseDto>>;
+  assignRoleToUser(data: {userUuid: string, roleType: string}): Observable<BaseUserRoleResponseGrpc<UserRoleResponseDto>>;
   getUserRole(data: GetUserByUserUuidDto): Observable<BaseGetUserRoleReponseGrpc<RoleResponseDto>>;
   getAllRoles(data: object): Observable<BaseRoleResponsesGrpc<RoleResponseDto[]>>; 
 }
@@ -116,22 +116,24 @@ export class RbacGatewayService implements OnModuleInit {
   }
 
 
+  async assignRoleToUser(
+  userUuid: string,  // ← Add this as separate parameter
+      dto: AssignRoleToUserRequestDto  // ← DTO only has roleType, assignedBy, reason
+    ): Promise<BaseResponseDto<UserRoleResponseDto>> {
+      this.logger.debug('API-GW: calling Admin gRPC assignRoleToUser with:', { userUuid, roleType: dto.roleType });
+      
+      const response$ = this.rbacServiceGrpc.assignRoleToUser({ 
+        userUuid: userUuid,      // ← Use the parameter
+        roleType: dto.roleType 
+      });
+      const response = await firstValueFrom(response$);
 
-
-  //Asssign role to user
-  async assignRoleToUser(dto: AssignRoleToUserRequestDto): Promise<BaseResponseDto<UserRoleResponseDto>> {
-
-
-     this.logger.debug('API-GW: calling Admin gRPC assignRoleToUser with:', JSON.stringify(dto));
-    const response$ = this.rbacServiceGrpc.assignRoleToUser({ userUuid: dto.userUuid, roleId: dto.roleId });
-    const response = await firstValueFrom(response$);
-
-    if (response.success) {
-      return BaseResponseDto.ok(response.userRole, response.message, response.code);
-    } else {
-      return BaseResponseDto.fail(response.message, response.code);
+      if (response.success) {
+        return BaseResponseDto.ok(response.userRole, response.message, response.code);
+      } else {
+        return BaseResponseDto.fail(response.message, response.code);
+      }
     }
-  }
 
   // -------------------------
   // Get Roles for a User

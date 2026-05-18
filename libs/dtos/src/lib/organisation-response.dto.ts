@@ -32,6 +32,9 @@ export class AccountBaseDto {
 
   @ApiPropertyOptional({ enum: BUSINESS_TYPES, example: 'FOR_PROFIT' })
   businessType?: string;
+
+  @ApiPropertyOptional({ example: 'SYSTEM', enum: ['SYSTEM', 'BUSINESS'] })
+  scope?: string;
 }
 
 /* ------------------ Organization Base ------------------ */

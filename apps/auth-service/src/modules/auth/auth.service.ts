@@ -33,6 +33,7 @@ import {
   AccountResponseDto,
   SignupResponseDto,
   GoogleLoginRequestDto,
+  SyncUserRoleResponseDto,
 } from '@pivota-api/dtos';
 import { firstValueFrom, lastValueFrom, Observable } from 'rxjs';
 import { BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
@@ -2085,26 +2086,9 @@ async verifyOtp(
   const startTime = Date.now();
 
   try {
-    // 1. Check rate limit for OTP verification attempts (prevent brute force)
-    const verifyLimit = getRateLimitConfig('OTP_VERIFICATION');
+    //  REMOVED: Rate limiting - OTP has its own security (expiration + single-use)
     
-    const rateLimitResult = await this.queue.checkRateLimit(
-      email,
-      `verify_otp_${purpose}`,
-      verifyLimit.maxAttempts,
-      verifyLimit.windowSeconds
-    );
-    
-    if (!rateLimitResult.allowed) {
-      const minutesLeft = Math.ceil(rateLimitResult.resetInSeconds / 60);
-      this.logger.warn(`[AUTH] OTP verification rate limit exceeded for ${email} (${purpose})`);
-      return BaseResponseDto.fail(
-        verifyLimit.errorMessage(minutesLeft),
-        'TOO_MANY_REQUESTS'
-      );
-    }
-    
-    // 2. Single database call - find AND delete in one operation
+    // Single database call - find AND delete in one operation
     const deleteResult = await this.prisma.otp.deleteMany({
       where: {
         email,
@@ -2115,14 +2099,6 @@ async verifyOtp(
     });
 
     if (deleteResult.count === 0) {
-      // Increment failed attempt counter
-      await this.queue.incrementRateLimit(
-        email,
-        `verify_otp_${purpose}`,
-        verifyLimit.maxAttempts,
-        verifyLimit.windowSeconds
-      );
-      
       this.logger.warn(`[AUTH] Failed OTP verification for: ${email} | Purpose: ${purpose}`);
       return BaseResponseDto.fail(
         'Invalid or expired verification code.',
@@ -2130,9 +2106,6 @@ async verifyOtp(
         { code: 'INVALID_OTP', verified: false }
       );
     }
-    
-    // 3. Reset rate limit on success
-    await this.queue.resetRateLimit(email, `verify_otp_${purpose}`);
     
     const totalTime = Date.now() - startTime;
     this.logger.log(`[AUTH] OTP verified successfully: ${email} [${purpose}] in ${totalTime}ms`);
@@ -2148,9 +2121,9 @@ async verifyOtp(
     this.logger.error(`Error verifying OTP for ${email}: ${errorMsg}`);
     
     return BaseResponseDto.fail(
-      'An error occurred during verification',
+      'An error occurred during verification. Please try again.',
       'INTERNAL_ERROR',
-      { code: 'VERIFICATION_ERROR', message: errorMsg }
+      { code: 'INTERNAL_ERROR', message: errorMsg }
     );
   }
 }
@@ -2163,54 +2136,28 @@ async verifyMfaLogin(
   this.logger.debug(`MFA verification for: ${verifyDto.email}`);
 
   try {
-    // 1. Rate limit check
+    // ✅ REMOVED: Rate limit check - user already passed password verification
+    // IP rate limiting at gateway level is sufficient
+    
+    // 1. Verify OTP
     let stepStart = Date.now();
-    const mfaLimit = getRateLimitConfig('MFA_VERIFICATION');
-    const rateLimitResult = await this.queue.checkRateLimit(
-      verifyDto.email,
-      'mfa_verification',
-      mfaLimit.maxAttempts,
-      mfaLimit.windowSeconds
-    );
-    this.logger.log(`⏱️ Step 1 (rate limit): ${Date.now() - stepStart}ms`);
-    
-    if (!rateLimitResult.allowed) {
-      const minutesLeft = Math.ceil(rateLimitResult.resetInSeconds / 60);
-      return BaseResponseDto.fail(
-        mfaLimit.errorMessage(minutesLeft),
-        'TOO_MANY_REQUESTS'
-      );
-    }
-    
-    // 2. Verify OTP
-    stepStart = Date.now();
     const verificationResult = await this.verifyOtp({
       email: verifyDto.email,
       code: verifyDto.code,
       purpose: 'LOGIN_2FA',
     });
-    this.logger.log(`⏱️ Step 2 (verify OTP): ${Date.now() - stepStart}ms`);
+    this.logger.log(`⏱️ Step 1 (verify OTP): ${Date.now() - stepStart}ms`);
 
     if (!verificationResult.success || !verificationResult.data?.verified) {
-      await this.queue.incrementRateLimit(
-        verifyDto.email,
-        'mfa_verification',
-        mfaLimit.maxAttempts,
-        mfaLimit.windowSeconds
-      );
+      this.logger.debug(`Verification failed: ${verificationResult.message}`);
       return BaseResponseDto.fail(
-        'Invalid or expired verification code',
+        verificationResult.message || 'Invalid or expired verification code',
         'UNAUTHORIZED',
-        { code: 'INVALID_OTP' }
+        { code: 'INVALID_OTP', details: verificationResult.error }
       );
     }
     
-    // 3. Reset rate limit
-    stepStart = Date.now();
-    await this.queue.resetRateLimit(verifyDto.email, 'mfa_verification');
-    this.logger.log(`⏱️ Step 3 (reset rate limit): ${Date.now() - stepStart}ms`);
-    
-    // 4. Get credential with role (✅ NO gRPC call needed!)
+    // 2. Get credential with role
     stepStart = Date.now();
     const credential = await this.prisma.credential.findUnique({
       where: { email: verifyDto.email },
@@ -2219,16 +2166,16 @@ async verifyMfaLogin(
         accountUuid: true, 
         accountStatus: true,
         memberStatus: true,
-        role: true,  // ✅ Get role directly from credential
+        role: true,
       },
     });
-    this.logger.log(`⏱️ Step 4 (get credential): ${Date.now() - stepStart}ms`);
+    this.logger.log(`⏱️ Step 2 (get credential): ${Date.now() - stepStart}ms`);
 
     if (!credential) {
       return BaseResponseDto.fail('User not found', 'NOT_FOUND');
     }
 
-    // 5. Check account status
+    // 3. Check account status
     if (credential.accountStatus !== 'ACTIVE') {
       return BaseResponseDto.fail(
         `Account is ${credential.accountStatus.toLowerCase()}`,
@@ -2236,11 +2183,11 @@ async verifyMfaLogin(
       );
     }
 
-    // 6. Role is already in credential - no gRPC call needed!
-    const roleType = credential.role;  // ✅ Instant, no network call
-    this.logger.log(`⏱️ Step 6 (role from credential): 0ms`);
+    // 4. Role from credential
+    const roleType = credential.role;
+    this.logger.log(`⏱️ Step 3 (role from credential): 0ms`);
 
-    // 7. Generate tokens
+    // 5. Generate tokens
     stepStart = Date.now();
     const tokenId = `${credential.userUuid}-${Date.now()}`;
     const now = Math.floor(Date.now() / 1000);
@@ -2260,9 +2207,9 @@ async verifyMfaLogin(
       this.jwtService.signAsync(payload, { expiresIn: '15m' }),
       this.jwtService.signAsync(payload, { expiresIn: '7d' })
     ]);
-    this.logger.log(`⏱️ Step 7 (sign tokens): ${Date.now() - stepStart}ms`);
+    this.logger.log(`⏱️ Step 4 (sign tokens): ${Date.now() - stepStart}ms`);
 
-    // 8. Create session
+    // 6. Create session
     stepStart = Date.now();
     const hashedToken = await bcrypt.hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -2286,17 +2233,17 @@ async verifyMfaLogin(
         revoked: false,
       },
     });
-    this.logger.log(`⏱️ Step 8 (create session): ${Date.now() - stepStart}ms`);
+    this.logger.log(`⏱️ Step 5 (create session): ${Date.now() - stepStart}ms`);
 
-    // 9. Update last login
+    // 7. Update last login
     stepStart = Date.now();
     await this.prisma.credential.update({
       where: { userUuid: credential.userUuid },
       data: { lastLoginAt: new Date() }
     });
-    this.logger.log(`⏱️ Step 9 (update last login): ${Date.now() - stepStart}ms`);
+    this.logger.log(`⏱️ Step 6 (update last login): ${Date.now() - stepStart}ms`);
 
-    // 10. Send notification (async - don't await)
+    // 8. Send notification (async - don't await)
     this.sendLoginNotificationAsync(verifyDto.email, credential.userUuid, clientInfo);
 
     const totalTime = Date.now() - startTime;
@@ -2313,9 +2260,11 @@ async verifyMfaLogin(
     );
 
   } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
     this.logger.error(`MFA verification failed for ${verifyDto.email}:`, err);
+    
     return BaseResponseDto.fail(
-      'An unexpected error occurred',
+      errorMessage,
       'INTERNAL_ERROR'
     );
   }
@@ -2832,6 +2781,59 @@ async createInvitedUserCredentials(data: {
   } catch (error) {
     this.logger.error(`[gRPC] Failed to create credentials for invited user: ${error.message}`);
     return BaseResponseDto.fail(error.message, 'INTERNAL_ERROR');
+  }
+}
+
+/**
+ * Sync user role from Admin Service
+ * Updates the role in the credential table
+ */
+async syncUserRole(
+  userUuid: string,
+  roleName: string,
+  roleType: string,
+  scope: string
+): Promise<BaseResponseDto<SyncUserRoleResponseDto>> {
+  this.logger.log(`🔄 [AUTH] Syncing role for user ${userUuid} to ${roleName} (${roleType}) with scope ${scope}`);
+
+  try {
+    // Update the credential's role field
+    const updatedCredential = await this.prisma.credential.update({
+      where: { userUuid: userUuid },
+      data: {
+        role: roleType,  // Store the roleType (e.g., "PlatformSystemAdmin", "Individual")
+        updatedAt: new Date(),
+      },
+    });
+
+    this.logger.log(`✅ [AUTH] Successfully updated role for user ${userUuid} to ${roleType}`);
+
+    // Also log if there's any member status that might need update for organization users
+    if (updatedCredential.memberStatus && scope === 'SYSTEM') {
+      this.logger.log(`[AUTH] User ${userUuid} has memberStatus: ${updatedCredential.memberStatus} and is now SYSTEM role`);
+    }
+
+    return BaseResponseDto.ok(
+      { success: true, message: 'Role synced successfully' },
+      'Role synced successfully',
+      'OK'
+    );
+
+  } catch (error) {
+    this.logger.error(`[AUTH] Failed to sync role for user ${userUuid}: ${error.message}`);
+    
+    // Check if user exists
+    if (error.code === 'P2025') {
+      return BaseResponseDto.fail(
+        `User with UUID ${userUuid} not found in Auth Service`,
+        'NOT_FOUND'
+      );
+    }
+    
+    return BaseResponseDto.fail(
+      error.message || 'Unknown error syncing role',
+      'INTERNAL_ERROR'
+    );
   }
 }
 }

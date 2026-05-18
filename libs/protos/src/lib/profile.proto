@@ -120,6 +120,31 @@ service ProfileService {
   
   // Generic
   rpc DeleteFile(DeleteFileRequest) returns (BaseResponse);
+
+
+  rpc SyncUserRole (SyncUserRoleRequest) returns (BaseSyncUserRoleResponse);
+}
+
+
+message SyncUserRoleRequest {
+  string userUuid = 1;
+  string roleName = 2;
+  string roleType = 3;
+  string scope = 4;
+}
+
+// NEW: Sync User Role Response
+message SyncUserRoleResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message BaseSyncUserRoleResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  SyncUserRoleResponse data = 4;
+  ErrorPayload error = 5;
 }
 
 
@@ -704,6 +729,7 @@ message UserProf {
   optional PropertyOwnerProfileData propertyOwnerProfile = 12;
   optional SupportBeneficiaryProfileData supportBeneficiaryProfile = 13;
   optional IntermediaryAgentProfileData intermediaryAgentProfile = 14;
+   optional string planName = 15;
 }
 
 message UserBase {
@@ -715,6 +741,7 @@ message UserBase {
   string phone = 6;
   string status = 7;
   string roleName = 8;
+  optional string scope = 9;
 }
 
 message UserProfileMetadata {
@@ -757,7 +784,8 @@ message AccountData {
   CompletionResponse completion = 17;
   string createdAt = 18;
   string updatedAt = 19;
-  repeated UserBase users = 20;  // ← ADD THIS - users array for the account
+  repeated UserBase users = 20; 
+  optional string planName = 21;
 }
 
 message IndividualProfileData {
@@ -835,6 +863,7 @@ message AccountBase {
   string type = 3; 
   bool isBusiness = 4;
   optional string businessType = 5; 
+  optional string scope = 6;
 }
 
 message AdminResponse {

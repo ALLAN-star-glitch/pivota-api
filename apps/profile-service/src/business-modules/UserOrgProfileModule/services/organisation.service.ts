@@ -103,7 +103,7 @@ interface RbacServiceGrpc {
   ): Observable<BaseResponseDto<RoleIdResponse>>;
 
   AssignRoleToUser(
-    data: AssignRoleToUserRequestDto,
+    data: {userUuid: string, roleType: string},
   ): Observable<BaseResponseDto<UserRoleResponseDto>>;
 }
 
@@ -561,8 +561,6 @@ export class OrganisationService implements OnModuleInit {
             ]),
             isVerified: false,
             verifiedFeatures: StringUtils.stringifyJsonField([]),
-            isBusiness: true,  // Organizations are always businesses
-            businessType: data.businessType ?? null,
           },
         });
 
@@ -646,7 +644,7 @@ export class OrganisationService implements OnModuleInit {
         await lastValueFrom(
           this.rbacGrpc.AssignRoleToUser({
             userUuid: userUuid,
-            roleId: roleRes.data.roleId,
+            roleType: 'Admin'
           })
         );
 
@@ -1733,7 +1731,7 @@ export class OrganisationService implements OnModuleInit {
         await lastValueFrom(
           this.rbacGrpc.AssignRoleToUser({
             userUuid: result.userUuid,
-            roleId: roleRes.data.roleId,
+            roleType: 'Individual',
           })
         );
       } catch (syncError) {
@@ -2063,8 +2061,6 @@ private mapToOrganizationProfileResponse(
       uuid: org.account.uuid,
       accountCode: org.account.accountCode,
       type: org.account.type as AccountType,
-      isBusiness: org.account.isBusiness,
-      businessType: org.account.businessType,
     },
     admin: adminUser ? {
       uuid: adminUser.uuid,

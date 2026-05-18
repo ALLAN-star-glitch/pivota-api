@@ -28,7 +28,33 @@ service AuthService {
 
   rpc RevokeSessions(RevokeSessionRequest) returns (BaseResponse);
   rpc GetActiveSessions(GetActiveSessionsRequest) returns (GetActiveSessionsResponse);
+
+
+   rpc SyncUserRole (SyncUserRoleRequest) returns (BaseSyncUserRoleResponse);
 }
+
+
+
+message SyncUserRoleRequest {
+  string userUuid = 1;
+  string roleName = 2;
+  string roleType = 3;
+  string scope = 4;
+}
+
+message SyncUserRoleResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message BaseSyncUserRoleResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  SyncUserRoleResponse data = 4;
+  ErrorPayload error = 5;
+}
+
 
 // ======================================================
 // PROFILE DATA TYPES (Matches NestJS DTOs)

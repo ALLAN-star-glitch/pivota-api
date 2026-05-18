@@ -101,9 +101,7 @@ model Account {
   isVerified                   Boolean                       @default(false)
   status                       AccountStatus                 @default(ACTIVE)
   activeProfiles               Json                          @default("[]")
-  isBusiness                   Boolean                       @default(false)
-  businessType                 BusinessType?
-  userRole                     String                        @default("GeneralUser")
+  userRole                     String                        @default("Individual")
   verifiedFeatures             Json                          @default("[]")
   individualProfile            IndividualProfile?
   organizationProfile          OrganizationProfile?
@@ -117,6 +115,7 @@ model Account {
   skilledProfessionalProfile   SkilledProfessionalProfile?
   socialServiceProviderProfile SocialServiceProviderProfile?
   supportBeneficiaryProfile    SupportBeneficiaryProfile?
+  planSlug     String?   @default("free-forever")
 
   @@index([type])
   @@index([status])
@@ -129,7 +128,8 @@ model User {
   uuid                    String                   @unique @default(uuid())
   email                   String                   @unique
   phone                   String?                  @unique
-  roleName                String                   @default("GeneralUser")
+  roleName                String                   @default("Individual")
+  roleScope               String   @default("BUSINESS") 
   status                  UserStatus               @default(ACTIVE)
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt

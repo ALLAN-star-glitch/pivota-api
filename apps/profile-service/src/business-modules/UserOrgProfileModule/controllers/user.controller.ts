@@ -26,6 +26,8 @@ import {
   UpdateIntermediaryAgentGrpcRequestDto,
   UpdateSkilledProfessionalGrpcRequestDto,
   UpdateJobSeekerGrpcRequestDto,
+  SyncUserRoleRequestDto,
+  SyncUserRoleResponseDto,
 } from '@pivota-api/dtos';
 import { ProfileType } from '@pivota-api/constants';
 
@@ -275,4 +277,18 @@ async handleUpdateProfilePicture(
   this.logger.log(`[gRPC] UpdateProfilePicture for account: ${data.accountUuid}`);
   return this.userService.updateProfilePicture(data);
 }
+
+@GrpcMethod('ProfileService', 'SyncUserRole')
+  async syncUserRole(
+    data: SyncUserRoleRequestDto,
+  ): Promise<BaseResponseDto<SyncUserRoleResponseDto>> {
+    this.logger.log(`🔄 Syncing role for user: ${data.userUuid} to role: ${data.roleName}`);
+    
+    return this.userService.syncUserRole(
+      data.userUuid,
+      data.roleName,
+      data.roleType,
+      data.scope
+    );
+  }
 }

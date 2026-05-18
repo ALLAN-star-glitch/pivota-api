@@ -4,7 +4,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export class VerifyOtpDto {
   @ApiProperty({
     description: 'The email address associated with the OTP request',
-    example: 'user@example.com',
+    example: 'allanmathenge67@gmail.com',
   })
   @IsEmail()
   @IsNotEmpty()

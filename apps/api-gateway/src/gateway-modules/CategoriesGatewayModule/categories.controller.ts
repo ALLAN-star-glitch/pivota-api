@@ -262,99 +262,145 @@ export class CategoriesController {
    * @returns Hierarchical category tree with usage stats
    */
   @Get('categories')
-  @Public()
-  @Version('1')
-  @ApiTags('Categories - Public')
-  @ApiOperation({ 
-    summary: 'Get categories tree with usage stats',
-    description: `
-      Retrieves the complete category hierarchy with usage statistics.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Not required
-      **Permission:** Public endpoint
-      
-      **Features:**
-      • Returns categories in a hierarchical tree structure
-      • Includes usage statistics (number of listings in each category)
-      • Can filter by vertical (HOUSING, JOBS, SOCIAL_SUPPORT, SERVICES)
-      • Can filter by type (MAIN, COMPLIMENTARY)
-      • Sorted by category name
-      
-      **Use Cases:**
-      • Building navigation menus
-      • Category-based filtering UI
-      • Analytics dashboards
-      • SEO optimization
-      
-      **Response includes:**
-      • Full category details
-      • Child categories nested
-      • Listing counts per category
-      • Hierarchical relationships
-    `
-  })
-  @ApiQuery({ 
-    name: 'vertical', 
-    required: false,
-    description: 'Filter by vertical',
-    enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT', 'SERVICES'],
-    example: 'HOUSING'
-  })
-  @ApiQuery({ 
-    name: 'type', 
-    required: false,
-    description: 'Filter by category type (MAIN or COMPLIMENTARY)',
-    enum: ['MAIN', 'COMPLIMENTARY'],
-    example: 'MAIN'
-  })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Categories retrieved successfully',
-    type: [CategoryResponseDto],
-    schema: {
-      example: {
-        success: true,
-        message: 'Categories retrieved successfully',
-        code: 'OK',
-        data: [
-          {
-            id: 'cat_123abc',
-            name: 'Property',
-            slug: 'property',
-            vertical: 'HOUSING',
-            type: 'MAIN',
-            icon: 'building',
-            listingCount: 150,
-            subcategories: [
-              {
-                id: 'cat_456def',
-                name: 'Apartments',
-                slug: 'apartments',
-                type: 'MAIN',
-                listingCount: 85,
-                subcategories: []
-              },
-              {
-                id: 'cat_789ghi',
-                name: 'Houses',
-                slug: 'houses',
-                type: 'MAIN',
-                listingCount: 65,
-                subcategories: []
-              }
-            ]
-          }
-        ]
-      }
+@Public()
+@Version('1')
+@ApiTags('Categories - Public')
+@ApiOperation({ 
+  summary: 'Get categories tree with usage stats',
+  description: `
+    Retrieves the complete category hierarchy with usage statistics.
+    
+    **Microservice:** Listings Service
+    **Authentication:** Not required
+    **Permission:** Public endpoint
+    
+    **Features:**
+    • Returns categories in a hierarchical tree structure
+    • Includes usage statistics (number of listings in each category)
+    • Can filter by vertical (HOUSING, JOBS, SOCIAL_SUPPORT, SERVICES)
+    • Can filter by type (MAIN, COMPLIMENTARY)
+    • Can filter by parent category to get specific branches
+    • Can filter by hasSubcategories or hasParent
+    • Supports search by name
+    • Sorted by category name
+    
+    **Use Cases:**
+    • Building navigation menus
+    • Category-based filtering UI
+    • Analytics dashboards
+    • SEO optimization
+    • Breadcrumb navigation
+    
+    **Response includes:**
+    • Full category details
+    • Child categories nested (optional)
+    • Listing counts per category
+    • Hierarchical relationships
+  `
+})
+@ApiQuery({ 
+  name: 'vertical', 
+  required: false,
+  description: 'Filter by vertical',
+  enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT'],
+  example: 'HOUSING'
+})
+@ApiQuery({ 
+  name: 'type', 
+  required: false,
+  description: 'Filter by category type (MAIN or COMPLIMENTARY)',
+  enum: ['MAIN', 'COMPLIMENTARY'],
+  example: 'MAIN'
+})
+@ApiQuery({ 
+  name: 'parentId', 
+  required: false,
+  description: 'Filter by parent category ID. Use "null" for top-level categories only. Omit to get all categories regardless of parent.',
+  example: 'null'
+})
+@ApiQuery({ 
+  name: 'hasSubcategories', 
+  required: false,
+  description: 'Filter categories that have subcategories',
+  enum: ['true', 'false'],
+  example: 'true'
+})
+@ApiQuery({ 
+  name: 'hasParent', 
+  required: false,
+  description: 'Filter categories that have a parent (are subcategories)',
+  enum: ['true', 'false'],
+  example: 'false'
+})
+@ApiQuery({ 
+  name: 'search', 
+  required: false,
+  description: 'Search categories by name (partial match, case-insensitive)',
+  example: 'apartment'
+})
+@ApiQuery({ 
+  name: 'includeNested', 
+  required: false,
+  description: 'Include nested subcategories in response (useful for tree views)',
+  enum: ['true', 'false'],
+  example: 'true'
+})
+@ApiResponse({ 
+  status: 200, 
+  description: 'Categories retrieved successfully',
+  type: [CategoryResponseDto],
+  schema: {
+    example: {
+      success: true,
+      message: 'Categories fetched successfully',
+      code: 'FETCHED',
+      data: [
+        {
+          id: 'cmnbogww30000arihhia4xlt5',
+          name: 'Apartments',
+          slug: 'apartments',
+          vertical: 'HOUSING',
+          type: 'MAIN',
+          description: 'Apartment units for rent or sale in multi-unit buildings',
+          jobPostsCount: 0,
+          servicesCount: 0,
+          supportCount: 0,
+          subcategoriesCount: 10,
+          hasSubcategories: true,
+          hasParent: false,
+          subcategories: [
+            {
+              id: 'cmnboi1tl0051arih8oribuo6',
+              name: 'Studio Apartments',
+              slug: 'studio-apartments-sub',
+              type: 'MAIN',
+              description: 'Open-plan studio apartments',
+              hasParent: true,
+              parentId: 'cmnbogww30000arihhia4xlt5'
+            }
+          ],
+          createdAt: '2026-03-29T11:30:31.683Z',
+          updatedAt: '2026-03-29T11:30:31.683Z'
+        }
+      ]
     }
-  })
-  async getCategories(
-    @Query() query: GetCategoriesRequestDto,
-  ): Promise<BaseResponseDto<CategoryResponseDto[]>> {
-    this.logger.debug(`REST getCategories request - Vertical: ${query.vertical || 'ALL'}, Type: ${query.type || 'ALL'}`);
-    return this.categoriesService.getCategories(query);
   }
+})
+@ApiResponse({ status: 400, description: 'Bad request - Invalid query parameters' })
+async getCategories(
+  @Query() query: GetCategoriesRequestDto,
+): Promise<BaseResponseDto<CategoryResponseDto[]>> {
+  this.logger.debug(`REST getCategories request - Filters: ${JSON.stringify({
+    vertical: query.vertical || 'ALL',
+    type: query.type || 'ALL',
+    parentId: query.parentId || 'ALL',
+    hasSubcategories: query.hasSubcategories,
+    hasParent: query.hasParent,
+    search: query.search || 'NONE',
+    includeNested: query.includeNested || false
+  })}`);
+  return this.categoriesService.getCategories(query);
+}
 
   /**
    * Get lightweight discovery metadata
@@ -364,88 +410,88 @@ export class CategoriesController {
    * @param query - Filter parameters (vertical, type)
    * @returns Lightweight category metadata
    */
-  @Get('categories/discovery')
-  @Public()
-  @Version('1')
-  @ApiTags('Categories - Public')
-  @ApiOperation({ 
-    summary: 'Get lightweight discovery metadata',
-    description: `
-      Returns a simplified category structure optimized for navigation UIs.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Not required
-      **Permission:** Public endpoint
-      
-      **Features:**
-      • Lightweight response format
-      • Only essential fields (id, name, slug, icon)
-      • Flat structure for easy rendering
-      • Ideal for dropdowns and navigation menus
-      • Can filter by type (MAIN, COMPLIMENTARY)
-      
-      **Use Cases:**
-      • Category dropdowns in search forms
-      • Mobile navigation menus
-      • Quick category selection UI
-      • Filter components
-      
-      **Performance:**
-      • Optimized for fast loading
-      • Minimal data transfer
-      • Caching-friendly response
-    `
-  })
-  @ApiQuery({ 
-    name: 'vertical', 
-    required: true,
-    description: 'Vertical to get discovery metadata for',
-    enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT', 'SERVICES'],
-    example: 'HOUSING'
-  })
-  @ApiQuery({ 
-    name: 'type', 
-    required: false,
-    description: 'Filter by category type (MAIN or COMPLIMENTARY)',
-    enum: ['MAIN', 'COMPLIMENTARY'],
-    example: 'MAIN'
-  })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Discovery metadata retrieved successfully',
-    type: [DiscoveryCategoryResponseDto],
-    schema: {
-      example: {
-        success: true,
-        message: 'Discovery metadata retrieved',
-        code: 'OK',
-        data: [
-          {
-            id: 'cat_123abc',
-            name: 'Apartments',
-            slug: 'apartments',
-            type: 'MAIN',
-            icon: 'home',
-            color: '#3B82F6'
-          },
-          {
-            id: 'cat_456def',
-            name: 'Houses',
-            slug: 'houses',
-            type: 'MAIN',
-            icon: 'building',
-            color: '#10B981'
-          }
-        ]
-      }
+@Get('categories/discovery')
+@Public()
+@Version('1')
+@ApiTags('Categories - Public')
+@ApiOperation({ 
+  summary: 'Get lightweight discovery metadata',
+  description: `
+    Returns a simplified category structure optimized for navigation UIs.
+    
+    **Microservice:** Listings Service
+    **Authentication:** Not required
+    **Permission:** Public endpoint
+    
+    **Features:**
+    • Lightweight response format
+    • Only essential fields (id, name, slug, vertical, type, hasSubcategories)
+    • Flat structure for easy rendering
+    • Ideal for dropdowns and navigation menus
+    • Can filter by type (MAIN, COMPLIMENTARY)
+    
+    **Use Cases:**
+    • Category dropdowns in search forms
+    • Mobile navigation menus
+    • Quick category selection UI
+    • Filter components
+    
+    **Performance:**
+    • Optimized for fast loading
+    • Minimal data transfer
+    • Caching-friendly response
+  `
+})
+@ApiQuery({ 
+  name: 'vertical', 
+  required: false,  // Changed to false
+  description: 'Vertical to get discovery metadata for',
+  enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT'],
+  example: 'HOUSING'
+})
+@ApiQuery({ 
+  name: 'type', 
+  required: false,  // Changed to false
+  description: 'Filter by category type (MAIN or COMPLIMENTARY). Omit to get both.',
+  enum: ['MAIN', 'COMPLIMENTARY'],
+  example: 'MAIN'
+})
+@ApiResponse({ 
+  status: 200, 
+  description: 'Discovery metadata retrieved successfully',
+  type: [DiscoveryCategoryResponseDto],
+  schema: {
+    example: {
+      success: true,
+      message: 'Discovery metadata fetched successfully',
+      code: 'FETCHED',
+      data: [
+        {
+          id: 'cmnbogww30000arihhia4xlt5',
+          name: 'Apartments',
+          slug: 'apartments',
+          vertical: 'HOUSING',
+          type: 'MAIN',
+          hasSubcategories: true
+        },
+        {
+          id: 'cmnbogzbx0001arihrii85h3o',
+          name: 'Houses',
+          slug: 'houses',
+          vertical: 'HOUSING',
+          type: 'MAIN',
+          hasSubcategories: true
+        }
+      ]
     }
-  })
-  async getDiscoveryMetadata(
-    @Query() query: DiscoveryParamsDto,
-  ): Promise<BaseResponseDto<DiscoveryCategoryResponseDto[]>> {
-    this.logger.debug(`REST getDiscoveryMetadata request - Vertical: ${query.vertical}, Type: ${query.type || 'ALL'}`);
-    return this.categoriesService.getDiscoveryMetadata(query);
   }
+})
+async getDiscoveryMetadata(
+  @Query() query: DiscoveryParamsDto,
+): Promise<BaseResponseDto<DiscoveryCategoryResponseDto[]>> {
+  this.logger.debug(`REST getDiscoveryMetadata request - Vertical: ${query.vertical || 'ALL'}, Type: ${query.type || 'ALL'}`);
+  return this.categoriesService.getDiscoveryMetadata(query);
+}
 
   /**
    * Get category by ID

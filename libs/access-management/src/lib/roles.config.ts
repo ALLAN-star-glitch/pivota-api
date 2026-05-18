@@ -25,10 +25,11 @@ export enum RoleType {
   // ============ ACCOUNT ROLES ============
   /** 
    * Individual User - Solo user, personal account
-   * - Manage own listings only
-   * - Apply for jobs, book services
-   * - Cannot invite members
+   * - Has ALL business actions (CREATE, UPDATE, DELETE, CLOSE, ARCHIVE) with OWN scope
+   * - Apply for jobs, book services, request aid
+   * - Cannot invite members or manage team
    * - Personal account only
+   * - Subscription Guard enforces limits (listing count, feature access, etc.)
    */
   INDIVIDUAL = 'Individual',
   
@@ -67,7 +68,7 @@ export const RoleMetadataMap: Record<RoleType, RoleMetadata> = {
     name: 'Super Admin',
     description: 'Full platform control',
     scope: 'SYSTEM',
-    immutable: true,
+    immutable: true,  
     category: 'platform',
   },
   [RoleType.PLATFORM_SYSTEM_ADMIN]: {
@@ -109,7 +110,7 @@ export const RoleMetadataMap: Record<RoleType, RoleMetadata> = {
   // Account Roles (Business Scope)
   [RoleType.INDIVIDUAL]: {
     name: 'Individual',
-    description: 'Individual user with personal account',
+    description: 'Individual user with personal account - Has all business actions with OWN scope, limits enforced by Subscription Guard',
     scope: 'BUSINESS',
     immutable: false,
     category: 'individual',
@@ -178,43 +179,74 @@ export function isAIDeveloperRole(role: RoleType): boolean {
 
 /**
  * Role permissions mapping
- * Platform roles inherit ALL business role capabilities plus their specific system permissions
+ * 
+ * HIERARCHY PRINCIPLE:
+ * - Platform roles have FULL business capabilities (ANY scope) + platform-specific permissions
+ * - Business roles have FULL business capabilities (ANY scope for Admin, OWN for Individual)
+ * - This ensures platform roles always have more capabilities than business roles
+ * 
+ * IMPORTANT: Individual role has ALL business actions (CREATE, UPDATE, DELETE, CLOSE, ARCHIVE)
+ * with OWN scope. Subscription Guard handles limits (listing count, feature access, etc.)
  */
 export const RolePermissionsMap: Record<RoleType, string[]> = {
   // ============ PLATFORM ROLES ============
+  
   // Super Admin - Full access to everything
   [RoleType.SUPER_ADMIN]: [Permissions.SUPER_ADMIN],
   
-  // Platform System Admin - All business capabilities + system management
+  // Platform System Admin - FULL business capabilities + system management
   [RoleType.PLATFORM_SYSTEM_ADMIN]: [
-    // ============ Business Capabilities (Same as ADMIN) ============
+    // ============ FULL Business Capabilities (ANY scope) ============
     Permissions.DASHBOARD_VIEW,
     Permissions.REGISTRY_VIEW,
     Permissions.ANALYTICS_VIEW,
+    Permissions.ANALYTICS_EXPORT,
+    
+    // HOUSING - Full ANY scope
     Permissions.HOUSING_READ,
     Permissions.HOUSING_CREATE_ANY,
     Permissions.HOUSING_UPDATE_ANY,
     Permissions.HOUSING_DELETE_ANY,
     Permissions.HOUSING_CLOSE_ANY,
     Permissions.HOUSING_ARCHIVE_ANY,
+    Permissions.HOUSING_MODERATE,
+    Permissions.HOUSING_APPROVE,
+    Permissions.HOUSING_VERIFY,
+    
+    // EMPLOYMENT - Full ANY scope
     Permissions.EMPLOYMENT_READ,
     Permissions.EMPLOYMENT_CREATE_ANY,
     Permissions.EMPLOYMENT_UPDATE_ANY,
     Permissions.EMPLOYMENT_DELETE_ANY,
     Permissions.EMPLOYMENT_CLOSE_ANY,
     Permissions.EMPLOYMENT_ARCHIVE_ANY,
+    Permissions.EMPLOYMENT_MODERATE,
+    Permissions.EMPLOYMENT_APPROVE,
+    Permissions.EMPLOYMENT_VERIFY,
+    Permissions.EMPLOYMENT_APPLY,
+    
+    // SOCIAL SUPPORT - Full ANY scope
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.SOCIAL_SUPPORT_CREATE_ANY,
     Permissions.SOCIAL_SUPPORT_UPDATE_ANY,
     Permissions.SOCIAL_SUPPORT_DELETE_ANY,
     Permissions.SOCIAL_SUPPORT_CLOSE_ANY,
     Permissions.SOCIAL_SUPPORT_ARCHIVE_ANY,
+    Permissions.SOCIAL_SUPPORT_MODERATE,
+    Permissions.SOCIAL_SUPPORT_APPROVE,
+    Permissions.SOCIAL_SUPPORT_VERIFY,
+    Permissions.SOCIAL_SUPPORT_REQUEST,
+    
+    // PROFESSIONAL SERVICES - Full ANY scope
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_DELETE_ANY,
     Permissions.PROFESSIONAL_SERVICES_BOOK,
     Permissions.PROFESSIONAL_SERVICES_REVIEW,
+    Permissions.PROFESSIONAL_SERVICES_VERIFY,
+    
+    // ACCOUNT & TEAM
     Permissions.ACCOUNT_VIEW,
     Permissions.ACCOUNT_UPDATE,
     Permissions.ACCOUNT_UPGRADE,
@@ -227,23 +259,36 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.SUBSCRIPTION_BYPASS,
     
     // ============ Platform Specific Capabilities ============
+    Permissions.ROLE_CREATE,
+    Permissions.ROLE_UPDATE,
     Permissions.ROLE_DELETE,
+    Permissions.ROLE_ASSIGN,
+    Permissions.ROLE_VIEW,
     Permissions.CATEGORIES_CREATE,
     Permissions.CATEGORIES_UPDATE,
     Permissions.CATEGORIES_DELETE,
     Permissions.CATEGORIES_MANAGE,
     Permissions.USER_VIEW,
+    Permissions.USER_CREATE,
+    Permissions.USER_UPDATE,
+    Permissions.USER_DELETE,
     Permissions.USER_SUSPEND,
     Permissions.SYSTEM_SETTINGS_MANAGE,
+    Permissions.SYSTEM_SETTINGS_VIEW,
+    Permissions.SYSTEM_SETTINGS_UPDATE,
     Permissions.LISTINGS_MODERATE,
+    Permissions.AUDIT_VIEW,
+    Permissions.AUDIT_EXPORT,
   ],
   
-  // Platform Compliance Admin - All business capabilities + compliance
+  // Platform Compliance Admin - FULL business capabilities + compliance
   [RoleType.PLATFORM_COMPLIANCE_ADMIN]: [
-    // ============ Business Capabilities (Same as CONTENT_MANAGER_ADMIN) ============
+    // ============ FULL Business Capabilities (ANY scope) ============
     Permissions.DASHBOARD_VIEW,
     Permissions.REGISTRY_VIEW,
     Permissions.ANALYTICS_VIEW,
+    
+    // HOUSING - Full ANY scope with verification
     Permissions.HOUSING_READ,
     Permissions.HOUSING_CREATE_ANY,
     Permissions.HOUSING_UPDATE_ANY,
@@ -252,6 +297,9 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.HOUSING_ARCHIVE_ANY,
     Permissions.HOUSING_MODERATE,
     Permissions.HOUSING_APPROVE,
+    Permissions.HOUSING_VERIFY,
+    
+    // EMPLOYMENT - Full ANY scope with verification
     Permissions.EMPLOYMENT_READ,
     Permissions.EMPLOYMENT_CREATE_ANY,
     Permissions.EMPLOYMENT_UPDATE_ANY,
@@ -260,6 +308,10 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.EMPLOYMENT_ARCHIVE_ANY,
     Permissions.EMPLOYMENT_MODERATE,
     Permissions.EMPLOYMENT_APPROVE,
+    Permissions.EMPLOYMENT_VERIFY,
+    Permissions.EMPLOYMENT_APPLY,
+    
+    // SOCIAL SUPPORT - Full ANY scope with verification
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.SOCIAL_SUPPORT_CREATE_ANY,
     Permissions.SOCIAL_SUPPORT_UPDATE_ANY,
@@ -268,6 +320,10 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.SOCIAL_SUPPORT_ARCHIVE_ANY,
     Permissions.SOCIAL_SUPPORT_MODERATE,
     Permissions.SOCIAL_SUPPORT_APPROVE,
+    Permissions.SOCIAL_SUPPORT_VERIFY,
+    Permissions.SOCIAL_SUPPORT_REQUEST,
+    
+    // PROFESSIONAL SERVICES - Full ANY scope with verification
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
@@ -275,53 +331,103 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.PROFESSIONAL_SERVICES_BOOK,
     Permissions.PROFESSIONAL_SERVICES_REVIEW,
     Permissions.PROFESSIONAL_SERVICES_VERIFY,
+    
+    // ACCOUNT & TEAM (limited)
+    Permissions.ACCOUNT_VIEW,
     Permissions.TEAM_VIEW,
     Permissions.LISTINGS_READ,
     
     // ============ Platform Specific Capabilities ============
     Permissions.USER_VIEW,
     Permissions.LISTINGS_MODERATE,
-    Permissions.HOUSING_VERIFY,
-    Permissions.EMPLOYMENT_VERIFY,
-    Permissions.SOCIAL_SUPPORT_VERIFY,
-    Permissions.PROFESSIONAL_SERVICES_VERIFY,
+    Permissions.AUDIT_VIEW,
   ],
   
-  // Platform Analytics Admin - All business read capabilities + analytics
+  // Platform Analytics Admin - FULL business READ capabilities + analytics
   [RoleType.PLATFORM_ANALYTICS_ADMIN]: [
-    // ============ Business Capabilities (Read-only for all modules) ============
+    // ============ Business Read Capabilities (ANY scope) ============
     Permissions.DASHBOARD_VIEW,
     Permissions.REGISTRY_VIEW,
     Permissions.ANALYTICS_VIEW,
+    Permissions.ANALYTICS_EXPORT,
+    
+    // READ only for all business modules (can analyze but cannot modify)
     Permissions.HOUSING_READ,
     Permissions.EMPLOYMENT_READ,
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.LISTINGS_READ,
     
+    // ACCOUNT (limited)
+    Permissions.ACCOUNT_VIEW,
+    
     // ============ Platform Specific Capabilities ============
-    Permissions.ANALYTICS_EXPORT,
+    Permissions.AUDIT_VIEW,
+    Permissions.AUDIT_EXPORT,
   ],
   
-  // Platform Module Manager - All business capabilities + module management
+  // Platform Module Manager - FULL business capabilities + module management
   [RoleType.PLATFORM_MODULE_MANAGER]: [
-    // ============ Business Capabilities (Read-only for all modules) ============
+    // ============ FULL Business Capabilities (ANY scope) ============
     Permissions.DASHBOARD_VIEW,
     Permissions.REGISTRY_VIEW,
     Permissions.ANALYTICS_VIEW,
+    
+    // HOUSING - Full ANY scope
     Permissions.HOUSING_READ,
+    Permissions.HOUSING_CREATE_ANY,
+    Permissions.HOUSING_UPDATE_ANY,
+    Permissions.HOUSING_DELETE_ANY,
+    Permissions.HOUSING_CLOSE_ANY,
+    Permissions.HOUSING_ARCHIVE_ANY,
+    Permissions.HOUSING_MODERATE,
+    Permissions.HOUSING_APPROVE,
+    
+    // EMPLOYMENT - Full ANY scope
     Permissions.EMPLOYMENT_READ,
+    Permissions.EMPLOYMENT_CREATE_ANY,
+    Permissions.EMPLOYMENT_UPDATE_ANY,
+    Permissions.EMPLOYMENT_DELETE_ANY,
+    Permissions.EMPLOYMENT_CLOSE_ANY,
+    Permissions.EMPLOYMENT_ARCHIVE_ANY,
+    Permissions.EMPLOYMENT_MODERATE,
+    Permissions.EMPLOYMENT_APPROVE,
+    Permissions.EMPLOYMENT_APPLY,
+    
+    // SOCIAL SUPPORT - Full ANY scope
     Permissions.SOCIAL_SUPPORT_READ,
+    Permissions.SOCIAL_SUPPORT_CREATE_ANY,
+    Permissions.SOCIAL_SUPPORT_UPDATE_ANY,
+    Permissions.SOCIAL_SUPPORT_DELETE_ANY,
+    Permissions.SOCIAL_SUPPORT_CLOSE_ANY,
+    Permissions.SOCIAL_SUPPORT_ARCHIVE_ANY,
+    Permissions.SOCIAL_SUPPORT_MODERATE,
+    Permissions.SOCIAL_SUPPORT_APPROVE,
+    Permissions.SOCIAL_SUPPORT_REQUEST,
+    
+    // PROFESSIONAL SERVICES - Full ANY scope
     Permissions.PROFESSIONAL_SERVICES_READ,
+    Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
+    Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
+    Permissions.PROFESSIONAL_SERVICES_DELETE_ANY,
+    Permissions.PROFESSIONAL_SERVICES_BOOK,
+    Permissions.PROFESSIONAL_SERVICES_REVIEW,
+    
+    // ACCOUNT & TEAM (limited)
+    Permissions.ACCOUNT_VIEW,
+    Permissions.TEAM_VIEW,
     Permissions.LISTINGS_READ,
     
     // ============ Platform Specific Capabilities ============
     Permissions.MODULE_RULES_MANAGE,
     Permissions.MODULE_ENABLE,
     Permissions.MODULE_DISABLE,
+    Permissions.MODULE_VIEW,
+    Permissions.CATEGORIES_VIEW,
+    Permissions.AUDIT_VIEW,
   ],
   
-  // ============ AI DEVELOPER ROLE ============
+  // AI DEVELOPER - Read access + training data permissions
   [RoleType.AI_DEVELOPER]: [
     // Core access
     Permissions.DASHBOARD_VIEW,
@@ -329,31 +435,39 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.ANALYTICS_VIEW,
     Permissions.ANALYTICS_EXPORT,
     
-    // Read-only access to business modules (for data understanding)
+    // Read access to business modules (for data understanding)
     Permissions.HOUSING_READ,
     Permissions.EMPLOYMENT_READ,
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.PROFESSIONAL_SERVICES_READ,
+    Permissions.LISTINGS_READ,
     
     // Training data permissions
     Permissions.TRAINING_DATA_ACCESS,
     Permissions.TRAINING_DATA_EXPORT,
     
-    // Registry access
-    Permissions.LISTINGS_READ,
+    // Account access
+    Permissions.ACCOUNT_VIEW,
   ],
   
   // ============ INDIVIDUAL ROLE (Personal Account) ============
+  // Has ALL business actions with OWN scope for all business modules
+  // Subscription Guard enforces limits (listing count, feature access, etc.)
   [RoleType.INDIVIDUAL]: [
+    // Core access
     Permissions.DASHBOARD_VIEW,
     Permissions.REGISTRY_VIEW,
     Permissions.ANALYTICS_VIEW,
+    
+    // ============ HOUSING MODULE - Full OWN scope ============
     Permissions.HOUSING_READ,
     Permissions.HOUSING_CREATE_OWN,
     Permissions.HOUSING_UPDATE_OWN,
     Permissions.HOUSING_DELETE_OWN,
     Permissions.HOUSING_CLOSE_OWN,
     Permissions.HOUSING_ARCHIVE_OWN,
+    
+    // ============ EMPLOYMENT MODULE - Full OWN scope ============
     Permissions.EMPLOYMENT_READ,
     Permissions.EMPLOYMENT_CREATE_OWN,
     Permissions.EMPLOYMENT_UPDATE_OWN,
@@ -361,6 +475,8 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.EMPLOYMENT_CLOSE_OWN,
     Permissions.EMPLOYMENT_ARCHIVE_OWN,
     Permissions.EMPLOYMENT_APPLY,
+    
+    // ============ SOCIAL SUPPORT MODULE - Full OWN scope ============
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.SOCIAL_SUPPORT_CREATE_OWN,
     Permissions.SOCIAL_SUPPORT_UPDATE_OWN,
@@ -368,14 +484,20 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.SOCIAL_SUPPORT_CLOSE_OWN,
     Permissions.SOCIAL_SUPPORT_ARCHIVE_OWN,
     Permissions.SOCIAL_SUPPORT_REQUEST,
+    
+    // ============ PROFESSIONAL SERVICES MODULE - Full OWN scope ============
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.PROFESSIONAL_SERVICES_CREATE_OWN,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_OWN,
     Permissions.PROFESSIONAL_SERVICES_DELETE_OWN,
     Permissions.PROFESSIONAL_SERVICES_BOOK,
     Permissions.PROFESSIONAL_SERVICES_REVIEW,
+    
+    // ============ ACCOUNT MODULE ============
     Permissions.ACCOUNT_VIEW,
     Permissions.ACCOUNT_UPDATE,
+    
+    // ============ LISTINGS ============
     Permissions.LISTINGS_READ,
   ],
   
@@ -384,30 +506,42 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.DASHBOARD_VIEW,
     Permissions.REGISTRY_VIEW,
     Permissions.ANALYTICS_VIEW,
+    
+    // HOUSING - Full ANY scope
     Permissions.HOUSING_READ,
     Permissions.HOUSING_CREATE_ANY,
     Permissions.HOUSING_UPDATE_ANY,
     Permissions.HOUSING_DELETE_ANY,
     Permissions.HOUSING_CLOSE_ANY,
     Permissions.HOUSING_ARCHIVE_ANY,
+    
+    // EMPLOYMENT - Full ANY scope
     Permissions.EMPLOYMENT_READ,
     Permissions.EMPLOYMENT_CREATE_ANY,
     Permissions.EMPLOYMENT_UPDATE_ANY,
     Permissions.EMPLOYMENT_DELETE_ANY,
     Permissions.EMPLOYMENT_CLOSE_ANY,
     Permissions.EMPLOYMENT_ARCHIVE_ANY,
+    Permissions.EMPLOYMENT_APPLY,
+    
+    // SOCIAL SUPPORT - Full ANY scope
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.SOCIAL_SUPPORT_CREATE_ANY,
     Permissions.SOCIAL_SUPPORT_UPDATE_ANY,
     Permissions.SOCIAL_SUPPORT_DELETE_ANY,
     Permissions.SOCIAL_SUPPORT_CLOSE_ANY,
     Permissions.SOCIAL_SUPPORT_ARCHIVE_ANY,
+    Permissions.SOCIAL_SUPPORT_REQUEST,
+    
+    // PROFESSIONAL SERVICES - Full ANY scope
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_DELETE_ANY,
     Permissions.PROFESSIONAL_SERVICES_BOOK,
     Permissions.PROFESSIONAL_SERVICES_REVIEW,
+    
+    // ACCOUNT & TEAM
     Permissions.ACCOUNT_VIEW,
     Permissions.ACCOUNT_UPDATE,
     Permissions.ACCOUNT_UPGRADE,
@@ -425,6 +559,8 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.DASHBOARD_VIEW,
     Permissions.REGISTRY_VIEW,
     Permissions.ANALYTICS_VIEW,
+    
+    // HOUSING - Full ANY scope with moderation
     Permissions.HOUSING_READ,
     Permissions.HOUSING_CREATE_ANY,
     Permissions.HOUSING_UPDATE_ANY,
@@ -433,6 +569,8 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.HOUSING_ARCHIVE_ANY,
     Permissions.HOUSING_MODERATE,
     Permissions.HOUSING_APPROVE,
+    
+    // EMPLOYMENT - Full ANY scope with moderation
     Permissions.EMPLOYMENT_READ,
     Permissions.EMPLOYMENT_CREATE_ANY,
     Permissions.EMPLOYMENT_UPDATE_ANY,
@@ -441,6 +579,9 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.EMPLOYMENT_ARCHIVE_ANY,
     Permissions.EMPLOYMENT_MODERATE,
     Permissions.EMPLOYMENT_APPROVE,
+    Permissions.EMPLOYMENT_APPLY,
+    
+    // SOCIAL SUPPORT - Full ANY scope with moderation
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.SOCIAL_SUPPORT_CREATE_ANY,
     Permissions.SOCIAL_SUPPORT_UPDATE_ANY,
@@ -449,6 +590,9 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.SOCIAL_SUPPORT_ARCHIVE_ANY,
     Permissions.SOCIAL_SUPPORT_MODERATE,
     Permissions.SOCIAL_SUPPORT_APPROVE,
+    Permissions.SOCIAL_SUPPORT_REQUEST,
+    
+    // PROFESSIONAL SERVICES - Full ANY scope with verification
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
@@ -456,6 +600,9 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.PROFESSIONAL_SERVICES_BOOK,
     Permissions.PROFESSIONAL_SERVICES_REVIEW,
     Permissions.PROFESSIONAL_SERVICES_VERIFY,
+    
+    // ACCOUNT & TEAM (limited)
+    Permissions.ACCOUNT_VIEW,
     Permissions.TEAM_VIEW,
     Permissions.LISTINGS_READ,
   ],
@@ -484,7 +631,7 @@ export function getRoleModules(roleType: RoleType): ModuleSlug[] {
     ];
   }
   
-  // Individual role - personal account modules only
+  // Individual role - personal account modules only (has ALL business actions with OWN scope)
   if (isIndividualRole(roleType)) {
     return [
       ModuleSlug.DASHBOARD,

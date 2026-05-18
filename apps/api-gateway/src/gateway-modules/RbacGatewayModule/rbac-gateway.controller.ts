@@ -506,81 +506,64 @@ export class RbacGatewayController {
    * @returns Assignment confirmation
    */
   @Post('users/:userUuid/roles')
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @Permissions(P.ROLE_ASSIGN)
-  @Version('1')
-  @ApiTags('RBAC - Assignments')
-  @ApiOperation({ 
-    summary: 'Assign Role to a user',
-    description: `
-      Assigns a specific role to a user.
-      
-      **Microservice:** Admin Service (RBAC Module)
-      **Authentication:** Required (JWT cookie)
-      **Permission Required:** \`${P.ROLE_ASSIGN}\`
-      **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
-      
-      **How it works:**
-      When a role is assigned to a user, they gain all permissions
-      associated with that role.
-      
-      **Impact:**
-      Changes take effect immediately.
-      User's permissions are updated without requiring logout.
-      
-      **Important:**
-      This is a sensitive operation. All assignments are logged for audit purposes.
-    `
-  })
-  @ApiParam({ 
-    name: 'userUuid', 
-    type: String,
-    description: 'UUID of the user to assign role to',
-    example: 'usr_123abc'
-  })
-  @ApiBody({ 
-    type: AssignRoleToUserRequestDto,
-    examples: {
-      'Assign role to user': {
-        value: {
-          roleId: 'Admin'
-        }
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@Permissions(P.ROLE_ASSIGN)
+@Version('1')
+@ApiTags('RBAC - Assignments')
+@ApiOperation({ 
+  summary: 'Assign Role to a user',
+  description: `
+    Assigns a specific role to a user.
+    
+    **Microservice:** Admin Service (RBAC Module)
+    **Authentication:** Required (JWT cookie)
+    **Permission Required:** \`${P.ROLE_ASSIGN}\`
+  `
+})
+@ApiParam({ 
+  name: 'userUuid', 
+  type: String,
+  description: 'UUID of the user to assign role to',
+  example: '6d5ee496-6c1b-4153-8bce-5948e02e4cac'
+})
+@ApiBody({ 
+  type: AssignRoleToUserRequestDto,
+  examples: {
+    'Assign role to user': {
+      value: {
+        roleType: 'PlatformSystemAdmin'
       }
     }
-  })
-  @ApiResponse({ 
-    status: 201, 
-    description: 'Role assigned successfully',
-    type: UserRoleResponseDto,
-    schema: {
-      example: {
-        success: true,
-        message: 'Role assigned successfully',
-        code: 'CREATED',
-        data: {
-          id: 'ur_123abc',
-          userUuid: 'usr_123abc',
-          roleId: 'Admin',
-          createdAt: '2026-03-05T10:30:00.000Z'
-        }
-      }
-    }
-  })
-  @ApiResponse({ status: 400, description: 'Validation error - Invalid input' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: `Forbidden - Requires ${P.ROLE_ASSIGN} permission` })
-  @ApiResponse({ status: 404, description: 'User or Role not found' })
-  @ApiResponse({ status: 409, description: 'Role already assigned to this user' })
-  async assignRoleToUser(
-    @Param('userUuid') userUuid: string,
-    @Body() body: AssignRoleToUserRequestDto
-  ): Promise<BaseResponseDto<UserRoleResponseDto>> {
-    this.logger.log(`Assigning role ${body.roleId} to user ${userUuid}`);
-    return this.rbacGatewayService.assignRoleToUser({
-      ...body,
-      userUuid,
-    });
   }
+})
+@ApiResponse({ 
+  status: 201, 
+  description: 'Role assigned successfully',
+  schema: {
+    example: {
+      success: true,
+      message: 'Role assigned and synced successfully',
+      code: 'CREATED',
+      data: {
+        id: 'cm8w6h9xq0000wpeu8t3w3vqz',
+        userUuid: '6d5ee496-6c1b-4153-8bce-5948e02e4cac',
+        roleType: 'PlatformSystemAdmin',
+        roleName: 'Platform System Admin',
+        scope: 'SYSTEM',
+        createdAt: '2026-05-16T10:30:00.000Z'
+      }
+    }
+  }
+})
+async assignRoleToUser(
+  @Param('userUuid') userUuid: string,  // ← From URL path
+  @Body() body: AssignRoleToUserRequestDto  // ← Only roleType, assignedBy, reason
+): Promise<BaseResponseDto<UserRoleResponseDto>> {
+  this.logger.log(`Assigning role ${body.roleType} to user ${userUuid}`);
+  
+  // Pass userUuid as first parameter, body as second
+  return this.rbacGatewayService.assignRoleToUser(userUuid, body);
+}
 
   /**
    * Get role for a user

@@ -20,6 +20,16 @@ import { PrismaModule } from '../../../prisma/prisma.module'
           url: process.env.USER_GRPC_URL || 'localhost:50052',
         },
       },
+
+      {
+        name: 'AUTH_PACKAGE',
+        transport: Transport.GRPC,
+        options: {
+          package: 'auth', // must match proto definition
+          protoPath: process.env.AUTH_PROTO_PATH || 'libs/protos/src/lib/auth.proto',
+          url: process.env.AUTH_GRPC_URL || 'localhost:50053',
+        },
+      },
       // Kafka client
       {
         name: 'RBAC_KAFKA',

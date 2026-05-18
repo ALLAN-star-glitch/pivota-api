@@ -30,7 +30,7 @@ model Credential {
   // ✅ Account status (synced from Profile Service)
   accountStatus       String               @default("ACTIVE")  // ACTIVE, INACTIVE, SUSPENDED, PENDING_PAYMENT
 
-  role                String               @default("GeneralUser")
+  role                String               @default("Individual")
   
   // For organization members - their status within the org
   memberStatus        String?              // Only for organization members

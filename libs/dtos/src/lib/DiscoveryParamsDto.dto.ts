@@ -1,29 +1,29 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { VERTICALS } from '@pivota-api/constants';
-import { IsIn, IsNotEmpty, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
 export class DiscoveryParamsDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'HOUSING',
-    description: 'The vertical to fetch top-level discovery metadata for',
+    description: 'The vertical to fetch discovery metadata for',
     enum: VERTICALS,
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @IsIn(VERTICALS, {
     message: () => `Invalid vertical. Must be one of: ${VERTICALS.join(', ')}`,
   })
-  vertical!: string;
+  vertical?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'MAIN',
-    description: 'The type of category to fetch',
+    description: 'Filter by category type (MAIN or COMPLIMENTARY). Omit to get both.',
     enum: ['MAIN', 'COMPLIMENTARY'],
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @IsIn(['MAIN', 'COMPLIMENTARY'], {
     message: () => `Invalid type. Must be one of: MAIN, COMPLIMENTARY`,
   })
-  type!: 'MAIN' | 'COMPLIMENTARY';  
+  type?: 'MAIN' | 'COMPLIMENTARY';
 }

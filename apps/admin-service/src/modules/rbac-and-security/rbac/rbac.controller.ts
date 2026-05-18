@@ -11,7 +11,6 @@ import {
   IdRequestDto,
   CreatePermissionRequestDto,
   AssignPermissionToRoleRequestDto,
-  AssignRoleToUserRequestDto,
   UserRoleResponseDto,
   GetUserByUserUuidDto,
   RoleIdRequestDto, RoleIdResponse,
@@ -74,7 +73,7 @@ export class RbacController {
   // -------------------------
   @GrpcMethod('RbacService', 'AssignRoleToUser')
   async assignRoleToUser(
-    data: AssignRoleToUserRequestDto,
+    data: {roleType: string, userUuid: string},
   ): Promise<BaseResponseDto<UserRoleResponseDto>> {
     this.logger.log(`Received Payload: ${JSON.stringify(data, null, 2)}`);
 

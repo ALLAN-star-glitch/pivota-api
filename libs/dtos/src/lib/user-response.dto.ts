@@ -45,6 +45,9 @@ export class UserBaseDto {
 
   @ApiProperty({ example: 'GeneralUser' })
   roleName!: string;
+
+  @ApiPropertyOptional({ example: 'SYSTEM', enum: ['SYSTEM', 'BUSINESS'] })
+  scope?: string;
 }
 
 /* ======================================================
@@ -613,6 +616,10 @@ export class UserSignupDataDto {
    - Includes timestamps as per UserProfileTrio in .proto
 ====================================================== */
 export class UserProfileResponseDto extends UserSignupDataDto {
+  @ApiPropertyOptional({ example: 'Pro', description: 'The subscription plan name' })
+  planName?: string;
+
+
   @ApiPropertyOptional({ type: OrganizationBaseDto })
   organization?: OrganizationBaseDto;
 
@@ -660,6 +667,9 @@ export class AccountResponseDto {
   @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000' })
   uuid!: string;
 
+  @ApiPropertyOptional({ example: 'Pro', description: 'The subscription plan name' })
+  planName?: string;  // ← ADD THIS LINE
+
   @ApiProperty({ example: 'ACC-ABC123' })
   accountCode!: string;
 
@@ -678,11 +688,6 @@ export class AccountResponseDto {
   @ApiProperty({ example: 'GeneralUser' })
   userRole!: string;
 
-  @ApiPropertyOptional({ example: false })
-  isBusiness?: boolean;
-
-  @ApiPropertyOptional({ enum: BUSINESS_TYPES, example: 'FOR_PROFIT' })
-  businessType?: string;
 
   @ApiProperty({ 
     example: ['JOB_SEEKER', 'SKILLED_PROFESSIONAL'],

@@ -18,7 +18,8 @@ import {
   AuthClientInfoDto,
   SignupResponseDto,
   GoogleOnboardingDataDto,
-  GoogleLoginRequestDto, // Keep this import
+  GoogleLoginRequestDto,
+  SyncUserRoleResponseDto, // Keep this import
 } from '@pivota-api/dtos';
 import { OtpPurpose } from '@pivota-api/shared-redis';
 
@@ -237,6 +238,20 @@ async handleGoogleLoginGrpc(
     ); 
     
     return response;
+  }
+
+  @GrpcMethod('AuthService', 'SyncUserRole')
+  async handleSyncUserRole(
+    data: { userUuid: string; roleName: string; roleType: string; scope: string }
+  ): Promise<BaseResponseDto<SyncUserRoleResponseDto>> {
+    this.logger.log(`🔄 gRPC: Syncing role for user ${data.userUuid} to ${data.roleName} (${data.roleType}) with scope ${data.scope}`);
+    
+    return this.authService.syncUserRole(
+      data.userUuid,
+      data.roleName,
+      data.roleType,
+      data.scope
+    );
   }
   
 }

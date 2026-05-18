@@ -38,25 +38,27 @@ async function main() {
   console.log('\n👤 Seeding Roles...');
   
   // Get roles directly from RoleMetadataMap - Single Source of Truth
-  for (const [roleType, metadata] of Object.entries(RoleMetadataMap)) {
-    await prisma.role.upsert({
-      where: { roleType },
-      update: {
-        name: metadata.name,
-        description: metadata.description,
-        scope: metadata.scope,
-      },
-      create: {
-        id: roleType, // Using roleType as ID for consistency
-        roleType: roleType,
-        name: metadata.name,
-        description: metadata.description,
-        scope: metadata.scope,
-        status: 'Active',
-        immutable: metadata.immutable,
-      },
-    });
-  }
+
+for (const [roleType, metadata] of Object.entries(RoleMetadataMap)) {
+  await prisma.role.upsert({
+    where: { roleType },  // Use roleType as the unique identifier for lookup
+    update: {
+      name: metadata.name,
+      description: metadata.description,
+      scope: metadata.scope,
+      status: 'Active',
+      immutable: metadata.immutable,
+    },
+    create: {
+      roleType: roleType,
+      name: metadata.name,
+      description: metadata.description,
+      scope: metadata.scope,
+      status: 'Active',
+      immutable: metadata.immutable,
+    },
+  });
+}
 
   const dbRoles = await prisma.role.findMany();
   console.log(`   ✓ ${dbRoles.length} roles seeded`);
