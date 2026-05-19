@@ -11,6 +11,7 @@ import { InvitationEventController } from './invitation-event.controller';
 import { SharedRedisModule } from '@pivota-api/shared-redis';
 import { EmailWorker } from '../../workers/email.worker';
 import { AnalyticsWorker } from '../../workers/analytics.worker';
+import { SessionSyncWorker } from '../../workers/session-sync.worker';
 import { AccountConsumer } from '../../consumers/account.consumer';
 
 @Module({
@@ -50,8 +51,8 @@ import { AccountConsumer } from '../../consumers/account.consumer';
         options: {
           urls: [process.env.RMQ_URL || 'amqp://localhost:5672'],
           queue: 'notification_email_queue',
-          exchange: 'amq.direct',  // ← ADD THIS (must match what you bound)
-          routingKey: 'otp.requested',  // ← ADD THIS
+          exchange: 'amq.direct',
+          routingKey: 'otp.requested',
         },
       },
       {
@@ -68,7 +69,7 @@ import { AccountConsumer } from '../../consumers/account.consumer';
       },
     ]),
   ],
-  providers: [AuthService, EmailWorker, AnalyticsWorker],
+  providers: [AuthService, EmailWorker, AnalyticsWorker, SessionSyncWorker],
   controllers: [AuthController, InvitationEventController, AccountConsumer],
   exports: [AuthService],
 })
@@ -76,6 +77,7 @@ export class AuthModule {
   constructor(
     private emailWorker: EmailWorker,
     private analyticsWorker: AnalyticsWorker,
+    private sessionSyncWorker: SessionSyncWorker,
   ) {
     console.log(
       '🚀 AuthModule: gRPC Clients & Dual RMQ Event Buses initialized.',
@@ -84,6 +86,7 @@ export class AuthModule {
     );
     console.log('🔥 AuthModule constructor, emailWorker:', !!this.emailWorker);
     console.log('🔥 AuthModule constructor, analyticsWorker:', !!this.analyticsWorker);
+    console.log('🔥 AuthModule constructor, sessionSyncWorker:', !!this.sessionSyncWorker);
     
     // Initialize email worker immediately
     setImmediate(() => {
@@ -98,6 +101,14 @@ export class AuthModule {
       console.log('🔥 AuthModule - manually initializing AnalyticsWorker');
       this.analyticsWorker.initialize().catch(err => {
         console.error('🔥 Failed to initialize analytics worker:', err);
+      });
+    });
+    
+    // Initialize session sync worker immediately
+    setImmediate(() => {
+      console.log('🔥 AuthModule - manually initializing SessionSyncWorker');
+      this.sessionSyncWorker.initialize().catch(err => {
+        console.error('🔥 Failed to initialize session sync worker:', err);
       });
     });
   }

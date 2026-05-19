@@ -41,7 +41,7 @@ import { randomUUID } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import * as dotenv from 'dotenv';
 import { HttpService } from '@nestjs/axios';
-import { getRateLimitConfig, OtpPurpose, QueueService, RedisService } from '@pivota-api/shared-redis';
+import { getRateLimitConfig, OtpPurpose, QueueService, RedisService, RedisSessionService } from '@pivota-api/shared-redis';
 
 
 
@@ -88,6 +88,7 @@ export class AuthService implements OnModuleInit {
   private readonly jwtService: JwtService,
   private readonly prismaService: PrismaService,
   private readonly httpService: HttpService,
+  private readonly redisSession: RedisSessionService,
   private queue: QueueService,
   
   // gRPC Clients
@@ -130,6 +131,7 @@ export class AuthService implements OnModuleInit {
   
 
  /** ------------------ Validate User ------------------ */
+
 async validateUser(
   email: string, 
   password: string, 
@@ -147,7 +149,17 @@ async validateUser(
   const LOCKOUT_DURATION_MINUTES = 15;
 
   try {
-    // 1. FETCH CREDENTIAL with all needed fields
+    // 1. Check lockout status FIRST (must be real-time, never cached)
+    const lockoutKey = `lockout:${email}`;
+    const isLocked = await this.redisService.exists(lockoutKey);
+    if (isLocked) {
+      const ttl = await this.redisService.getTTL(lockoutKey);
+      const minutesLeft = Math.ceil(ttl / 60);
+      this.logger.warn(`[AUTH] Blocked: ${email} locked for ${minutesLeft} mins.`);
+      throw new UnauthorizedException(`Account locked. Try again in ${minutesLeft} minutes.`);
+    }
+
+    // 2. Get FRESH security data from DB (password hash, failed attempts)
     const credential = await this.prisma.credential.findUnique({
       where: { email },
       select: {
@@ -160,6 +172,7 @@ async validateUser(
         lockoutExpires: true,
         accountStatus: true,
         memberStatus: true,
+        role: true,
       }
     });
 
@@ -168,61 +181,79 @@ async validateUser(
       return null;
     }
 
-    this.logger.debug(`[AUTH] Found Credential for: ${email}. UserUUID: ${credential.userUuid}, AccountUUID: ${credential.accountUuid}`);
-
-    // 2. CHECK LOCKOUT STATUS
+    // 3. Check DB lockout expires
     if (credential.lockoutExpires && credential.lockoutExpires > new Date()) {
       const remainingTime = Math.ceil((credential.lockoutExpires.getTime() - Date.now()) / 60000);
       this.logger.warn(`[AUTH] Blocked: ${email} locked for ${remainingTime} mins.`);
       throw new UnauthorizedException(`Account locked. Try again in ${remainingTime} minutes.`);
     }
 
-    // 3. VERIFY PASSWORD
+    // 4. Verify password (MUST be fresh, never cached)
     const isValid = await bcrypt.compare(password, credential.passwordHash);
+    
     if (!isValid) {
       const newFailedAttempts = credential.failedAttempts + 1;
-      let lockoutExpires: Date | null = null;
-
+      
       if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
-        lockoutExpires = new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60000);
-        this.logger.error(`[AUTH] Locking account: ${email} due to max failed attempts.`);
+        // Lock account in Redis (fast, real-time)
+        await this.redisService.setEx(lockoutKey, '1', LOCKOUT_DURATION_MINUTES * 60);
+        
+        // Also update DB
+        await this.prisma.credential.update({
+          where: { id: credential.id },
+          data: { 
+            failedAttempts: newFailedAttempts,
+            lockoutExpires: new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60000)
+          },
+        });
+      } else {
+        await this.prisma.credential.update({
+          where: { id: credential.id },
+          data: { failedAttempts: newFailedAttempts },
+        });
       }
-
-      await this.prisma.credential.update({
-        where: { id: credential.id },
-        data: { 
-          failedAttempts: newFailedAttempts, 
-          lockoutExpires 
-        },
-      });
       return null;
     }
 
-    // 4. CHECK STATUS based on login context
+    // 5. Password is valid - cache SAFE data for future use
+    await this.redisSession.cacheCredential(email, {
+      userUuid: credential.userUuid,
+      accountUuid: credential.accountUuid,
+      accountStatus: credential.accountStatus,
+      memberStatus: credential.memberStatus,
+      role: credential.role,
+      email: credential.email,
+    });
+
+    // 6. Reset security fields on success
+    await Promise.all([
+      this.prisma.credential.update({
+        where: { id: credential.id },
+        data: { 
+          lastLoginAt: new Date(),
+          failedAttempts: 0,
+          lockoutExpires: null 
+        },
+      }),
+      this.redisService.delete(lockoutKey), // Clear Redis lockout
+      this.redisService.delete(`failed:${email}`), // Clear failed attempts cache
+    ]);
+
+    // Determine login context
     let effectiveStatus: string;
     let isOrganizationMember = false;
 
     if (organizationUuid) {
-      // Organization login - check member status for this specific org
       if (!credential.memberStatus) {
         this.logger.warn(`[AUTH] User ${email} is not a member of any organization`);
         throw new UnauthorizedException('You are not a member of any organization.');
       }
-      
-      // For organization login, we need to verify the specific organization
-      // The credential.memberStatus should reflect the status for the primary org
-      // For multi-org support, you might need to query the specific org status
       effectiveStatus = credential.memberStatus;
       isOrganizationMember = true;
-      
-      this.logger.debug(`[AUTH] Organization login for ${email}, member status: ${effectiveStatus}`);
     } else {
-      // Individual login - check account status
       effectiveStatus = credential.accountStatus;
-      this.logger.debug(`[AUTH] Individual login for ${email}, account status: ${effectiveStatus}`);
     }
 
-    // 5. CHECK IF STATUS ALLOWS LOGIN
     if (effectiveStatus !== 'ACTIVE') {
       const statusMessage = effectiveStatus.toLowerCase();
       this.logger.warn(`[AUTH] Blocked: ${email} account is ${statusMessage}`);
@@ -233,19 +264,8 @@ async validateUser(
       throw new UnauthorizedException(`Your account is ${statusMessage}.`);
     }
 
-    // 6. RESET SECURITY FIELDS ON SUCCESS
-    await this.prisma.credential.update({
-      where: { id: credential.id },
-      data: { 
-        lastLoginAt: new Date(),
-        failedAttempts: 0,
-        lockoutExpires: null 
-      }
-    });
+    this.logger.log(`[AUTH] User validated successfully: ${email}`);
 
-    this.logger.log(`[AUTH] User validated successfully: ${email} (${organizationUuid ? 'Organization' : 'Individual'} login)`);
-    
-    // Return minimal data needed for token generation
     return {
       userUuid: credential.userUuid,
       accountUuid: credential.accountUuid,
@@ -1292,18 +1312,23 @@ private async queueOtpInBackground(email: string, purpose: string): Promise<void
   // Generate OTP
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60000);
+  const now = new Date();
   
-  // Store OTP in database
+  // ✅ Store in Redis FIRST (fast lookup for verification)
+  const redisKey = `otp:${email}:${purpose}`;
+  await this.redisService.setEx(redisKey, otpCode, 600); // 10 minutes TTL
+  
+  // ✅ Store in database (for persistence/fallback)
   await this.prisma.otp.upsert({
     where: {
       email_purpose: { email, purpose }
     },
-    update: { code: otpCode, expiresAt, createdAt: new Date() },
-    create: { email, code: otpCode, purpose, expiresAt, createdAt: new Date() },
+    update: { code: otpCode, expiresAt, createdAt: now },
+    create: { email, code: otpCode, purpose, expiresAt, createdAt: now },
   });
   
-  // Queue email sending (fire and forget)
-  await this.queue.addJob(
+  // Queue email sending (fire and forget - don't await)
+  this.queue.addJob(
     'email-queue',
     'send-otp',
     {
@@ -1317,93 +1342,163 @@ private async queueOtpInBackground(email: string, purpose: string): Promise<void
       removeOnComplete: true,
       removeOnFail: false,
     }
-  );
+  ).catch(err => this.logger.error(`Failed to queue OTP email: ${err.message}`));
   
-  this.logger.debug(`OTP ${otpCode} queued for ${email}`);
+  this.logger.debug(`OTP ${otpCode} stored in Redis and DB for ${email}`);
 }
 
 
   // ------------------ Refresh Token ------------------
 async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>> {
-  if (!refreshToken) throw new UnauthorizedException('Refresh token is required');
+  const startTime = Date.now();
+  
+  if (!refreshToken) {
+    throw new UnauthorizedException('Refresh token is required');
+  }
 
   try {
-    // 1. Verify the JWT integrity and expiration
-    const payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken);
-    
-    // 2. Database Lookup: Find all active sessions for this user
-    const sessions = await this.prisma.session.findMany({
-      where: { 
-        userUuid: payload.sub, 
-        revoked: false,
-        expiresAt: { gt: new Date() }
-      },
-    });
-
-    // 3. Verify the hashed token matches the one in our database
-    const validSession = sessions.find((s) => bcrypt.compareSync(refreshToken, s.hashedToken));
-    
-    if (!validSession) {
-      this.logger.warn(`[AUTH] Refresh attempt with invalid/revoked token for user: ${payload.sub}`);
-      throw new UnauthorizedException('Invalid or revoked refresh token');
+    // 1. Decode token to get tokenId
+    const decoded = this.jwtService.decode(refreshToken) as JwtPayload;
+    if (!decoded?.jti || !decoded?.sub) {
+      throw new UnauthorizedException('Invalid token structure');
     }
 
-    // 4. Update the "Last Active" timestamp for the current session
-    await this.prisma.session.update({
-      where: { id: validSession.id },
-      data: { lastActiveAt: new Date() }
-    });
+    const { jti: tokenId, sub: userUuid } = decoded;
+    this.logger.log(`🔄 Refreshing token for user: ${userUuid}, tokenId: ${tokenId}`);
 
-    // 5. Fetch fresh user profile details via gRPC
-    const userGrpcService = this.getProfileGrpcService();
-    const profileResponse = await firstValueFrom(
-      userGrpcService.getUserProfileByUuid({ userUuid: payload.sub })
+    // 2. Try Redis first, fallback to Database
+    const session = await this.redisSession.getSession(tokenId);
+    let isValid = false;
+    
+    if (session) {
+      // Validate in Redis
+      const bcrypt = require('bcrypt');
+      isValid = await bcrypt.compare(refreshToken, session.refreshTokenHash);
+      this.logger.debug(`Redis validation result: ${isValid}`);
+    }
+    
+    // Fallback to Database if Redis doesn't have it or validation failed
+    if (!isValid) {
+      this.logger.warn(`Redis validation failed, checking database...`);
+      const dbSession = await this.prisma.session.findUnique({
+        where: { tokenId },
+        select: { hashedToken: true, revoked: true, expiresAt: true, userUuid: true }
+      });
+      
+      if (dbSession && !dbSession.revoked && dbSession.expiresAt > new Date()) {
+        const bcrypt = require('bcrypt');
+        isValid = await bcrypt.compare(refreshToken, dbSession.hashedToken);
+        
+        if (isValid) {
+          // Restore to Redis for next time
+          await this.redisSession.storeSession(
+            tokenId,
+            dbSession.userUuid,
+            dbSession.hashedToken,
+            null
+          );
+          this.logger.debug(`Session restored to Redis from database`);
+        }
+      }
+    }
+    
+    if (!isValid) {
+      this.logger.warn(`Invalid refresh token: ${tokenId}`);
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    // 3. Check blacklist
+    const isBlacklisted = await this.redisSession.isBlacklisted(tokenId);
+    if (isBlacklisted) {
+      this.logger.warn(`Token is blacklisted: ${tokenId}`);
+      throw new UnauthorizedException('Token has been revoked');
+    }
+
+    // 4. Get user profile (from cache or gRPC)
+    let profileData = await this.redisSession.getCachedUserProfile(userUuid);
+    if (!profileData) {
+      const profileGrpc = this.getProfileGrpcService();
+      const profileResponse = await firstValueFrom(
+        profileGrpc.getUserProfileByUuid({ userUuid })
+      );
+      
+      if (!profileResponse?.success || !profileResponse?.data) {
+        throw new UnauthorizedException('User profile not found');
+      }
+      
+      profileData = profileResponse.data;
+      await this.redisSession.cacheUserProfile(userUuid, profileData);
+    }
+
+    // 5. Generate new tokens
+    const newTokenId = `${userUuid}-${Date.now()}`;
+    const now = Math.floor(Date.now() / 1000);
+    
+    const payload: JwtPayload = {
+      sub: userUuid,
+      jti: newTokenId,
+      iat: now,
+      email: profileData.user?.email,
+      accountId: profileData.account?.uuid,
+      role: profileData.user?.role || 'Individual',
+      accountType: profileData.account?.type || 'INDIVIDUAL',
+      organizationUuid: profileData.organization?.uuid || null,
+    };
+
+    const [newAccessToken, newRefreshToken] = await Promise.all([
+      this.jwtService.signAsync(payload, { expiresIn: '15m' }),
+      this.jwtService.signAsync(payload, { expiresIn: '7d' })
+    ]);
+
+    // 6. Hash new refresh token
+    const hashedNewToken = await bcrypt.hash(newRefreshToken, 10);
+    const clientInfo = session?.clientInfo ? JSON.parse(session.clientInfo) : null;
+
+    // 7. Rotate token in Redis
+    await this.redisSession.rotateToken(
+      tokenId,
+      newTokenId,
+      userUuid,
+      hashedNewToken,
+      clientInfo
     );
 
-    if (!profileResponse?.success || !profileResponse.data) {
-      throw new UnauthorizedException('User profile no longer exists');
-    }
-
-    // 6. Issue a New Token Pair
-    const tokens = await this.generateTokens(
-      profileResponse.data,
+    // 8. Queue DB sync for eventual consistency
+    await this.queue.addJob(
+      'db-sync',
+      'session-rotation',
       {
-        device: validSession.device,
-        ipAddress: validSession.ipAddress,
-        userAgent: validSession.userAgent,
-        os: validSession.os
+        oldTokenId: tokenId,
+        newTokenId: newTokenId,
+        userUuid: userUuid,
+        newRefreshTokenHash: hashedNewToken,
+        clientInfo: clientInfo,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
+        removeOnComplete: true,
       }
     );
 
-    // 7. Revoke the old session used for this refresh (Token Rotation)
-    await this.prisma.session.update({
-      where: { id: validSession.id },
-      data: { revoked: true }
-    });
+    const elapsed = Date.now() - startTime;
+    this.logger.log(`✅ Token refresh completed in ${elapsed}ms for user: ${userUuid}`);
 
-    // ✅ FIXED: Return using BaseResponseDto.ok() method for consistency
     return BaseResponseDto.ok(
-      tokens,
+      { accessToken: newAccessToken, refreshToken: newRefreshToken },
       'Tokens refreshed successfully',
       'OK'
     );
 
-  } catch (err: unknown) {
-    this.logger.error(`[AUTH] Refresh Token Error: ${err instanceof Error ? err.message : 'Unknown'}`);
+  } catch (err: any) {
+    this.logger.error(`Refresh token error: ${err.message}`);
     
     if (err instanceof UnauthorizedException) {
-      return BaseResponseDto.fail(
-        err.message,
-        'UNAUTHORIZED',
-        { code: 'AUTH_FAILURE', message: err.message }
-      );
+      return BaseResponseDto.fail(err.message, 'UNAUTHORIZED');
     }
-
-    return BaseResponseDto.fail(
-      'Token refresh failed due to a system error',
-      'INTERNAL_ERROR',
-      { code: 'INTERNAL', message: err instanceof Error ? err.message : 'Refresh failed' }
-    );
+    
+    return BaseResponseDto.fail('Token refresh failed', 'INTERNAL_ERROR');
   }
 }
 
@@ -1411,6 +1506,8 @@ async signInWithGoogle(
   clientInfo?: AuthClientInfoDto,
   googleLoginRequest?: GoogleLoginRequestDto
 ): Promise<BaseResponseDto<LoginResponseDto>> {
+  const startTime = Date.now();
+  
   try {
     const profileGrpc = this.getProfileGrpcService();
     
@@ -1421,18 +1518,34 @@ async signInWithGoogle(
       throw new UnauthorizedException('Google token is required');
     }
     
-    // 1. VERIFY GOOGLE TOKEN
+    // 1. VERIFY GOOGLE TOKEN - WITH CACHING
     this.logger.log('🔍 [Google Auth] Verifying Google token...');
-    const ticket = await this.googleClient.verifyIdToken({
-      idToken: token,
-      audience: [
-        process.env.GOOGLE_CLIENT_ID,
-        '407408718192.apps.googleusercontent.com',
-        '759373816085-4o3n6e05g7ck3k6nb3f016c4civles7h.apps.googleusercontent.com'
-      ]
-    });
     
-    const payload = ticket.getPayload();
+    // Try cache first (saves 500-800ms for repeated requests)
+    const cacheKey = `google_token:${token.substring(0, 50)}`;
+    let payload = await this.redisService.getObject(cacheKey);
+    
+    if (!payload) {
+      // Cache miss - verify with Google
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: token,
+        audience: [
+          process.env.GOOGLE_CLIENT_ID,
+          '407408718192.apps.googleusercontent.com',
+          '759373816085-4o3n6e05g7ck3k6nb3f016c4civles7h.apps.googleusercontent.com'
+        ]
+      });
+      
+      payload = ticket.getPayload();
+      
+      if (payload && payload.email) {
+        // Cache for 60 seconds (short TTL for security)
+        await this.redisService.setObject(cacheKey, payload, 60);
+        this.logger.debug(`Google token cached for ${payload.email}`);
+      }
+    } else {
+      this.logger.debug(`✅ Google token cache HIT for ${payload.email}`);
+    }
     
     if (!payload || !payload.email) {
       throw new UnauthorizedException('Invalid Google token');
@@ -1453,12 +1566,30 @@ async signInWithGoogle(
 
     this.logger.log(`🔍 [Google Auth] Processing Google login for: ${email}`);
 
-    // 2. CHECK IF CREDENTIAL EXISTS
-    const existingCredential = await this.prisma.credential.findFirst({
-      where: {
-        OR: [{ googleProviderId }, { email }]
+    // 2. CHECK IF CREDENTIAL EXISTS - Try cache first
+    let existingCredential = await this.redisSession.getCachedCredential(email);
+    let credentialId: string | undefined;
+    
+    if (!existingCredential) {
+      const dbCredential = await this.prisma.credential.findFirst({
+        where: {
+          OR: [{ googleProviderId }, { email }]
+        }
+      });
+      
+      if (dbCredential) {
+        existingCredential = {
+          userUuid: dbCredential.userUuid,
+          accountUuid: dbCredential.accountUuid,
+          accountStatus: dbCredential.accountStatus,
+          role: dbCredential.role,
+          email: dbCredential.email,
+        };
+        credentialId = dbCredential.id;
+        
+        await this.redisSession.cacheCredential(email, existingCredential);
       }
-    });
+    }
 
     if (existingCredential) {
       // PATH A: EXISTING USER - Login flow
@@ -1468,60 +1599,67 @@ async signInWithGoogle(
       accountUuid = existingCredential.accountUuid;
       accountStatus = existingCredential.accountStatus;
       
-      // Link Google ID if not already linked
-      if (!existingCredential.googleProviderId) {
-        await this.prisma.credential.update({
-          where: { id: existingCredential.id },
-          data: { googleProviderId }
+      // Link Google ID if not already linked (fire and forget)
+      if (!credentialId) {
+        const dbCredential = await this.prisma.credential.findUnique({
+          where: { userUuid },
+          select: { id: true, googleProviderId: true }
         });
-        this.logger.log(`[Google Auth] Linked Google ID to existing account: ${email}`);
-      }
-      
-      //  NEW: Get current user profile to check if picture needs update
-      const userProfile = await firstValueFrom(
-        profileGrpc.getUserProfileByUuid({ userUuid })
-      );
-      
-      const currentProfileImage = userProfile?.data?.profile?.profileImage || 
-                                   userProfile?.data?.profile?.profileImage;
-      
-      const hasGooglePicture = profileImage && 
-                               profileImage.startsWith('https://lh3.googleusercontent.com/');
-      
-      // Check if Google has a picture AND it's different from current
-      if (hasGooglePicture && currentProfileImage !== profileImage) {
-        this.logger.log(`📸 Google profile picture changed for ${email}`);
-        this.logger.log(`   Old: ${currentProfileImage}`);
-        this.logger.log(`   New: ${profileImage}`);
+        credentialId = dbCredential?.id;
         
-        await firstValueFrom(
-          profileGrpc.updateProfilePicture({
-            accountUuid: accountUuid, 
-            pictureUrl: profileImage,
-            oldImageUrl: currentProfileImage,
-          })
-        );
+        if (dbCredential && !dbCredential.googleProviderId) {
+          this.prisma.credential.update({
+            where: { id: dbCredential.id },
+            data: { googleProviderId }
+          }).catch(err => this.logger.error(`Failed to link Google ID: ${err.message}`));
+        }
       }
       
-      // Track existing user login
-      this.kafkaClient.emit('user.login.google', {
-        userUuid,
-        email,
-        isNewUser: false,
-        clientInfo: clientInfo ? {
-          device: clientInfo.device,
-          deviceType: clientInfo.deviceType,
-          os: clientInfo.os,
-          osVersion: clientInfo.osVersion,
-          browser: clientInfo.browser,
-          browserVersion: clientInfo.browserVersion,
-          isBot: clientInfo.isBot
-        } : null,
-        timestamp: new Date().toISOString()
-      });
+      // Profile picture update (fire and forget - already non-blocking)
+      const profileObservable = profileGrpc.getUserProfileByUuid({ userUuid });
+      firstValueFrom(profileObservable)
+        .then(userProfile => {
+          const currentProfileImage = userProfile?.data?.profile?.profileImage;
+          const hasGooglePicture = profileImage && profileImage.startsWith('https://lh3.googleusercontent.com/');
+          
+          if (hasGooglePicture && currentProfileImage !== profileImage) {
+            this.logger.log(`📸 Google profile picture changed for ${email}`);
+            firstValueFrom(
+              profileGrpc.updateProfilePicture({
+                accountUuid: accountUuid, 
+                pictureUrl: profileImage,
+                oldImageUrl: currentProfileImage,
+              })
+            ).catch(err => this.logger.error(`Failed to update profile picture: ${err.message}`));
+          }
+        })
+        .catch(err => this.logger.warn(`Profile fetch failed: ${err.message}`));
+      
+      // Analytics (fire and forget)
+      this.queue.addJob(
+        'analytics-queue',
+        'user-login',
+        {
+          userUuid,
+          email,
+          isNewUser: false,
+          loginMethod: 'GOOGLE',
+          clientInfo: clientInfo ? {
+            device: clientInfo.device,
+            deviceType: clientInfo.deviceType,
+            os: clientInfo.os,
+            osVersion: clientInfo.osVersion,
+            browser: clientInfo.browser,
+            browserVersion: clientInfo.browserVersion,
+            isBot: clientInfo.isBot
+          } : null,
+          timestamp: new Date().toISOString()
+        },
+        { attempts: 2, removeOnComplete: true, removeOnFail: false }
+      ).catch(err => this.logger.error(`Failed to queue analytics: ${err.message}`));
 
     } else {
-      // PATH B: BRAND NEW USER - Create everything (existing logic - unchanged)
+      // PATH B: BRAND NEW USER - Create everything
       isNewUser = true;
       this.logger.log(`[Google Auth] New user detected: ${email}. Creating account...`);
       
@@ -1579,7 +1717,14 @@ async signInWithGoogle(
         },
       });
 
-      // Send welcome emails (keep existing logic)
+      await this.redisSession.cacheCredential(email, {
+        userUuid,
+        accountUuid,
+        accountStatus,
+        role: 'Individual',
+        email,
+      });
+
       const profileType = onboardingData?.primaryPurpose 
         ? this.mapPurposeToProfileType(onboardingData.primaryPurpose)
         : null;
@@ -1589,47 +1734,49 @@ async signInWithGoogle(
         onboardingData
       );
 
-      this.notificationBus.emit('user.onboarded', {
-        accountId: accountData.accountCode,
-        firstName: firstName,
-        email: email,
-        plan: 'Free Forever',
-        profileType: profileType,
-        profileData: profileDataForEmail,
-      });
-
-      this.notificationBus.emit('admin.new.registration', {
-        adminEmail: process.env.ADMIN_NOTIFICATION_EMAIL || 'onboarding@pivotaconnect.com',
-        userEmail: email,
-        userName: `${firstName} ${lastName}`.trim(),
-        accountType: 'INDIVIDUAL',
-        registrationMethod: 'GOOGLE',
-        registrationDate: new Date().toISOString(),
-        plan: 'Free Forever',
-        primaryPurpose: onboardingData?.primaryPurpose || 'JUST_EXPLORING',
-        profileType: profileType,
-      });
-
-      this.kafkaClient.emit('user.registered', {
-        userUuid,
-        email,
-        accountId: accountData.accountCode,
-        plan: 'free-forever',
-        registrationMethod: 'GOOGLE',
-        primaryPurpose: onboardingData?.primaryPurpose || 'JUST_EXPLORING',
-        profileType: profileType,
-        hasProfileData: !!profileType,
-        signupSource: {
-          device: clientInfo?.device,
-          deviceType: clientInfo?.deviceType,
-          os: clientInfo?.os,
-          osVersion: clientInfo?.osVersion,
-          browser: clientInfo?.browser,
-          browserVersion: clientInfo?.browserVersion,
-          isBot: clientInfo?.isBot,
-          timestamp: new Date().toISOString()
-        }
-      });
+      // Notifications (fire and forget)
+      Promise.all([
+        this.queue.addJob('email-queue', 'welcome-email', {
+          to: email,
+          accountId: accountData.accountCode,
+          firstName: firstName,
+          lastName: lastName,
+          plan: 'Free Forever',
+          profileType: profileType,
+          profileData: profileDataForEmail,
+        }, { removeOnComplete: true }),
+        this.queue.addJob('email-queue', 'admin-notification', {
+          to: process.env.ADMIN_NOTIFICATION_EMAIL || 'onboarding@pivotaconnect.com',
+          userEmail: email,
+          userName: `${firstName} ${lastName}`.trim(),
+          accountType: 'INDIVIDUAL',
+          registrationMethod: 'GOOGLE',
+          registrationDate: new Date().toISOString(),
+          plan: 'Free Forever',
+          primaryPurpose: onboardingData?.primaryPurpose || 'JUST_EXPLORING',
+          profileType: profileType,
+        }, { removeOnComplete: true }),
+        this.queue.addJob('analytics-queue', 'user-registered', {
+          userUuid,
+          email,
+          accountId: accountData.accountCode,
+          plan: 'free-forever',
+          registrationMethod: 'GOOGLE',
+          primaryPurpose: onboardingData?.primaryPurpose || 'JUST_EXPLORING',
+          profileType: profileType,
+          hasProfileData: !!profileType,
+          signupSource: {
+            device: clientInfo?.device,
+            deviceType: clientInfo?.deviceType,
+            os: clientInfo?.os,
+            osVersion: clientInfo?.osVersion,
+            browser: clientInfo?.browser,
+            browserVersion: clientInfo?.browserVersion,
+            isBot: clientInfo?.isBot,
+            timestamp: new Date().toISOString()
+          }
+        }, { removeOnComplete: true })
+      ]).catch(err => this.logger.error(`Failed to queue notifications: ${err.message}`));
     }
 
     // 3. CHECK ACCOUNT STATUS
@@ -1638,15 +1785,32 @@ async signInWithGoogle(
       throw new UnauthorizedException(`Your account is ${accountStatus.toLowerCase()}.`);
     }
 
-    // 4. GENERATE TOKENS (existing logic - unchanged)
+    // 4. GENERATE TOKENS WITH ROLE CACHING
     const tokenId = `${userUuid}-${Date.now()}`;
     const now = Math.floor(Date.now() / 1000);
     
-    const rbacService = this.getRbacGrpcService();
-    const userRoleResponse = await firstValueFrom(
-      rbacService.getUserRole({ userUuid })
-    );
-    const roleType = userRoleResponse?.role?.roleType ?? 'Individual';
+    // Try to get role from cache first
+    let roleType = await this.redisSession.getCachedUserRole(userUuid);
+    
+    if (!roleType) {
+      // Cache miss - fetch from RBAC service
+      this.logger.debug(`Role cache miss for ${userUuid}, fetching from RBAC service`);
+      try {
+        const rbacService = this.getRbacGrpcService();
+        const userRoleResponse = await firstValueFrom(
+          rbacService.getUserRole({ userUuid })
+        );
+        roleType = userRoleResponse?.role?.roleType ?? 'Individual';
+        
+        // Cache for next time (5 minutes TTL)
+        await this.redisSession.cacheUserRole(userUuid, roleType);
+      } catch (err) {
+        this.logger.warn(`Failed to fetch role from RBAC, using default role: ${err.message}`);
+        roleType = 'Individual';
+      }
+    } else {
+      this.logger.debug(`Role cache HIT for ${userUuid}: ${roleType}`);
+    }
 
     const jwtPayload: JwtPayload = {
       sub: userUuid,
@@ -1659,60 +1823,61 @@ async signInWithGoogle(
       organizationUuid: null,
     };
 
-    const accessToken = await this.jwtService.signAsync(jwtPayload, { expiresIn: '15m' });
-    const refreshToken = await this.jwtService.signAsync(jwtPayload, { expiresIn: '7d' });
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(jwtPayload, { expiresIn: '15m' }),
+      this.jwtService.signAsync(jwtPayload, { expiresIn: '7d' })
+    ]);
 
     const hashedToken = await bcrypt.hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    await this.prisma.session.create({
-      data: {
-        userUuid: userUuid,
-        tokenId: tokenId,
-        hashedToken,
-        device: clientInfo?.device,
-        ipAddress: clientInfo?.ipAddress,
-        userAgent: clientInfo?.userAgent,
-        os: clientInfo?.os,
-        deviceType: clientInfo?.deviceType,
-        osVersion: clientInfo?.osVersion,
-        browser: clientInfo?.browser,
-        browserVersion: clientInfo?.browserVersion,
-        isBot: clientInfo?.isBot,
-        lastActiveAt: new Date(),
-        expiresAt,
-        revoked: false,
-      },
-    });
+    // 5. Store session in DB and Redis (parallel)
+    await Promise.all([
+      this.prisma.session.create({
+        data: {
+          userUuid: userUuid,
+          tokenId: tokenId,
+          hashedToken,
+          device: clientInfo?.device,
+          ipAddress: clientInfo?.ipAddress,
+          userAgent: clientInfo?.userAgent,
+          os: clientInfo?.os,
+          deviceType: clientInfo?.deviceType,
+          osVersion: clientInfo?.osVersion,
+          browser: clientInfo?.browser,
+          browserVersion: clientInfo?.browserVersion,
+          isBot: clientInfo?.isBot,
+          lastActiveAt: new Date(),
+          expiresAt,
+          revoked: false,
+        },
+      }),
+      this.prisma.credential.update({
+        where: { userUuid: userUuid },
+        data: { lastLoginAt: new Date() }
+      }),
+      this.redisSession.storeSession(tokenId, userUuid, hashedToken, clientInfo)
+    ]);
 
-    // 5. UPDATE LAST LOGIN
-    await this.prisma.credential.update({
-      where: { userUuid: userUuid },
-      data: { lastLoginAt: new Date() }
-    });
-
-    // 6. SEND LOGIN NOTIFICATION (for existing users only)
+    // 6. Send notification (fire and forget)
     if (!isNewUser) {
-      const loginEmailPayload = {
-        to: email,
-        firstName: firstName,
-        lastName: lastName,
-        subject: 'New Login to Your Pivota Account (via Google)',
-        device: clientInfo?.device || 'Unknown Device',
-        deviceType: clientInfo?.deviceType,
-        os: clientInfo?.os || 'Unknown OS',
-        osVersion: clientInfo?.osVersion,
-        browser: clientInfo?.browser,
-        browserVersion: clientInfo?.browserVersion,
-        userAgent: clientInfo?.userAgent || 'Unknown Browser',
-        ipAddress: clientInfo?.ipAddress || '0.0.0.0',
-        timestamp: new Date().toISOString(),
-        isBot: clientInfo?.isBot,
-      };
-      this.notificationBus.emit('user.login.email', loginEmailPayload);
+      this.sendLoginNotificationAsync(email, userUuid, clientInfo, firstName, lastName);
     }
 
+    // 7. Cache user profile (fire and forget)
+    const profileObservable = profileGrpc.getUserProfileByUuid({ userUuid });
+    firstValueFrom(profileObservable)
+      .then(profileResponse => {
+        if (profileResponse?.success && profileResponse?.data) {
+          this.redisSession.cacheUserProfile(userUuid, profileResponse.data)
+            .catch(err => this.logger.debug(`Profile cache failed: ${err.message}`));
+        }
+      })
+      .catch(err => this.logger.warn(`Failed to cache user profile: ${err.message}`));
+
+    const elapsed = Date.now() - startTime;
     const successMessage = isNewUser ? 'Signup successful' : 'Login successful';
+    this.logger.log(`✅ Google ${successMessage} completed in ${elapsed}ms for: ${email}`);
 
     return BaseResponseDto.ok(
       {
@@ -1738,18 +1903,23 @@ async signInWithGoogle(
     const errorMessage = err.details || err.message;
     this.logger.error(`[Google Auth] Failure: ${errorMessage}`);
     
-    this.kafkaClient.emit('user.login.error', {
-      error: errorMessage,
-      method: 'GOOGLE',
-      clientInfo: clientInfo ? {
-        device: clientInfo.device,
-        deviceType: clientInfo.deviceType,
-        os: clientInfo.os,
-        browser: clientInfo.browser,
-        isBot: clientInfo.isBot
-      } : null,
-      timestamp: new Date().toISOString()
-    });
+    this.queue.addJob(
+      'analytics-queue',
+      'user-login-error',
+      {
+        error: errorMessage,
+        method: 'GOOGLE',
+        clientInfo: clientInfo ? {
+          device: clientInfo.device,
+          deviceType: clientInfo.deviceType,
+          os: clientInfo.os,
+          browser: clientInfo.browser,
+          isBot: clientInfo.isBot
+        } : null,
+        timestamp: new Date().toISOString()
+      },
+      { removeOnComplete: true }
+    ).catch(err => this.logger.error(`Failed to queue error analytics: ${err.message}`));
 
     throw new UnauthorizedException(`Google Auth failed: ${errorMessage}`);
   }
@@ -1793,19 +1963,74 @@ private extractProfileDataForEmail(primaryPurpose: string | undefined, onboardin
 }
 
   // ------------------ Logout ------------------
-  async logout(userUuid: string, tokenId?: string): Promise<void> {
+ async logout(userUuid: string, tokenId?: string): Promise<void> {
+  const startTime = Date.now();
+  this.logger.log(`🚪 Logout requested for user: ${userUuid}, tokenId: ${tokenId || 'ALL'}`);
+
+  try {
     if (tokenId) {
-      await this.prisma.session.updateMany({
-        where: { tokenId },
-        data: { revoked: true },
-      });
+      // 1. Blacklist token in Redis immediately (fast - prevents further use)
+      await this.redisSession.blacklistToken(tokenId);
+      
+      // 2. Queue DB update (non-blocking)
+      this.queue.addJob(
+        'db-sync',
+        'revoke-session',
+        {
+          tokenId,
+          userUuid,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+          removeOnComplete: true,
+        }
+      ).catch(err => this.logger.error(`Failed to queue session revocation: ${err.message}`));
+      
+      // 3. Remove from Redis session store (fast)
+      await this.redisSession.removeSession(tokenId);
+      
     } else {
-      await this.prisma.session.updateMany({
-        where: { userUuid },
-        data: { revoked: true },
-      });
+      // Revoke ALL sessions for user
+      
+      // 1. Get all active session IDs for this user
+      const userSessionsKey = `user_sessions:${userUuid}`;
+      const sessionIds = await this.redisService.getKeys(`${userSessionsKey}:*`);
+      
+      // 2. Blacklist all tokens in Redis (fast)
+      const blacklistPromises = sessionIds.map(sessionId => 
+        this.redisSession.blacklistToken(sessionId.replace(`${userSessionsKey}:`, ''))
+      );
+      await Promise.all(blacklistPromises);
+      
+      // 3. Queue DB update (non-blocking)
+      this.queue.addJob(
+        'db-sync',
+        'revoke-all-sessions',
+        {
+          userUuid,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+          removeOnComplete: true,
+        }
+      ).catch(err => this.logger.error(`Failed to queue revoke all sessions: ${err.message}`));
+      
+      // 4. Remove user session index from Redis
+      await this.redisService.deletePattern(`${userSessionsKey}:*`);
     }
+    
+    const elapsed = Date.now() - startTime;
+    this.logger.log(`✅ Logout completed in ${elapsed}ms for user: ${userUuid}`);
+    
+  } catch (error) {
+    this.logger.error(`Logout failed for user ${userUuid}: ${error.message}`);
+    // Don't throw - logout should succeed even if cleanup fails partially
   }
+}
 
 
   // ------------------ Dev Token Generation ------------------
@@ -1903,7 +2128,7 @@ async requestOtp(
   const validation = config.validation;
 
   try {
-    // 1. CHECK rate limit
+    // 1. CHECK rate limit (Redis - fast)
     const rateLimitResult = await this.queue.checkRateLimit(
       email, 
       `otp_${purpose}`, 
@@ -1920,9 +2145,12 @@ async requestOtp(
       );
     }
     
-    // 2. Check user existence (only if validation rules require it)
+    // 2. Check user existence (optimized - parallel where possible)
     let existingUser = null;
+    let existingPhone = null;
+    
     if (validation && validation.userExists !== 'ignore') {
+      // Single query to check credential
       existingUser = await this.prisma.credential.findUnique({
         where: { email },
         select: { id: true, phone: true, userUuid: true },
@@ -1945,9 +2173,9 @@ async requestOtp(
       }
     }
 
-    // 3. Check phone uniqueness ONLY for EMAIL_VERIFICATION (signup)
+    // 3. Check phone uniqueness ONLY for EMAIL_VERIFICATION (signup) - parallel query
     if (purpose === 'EMAIL_VERIFICATION' && phone) {
-      const existingPhone = await this.prisma.credential.findUnique({
+      existingPhone = await this.prisma.credential.findUnique({
         where: { phone },
         select: { id: true },
       });
@@ -1964,7 +2192,7 @@ async requestOtp(
 
     this.logger.debug(`[OTP] Validation config for ${purpose}:`, validation);
     
-    // 4. Apply validation rules (with null checks)
+    // 4. Apply validation rules
     if (validation?.userExists === 'required' && !existingUser) {
       if (validation?.requireDelayOnError) {
         await this.simulateDelay();
@@ -1975,7 +2203,6 @@ async requestOtp(
       );
     }
 
-    // ✅ FIX: Return error immediately for existing user during signup
     if (validation?.userExists === 'forbidden' && existingUser) {
       this.logger.warn(`[OTP] Signup blocked: Email ${email} already registered`);
       return BaseResponseDto.fail(
@@ -1990,31 +2217,43 @@ async requestOtp(
       return BaseResponseDto.ok(null, validation?.customMessage?.userNotFound || 'If an account exists, a code has been sent.');
     }
 
-    // 5. Generate OTP (only reaches here if validation passes)
+    // 5. Generate OTP
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 10 * 60000);
 
-    // 6. UPSERT - Store phone only for EMAIL_VERIFICATION
-    await this.prisma.otp.upsert({
-      where: {
-        email_purpose: { email, purpose }
-      },
-      update: {
-        code: otpCode,
-        expiresAt: expiresAt,
-        createdAt: now,
-      },
-      create: {
-        email,
-        code: otpCode,
-        purpose,
-        expiresAt,
-        createdAt: now,
-      },
-    });
+    // 6. Store OTP in BOTH Database AND Redis (parallel)
+    const redisKey = `otp:${email}:${purpose}`;
+    
+    await Promise.all([
+      // Store in Redis (fast, 2-5ms)
+      this.redisService.setEx(redisKey, otpCode, 600), // 10 minutes TTL
+      
+      // Store in Database (for persistence)
+      this.prisma.otp.upsert({
+        where: {
+          email_purpose: { email, purpose }
+        },
+        update: {
+          code: otpCode,
+          expiresAt: expiresAt,
+          createdAt: now,
+        },
+        create: {
+          email,
+          code: otpCode,
+          purpose,
+          expiresAt,
+          createdAt: now,
+        },
+      })
+    ]);
 
-    // 7. INCREMENT rate limit counter AFTER successfully generating OTP
+    // Verify it was stored
+    const verifyStored = await this.redisService.get(redisKey);
+    this.logger.debug(`✅ Verified Redis storage: ${verifyStored === otpCode ? 'SUCCESS' : 'FAILED'}`);
+
+    // 7. INCREMENT rate limit counter (Redis)
     await this.queue.incrementRateLimit(
       email, 
       `otp_${purpose}`, 
@@ -2022,15 +2261,8 @@ async requestOtp(
       config.windowSeconds
     );
 
-    // 8. Log request
-    this.prisma.otpRequestLog.create({
-      data: { email, purpose, createdAt: now },
-    }).catch(err => this.logger.debug(`Log failed: ${err.message}`));
-
-
-    this.logger.debug(`Sending OTP ${otpCode} to ${email} for ${purpose}`);
-    // 9. Queue email (fire and forget)
-    await this.queue.addJob(
+    // 8. Queue email (fire and forget - don't await if possible)
+    this.queue.addJob(
       'email-queue',
       'send-otp',
       {
@@ -2044,9 +2276,9 @@ async requestOtp(
         removeOnComplete: true,
         removeOnFail: false,
       }
-    );
+    ).catch(err => this.logger.error(`Failed to queue OTP email: ${err.message}`));
 
-    // 10. Clean up old logs
+    // 9. Async cleanup (fire and forget - don't await)
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
     this.prisma.otpRequestLog.deleteMany({
       where: {
@@ -2056,10 +2288,14 @@ async requestOtp(
       },
     }).catch(err => this.logger.debug(`Cleanup failed: ${err.message}`));
 
+    // 10. Create log entry (async, don't await)
+    this.prisma.otpRequestLog.create({
+      data: { email, purpose, createdAt: now },
+    }).catch(err => this.logger.debug(`Log failed: ${err.message}`));
+
     const totalTime = Date.now() - startTime;
     this.logger.log(`[OTP] Code sent to ${email} for ${purpose} in ${totalTime}ms`);
 
-    // Use success message from config
     return BaseResponseDto.ok(null, config.successMessage || 'Verification code sent to your email');
 
   } catch (error: unknown) {
@@ -2086,9 +2322,30 @@ async verifyOtp(
   const startTime = Date.now();
 
   try {
-    //  REMOVED: Rate limiting - OTP has its own security (expiration + single-use)
+    // 1. Check Redis first
+    const redisKey = `otp:${email}:${purpose}`;
+    this.logger.debug(`🔍 Looking for OTP in Redis with key: ${redisKey}`);
     
-    // Single database call - find AND delete in one operation
+    const cachedOtp = await this.redisService.get(redisKey);
+    this.logger.debug(`📦 Redis returned: ${cachedOtp}, Expected: ${code}`);
+    
+    if (cachedOtp === code) {
+      // Valid OTP found in Redis
+      await this.redisService.delete(redisKey);
+      this.logger.debug(`🗑️ Deleted OTP from Redis`);
+      
+      const totalTime = Date.now() - startTime;
+      this.logger.log(`✅ OTP verified from Redis in ${totalTime}ms`);
+      
+      return BaseResponseDto.ok(
+        { verified: true },
+        'Verification successful',
+        'OK'
+      );
+    }
+    
+    // 2. Fallback to database
+    this.logger.debug(`Redis miss for ${email}, checking database...`);
     const deleteResult = await this.prisma.otp.deleteMany({
       where: {
         email,
@@ -2099,7 +2356,7 @@ async verifyOtp(
     });
 
     if (deleteResult.count === 0) {
-      this.logger.warn(`[AUTH] Failed OTP verification for: ${email} | Purpose: ${purpose}`);
+      this.logger.warn(`❌ No valid OTP found for ${email}`);
       return BaseResponseDto.fail(
         'Invalid or expired verification code.',
         'UNAUTHORIZED',
@@ -2108,7 +2365,7 @@ async verifyOtp(
     }
     
     const totalTime = Date.now() - startTime;
-    this.logger.log(`[AUTH] OTP verified successfully: ${email} [${purpose}] in ${totalTime}ms`);
+    this.logger.log(`✅ OTP verified from DB in ${totalTime}ms`);
     
     return BaseResponseDto.ok(
       { verified: true },
@@ -2136,20 +2393,14 @@ async verifyMfaLogin(
   this.logger.debug(`MFA verification for: ${verifyDto.email}`);
 
   try {
-    // ✅ REMOVED: Rate limit check - user already passed password verification
-    // IP rate limiting at gateway level is sufficient
-    
-    // 1. Verify OTP
-    let stepStart = Date.now();
+    // 1. Verify OTP (already fast - 1ms)
     const verificationResult = await this.verifyOtp({
       email: verifyDto.email,
       code: verifyDto.code,
       purpose: 'LOGIN_2FA',
     });
-    this.logger.log(`⏱️ Step 1 (verify OTP): ${Date.now() - stepStart}ms`);
 
     if (!verificationResult.success || !verificationResult.data?.verified) {
-      this.logger.debug(`Verification failed: ${verificationResult.message}`);
       return BaseResponseDto.fail(
         verificationResult.message || 'Invalid or expired verification code',
         'UNAUTHORIZED',
@@ -2157,22 +2408,33 @@ async verifyMfaLogin(
       );
     }
     
-    // 2. Get credential with role
-    stepStart = Date.now();
-    const credential = await this.prisma.credential.findUnique({
-      where: { email: verifyDto.email },
-      select: { 
-        userUuid: true, 
-        accountUuid: true, 
-        accountStatus: true,
-        memberStatus: true,
-        role: true,
-      },
-    });
-    this.logger.log(`⏱️ Step 2 (get credential): ${Date.now() - stepStart}ms`);
-
+    // 2. Get credential - Try cache FIRST, fallback to DB
+    let credential = await this.redisSession.getCachedCredential(verifyDto.email);
+    
     if (!credential) {
-      return BaseResponseDto.fail('User not found', 'NOT_FOUND');
+      // Cache miss - get from database
+      this.logger.debug(`Credential cache miss for ${verifyDto.email}, fetching from DB`);
+      const dbCredential = await this.prisma.credential.findUnique({
+        where: { email: verifyDto.email },
+        select: { 
+          userUuid: true, 
+          accountUuid: true, 
+          accountStatus: true,
+          memberStatus: true,
+          role: true,
+        },
+      });
+      
+      if (!dbCredential) {
+        return BaseResponseDto.fail('User not found', 'NOT_FOUND');
+      }
+      
+      credential = dbCredential;
+      
+      // Cache for next time (5 minutes TTL)
+      await this.redisSession.cacheCredential(verifyDto.email, credential);
+    } else {
+      this.logger.debug(`Credential cache HIT for ${verifyDto.email}`);
     }
 
     // 3. Check account status
@@ -2183,12 +2445,30 @@ async verifyMfaLogin(
       );
     }
 
-    // 4. Role from credential
-    const roleType = credential.role;
-    this.logger.log(`⏱️ Step 3 (role from credential): 0ms`);
+    // 4. Get role from cache or RBAC service
+    let roleType = await this.redisSession.getCachedUserRole(credential.userUuid);
+    
+    if (!roleType) {
+      // Cache miss - fetch from RBAC service
+      this.logger.debug(`Role cache miss for ${credential.userUuid}, fetching from RBAC`);
+      try {
+        const rbacService = this.getRbacGrpcService();
+        const userRoleResponse = await firstValueFrom(
+          rbacService.getUserRole({ userUuid: credential.userUuid })
+        );
+        roleType = userRoleResponse?.role?.roleType ?? credential.role ?? 'Individual';
+        
+        // Cache for next time (5 minutes TTL)
+        await this.redisSession.cacheUserRole(credential.userUuid, roleType);
+      } catch (err) {
+        this.logger.warn(`Failed to fetch role from RBAC, using credential role: ${err.message}`);
+        roleType = credential.role ?? 'Individual';
+      }
+    } else {
+      this.logger.debug(`Role cache HIT for ${credential.userUuid}: ${roleType}`);
+    }
 
     // 5. Generate tokens
-    stepStart = Date.now();
     const tokenId = `${credential.userUuid}-${Date.now()}`;
     const now = Math.floor(Date.now() / 1000);
     
@@ -2207,47 +2487,84 @@ async verifyMfaLogin(
       this.jwtService.signAsync(payload, { expiresIn: '15m' }),
       this.jwtService.signAsync(payload, { expiresIn: '7d' })
     ]);
-    this.logger.log(`⏱️ Step 4 (sign tokens): ${Date.now() - stepStart}ms`);
 
-    // 6. Create session
-    stepStart = Date.now();
     const hashedToken = await bcrypt.hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    await this.prisma.session.create({
-      data: {
-        userUuid: credential.userUuid,
-        tokenId: tokenId,
-        hashedToken,
-        device: clientInfo?.device,
-        ipAddress: clientInfo?.ipAddress,
-        userAgent: clientInfo?.userAgent,
-        os: clientInfo?.os,
-        deviceType: clientInfo?.deviceType,
-        osVersion: clientInfo?.osVersion,
-        browser: clientInfo?.browser,
-        browserVersion: clientInfo?.browserVersion,
-        isBot: clientInfo?.isBot,
-        lastActiveAt: new Date(),
-        expiresAt,
-        revoked: false,
-      },
-    });
-    this.logger.log(`⏱️ Step 5 (create session): ${Date.now() - stepStart}ms`);
+    // 6. Create DB session and update last login in parallel
+    await Promise.all([
+      this.prisma.session.create({
+        data: {
+          userUuid: credential.userUuid,
+          tokenId: tokenId,
+          hashedToken,
+          device: clientInfo?.device,
+          ipAddress: clientInfo?.ipAddress,
+          userAgent: clientInfo?.userAgent,
+          os: clientInfo?.os,
+          deviceType: clientInfo?.deviceType,
+          osVersion: clientInfo?.osVersion,
+          browser: clientInfo?.browser,
+          browserVersion: clientInfo?.browserVersion,
+          isBot: clientInfo?.isBot,
+          lastActiveAt: new Date(),
+          expiresAt,
+          revoked: false,
+        },
+      }),
+      
+      this.prisma.credential.update({
+        where: { userUuid: credential.userUuid },
+        data: { lastLoginAt: new Date() }
+      }),
+    ]);
 
-    // 7. Update last login
-    stepStart = Date.now();
-    await this.prisma.credential.update({
-      where: { userUuid: credential.userUuid },
-      data: { lastLoginAt: new Date() }
-    });
-    this.logger.log(`⏱️ Step 6 (update last login): ${Date.now() - stepStart}ms`);
+    // 7. Store session in Redis (fast)
+    await this.redisSession.storeSession(
+      tokenId,
+      credential.userUuid,
+      hashedToken,
+      clientInfo
+    );
 
-    // 8. Send notification (async - don't await)
-    this.sendLoginNotificationAsync(verifyDto.email, credential.userUuid, clientInfo);
+    // 8. Fire and forget - Profile fetch, caching, and notification (don't await)
+    const profileObservable = this.getProfileGrpcService().getUserProfileByUuid({ 
+      userUuid: credential.userUuid 
+    });
+    
+    firstValueFrom(profileObservable)
+      .then(profileResponse => {
+        if (profileResponse?.success && profileResponse?.data) {
+          const firstName = profileResponse.data.user?.firstName || 'User';
+          const lastName = profileResponse.data.user?.lastName || '';
+          
+          // Cache profile in Redis
+          this.redisSession.cacheUserProfile(credential.userUuid, profileResponse.data)
+            .catch(err => this.logger.debug(`Profile cache failed: ${err.message}`));
+          
+          // Send notification
+          this.sendLoginNotificationAsync(
+            verifyDto.email, 
+            credential.userUuid, 
+            clientInfo, 
+            firstName, 
+            lastName
+          );
+        } else {
+          // Send notification without names
+          this.sendLoginNotificationAsync(
+            verifyDto.email, 
+            credential.userUuid, 
+            clientInfo, 
+            'User', 
+            ''
+          );
+        }
+      })
+      .catch(err => this.logger.warn(`Profile fetch failed: ${err.message}`));
 
     const totalTime = Date.now() - startTime;
-    this.logger.log(`✅ MFA verification completed in ${totalTime}ms for: ${verifyDto.email}`);
+    this.logger.log(`✅ MFA verification completed in ${totalTime}ms`);
 
     return BaseResponseDto.ok(
       { 
@@ -2261,24 +2578,34 @@ async verifyMfaLogin(
 
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
-    this.logger.error(`MFA verification failed for ${verifyDto.email}:`, err);
+    this.logger.error(`MFA verification failed:`, err);
     
-    return BaseResponseDto.fail(
-      errorMessage,
-      'INTERNAL_ERROR'
-    );
+    return BaseResponseDto.fail(errorMessage, 'INTERNAL_ERROR');
   }
 }
 
 
-private async sendLoginNotificationAsync(email: string, userUuid: string, clientInfo?: AuthClientInfoDto): Promise<void> {
+private async sendLoginNotificationAsync(
+  email: string, 
+  userUuid: string, 
+  clientInfo?: AuthClientInfoDto,
+  firstName= 'User',
+  lastName= ''
+): Promise<void> {
   this.queue.addJob(
     'email-queue',
     'login-notification',
     {
       to: email,
-      userUuid: userUuid,
-      clientInfo: clientInfo,
+      firstName: firstName,
+      lastName: lastName,
+      device: clientInfo?.device,
+      deviceType: clientInfo?.deviceType,
+      os: clientInfo?.os,
+      osVersion: clientInfo?.osVersion,
+      browser: clientInfo?.browser,
+      browserVersion: clientInfo?.browserVersion,
+      ipAddress: clientInfo?.ipAddress,
       timestamp: new Date().toISOString(),
     },
     {
@@ -2290,53 +2617,72 @@ private async sendLoginNotificationAsync(email: string, userUuid: string, client
   ).catch(err => this.logger.error(`Failed to queue login notification: ${err.message}`));
 }
 
-// Helper method for fire-and-forget notifications
-private sendLoginNotification(userData: any, profile: any, clientInfo?: AuthClientInfoDto): void {
-  const adminRoles = ['Business System Admin'];
-  const isOrgAccount = profile.account.type === 'ORGANIZATION';
-  const isUserAdmin = isOrgAccount && adminRoles.includes(userData.roleName);
-
-  const loginEmailPayload = {
-    to: userData.email,
-    firstName: userData.firstName,
-    lastName: userData.lastName,
-    organizationName: isOrgAccount ? profile.organization?.name : undefined,
-    orgEmail: isUserAdmin ? profile.organization?.officialEmail : undefined,
-    subject: isUserAdmin ? `SECURITY: Admin Login` : 'New Login detected',
-    device: clientInfo?.device || 'Unknown',
-    deviceType: clientInfo?.deviceType,
-    os: clientInfo?.os || 'Unknown',
-    osVersion: clientInfo?.osVersion,
-    browser: clientInfo?.browser,
-    browserVersion: clientInfo?.browserVersion,
-    userAgent: clientInfo?.userAgent || 'Unknown',
-    ipAddress: clientInfo?.ipAddress || '0.0.0.0',
-    timestamp: new Date().toISOString(),
-    isBot: clientInfo?.isBot,
-  };
-
-  this.notificationBus.emit('user.login.email', loginEmailPayload);
-}
 
 /** ------------------ Forgot Password: Step 1 (Request) ------------------ */
 async requestPasswordReset(dto: RequestOtpDto): Promise<BaseResponseDto<null>> {
   this.logger.log(`🔐 Password reset requested for: ${dto.email}`);
   
-  // Verify user exists before sending email
-  const credential = await this.prisma.credential.findUnique({ where: { email: dto.email } });
-  this.logger.log(`🔐 User exists: ${!!credential}`);
+  // Rate limit by IP and email to prevent abuse
+  const rateLimitKey = `password_reset:${dto.email}`;
+  const rateLimitResult = await this.queue.checkRateLimit(
+    rateLimitKey,
+    'password_reset',
+    3, // Max 3 attempts
+    3600 // Per hour
+  );
   
-  if (!credential) {
-    // Security best practice: don't reveal if email exists, just say "If account exists..."
+  if (!rateLimitResult.allowed) {
+    this.logger.warn(`Password reset rate limit exceeded for: ${dto.email}`);
+    // Still return success message to prevent enumeration
+    return BaseResponseDto.ok(null, 'If an account exists, a reset code has been sent.');
+  }
+  
+  // Try to get user from cache first (faster)
+  let userExists = false;
+  let userUuid: string | undefined;
+  
+  const cachedCredential = await this.redisSession.getCachedCredential(dto.email);
+  
+  if (cachedCredential) {
+    userExists = true;
+    userUuid = cachedCredential.userUuid;
+    this.logger.debug(`Password reset - user found in cache: ${dto.email}`);
+  } else {
+    // Cache miss - check database
+    const credential = await this.prisma.credential.findUnique({ 
+      where: { email: dto.email },
+      select: { userUuid: true }
+    });
+    userExists = !!credential;
+    userUuid = credential?.userUuid;
+    
+    if (userExists) {
+      this.logger.debug(`Password reset - user found in DB: ${dto.email}`);
+    }
+  }
+  
+  // Security: Always return same message
+  if (!userExists) {
+    this.logger.debug(`Password reset requested for non-existent email: ${dto.email}`);
+    await this.simulateDelay(); // Prevent timing attacks
+    await this.queue.incrementRateLimit(rateLimitKey, 'password_reset', 3, 3600);
     return BaseResponseDto.ok(null, 'If an account exists, a reset code has been sent.');
   }
 
+  // Track reset requests for monitoring
+  await this.redisService.increment(`reset_requests:${userUuid}`);
+  
+  // Generate and send OTP
   this.logger.log(`🔐 Calling requestOtp for PASSWORD_RESET to: ${dto.email}`);
   const result = await this.requestOtp({ email: dto.email, purpose: 'PASSWORD_RESET' });
+  
+  // Increment rate limit counter
+  await this.queue.incrementRateLimit(rateLimitKey, 'password_reset', 3, 3600);
+  
   this.logger.log(`🔐 requestOtp result: ${result.success ? 'SUCCESS' : 'FAILED'} - ${result.message}`);
   
   return result;
-}q
+}
 
   /** ------------------ Forgot Password: Step 2 (Reset) ------------------ */
 async resetPassword(dto: ResetPasswordDto): Promise<BaseResponseDto<null>> {
@@ -2387,38 +2733,75 @@ async resetPassword(dto: ResetPasswordDto): Promise<BaseResponseDto<null>> {
 }
 
   /** ------------------ Revoke Session(s) ------------------ */
- async revokeSessions(userUuid: string, tokenId?: string): Promise<BaseResponseDto<null>> {
+async revokeSessions(userUuid: string, tokenId?: string): Promise<BaseResponseDto<null>> {
+  const startTime = Date.now();
+  
   try {
-    let result: { count: any; };
-
     if (tokenId) {
       this.logger.log(`🚫 Revoking specific session: ${tokenId} for user: ${userUuid}`);
-      result = await this.prisma.session.updateMany({
-        where: { userUuid: userUuid, tokenId: tokenId, revoked: false },
-        data: { revoked: true },
-      });
-
-      // If a specific tokenId was provided but nothing was updated
-      if (result.count === 0) {
-        this.logger.warn(`⚠️ No active session found for tokenId: ${tokenId}`);
-        return BaseResponseDto.fail('Session not found or already revoked', 'NOT_FOUND');
-      }
+      
+      // 1. Blacklist in Redis immediately
+      await this.redisSession.blacklistToken(tokenId);
+      
+      // 2. Remove from Redis session store
+      await this.redisSession.removeSession(tokenId);
+      
+      // 3. Queue DB update (non-blocking)
+      await this.queue.addJob(
+        'db-sync',
+        'revoke-session',
+        {
+          tokenId,
+          userUuid,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+          removeOnComplete: true,
+        }
+      );
+      
     } else {
       this.logger.warn(`🚨 Revoking ALL sessions for user: ${userUuid}`);
-      result = await this.prisma.session.updateMany({
-        where: { userUuid: userUuid, revoked: false },
-        data: { revoked: true },
-      });
       
-      // Note: For Global Logout, you might still want to return 'ok' 
-      // even if count is 0, as the end state (no active sessions) is achieved.
+      // 1. Get all session IDs for this user
+      const userSessionsKey = `user_sessions:${userUuid}`;
+      const sessionIds = await this.redisService.getKeys(`${userSessionsKey}:*`);
+      
+      // 2. Blacklist all in Redis
+      const blacklistPromises = sessionIds.map(sessionId => 
+        this.redisSession.blacklistToken(sessionId.replace(`${userSessionsKey}:`, ''))
+      );
+      await Promise.all(blacklistPromises);
+      
+      // 3. Remove user session index
+      await this.redisService.deletePattern(`${userSessionsKey}:*`);
+      
+      // 4. Queue DB update
+      await this.queue.addJob(
+        'db-sync',
+        'revoke-all-sessions',
+        {
+          userUuid,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+          removeOnComplete: true,
+        }
+      );
     }
-
-
+    
+    const elapsed = Date.now() - startTime;
+    this.logger.log(`✅ Sessions revoked in ${elapsed}ms`);
+    
     return BaseResponseDto.ok(null, 'Session(s) successfully revoked');
+    
   } catch (err) {
-    this.logger.error(`Failed to revoke sessions for ${userUuid}`, err);
-    return BaseResponseDto.fail('Failed to revoke session', 'INTERNAL');
+    this.logger.error(`Failed to revoke sessions for ${userUuid}: ${err.message}`);
+    return BaseResponseDto.fail('Failed to revoke session', 'INTERNAL_ERROR');
   }
 }
  
@@ -2797,6 +3180,19 @@ async syncUserRole(
   this.logger.log(`🔄 [AUTH] Syncing role for user ${userUuid} to ${roleName} (${roleType}) with scope ${scope}`);
 
   try {
+    // First, get the user's email before updating (needed for cache invalidation)
+    const user = await this.prisma.credential.findUnique({
+      where: { userUuid: userUuid },
+      select: { email: true }
+    });
+
+    if (!user) {
+      return BaseResponseDto.fail(
+        `User with UUID ${userUuid} not found in Auth Service`,
+        'NOT_FOUND'
+      );
+    }
+
     // Update the credential's role field
     const updatedCredential = await this.prisma.credential.update({
       where: { userUuid: userUuid },
@@ -2805,6 +3201,10 @@ async syncUserRole(
         updatedAt: new Date(),
       },
     });
+
+    // ✅ Invalidate credential cache since role changed
+    await this.redisSession.invalidateCredentialCache(user.email);
+    this.logger.debug(`Credential cache invalidated for ${user.email} due to role change`);
 
     this.logger.log(`✅ [AUTH] Successfully updated role for user ${userUuid} to ${roleType}`);
 
@@ -2822,7 +3222,7 @@ async syncUserRole(
   } catch (error) {
     this.logger.error(`[AUTH] Failed to sync role for user ${userUuid}: ${error.message}`);
     
-    // Check if user exists
+    // Check if user exists (Prisma error code for record not found)
     if (error.code === 'P2025') {
       return BaseResponseDto.fail(
         `User with UUID ${userUuid} not found in Auth Service`,

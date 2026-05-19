@@ -45,7 +45,7 @@ export class EmailWorker {
         
         try {
           switch (name) {
-              case 'send-otp':
+            case 'send-otp':
               console.log('📧 Emitting OTP event to RabbitMQ');
               
               this.notificationBus.emit('otp.requested', {
@@ -109,6 +109,24 @@ export class EmailWorker {
                 errorMessage: data.errorMessage,
               });
               this.logger.log(`✅ Payment failed email queued for ${data.to}`);
+              break;
+              
+            case 'login-notification':
+              // Updated to match the new data structure
+              this.notificationBus.emit('user.login.email', {
+                to: data.to,
+                firstName: data.firstName,
+                lastName: data.lastName,
+                device: data.device,
+                deviceType: data.deviceType,
+                os: data.os,
+                osVersion: data.osVersion,
+                browser: data.browser,
+                browserVersion: data.browserVersion,
+                ipAddress: data.ipAddress,
+                timestamp: data.timestamp,
+              });
+              this.logger.log(`✅ Login notification queued for ${data.to}`);
               break;
               
             default:

@@ -3,6 +3,7 @@ import { Module, Global, Logger, DynamicModule } from '@nestjs/common';
 import Redis from 'ioredis';
 import { RedisService } from './redis.service';
 import { QueueService } from './queue.service';
+import { RedisSessionService } from './redis-session.service';
 
 @Global()
 @Module({})
@@ -73,8 +74,9 @@ export class SharedRedisModule {
         },
         RedisService,
         QueueService,
+        RedisSessionService
       ],
-      exports: ['REDIS_CONNECTION', RedisService, QueueService],
+      exports: ['REDIS_CONNECTION', RedisService, QueueService, RedisSessionService],
     };
   }
 

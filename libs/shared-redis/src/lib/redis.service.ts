@@ -225,4 +225,11 @@ export class RedisService implements OnModuleDestroy {
     this.logger.log('Closing Redis connection...');
     await this.redis.quit();
   }
+
+  /**
+ * Get all keys matching a pattern
+ */
+  async getKeys(pattern: string): Promise<string[]> {
+    return await this.redis.keys(pattern);
+  }
 }

@@ -40,6 +40,30 @@ export class AnalyticsWorker {
               this.logger.log(`✅ user.registered event emitted`);
               break;
             
+            case 'user-login':
+              this.logger.log(`📤 Emitting user.login to Kafka: ${data.email}`);
+              this.kafkaClient.emit('user.login', {
+                userUuid: data.userUuid,
+                email: data.email,
+                isNewUser: data.isNewUser,
+                loginMethod: data.loginMethod,
+                clientInfo: data.clientInfo,
+                timestamp: data.timestamp,
+              });
+              this.logger.log(`✅ user.login event emitted for ${data.email}`);
+              break;
+            
+            case 'user-login-error':
+              this.logger.log(`📤 Emitting user.login.error to Kafka: ${data.email || data.error}`);
+              this.kafkaClient.emit('user.login.error', {
+                error: data.error,
+                method: data.method,
+                clientInfo: data.clientInfo,
+                timestamp: data.timestamp,
+              });
+              this.logger.log(`✅ user.login.error event emitted`);
+              break;
+            
             case 'signup-failed':
               this.logger.log(`📤 Emitting signup-failed to Kafka: ${data.email}`);
               this.kafkaClient.emit('user.signup.failed', data);
@@ -61,7 +85,7 @@ export class AnalyticsWorker {
               break;
             
             default:
-              this.logger.warn(`Unknown analytics job type: ${name}`);
+              this.logger.warn(`⚠️ Unknown analytics job type: ${name}`);
           }
           
           this.logger.log(`✅ Analytics job ${name} completed`);
