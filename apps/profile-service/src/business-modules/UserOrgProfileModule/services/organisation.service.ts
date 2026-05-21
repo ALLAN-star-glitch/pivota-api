@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import {
@@ -841,48 +842,95 @@ export class OrganisationService implements OnModuleInit {
     }
   }
 
-  async createOrganizationSkilledProfessionalProfile(
-    accountUuid: string,
-    data: SkilledProfessionalProfileDataDto
-  ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
-    try {
-      const profile = await this.prisma.skilledProfessionalProfile.create({
-        data: {
-          accountUuid,
-          uuid: randomUUID(),
-          title: data.title,
-          profession: data.profession,
-          specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
-          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
-          yearsExperience: data.yearsExperience,
-          licenseNumber: data.licenseNumber,
-          insuranceInfo: data.insuranceInfo,
-          hourlyRate: data.hourlyRate,
-          dailyRate: data.dailyRate,
-          paymentTerms: data.paymentTerms,
-          availableToday: data.availableToday ?? false,
-          availableWeekends: data.availableWeekends ?? true,
-          emergencyService: data.emergencyService ?? false,
-          portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
-          certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
+ async createOrganizationSkilledProfessionalProfile(
+  accountUuid: string,
+  data: SkilledProfessionalProfileDataDto
+): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+  try {
+    // Validate categories if provided
+    const allCategoryIds = [];
+    if (data.primaryCategoryId) allCategoryIds.push(data.primaryCategoryId);
+    if (data.additionalCategoryIds?.length) allCategoryIds.push(...data.additionalCategoryIds);
+    
+    // Note: You'll need to inject CategoryService or make a gRPC call to validate categories
+    // For now, we'll skip validation and let the DB handle it via foreign keys
+    
+    const profile = await this.prisma.skilledProfessionalProfile.create({
+      data: {
+        accountUuid,
+        uuid: randomUUID(),
+        title: data.title,
+        // Remove profession field - we use categories now
+        // profession: data.profession,
+        specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
+        serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
+        yearsExperience: data.yearsExperience,
+        licenseNumber: data.licenseNumber,
+        insuranceInfo: data.insuranceInfo,
+        hourlyRate: data.hourlyRate,
+        dailyRate: data.dailyRate,
+        paymentTerms: data.paymentTerms,
+        availableToday: data.availableToday ?? false,
+        availableWeekends: data.availableWeekends ?? true,
+        emergencyService: data.emergencyService ?? false,
+        portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
+        certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
+      }
+    });
+
+    // Create category relations if categories are provided
+    if (data.primaryCategoryId || data.additionalCategoryIds?.length) {
+      await this.prisma.$transaction(async (tx) => {
+        // Create primary category relation
+        if (data.primaryCategoryId) {
+          await tx.skilledProfessionalCategory.create({
+            data: {
+              skilledProfessionalId: profile.id,
+              categoryId: data.primaryCategoryId,
+              isPrimary: true,
+              yearsExperience: data.yearsExperienceInCategory ?? data.yearsExperience,
+            }
+          });
+        }
+        
+        // Create additional category relations
+        if (data.additionalCategoryIds?.length) {
+          await tx.skilledProfessionalCategory.createMany({
+            data: data.additionalCategoryIds.map(categoryId => ({
+              skilledProfessionalId: profile.id,
+              categoryId,
+              isPrimary: false,
+            })),
+          });
         }
       });
-
-      await this.updateActiveProfiles(accountUuid, 'SKILLED_PROFESSIONAL', 'add');
-
-      const completion = this.calculateProfileCompletion('SKILLED_PROFESSIONAL', data);
-      const missingFields = this.getMissingFields('SKILLED_PROFESSIONAL', data);
-
-      return BaseResponseDto.ok(
-        this.mapToSkilledProfessionalResponse(profile, completion, missingFields),
-        'Organization skilled professional profile created',
-        'CREATED'
-      );
-    } catch (error) {
-      this.logger.error(`Failed to create skilled professional profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
     }
+
+    await this.updateActiveProfiles(accountUuid, 'SKILLED_PROFESSIONAL', 'add');
+
+    // Fetch profile with categories for response
+    const profileWithCategories = await this.prisma.skilledProfessionalProfile.findUnique({
+      where: { id: profile.id },
+      include: {
+        categories: {
+          include: { category: true }
+        }
+      }
+    });
+
+    const completion = this.calculateProfileCompletion('SKILLED_PROFESSIONAL', data);
+    const missingFields = this.getMissingFields('SKILLED_PROFESSIONAL', data);
+
+    return BaseResponseDto.ok(
+      this.mapToSkilledProfessionalResponse(profileWithCategories, completion, missingFields),
+      'Organization skilled professional profile created',
+      'CREATED'
+    );
+  } catch (error) {
+    this.logger.error(`Failed to create skilled professional profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
   }
+}
 
   async createOrganizationIntermediaryAgentProfile(
     accountUuid: string,
@@ -1320,15 +1368,18 @@ export class OrganisationService implements OnModuleInit {
   }
 
   async updateOrganizationSkilledProfessionalProfile(
-    accountUuid: string,
-    data: SkilledProfessionalProfileDataDto
-  ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
-    try {
-      const profile = await this.prisma.skilledProfessionalProfile.upsert({
+  accountUuid: string,
+  data: SkilledProfessionalProfileDataDto
+): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+  try {
+    // Update profile in a transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // First, upsert the profile
+      const profile = await tx.skilledProfessionalProfile.upsert({
         where: { accountUuid },
         update: {
           title: data.title,
-          profession: data.profession,
+          // profession: data.profession, // Remove this
           specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
           serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           yearsExperience: data.yearsExperience,
@@ -1347,7 +1398,7 @@ export class OrganisationService implements OnModuleInit {
           accountUuid,
           uuid: randomUUID(),
           title: data.title,
-          profession: data.profession,
+          // profession: data.profession,
           specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
           serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           yearsExperience: data.yearsExperience,
@@ -1363,22 +1414,66 @@ export class OrganisationService implements OnModuleInit {
           certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
         },
       });
+      
+      // Update categories if provided
+      if (data.primaryCategoryId !== undefined || data.additionalCategoryIds !== undefined) {
+        // Delete existing category relations
+        await tx.skilledProfessionalCategory.deleteMany({
+          where: { skilledProfessionalId: profile.id }
+        });
+        
+        // Create new primary category relation
+        if (data.primaryCategoryId) {
+          await tx.skilledProfessionalCategory.create({
+            data: {
+              skilledProfessionalId: profile.id,
+              categoryId: data.primaryCategoryId,
+              isPrimary: true,
+              yearsExperience: data.yearsExperienceInCategory ?? data.yearsExperience,
+            }
+          });
+        }
+        
+        // Create new additional category relations
+        if (data.additionalCategoryIds?.length) {
+          await tx.skilledProfessionalCategory.createMany({
+            data: data.additionalCategoryIds.map(categoryId => ({
+              skilledProfessionalId: profile.id,
+              categoryId,
+              isPrimary: false,
+            })),
+          });
+        }
+      }
+      
+      return profile;
+    });
+    
+    await this.updateActiveProfiles(accountUuid, 'SKILLED_PROFESSIONAL', 'add');
 
-      await this.updateActiveProfiles(accountUuid, 'SKILLED_PROFESSIONAL', 'add');
+    // Fetch profile with categories for response
+    const profileWithCategories = await this.prisma.skilledProfessionalProfile.findUnique({
+      where: { id: result.id },
+      include: {
+        categories: {
+          include: { category: true }
+        }
+      }
+    });
 
-      const completion = this.calculateProfileCompletion('SKILLED_PROFESSIONAL', data);
-      const missingFields = this.getMissingFields('SKILLED_PROFESSIONAL', data);
+    const completion = this.calculateProfileCompletion('SKILLED_PROFESSIONAL', data);
+    const missingFields = this.getMissingFields('SKILLED_PROFESSIONAL', data);
 
-      return BaseResponseDto.ok(
-        this.mapToSkilledProfessionalResponse(profile, completion, missingFields),
-        'Skilled professional profile updated',
-        'OK'
-      );
-    } catch (error) {
-      this.logger.error(`Failed to update skilled professional profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
-    }
+    return BaseResponseDto.ok(
+      this.mapToSkilledProfessionalResponse(profileWithCategories, completion, missingFields),
+      'Skilled professional profile updated',
+      'OK'
+    );
+  } catch (error) {
+    this.logger.error(`Failed to update skilled professional profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
   }
+}
 
   async updateOrganizationIntermediaryAgentProfile(
     accountUuid: string,
@@ -2163,41 +2258,60 @@ private mapToOrganizationProfileResponse(
     };
   }
 
-  private mapToSkilledProfessionalResponse(
-    profile: SkilledProfessionalProfile,
-    completion?: number,
-    missingFields?: string[]
-  ): SkilledProfessionalProfileResponseDto {
-    return {
-      id: profile.id,
-      uuid: profile.uuid,
-      title: profile.title ?? undefined,
-      profession: profile.profession ?? undefined,
-      specialties: this.parseJsonField<string[]>(profile.specialties, []),
-      serviceAreas: this.parseJsonField<string[]>(profile.serviceAreas, []),
-      yearsExperience: profile.yearsExperience ?? undefined,
-      licenseNumber: profile.licenseNumber ?? undefined,
-      insuranceInfo: profile.insuranceInfo ?? undefined,
-      hourlyRate: profile.hourlyRate ?? undefined,
-      dailyRate: profile.dailyRate ?? undefined,
-      paymentTerms: profile.paymentTerms ?? undefined,
-      availableToday: profile.availableToday ?? undefined,
-      availableWeekends: profile.availableWeekends ?? undefined,
-      emergencyService: profile.emergencyService ?? undefined,
-      isVerified: profile.isVerified,
-      averageRating: profile.averageRating,
-      totalReviews: profile.totalReviews,
-      completedJobs: profile.completedJobs,
-      completionRate: profile.completionRate ?? undefined,
-      portfolioImages: this.parseJsonField<string[]>(profile.portfolioImages, []),
-      certifications: this.parseJsonField<string[]>(profile.certifications, []),
-      completion: completion ? {
-        percentage: completion,
-        missingFields: missingFields || [],
-        isComplete: (completion || 0) >= 80,
-      } : undefined,
-    };
-  }
+ private mapToSkilledProfessionalResponse(
+  profile: any, // Type includes categories relation
+  completion?: number,
+  missingFields?: string[]
+): SkilledProfessionalProfileResponseDto {
+  // Extract categories
+  const categories = profile.categories || [];
+  const primaryCategory = categories.find((c: any) => c.isPrimary);
+  const additionalCategories = categories.filter((c: any) => !c.isPrimary);
+  
+  return {
+    id: profile.id,
+    uuid: profile.uuid,
+    title: profile.title ?? undefined,
+    // profession: profile.profession ?? undefined, // Remove this
+    // Add category info
+    primaryCategory: primaryCategory ? {
+      id: primaryCategory.category.id,
+      name: primaryCategory.category.name,
+      slug: primaryCategory.category.slug,
+      vertical: primaryCategory.category.vertical,
+      yearsExperience: primaryCategory.yearsExperience,
+    } : undefined,
+    additionalCategories: additionalCategories.map((c: any) => ({
+      id: c.category.id,
+      name: c.category.name,
+      slug: c.category.slug,
+      vertical: c.category.vertical,
+    })),
+    specialties: this.parseJsonField<string[]>(profile.specialties, []),
+    serviceAreas: this.parseJsonField<string[]>(profile.serviceAreas, []),
+    yearsExperience: profile.yearsExperience ?? undefined,
+    licenseNumber: profile.licenseNumber ?? undefined,
+    insuranceInfo: profile.insuranceInfo ?? undefined,
+    hourlyRate: profile.hourlyRate ?? undefined,
+    dailyRate: profile.dailyRate ?? undefined,
+    paymentTerms: profile.paymentTerms ?? undefined,
+    availableToday: profile.availableToday ?? undefined,
+    availableWeekends: profile.availableWeekends ?? undefined,
+    emergencyService: profile.emergencyService ?? undefined,
+    isVerified: profile.isVerified,
+    averageRating: profile.averageRating,
+    totalReviews: profile.totalReviews,
+    completedJobs: profile.completedJobs,
+    completionRate: profile.completionRate ?? undefined,
+    portfolioImages: this.parseJsonField<string[]>(profile.portfolioImages, []),
+    certifications: this.parseJsonField<string[]>(profile.certifications, []),
+    completion: completion ? {
+      percentage: completion,
+      missingFields: missingFields || [],
+      isComplete: (completion || 0) >= 80,
+    } : undefined,
+  };
+}
 
   private mapToIntermediaryAgentResponse(
     profile: IntermediaryAgentProfile,

@@ -20,6 +20,7 @@ import { ContractorsPricingController } from './controllers/contractors-pricing.
           url: process.env.LISTINGS_GRPC_URL || 'localhost:50052',
         },
       },
+
     ]),
   ],
   providers: [ContractorsService, ContractorsPricingService],

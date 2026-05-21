@@ -1,11 +1,11 @@
 // apps/auth-service/src/workers/analytics.worker.ts
 console.log('🔥 ANALYTICS WORKER FILE IS BEING LOADED');
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject, OnModuleInit } from '@nestjs/common';
 import { QueueService } from '@pivota-api/shared-redis';
 import { ClientProxy } from '@nestjs/microservices';
 
 @Injectable()
-export class AnalyticsWorker {
+export class AnalyticsWorker implements OnModuleInit {
   private readonly logger = new Logger(AnalyticsWorker.name);
   private initialized = false;
 
@@ -16,14 +16,19 @@ export class AnalyticsWorker {
     console.log('🔥 AnalyticsWorker CONSTRUCTOR called');
   }
 
+  async onModuleInit() {
+    console.log('🔥 AnalyticsWorker.onModuleInit() called');
+    await this.initialize();
+  }
+
   async initialize() {
     if (this.initialized) {
       console.log('🔥 AnalyticsWorker already initialized, skipping');
       return;
     }
-    this.initialized = true;
     
     console.log('🔥 AnalyticsWorker.initialize() STARTED');
+    const startTime = Date.now();
     this.logger.log('🚀 Initializing analytics worker...');
     
     try {
@@ -96,8 +101,11 @@ export class AnalyticsWorker {
         }
       });
       
-      this.logger.log('✅ Analytics worker initialized and ready');
-      console.log('🔥 AnalyticsWorker.initialize() COMPLETED SUCCESSFULLY');
+      this.initialized = true;
+      
+      const elapsed = Date.now() - startTime;
+      this.logger.log(`✅ Analytics worker initialized in ${elapsed}ms`);
+      console.log(`🔥 AnalyticsWorker.initialize() COMPLETED SUCCESSFULLY in ${elapsed}ms`);
       
     } catch (error) {
       console.error('🔥 AnalyticsWorker.initialize() FAILED:', error);

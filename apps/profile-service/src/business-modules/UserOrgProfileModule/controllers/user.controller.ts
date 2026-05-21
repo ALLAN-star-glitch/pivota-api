@@ -28,6 +28,9 @@ import {
   UpdateJobSeekerGrpcRequestDto,
   SyncUserRoleRequestDto,
   SyncUserRoleResponseDto,
+  DiscoverSkilledProfessionalsDto,
+  SkilledProfessionalDiscoveryResponseDto,
+  SkilledProfessionalPublicProfileDto,
 } from '@pivota-api/dtos';
 import { ProfileType } from '@pivota-api/constants';
 
@@ -291,4 +294,37 @@ async handleUpdateProfilePicture(
       data.scope
     );
   }
+
+
+
+      @GrpcMethod('ProfileService', 'DiscoverSkilledProfessionals')
+      async discoverSkilledProfessionals(
+        @Payload() query: DiscoverSkilledProfessionalsDto
+      ): Promise<BaseResponseDto<SkilledProfessionalDiscoveryResponseDto>> {
+        this.logger.log(`[gRPC] DiscoverSkilledProfessionals called with filters: ${JSON.stringify(query)}`);
+        return this.userService.discoverSkilledProfessionals(query);
+      }
+
+      @GrpcMethod('ProfileService', 'GetSkilledProfessionalByAccount')
+      async getSkilledProfessionalByAccount(
+        @Payload() data: { accountUuid: string }
+      ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+        this.logger.log(`[gRPC] GetSkilledProfessionalByAccount: ${data.accountUuid}`);
+        return this.userService.getSkilledProfessionalByAccount(data.accountUuid);
+      }
+
+      @GrpcMethod('ProfileService', 'GetSkilledProfessionalByUuid')
+      async getSkilledProfessionalByUuid(
+        @Payload() data: { uuid: string }
+      ): Promise<BaseResponseDto<SkilledProfessionalPublicProfileDto>> {
+        this.logger.log(`[gRPC] GetSkilledProfessionalByUuid: ${data.uuid}`);
+        return this.userService.getSkilledProfessionalByUuid(data.uuid);
+      }
+
+      @GrpcMethod('ProfileService', 'GetAllUsers')
+        async getAllUsers(): Promise<BaseResponseDto<UserProfileResponseDto[]>> {
+          this.logger.log('[gRPC] GetAllUsers called');
+          return this.userService.getAllUsers();
+        }
+
 }

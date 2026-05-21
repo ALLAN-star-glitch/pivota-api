@@ -40,8 +40,8 @@ interface ValidationResult {
 // OPTIMIZATION 1: Pre-define validation rules as constants
 const VALIDATION_RULES = {
   JOB_SEEKER: ['headline', 'skills', 'jobTypes', 'expectedSalary'],
-  SKILLED_PROFESSIONAL: ['title', 'profession', 'specialties', 'serviceAreas', 'yearsExperience'],
-  HOUSING_SEEKER: ['searchType', 'preferredTypes'],  // ✅ Simplified: only require searchType and property types
+  SKILLED_PROFESSIONAL: ['title', 'specialties', 'serviceAreas', 'yearsExperience'], 
+  HOUSING_SEEKER: ['searchType', 'preferredTypes'],
   PROPERTY_OWNER: ['preferredPropertyTypes', 'serviceAreas', 'listingType'],
   SUPPORT_BENEFICIARY: ['needs'],
   INTERMEDIARY_AGENT: ['agentType', 'specializations', 'serviceAreas', 'licenseNumber'],
@@ -268,14 +268,30 @@ export async function createBusinessProfile(
       break;
     }
 
-    case "SKILLED_PROFESSIONAL": {
+   case "SKILLED_PROFESSIONAL": {
       const profData = data as SkilledProfessionalProfileDataDto;
-      await tx.skilledProfessionalProfile.create({
+      
+      logger.log(`👨‍🔧 Creating SKILLED_PROFESSIONAL profile for account ${accountUuid}`);
+      logger.debug(`📊 Skilled professional data: ${JSON.stringify({
+        title: profData.title,
+        primaryCategoryId: profData.primaryCategoryId,
+        additionalCategoryIds: profData.additionalCategoryIds,
+        yearsExperience: profData.yearsExperience,
+        specialties: profData.specialties,
+        serviceAreas: profData.serviceAreas,
+        licenseNumber: profData.licenseNumber,
+        hourlyRate: profData.hourlyRate,
+        dailyRate: profData.dailyRate,
+      })}`);
+      
+      // Create the profile
+      const profile = await tx.skilledProfessionalProfile.create({
         data: {
           accountUuid,
           uuid: randomUUID(),
           title: profData.title!,
-          profession: profData.profession!,
+          // Remove profession field - we use categories now
+          // profession: profData.profession!,
           specialties: StringUtils.stringifyJsonField(profData.specialties ?? []),
           serviceAreas: StringUtils.stringifyJsonField(profData.serviceAreas ?? []),
           yearsExperience: profData.yearsExperience!,
@@ -291,6 +307,37 @@ export async function createBusinessProfile(
           certifications: StringUtils.stringifyJsonField(profData.certifications ?? []),
         },
       });
+      
+      // Create category relations if categories are provided
+      if (profData.primaryCategoryId || profData.additionalCategoryIds?.length) {
+        logger.log(`📂 Creating category relations for skilled professional`);
+        
+        // Create primary category relation
+        if (profData.primaryCategoryId) {
+          await tx.skilledProfessionalCategory.create({
+            data: {
+              skilledProfessionalId: profile.id,
+              categoryId: profData.primaryCategoryId,
+              isPrimary: true,
+              yearsExperience: profData.yearsExperienceInCategory ?? profData.yearsExperience,
+            }
+          });
+          logger.log(`✅ Created primary category relation: ${profData.primaryCategoryId}`);
+        }
+        
+        // Create additional category relations
+        if (profData.additionalCategoryIds?.length) {
+          await tx.skilledProfessionalCategory.createMany({
+            data: profData.additionalCategoryIds.map(categoryId => ({
+              skilledProfessionalId: profile.id,
+              categoryId,
+              isPrimary: false,
+            })),
+          });
+          logger.log(`✅ Created ${profData.additionalCategoryIds.length} additional category relations`);
+        }
+      }
+      
       logger.log(`✅ Created SKILLED_PROFESSIONAL profile for account ${accountUuid}`);
       break;
     }

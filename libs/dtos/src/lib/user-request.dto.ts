@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiHideProperty, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ACCOUNT_TYPES, AccountType, AGENT_TYPES, AgentType, BUSINESS_TYPES, JOB_TYPES, JobType, KENYAN_PHONE_REGEX, LISTING_TYPES, OrganizationPurpose, PROFILE_TYPES, ProfileType, PROPERTY_TYPES, PropertyType, SEARCH_TYPES, SENIORITY_LEVELS, SeniorityLevel, SERVICE_PROVIDER_TYPES, ServiceProviderType, SUPPORT_NEEDS, SupportNeed } from '@pivota-api/constants';
 import { Transform } from 'class-transformer';
 import { 
@@ -324,6 +324,7 @@ export class JobSeekerProfileDataDto {
   agentUuid?: string;
 }
 
+
 export class SkilledProfessionalProfileDataDto {
   @ApiPropertyOptional({ 
     description: 'Professional title',
@@ -333,13 +334,43 @@ export class SkilledProfessionalProfileDataDto {
   @IsString()
   title?: string;
 
+  // DEPRECATED: Keep for backward compatibility, but mark as deprecated
   @ApiPropertyOptional({ 
-    description: 'Profession category',
-    example: 'ELECTRICIAN'
+    description: 'Profession category (DEPRECATED: Use primaryCategoryId instead)',
+    example: 'ELECTRICIAN',
+    deprecated: true
   })
   @IsOptional()
   @IsString()
   profession?: string;
+
+  // NEW: Category fields
+  @ApiPropertyOptional({ 
+    description: 'Primary category ID from the categories service (use this instead of profession)',
+    example: 'cmnboiknh0084arihk7i2lcwt'
+  })
+  @IsOptional()
+  @IsString()
+  primaryCategoryId?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Years of experience specifically for the primary category',
+    example: 8
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  yearsExperienceInCategory?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Additional category IDs',
+    example: ['cmnboijtf0081arih7wy1n0kb', 'cmnboijya0082arihtv8au1wt'],
+    type: [String]
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  additionalCategoryIds?: string[];
 
   @ApiPropertyOptional({ 
     description: 'Specialties',
@@ -449,21 +480,15 @@ export class SkilledProfessionalProfileDataDto {
   @IsBoolean()
   emergencyService?: boolean;
 
-  @ApiPropertyOptional({ 
-    description: 'Portfolio image URLs',
-    example: ['https://storage.pivota.com/portfolio/work1.jpg'],
-    type: [String]
-  })
+  // Hide from Swagger - these are handled by media service endpoints
+  @ApiHideProperty()
   @IsOptional()
   @IsArray()
   @IsUrl({}, { each: true })
   portfolioImages?: string[];
 
-  @ApiPropertyOptional({ 
-    description: 'Certificate/document URLs',
-    example: ['https://storage.pivota.com/certs/license.pdf'],
-    type: [String]
-  })
+  // Hide from Swagger - these are handled by media service endpoints
+  @ApiHideProperty()
   @IsOptional()
   @IsArray()
   @IsUrl({}, { each: true })

@@ -123,6 +123,11 @@ service ProfileService {
 
 
   rpc SyncUserRole (SyncUserRoleRequest) returns (BaseSyncUserRoleResponse);
+
+
+  rpc GetSkilledProfessionalByUuid(GetSkilledProfessionalByUuidRequest) returns (SkilledProfessionalPublicResponse);
+  rpc GetSkilledProfessionalByAccount(GetSkilledProfessionalByAccountRequest) returns (SkilledProfessionalProfileResponse);
+  rpc DiscoverSkilledProfessionals(DiscoverSkilledProfessionalsRequest) returns (SkilledProfessionalDiscoveryResponse);
 }
 
 
@@ -179,7 +184,7 @@ message JobSeekerProfileData {
 
 message SkilledProfessionalProfileData {
   optional string title = 1;
-  optional string profession = 2;
+  optional string profession = 2;  // DEPRECATED - kept for backward compatibility
   repeated string specialties = 3;
   repeated string serviceAreas = 4;
   optional int32 yearsExperience = 5;
@@ -193,6 +198,11 @@ message SkilledProfessionalProfileData {
   optional bool emergencyService = 13;
   repeated string portfolioImages = 14;
   repeated string certifications = 15;
+  
+  // NEW: Category fields for skilled professionals
+  optional string primaryCategoryId = 16;
+  optional int32 yearsExperienceInCategory = 17;
+  repeated string additionalCategoryIds = 18;
 }
 
 message IntermediaryAgentProfileData {
@@ -493,7 +503,7 @@ message UpdateJobSeekerProfileRequest {
 message UpdateSkilledProfessionalProfileRequest {
   string accountUuid = 1;
   optional string title = 2;
-  optional string profession = 3;
+  optional string profession = 3;  // DEPRECATED
   repeated string specialties = 4;
   repeated string serviceAreas = 5;
   optional int32 yearsExperience = 6;
@@ -507,6 +517,11 @@ message UpdateSkilledProfessionalProfileRequest {
   optional bool emergencyService = 14;
   repeated string portfolioImages = 15;
   repeated string certifications = 16;
+  
+  // NEW: Category fields for skilled professionals
+  optional string primaryCategoryId = 17;
+  optional int32 yearsExperienceInCategory = 18;
+  repeated string additionalCategoryIds = 19;
 }
 
 message UpdateHousingSeekerProfileRequest {
@@ -942,7 +957,7 @@ message SkilledProfessionalData {
   string id = 1;
   string uuid = 2;
   optional string title = 3;
-  optional string profession = 4;
+  optional string profession = 4;  // DEPRECATED - kept for backward compatibility
   repeated string specialties = 5;
   repeated string serviceAreas = 6;
   optional int32 yearsExperience = 7;
@@ -953,6 +968,19 @@ message SkilledProfessionalData {
   float averageRating = 12;
   int32 totalReviews = 13;
   repeated string portfolioImages = 14;
+  
+  // NEW: Category fields for response
+  optional ProfessionalCategory primaryCategory = 15;
+  repeated ProfessionalCategory additionalCategories = 16;
+}
+
+// NEW: Professional category message
+message ProfessionalCategory {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  string vertical = 4;
+  optional int32 yearsExperience = 5;
 }
 
 message HousingSeekerProfileResponse {
@@ -1626,3 +1654,77 @@ message DeleteFileRequest {
 }
 
 message Empty {}
+
+// ======================================================
+// SKILLED PROFESSIONAL DISCOVERY MESSAGES
+// ======================================================
+
+message GetSkilledProfessionalByUuidRequest {
+  string uuid = 1;
+}
+
+message GetSkilledProfessionalByAccountRequest {
+  string accountUuid = 1;
+}
+
+message DiscoverSkilledProfessionalsRequest {
+  optional string categoryId = 1;
+  optional string city = 2;
+  optional double minPrice = 3;
+  optional double maxPrice = 4;
+  optional double minRating = 5;
+  optional bool isVerified = 6;
+  optional string sortBy = 7;
+  optional int32 limit = 8;
+  optional int32 offset = 9;
+}
+
+message SkilledProfessionalPublicResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  SkilledProfessionalPublicData data = 4;
+  ErrorPayload error = 5;
+}
+
+message SkilledProfessionalPublicData {
+  string id = 1;
+  string uuid = 2;
+  string accountUuid = 3;
+  optional string accountType = 4;
+  optional string displayName = 5;
+  optional string title = 6;
+  optional ProfessionalCategory primaryCategory = 7;
+  repeated ProfessionalCategory additionalCategories = 8;
+  repeated string specialties = 9;
+  repeated string serviceAreas = 10;
+  optional int32 yearsExperience = 11;
+  optional double hourlyRate = 12;
+  optional double dailyRate = 13;
+  bool isVerified = 14;
+  float averageRating = 15;
+  int32 totalReviews = 16;
+  int32 completedJobs = 17;
+  optional string profileImage = 18;
+  repeated string portfolioImages = 19;
+}
+
+message SkilledProfessionalDiscoveryResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  SkilledProfessionalDiscoveryData data = 4;
+  ErrorPayload error = 5;
+}
+
+message SkilledProfessionalDiscoveryData {
+  repeated SkilledProfessionalPublicData professionals = 1;
+  PaginationInfo pagination = 2;
+}
+
+message PaginationInfo {
+  int32 total = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  bool hasMore = 4;
+}

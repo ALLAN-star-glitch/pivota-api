@@ -5,3 +5,4 @@ export * from './lib/auth.constants';
 export * from './lib/shared-profile-service.constants';
 export * from './lib/email-colors.constants';
 export * from './lib/plans.constants';
+export * from './lib/category.events';

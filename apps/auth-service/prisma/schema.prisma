@@ -26,10 +26,8 @@ model Credential {
   googleProviderId    String?              @unique
   uuid                String               @unique @default(uuid())
   
-  
-  // ✅ Account status (synced from Profile Service)
+  // Account status (synced from Profile Service)
   accountStatus       String               @default("ACTIVE")  // ACTIVE, INACTIVE, SUSPENDED, PENDING_PAYMENT
-
   role                String               @default("Individual")
   
   // For organization members - their status within the org
@@ -77,31 +75,8 @@ model Session {
   @@index([tokenId])
 }
 
-model Otp {
-  id        String   @id @default(cuid())
-  email     String
-  code      String
-  purpose   String   @default("SIGNUP")
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  uuid      String   @unique @default(uuid())
-
-  @@unique([email, purpose])
-  @@index([email, code])
-  @@index([email, purpose])
-  @@index([email, purpose, createdAt])
-  @@index([purpose])
-  @@index([expiresAt])
-}
-
-model OtpRequestLog {
-  id        String   @id @default(cuid())
-  email     String
-  purpose   String
-  createdAt DateTime @default(now())
-
-  @@index([email, purpose, createdAt])
-}
+// ✅ REMOVED: model Otp (no longer needed - using Redis)
+// ✅ REMOVED: model OtpRequestLog (no longer needed - using Redis)
 
 model PasswordSetupToken {
   id         String     @id @default(cuid())

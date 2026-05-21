@@ -45,6 +45,9 @@ model Category {
   houseListings    HouseListing[]     @relation("HouseMainCategory")
   houseSubListings HouseListing[]     @relation("HouseSubcategory")
 
+
+  version Int @default(1)
+
   hasSubcategories Boolean @default(false)
   hasParent        Boolean @default(false)
   createdAt        DateTime      @default(now())

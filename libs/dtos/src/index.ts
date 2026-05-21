@@ -87,3 +87,4 @@ export * from './lib/housing-training-data.http.dto';
 export * from './lib/housing-training-data.response.dto';
 export * from './lib/profile_media.dto';
 export * from './lib/sync-user-role.dto';
+export * from './lib/skilled-professional-discovery.dto';

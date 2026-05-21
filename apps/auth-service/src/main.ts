@@ -4,6 +4,8 @@ import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import { AppModule } from './app/app.module';
 import * as dotenv from 'dotenv';
 import { AUTH_PROTO_PATH } from '@pivota-api/protos';
+import { QueueService } from '@pivota-api/shared-redis';
+import { AuthModule } from './modules/auth/auth.module';
 
 // Load environment
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
@@ -58,6 +60,11 @@ async function bootstrap() {
       noAck: false,  // ✅ Set to false for manual acknowledgment
     },
   });
+
+  // ✅ CRITICAL: Pre-create queues BEFORE starting microservices
+  const queueService = app.get(QueueService);
+  await queueService.onModuleInit();
+  logger.log('✅ Queues pre-created');
 
   await app.startAllMicroservices();
   logger.log('🚀 Auth service is running (Kafka + gRPC + RabbitMQ)');

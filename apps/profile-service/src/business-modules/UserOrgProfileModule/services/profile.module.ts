@@ -1,5 +1,5 @@
 // apps/profile-service/src/profile.module.ts
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { UserController } from '../controllers/user.controller';
 import { PrismaModule } from '../../../prisma/prisma.module';
 import { ClientsModule, Transport } from '@nestjs/microservices';
@@ -12,6 +12,8 @@ import { UserService } from './user.service';
 import { ProfileWorker } from '../../../workers/profile.worker';
 import { MediaService } from './media.service';
 import { MediaController } from '../controllers/media.controller';
+import { CategoryService } from './category.service';
+import { CategoryConsumer } from '../controllers/category.consumer';
 
 @Module({
   imports: [
@@ -82,25 +84,56 @@ import { MediaController } from '../controllers/media.controller';
       }
     ]),
   ],
-  controllers: [UserController, OrganisationController, MediaController],
+  controllers: [UserController, OrganisationController, MediaController, CategoryConsumer],
   providers: [
     UserService,
     OrganisationService,
     ProfileWorker,
-    MediaService
+    MediaService,
+    CategoryService
   ],
-  exports: [OrganisationService],
+  exports: [OrganisationService, CategoryService],
 })
 export class ProfileModule {
-  constructor(private profileWorker: ProfileWorker) {
-    console.log('🚀 ProfileModule constructor called');
+  private readonly logger = new Logger(ProfileModule.name);
+
+  constructor(
+    private profileWorker: ProfileWorker,
+  ) {
+    this.logger.log('🚀 ProfileModule: gRPC Clients & RMQ Event Buses initialized');
+    this.logger.log(`📡 RBAC_GRPC_URL: ${process.env.RBAC_GRPC_URL || 'localhost:50055'}`);
+    this.logger.log(`📡 SUBSCRIPTIONS_GRPC_URL: ${process.env.SUBSCRIPTIONS_GRPC_URL || 'localhost:50040'}`);
+    this.logger.log(`📡 PLANS_SERVICE_GRPC_URL: ${process.env.PLANS_SERVICE_GRPC_URL || 'localhost:50050'}`);
+    this.logger.log(`📨 KAFKA_BROKERS: ${process.env.KAFKA_BROKERS || 'localhost:9092'}`);
+    this.logger.log(`📨 RMQ_URL: ${process.env.RMQ_URL || 'amqp://localhost:5672'}`);
     
-    // Initialize profile worker immediately (same pattern as EmailWorker)
-    setImmediate(() => {
-      console.log('🔥 ProfileModule - manually initializing ProfileWorker');
-      this.profileWorker.initialize().catch(err => {
-        console.error('🔥 Failed to initialize profile worker:', err);
-      });
+    // ✅ Initialize workers immediately in constructor
+    this.initializeWorkers();
+  }
+
+  private async initializeWorkers() {
+    this.logger.log('🔥 ProfileModule.initializeWorkers() - Starting workers initialization...');
+    const startTime = Date.now();
+
+    // Small delay to ensure all dependencies are ready
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Initialize profile worker
+    const results = await Promise.allSettled([
+      this.profileWorker.initialize(),
+    ]);
+
+    // Log results
+    const workerNames = ['ProfileWorker'];
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        this.logger.log(`✅ ${workerNames[index]} initialized successfully`);
+      } else {
+        this.logger.error(`❌ ${workerNames[index]} failed to initialize: ${result.reason}`);
+      }
     });
+
+    const elapsed = Date.now() - startTime;
+    this.logger.log(`✅ All workers initialized in ${elapsed}ms`);
   }
 }

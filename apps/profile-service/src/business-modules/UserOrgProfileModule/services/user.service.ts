@@ -4,7 +4,6 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import {
   BaseResponseDto,
   GetUserByUserUuidDto,
-  AssignRoleToUserRequestDto,
   RoleIdResponse,
   UserRoleResponseDto,
   RoleIdRequestDto,
@@ -38,6 +37,9 @@ import {
   UpdateSkilledProfessionalGrpcRequestDto,
   UpdateJobSeekerGrpcRequestDto,
   SyncUserRoleResponseDto,
+  DiscoverSkilledProfessionalsDto,
+  SkilledProfessionalDiscoveryResponseDto,
+  SkilledProfessionalPublicProfileDto,
 } from '@pivota-api/dtos';
 import { 
   Prisma,
@@ -62,6 +64,7 @@ import { BaseSubscriptionResponseGrpc } from '@pivota-api/interfaces';
 import { PhoneUtils, StringUtils } from '@pivota-api/utils';
 import { QueueService } from '@pivota-api/shared-redis';
 import { StorageService } from '@pivota-api/shared-storage';
+import { CategoryService } from './category.service';
 
 
 // ==================== Type Definitions ====================
@@ -158,6 +161,7 @@ export class UserService implements OnModuleInit {
     @Inject('KAFKA_STORAGE_CLIENT') private readonly storageKafkaClient: ClientKafka,
     // For analytics events (producing)
     @Inject('KAFKA_ANALYTICS_CLIENT') private readonly analyticsKafkaClient: ClientKafka,
+    private readonly categoryService: CategoryService,
     private queue: QueueService, 
   ) {
     this.rbacGrpc = this.rbacClient.getService<RbacServiceGrpc>('RbacService');
@@ -402,7 +406,6 @@ private async updateActiveProfiles(
   private skilledProfessionalProfileToDataDto(profile: SkilledProfessionalProfile): SkilledProfessionalProfileDataDto {
     return {
       title: profile.title ?? undefined,
-      profession: profile.profession ?? undefined,
       specialties: this.parseJsonField<string[]>(profile.specialties, []),
       serviceAreas: this.parseJsonField<string[]>(profile.serviceAreas, []),
       yearsExperience: profile.yearsExperience ?? undefined,
@@ -957,40 +960,110 @@ async createSkilledProfessionalProfile(
   data: SkilledProfessionalProfileDataDto
 ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
   try {
-    const profile = await this.prisma.skilledProfessionalProfile.create({
-      data: {
-        accountUuid,
-        uuid: randomUUID(),
-        title: data.title,
-        profession: data.profession,
-        specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
-        serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
-        yearsExperience: data.yearsExperience,
-        licenseNumber: data.licenseNumber,
-        insuranceInfo: data.insuranceInfo,
-        hourlyRate: data.hourlyRate,
-        dailyRate: data.dailyRate,
-        paymentTerms: data.paymentTerms,
-        availableToday: data.availableToday ?? false,
-        availableWeekends: data.availableWeekends ?? true,
-        emergencyService: data.emergencyService ?? false,
-        portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
-        certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
-      }
+    // Check if profile already exists
+    const existingProfile = await this.prisma.skilledProfessionalProfile.findUnique({
+      where: { accountUuid }
     });
 
+    if (existingProfile) {
+      return BaseResponseDto.fail(
+        'Skilled professional profile already exists for this account. Use PATCH /profiles/skilled-professional to update.',
+        'ALREADY_EXISTS'
+      );
+    }
+
+    // Validate categories if provided
+    const allCategoryIds = [];
+    if (data.primaryCategoryId) allCategoryIds.push(data.primaryCategoryId);
+    if (data.additionalCategoryIds?.length) allCategoryIds.push(...data.additionalCategoryIds);
+    
+    if (allCategoryIds.length > 0) {
+      const validation = await this.categoryService.validateCategories(allCategoryIds);
+      if (!validation.success) {
+        return BaseResponseDto.fail(validation.message, validation.code);
+      }
+    }
+
+    // Create profile with categories in a transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Create the profile
+      const profile = await tx.skilledProfessionalProfile.create({
+        data: {
+          accountUuid,
+          uuid: randomUUID(),
+          title: data.title ?? null,
+          specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
+          yearsExperience: data.yearsExperience ?? null,
+          licenseNumber: data.licenseNumber ?? null,
+          insuranceInfo: data.insuranceInfo ?? null,
+          hourlyRate: data.hourlyRate ?? null,
+          dailyRate: data.dailyRate ?? null,
+          paymentTerms: data.paymentTerms ?? null,
+          availableToday: data.availableToday ?? false,
+          availableWeekends: data.availableWeekends ?? true,
+          emergencyService: data.emergencyService ?? false,
+          portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
+          certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
+        }
+      });
+      
+      // Create primary category relation
+      if (data.primaryCategoryId) {
+        await tx.skilledProfessionalCategory.create({
+          data: {
+            skilledProfessionalId: profile.id,
+            categoryId: data.primaryCategoryId,
+            isPrimary: true,
+            yearsExperience: data.yearsExperienceInCategory ?? data.yearsExperience,
+          }
+        });
+      }
+      
+      // Create additional category relations
+      if (data.additionalCategoryIds?.length) {
+        await tx.skilledProfessionalCategory.createMany({
+          data: data.additionalCategoryIds.map(categoryId => ({
+            skilledProfessionalId: profile.id,
+            categoryId,
+            isPrimary: false,
+          })),
+        });
+      }
+      
+      return profile;
+    });
+    
     await this.updateActiveProfiles(accountUuid, "SKILLED_PROFESSIONAL", 'add');
+
+    // Fetch the profile with categories for response
+    const profileWithCategories = await this.prisma.skilledProfessionalProfile.findUnique({
+      where: { id: result.id },
+      include: {
+        categories: {
+          include: { category: true }
+        }
+      }
+    });
 
     const completion = this.calculateProfileCompletion("SKILLED_PROFESSIONAL", data);
     const missingFields = this.getMissingFields("SKILLED_PROFESSIONAL", data);
 
     return BaseResponseDto.ok(
-      this.mapToSkilledProfessionalResponse(profile, completion, missingFields),
-      'Skilled professional profile created',
+      this.mapToSkilledProfessionalResponse(profileWithCategories!, completion, missingFields),
+      'Skilled professional profile created successfully',
       'CREATED'
     );
   } catch (error) {
     this.logger.error(`Failed to create skilled professional profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return BaseResponseDto.fail(
+        'Skilled professional profile already exists for this account',
+        'ALREADY_EXISTS'
+      );
+    }
+    
     return BaseResponseDto.fail(error instanceof Error ? error.message : 'Unknown error', 'INTERNAL_ERROR');
   }
 }
@@ -1525,62 +1598,114 @@ async updateSkilledProfessionalProfile(
   data: UpdateSkilledProfessionalGrpcRequestDto
 ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
   try {
-    // Build update object dynamically - ONLY include fields that are explicitly provided
-    const updateData: any = {};
+    // Validate categories if provided
+    const allCategoryIds = [];
+    if (data.primaryCategoryId) allCategoryIds.push(data.primaryCategoryId);
+    if (data.additionalCategoryIds?.length) allCategoryIds.push(...data.additionalCategoryIds);
     
-    if (data.title !== undefined) updateData.title = data.title;
-    if (data.profession !== undefined) updateData.profession = data.profession;
-    if (data.specialties !== undefined) updateData.specialties = StringUtils.stringifyJsonField(data.specialties);
-    if (data.serviceAreas !== undefined) updateData.serviceAreas = StringUtils.stringifyJsonField(data.serviceAreas);
-    if (data.yearsExperience !== undefined) updateData.yearsExperience = data.yearsExperience;
-    if (data.licenseNumber !== undefined) updateData.licenseNumber = data.licenseNumber;
-    if (data.insuranceInfo !== undefined) updateData.insuranceInfo = data.insuranceInfo;
-    if (data.hourlyRate !== undefined) updateData.hourlyRate = data.hourlyRate;
-    if (data.dailyRate !== undefined) updateData.dailyRate = data.dailyRate;
-    if (data.paymentTerms !== undefined) updateData.paymentTerms = data.paymentTerms;
-    if (data.availableToday !== undefined) updateData.availableToday = data.availableToday;
-    if (data.availableWeekends !== undefined) updateData.availableWeekends = data.availableWeekends;
-    if (data.emergencyService !== undefined) updateData.emergencyService = data.emergencyService;
-    if (data.portfolioImages !== undefined) updateData.portfolioImages = StringUtils.stringifyJsonField(data.portfolioImages);
-    if (data.certifications !== undefined) updateData.certifications = StringUtils.stringifyJsonField(data.certifications);
+    if (allCategoryIds.length > 0) {
+      const validation = await this.categoryService.validateCategories(allCategoryIds);
+      if (!validation.success) {
+        return BaseResponseDto.fail(validation.message, validation.code);
+      }
+    }
     
-    // Build create data for the "create" case (when profile doesn't exist yet)
-    const createData = {
-      accountUuid: data.accountUuid,
-      uuid: randomUUID(),
-      title: data.title ?? null,
-      profession: data.profession ?? null,
-      specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
-      serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
-      yearsExperience: data.yearsExperience ?? null,
-      licenseNumber: data.licenseNumber ?? null,
-      insuranceInfo: data.insuranceInfo ?? null,
-      hourlyRate: data.hourlyRate ?? null,
-      dailyRate: data.dailyRate ?? null,
-      paymentTerms: data.paymentTerms ?? null,
-      availableToday: data.availableToday ?? false,
-      availableWeekends: data.availableWeekends ?? true,
-      emergencyService: data.emergencyService ?? false,
-      portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
-      certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
-    };
-
-    // Use the same variable and don't fetch again
-    const profile = await this.prisma.skilledProfessionalProfile.upsert({
-      where: { accountUuid: data.accountUuid },
-      update: updateData,
-      create: createData,
+    // Update profile with categories in a transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Build update object dynamically
+      const updateData: any = {};
+      
+      if (data.title !== undefined) updateData.title = data.title;
+      if (data.specialties !== undefined) updateData.specialties = StringUtils.stringifyJsonField(data.specialties);
+      if (data.serviceAreas !== undefined) updateData.serviceAreas = StringUtils.stringifyJsonField(data.serviceAreas);
+      if (data.yearsExperience !== undefined) updateData.yearsExperience = data.yearsExperience;
+      if (data.licenseNumber !== undefined) updateData.licenseNumber = data.licenseNumber;
+      if (data.insuranceInfo !== undefined) updateData.insuranceInfo = data.insuranceInfo;
+      if (data.hourlyRate !== undefined) updateData.hourlyRate = data.hourlyRate;
+      if (data.dailyRate !== undefined) updateData.dailyRate = data.dailyRate;
+      if (data.paymentTerms !== undefined) updateData.paymentTerms = data.paymentTerms;
+      if (data.availableToday !== undefined) updateData.availableToday = data.availableToday;
+      if (data.availableWeekends !== undefined) updateData.availableWeekends = data.availableWeekends;
+      if (data.emergencyService !== undefined) updateData.emergencyService = data.emergencyService;
+      if (data.portfolioImages !== undefined) updateData.portfolioImages = StringUtils.stringifyJsonField(data.portfolioImages);
+      if (data.certifications !== undefined) updateData.certifications = StringUtils.stringifyJsonField(data.certifications);
+      
+      // Update the profile
+      const profile = await tx.skilledProfessionalProfile.upsert({
+        where: { accountUuid: data.accountUuid },
+        update: updateData,
+        create: {
+          accountUuid: data.accountUuid,
+          uuid: randomUUID(),
+          title: data.title ?? null,
+          specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
+          serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
+          yearsExperience: data.yearsExperience ?? null,
+          licenseNumber: data.licenseNumber ?? null,
+          insuranceInfo: data.insuranceInfo ?? null,
+          hourlyRate: data.hourlyRate ?? null,
+          dailyRate: data.dailyRate ?? null,
+          paymentTerms: data.paymentTerms ?? null,
+          availableToday: data.availableToday ?? false,
+          availableWeekends: data.availableWeekends ?? true,
+          emergencyService: data.emergencyService ?? false,
+          portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
+          certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
+        }
+      });
+      
+      // Update categories if provided
+      if (data.primaryCategoryId !== undefined || data.additionalCategoryIds !== undefined) {
+        // Delete existing category relations
+        await tx.skilledProfessionalCategory.deleteMany({
+          where: { skilledProfessionalId: profile.id }
+        });
+        
+        // Create new primary category relation
+        if (data.primaryCategoryId) {
+          await tx.skilledProfessionalCategory.create({
+            data: {
+              skilledProfessionalId: profile.id,
+              categoryId: data.primaryCategoryId,
+              isPrimary: true,
+              yearsExperience: data.yearsExperienceInCategory ?? data.yearsExperience,
+            }
+          });
+        }
+        
+        // Create new additional category relations
+        if (data.additionalCategoryIds?.length) {
+          await tx.skilledProfessionalCategory.createMany({
+            data: data.additionalCategoryIds.map(categoryId => ({
+              skilledProfessionalId: profile.id,
+              categoryId,
+              isPrimary: false,
+            })),
+          });
+        }
+      }
+      
+      return profile;
+    });
+    
+    await this.updateActiveProfiles(data.accountUuid, "SKILLED_PROFESSIONAL", 'add');
+    
+    // Fetch the profile with categories for response
+    const profileWithCategories = await this.prisma.skilledProfessionalProfile.findUnique({
+      where: { id: result.id },
+      include: {
+        categories: {
+          include: { category: true }
+        }
+      }
     });
 
-    await this.updateActiveProfiles(data.accountUuid, "SKILLED_PROFESSIONAL", 'add');
-
-    // Convert the profile to DTO for completion calculation
-    const fullData = this.skilledProfessionalProfileToDataDto(profile);
+    const fullData = this.skilledProfessionalProfileToDataDto(profileWithCategories);
     const completion = this.calculateProfileCompletion("SKILLED_PROFESSIONAL", fullData);
     const missingFields = this.getMissingFields("SKILLED_PROFESSIONAL", fullData);
 
     return BaseResponseDto.ok(
-      this.mapToSkilledProfessionalResponse(profile, completion, missingFields),
+      this.mapToSkilledProfessionalResponse(profileWithCategories, completion, missingFields),
       'Skilled professional profile updated',
       'OK'
     );
@@ -1959,6 +2084,42 @@ private mapToAccountResponse(account: AccountWithIndividualProfiles): AccountRes
 
   const firstUser = users[0];
 
+  // Map individual profile (this is fine - it's a simple object)
+  const individualProfile = account.individualProfile ? {
+    accountUuid: account.individualProfile.accountUuid,
+    firstName: account.individualProfile.firstName ?? '',
+    lastName: account.individualProfile.lastName ?? '',
+    bio: account.individualProfile.bio ?? undefined,
+    gender: account.individualProfile.gender ?? undefined,
+    dateOfBirth: account.individualProfile.dateOfBirth?.toISOString(),
+    nationalId: account.individualProfile.nationalId ?? undefined,
+    profileImage: account.individualProfile.profileImage ?? undefined,
+  } : undefined;
+
+  // Map job seeker profile - USE RESPONSE DTO
+  const jobSeekerProfile = account.jobSeekerProfile ? 
+    this.mapToJobSeekerResponse(account.jobSeekerProfile, undefined, undefined) : undefined;
+  
+  // Map skilled professional profile - USE RESPONSE DTO
+  const skilledProfessionalProfile = account.skilledProfessionalProfile ? 
+    this.mapToSkilledProfessionalResponse(account.skilledProfessionalProfile, undefined, undefined) : undefined;
+  
+  // Map housing seeker profile - USE RESPONSE DTO
+  const housingSeekerProfile = account.housingSeekerProfile ? 
+    this.mapToHousingSeekerResponse(account.housingSeekerProfile, undefined, undefined) : undefined;
+  
+  // Map property owner profile - USE RESPONSE DTO
+  const propertyOwnerProfile = account.propertyOwnerProfile ? 
+    this.mapToPropertyOwnerResponse(account.propertyOwnerProfile, undefined, undefined) : undefined;
+  
+  // Map support beneficiary profile - USE RESPONSE DTO
+  const supportBeneficiaryProfile = account.supportBeneficiaryProfile ? 
+    this.mapToSupportBeneficiaryResponse(account.supportBeneficiaryProfile, undefined, undefined) : undefined;
+  
+  // Map intermediary agent profile - USE RESPONSE DTO
+  const intermediaryAgentProfile = account.intermediaryAgentProfile ? 
+    this.mapToIntermediaryAgentResponse(account.intermediaryAgentProfile, undefined, undefined) : undefined;
+
   return {
     uuid: account.uuid,
     accountCode: account.accountCode,
@@ -1969,18 +2130,14 @@ private mapToAccountResponse(account: AccountWithIndividualProfiles): AccountRes
     activeProfiles: activeProfiles,
     isVerified: account.isVerified,
     verifiedFeatures: verifiedFeatures,
-    planName: planName,  // ← Return the friendly name
-    individualProfile: account.individualProfile ? {
-      accountUuid: account.individualProfile.accountUuid,
-      firstName: account.individualProfile.firstName ?? '',
-      lastName: account.individualProfile.lastName ?? '',
-      bio: account.individualProfile.bio ?? undefined,
-      gender: account.individualProfile.gender ?? undefined,
-      dateOfBirth: account.individualProfile.dateOfBirth?.toISOString(),
-      nationalId: account.individualProfile.nationalId ?? undefined,
-      profileImage: account.individualProfile.profileImage ?? undefined,
-    } : undefined,
-    // ... rest of the profiles mapping ...
+    planName: planName,
+    individualProfile: individualProfile,
+    jobSeekerProfile: jobSeekerProfile,
+    skilledProfessionalProfile: skilledProfessionalProfile,
+    housingSeekerProfile: housingSeekerProfile,
+    propertyOwnerProfile: propertyOwnerProfile,
+    supportBeneficiaryProfile: supportBeneficiaryProfile,
+    intermediaryAgentProfile: intermediaryAgentProfile,
     users: users,
     user: firstUser,
     completion: {
@@ -1999,7 +2156,6 @@ private mapToUserProfileResponse(user: UserWithAccount): UserProfileResponseDto 
   const accountResponse = this.mapToAccountResponse(user.account);
 
   return {
-    // Account info from UserSignupDataDto
     account: {
       uuid: accountResponse.uuid,
       accountCode: accountResponse.accountCode,
@@ -2023,29 +2179,22 @@ private mapToUserProfileResponse(user: UserWithAccount): UserProfileResponseDto 
       dateOfBirth: user.account.individualProfile?.dateOfBirth?.toISOString(),
       nationalId: user.account.individualProfile?.nationalId ?? undefined,
       profileImage: user.account.individualProfile?.profileImage ?? undefined,
-
       businessName: user.account.individualProfile?.businessName ?? undefined,
       logo: user.account.individualProfile?.logo ?? undefined,
       operatesAsBusiness: user.account.individualProfile?.operatesAsBusiness ?? false,
       coverPhoto: user.account.individualProfile?.coverPhoto ?? undefined,
     },
     completion: accountResponse.completion,
-
     planName: accountResponse.planName,
-    
-    // FLATTEN THE PROFILES - move them from account to top level
     jobSeekerProfile: accountResponse.jobSeekerProfile,
     skilledProfessionalProfile: accountResponse.skilledProfessionalProfile,
     housingSeekerProfile: accountResponse.housingSeekerProfile,
     propertyOwnerProfile: accountResponse.propertyOwnerProfile,
     supportBeneficiaryProfile: accountResponse.supportBeneficiaryProfile,
     intermediaryAgentProfile: accountResponse.intermediaryAgentProfile,
-    
-    // Organization related (if any)
     organization: accountResponse.organizationProfile,
     organizationProfile: accountResponse.organizationProfile,
     individualProfile: accountResponse.individualProfile,
-    
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };
@@ -2084,40 +2233,59 @@ private mapToUserProfileResponse(user: UserWithAccount): UserProfileResponseDto 
   }
 
   private mapToSkilledProfessionalResponse(
-    profile: SkilledProfessionalProfile,
-    completion?: number,
-    missingFields?: string[]
-  ): SkilledProfessionalProfileResponseDto {
-    return {
-      id: profile.id,
-      uuid: profile.uuid,
-      title: profile.title ?? null,
-      profession: profile.profession ?? undefined,
-      specialties: this.parseJsonField<string[]>(profile.specialties, []),
-      serviceAreas: this.parseJsonField<string[]>(profile.serviceAreas, []),
-      yearsExperience: profile.yearsExperience ?? undefined,
-      licenseNumber: profile.licenseNumber ?? undefined,
-      insuranceInfo: profile.insuranceInfo ?? undefined,
-      hourlyRate: profile.hourlyRate ?? undefined,
-      dailyRate: profile.dailyRate ?? undefined,
-      paymentTerms: profile.paymentTerms ?? undefined,
-      availableToday: profile.availableToday ?? undefined,
-      availableWeekends: profile.availableWeekends ?? undefined,
-      emergencyService: profile.emergencyService ?? undefined,
-      isVerified: profile.isVerified,
-      averageRating: profile.averageRating,
-      totalReviews: profile.totalReviews,
-      completedJobs: profile.completedJobs,
-      completionRate: profile.completionRate ?? undefined,
-      portfolioImages: this.parseJsonField<string[]>(profile.portfolioImages, []),
-      certifications: this.parseJsonField<string[]>(profile.certifications, []),
-      completion: completion ? {
-        percentage: completion,
-        missingFields: missingFields || [],
-        isComplete: (completion || 0) >= 80,
-      } : undefined,
-    };
-  }
+  profile: any, // Type includes categories relation
+  completion?: number, 
+  missingFields?: string[]
+): SkilledProfessionalProfileResponseDto {
+  // Extract categories
+  const categories = profile.categories || [];
+  const primaryCategory = categories.find((c: any) => c.isPrimary);
+  const additionalCategories = categories.filter((c: any) => !c.isPrimary);
+  
+  return {
+    id: profile.id,
+    uuid: profile.uuid,
+    title: profile.title ?? null,
+    // Add category info
+    primaryCategory: primaryCategory ? {
+      id: primaryCategory.category.id,
+      name: primaryCategory.category.name,
+      slug: primaryCategory.category.slug,
+      vertical: primaryCategory.category.vertical,
+      yearsExperience: primaryCategory.yearsExperience,
+    } : undefined,
+    additionalCategories: additionalCategories.map((c: any) => ({
+      id: c.category.id,
+      name: c.category.name,
+      slug: c.category.slug,
+      vertical: c.category.vertical,
+    })),
+    // Existing fields
+    specialties: this.parseJsonField<string[]>(profile.specialties, []),
+    serviceAreas: this.parseJsonField<string[]>(profile.serviceAreas, []),
+    yearsExperience: profile.yearsExperience ?? undefined,
+    licenseNumber: profile.licenseNumber ?? undefined,
+    insuranceInfo: profile.insuranceInfo ?? undefined,
+    hourlyRate: profile.hourlyRate ?? undefined,
+    dailyRate: profile.dailyRate ?? undefined,
+    paymentTerms: profile.paymentTerms ?? undefined,
+    availableToday: profile.availableToday ?? undefined,
+    availableWeekends: profile.availableWeekends ?? undefined,
+    emergencyService: profile.emergencyService ?? undefined,
+    isVerified: profile.isVerified,
+    averageRating: profile.averageRating,
+    totalReviews: profile.totalReviews,
+    completedJobs: profile.completedJobs,
+    completionRate: profile.completionRate ?? undefined,
+    portfolioImages: this.parseJsonField<string[]>(profile.portfolioImages, []),
+    certifications: this.parseJsonField<string[]>(profile.certifications, []),
+    completion: completion ? {
+      percentage: completion,
+      missingFields: missingFields || [],
+      isComplete: (completion || 0) >= 80,
+    } : undefined,
+  };
+}
 
   private mapToIntermediaryAgentResponse(
     profile: IntermediaryAgentProfile,
@@ -2456,6 +2624,293 @@ async syncUserRole(
       error.message || 'Unknown error syncing role',
       'INTERNAL_ERROR',
     );
+  }
+}
+
+
+
+
+
+
+/**
+ * Get skilled professional profile by account UUID (supports both individuals and organizations)
+ */
+async getSkilledProfessionalByAccount(
+  accountUuid: string
+): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+  this.logger.log(`Fetching skilled professional by account UUID: ${accountUuid}`);
+  
+  try {
+    const profile = await this.prisma.skilledProfessionalProfile.findUnique({
+      where: { accountUuid },
+      include: {
+        categories: {
+          include: { category: true }
+        },
+        account: {
+          include: {
+            individualProfile: true,
+            organizationProfile: true,  // For organization professionals
+            users: { take: 1 }
+          }
+        }
+      }
+    });
+    
+    if (!profile) {
+      return BaseResponseDto.fail('Skilled professional profile not found', 'NOT_FOUND');
+    }
+    
+    const completion = this.calculateProfileCompletion('SKILLED_PROFESSIONAL', 
+      this.skilledProfessionalProfileToDataDto(profile));
+    const missingFields = this.getMissingFields('SKILLED_PROFESSIONAL', 
+      this.skilledProfessionalProfileToDataDto(profile));
+    
+    return BaseResponseDto.ok(
+      this.mapToSkilledProfessionalResponse(profile, completion, missingFields),
+      'Skilled professional retrieved',
+      'OK'
+    );
+  } catch (error) {
+    this.logger.error(`Failed to fetch skilled professional: ${error.message}`);
+    return BaseResponseDto.fail(error.message, 'INTERNAL_ERROR');
+  }
+}
+
+/**
+ * Get skilled professional public profile by UUID
+ */
+async getSkilledProfessionalByUuid(
+  uuid: string
+): Promise<BaseResponseDto<SkilledProfessionalPublicProfileDto>> {
+  this.logger.log(`Fetching skilled professional public profile by UUID: ${uuid}`);
+  
+  try {
+    const profile = await this.prisma.skilledProfessionalProfile.findUnique({
+      where: { uuid },
+      include: {
+        categories: {
+          include: { category: true }
+        },
+        account: {
+          include: {
+            individualProfile: true,
+            users: { take: 1 }
+          }
+        }
+      }
+    });
+    
+    if (!profile) {
+      return BaseResponseDto.fail('Skilled professional not found', 'NOT_FOUND');
+    }
+    
+    const mappedProfile = this.mapToPublicProfile(profile);
+    
+    return BaseResponseDto.ok(
+      mappedProfile,
+      'Skilled professional retrieved',
+      'OK'
+    );
+  } catch (error) {
+    this.logger.error(`Failed to fetch skilled professional: ${error.message}`);
+    return BaseResponseDto.fail(error.message, 'INTERNAL_ERROR');
+  }
+}
+
+/**
+ * Discover skilled professionals with filters
+ */
+async discoverSkilledProfessionals(
+  query: DiscoverSkilledProfessionalsDto
+): Promise<BaseResponseDto<SkilledProfessionalDiscoveryResponseDto>> {
+  try {
+    const where: any = {};
+    
+    // Filter by category (primary or additional)
+    if (query.categoryId) {
+      where.categories = {
+        some: {
+          categoryId: query.categoryId
+        }
+      };
+    }
+    
+    // Filter by verification
+    if (query.isVerified !== undefined) {
+      where.isVerified = query.isVerified;
+    }
+    
+    // Filter by rating
+    if (query.minRating) {
+      where.averageRating = { gte: query.minRating };
+    }
+    
+    // Filter by price
+    if (query.minPrice !== undefined || query.maxPrice !== undefined) {
+      where.hourlyRate = {};
+      if (query.minPrice !== undefined) where.hourlyRate.gte = query.minPrice;
+      if (query.maxPrice !== undefined) where.hourlyRate.lte = query.maxPrice;
+    }
+    
+    // Filter by service area (PostgreSQL JSON contains)
+    if (query.city) {
+      where.serviceAreas = {
+        path: '$[*]',
+        array_contains: query.city
+      };
+    }
+    
+    // Build order by
+    let orderBy: any = {};
+    switch (query.sortBy) {
+      case 'rating':
+        orderBy = { averageRating: 'desc' };
+        break;
+      case 'price_asc':
+        orderBy = { hourlyRate: 'asc' };
+        break;
+      case 'price_desc':
+        orderBy = { hourlyRate: 'desc' };
+        break;
+      case 'experience':
+        orderBy = { yearsExperience: 'desc' };
+        break;
+      case 'recent':
+        orderBy = { createdAt: 'desc' };
+        break;
+      default:
+        orderBy = { averageRating: 'desc' };
+    }
+    
+    const total = await this.prisma.skilledProfessionalProfile.count({ where });
+    
+    const professionals = await this.prisma.skilledProfessionalProfile.findMany({
+      where,
+      include: {
+        categories: {
+          include: { category: true }
+        },
+        account: {
+          include: {
+            individualProfile: true,
+            organizationProfile: true,  // Include org profile
+            users: { take: 1 }
+          }
+        }
+      },
+      orderBy,
+      skip: query.offset || 0,
+      take: query.limit || 20,
+    });
+    
+    const mappedProfessionals = professionals.map(prof => this.mapToPublicProfile(prof));
+    
+    return BaseResponseDto.ok(
+      {
+        professionals: mappedProfessionals,
+        pagination: {
+          total,
+          limit: query.limit || 20,
+          offset: query.offset || 0,
+          hasMore: (query.offset || 0) + (query.limit || 20) < total
+        }
+      },
+      'Skilled professionals retrieved',
+      'OK'
+    );
+  } catch (error) {
+    this.logger.error(`Failed to discover professionals: ${error.message}`);
+    return BaseResponseDto.fail(error.message, 'INTERNAL_ERROR');
+  }
+}
+
+/**
+ * Map to public profile (for discovery and public views)
+ */
+private mapToPublicProfile(profile: any): SkilledProfessionalPublicProfileDto {
+  const categories = profile.categories || [];
+  const primaryCategory = categories.find((c: any) => c.isPrimary);
+  const additionalCategories = categories.filter((c: any) => !c.isPrimary);
+  const user = profile.account?.users?.[0];
+  const individualProfile = profile.account?.individualProfile;
+  const organizationProfile = profile.account?.organizationProfile;
+  
+  // Determine account type and get appropriate display info
+  const accountType = profile.account?.type;
+  const displayName = accountType === 'ORGANIZATION' 
+    ? organizationProfile?.name 
+    : `${individualProfile?.firstName || ''} ${individualProfile?.lastName || ''}`.trim();
+  
+  return {
+    id: profile.id,
+    uuid: profile.uuid,
+    accountUuid: profile.accountUuid,
+    accountType: accountType,
+    displayName: displayName,
+    title: profile.title ?? undefined,
+    primaryCategory: primaryCategory ? {
+      id: primaryCategory.category.id,
+      name: primaryCategory.category.name,
+      slug: primaryCategory.category.slug,
+      vertical: primaryCategory.category.vertical,
+    } : undefined,
+    additionalCategories: additionalCategories.map((c: any) => ({
+      id: c.category.id,
+      name: c.category.name,
+      slug: c.category.slug,
+      vertical: c.category.vertical,
+    })),
+    specialties: this.parseJsonField<string[]>(profile.specialties, []),
+    serviceAreas: this.parseJsonField<string[]>(profile.serviceAreas, []),
+    yearsExperience: profile.yearsExperience ?? undefined,
+    hourlyRate: profile.hourlyRate ?? undefined,
+    dailyRate: profile.dailyRate ?? undefined,
+    isVerified: profile.isVerified,
+    averageRating: profile.averageRating,
+    totalReviews: profile.totalReviews,
+    completedJobs: profile.completedJobs,
+    profileImage: individualProfile?.profileImage ?? organizationProfile?.logo ?? user?.profileImage,
+    portfolioImages: this.parseJsonField<string[]>(profile.portfolioImages, []),
+  };
+}
+
+// In profile-service/src/modules/user/user.service.ts
+
+async getAllUsers(): Promise<BaseResponseDto<UserProfileResponseDto[]>> {
+  this.logger.log('Fetching all users');
+  
+  try {
+    const users = await this.prisma.user.findMany({
+      include: {
+        account: {
+          include: {
+            individualProfile: true,
+            jobSeekerProfile: true,
+            skilledProfessionalProfile: true,
+            housingSeekerProfile: true,
+            propertyOwnerProfile: true,
+            supportBeneficiaryProfile: true,
+            intermediaryAgentProfile: true,
+            users: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    
+    const mappedUsers = users.map(user => 
+      this.mapToUserProfileResponse(user as unknown as UserWithAccount)
+    );
+    
+    return BaseResponseDto.ok(
+      mappedUsers,
+      `Retrieved ${mappedUsers.length} users`,
+      'OK'
+    );
+  } catch (error) {
+    this.logger.error(`Failed to fetch all users: ${error.message}`);
+    return BaseResponseDto.fail(error.message, 'INTERNAL_ERROR');
   }
 }
 }

@@ -1,6 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use strict";
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
+import { ClientKafka } from '@nestjs/microservices';
+import { randomUUID } from 'crypto';
 import {
   BaseResponseDto,
   CategoryIdParamDto,
@@ -20,6 +23,8 @@ import {
   ServiceOffering, 
   SupportProgram 
 } from '../../../generated/prisma/client';
+import { CategoryEvents, CategoryEvent } from '@pivota-api/constants';
+import { QueueService } from '@pivota-api/shared-redis';
 
 type FullCategory = Category & {
   subcategories: Category[];
@@ -42,14 +47,135 @@ export class CategoriesService {
     supportPrograms: true,
   };
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject('CATEGORIES_CLIENT') private readonly kafkaClient: ClientKafka,
+    private queue: QueueService,
+  ) {}
+
+  /**
+   * SINGLE SOURCE OF TRUTH: Emit category event to Kafka for Profile Service to consume
+   * This method handles ALL Kafka emissions for categories
+   */
+  private async emitCategoryEvent(eventType: string, category: any): Promise<void> {
+    const event: CategoryEvent = {
+      eventId: randomUUID(),
+      timestamp: new Date().toISOString(),
+      source: 'listings-service',
+      data: {
+        id: category.id,
+        name: category.name,
+        slug: category.slug,
+        vertical: category.vertical,
+        type: category.type,
+        description: category.description ?? undefined,
+        parentId: category.parentId ?? undefined,
+        hasSubcategories: category.hasSubcategories,
+        hasParent: category.hasParent,
+        version: (category.version || 0) + 1,
+        isActive: eventType !== CategoryEvents.DELETED,
+      },
+    };
+    
+    this.logger.log(`📤 Emitting ${eventType} event for category ${category.id}: ${category.name}`);
+    
+    try {
+      await this.kafkaClient.emit(eventType, { key: category.id, value: JSON.stringify(event) });
+      this.logger.debug(`✅ Successfully emitted ${eventType} for category ${category.id}`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to emit ${eventType} for category ${category.id}: ${error.message}`);
+      // Don't throw - we don't want to fail the operation if event emission fails
+    }
+  }
+
+  /**
+   * Queue a bulk sync job for async processing
+   */
+  private async queueBulkSync(syncId: string, categoryIds?: string[]): Promise<void> {
+    await this.queue.addJob(
+      'categories-queue',
+      'bulk-sync-categories',
+      {
+        syncId,
+        categoryIds,
+      },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      }
+    );
+    
+    this.logger.log(`✅ Bulk sync queued with ID: ${syncId}`);
+  }
+
+  /**
+   * Process bulk sync (called by worker)
+   * Reuses emitCategoryEvent for each category
+   */
+  async processBulkSync(syncId: string, categoryIds?: string[]): Promise<{ syncedCount: number; failedCount: number }> {
+    this.logger.log(`Processing bulk sync: ${syncId}`);
+    
+    try {
+      // Fetch categories to sync
+      const where: any = { type: 'COMPLIMENTARY' };
+      if (categoryIds?.length) {
+        where.id = { in: categoryIds };
+      }
+      
+      const categories = await this.prisma.category.findMany({
+        where,
+        orderBy: { createdAt: 'asc' }
+      });
+      
+      this.logger.log(`Found ${categories.length} categories to sync for ${syncId}`);
+      
+      let syncedCount = 0;
+      let failedCount = 0;
+      
+      // Process in batches to avoid overwhelming Kafka
+      const batchSize = 50;
+      for (let i = 0; i < categories.length; i += batchSize) {
+        const batch = categories.slice(i, i + batchSize);
+        
+        await Promise.all(batch.map(async (category) => {
+          try {
+            // REUSE the existing emitCategoryEvent method
+            await this.emitCategoryEvent(CategoryEvents.CREATED, category);
+            syncedCount++;
+            
+            if (syncedCount % 50 === 0) {
+              this.logger.log(`Progress ${syncId}: ${syncedCount}/${categories.length} categories synced`);
+            }
+          } catch (error) {
+            failedCount++;
+            this.logger.error(`Failed to sync category ${category.id}: ${error.message}`);
+          }
+        }));
+        
+        // Small delay between batches to prevent Kafka overload
+        if (i + batchSize < categories.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      this.logger.log(`✅ Bulk sync ${syncId} completed: ${syncedCount} synced, ${failedCount} failed`);
+      
+      return { syncedCount, failedCount };
+      
+    } catch (error) {
+      this.logger.error(`Bulk sync ${syncId} failed: ${error.message}`);
+      throw error;
+    }
+  }
 
   /** -------------------------------
    * Recursive mapper for category responses
    * ------------------------------- */
   private mapCategory(
     cat: FullCategory, 
-    includeSubcategories = false  // Default to false for performance
+    includeSubcategories = false
   ): CategoryResponseDto {
     const jobPostsCount = (cat.jobPosts?.length ?? 0) + (cat.subCategoryPosts?.length ?? 0);
     const servicesCount = cat.serviceOfferings?.length ?? 0;
@@ -70,10 +196,9 @@ export class CategoriesService {
       subcategoriesCount,
       hasSubcategories: subcategoriesCount > 0,
       hasParent: !!cat.parentId,
-      // Only include subcategories if explicitly requested
       subcategories: includeSubcategories 
         ? (cat.subcategories ?? []).map((child) =>
-            this.mapCategory(child as FullCategory, false) // Don't nest further to avoid deep recursion
+            this.mapCategory(child as FullCategory, false)
           )
         : [],
       createdAt: cat.createdAt.toISOString(),
@@ -107,7 +232,6 @@ export class CategoriesService {
 
       const slug = dto.slug || dto.name.toLowerCase().replace(/ /g, '-');
 
-      // Prevent duplicates within the SAME vertical using slug uniqueness
       const existing = await this.prisma.category.findUnique({
         where: { 
           vertical_slug: { vertical: dto.vertical, slug } 
@@ -134,6 +258,7 @@ export class CategoriesService {
           parentId: dto.parentId || null,
           hasParent,
           hasSubcategories: false,
+          version: 1,
         },
         include: this.standardInclude,
       });
@@ -144,6 +269,8 @@ export class CategoriesService {
           data: { hasSubcategories: true },
         });
       }
+
+      await this.emitCategoryEvent(CategoryEvents.CREATED, created);
 
       return {
         success: true,
@@ -166,7 +293,7 @@ export class CategoriesService {
   }
 
   /** -------------------------------
-   * GET CATEGORY BY SLUG (Critical for Validation)
+   * GET CATEGORY BY SLUG
    * ------------------------------- */
   async getCategoryBySlug(dto: GetCategoryBySlugParamsDto): Promise<BaseResponseDto<CategoryResponseDto>> {
     try {
@@ -189,7 +316,7 @@ export class CategoriesService {
         success: true,
         message: 'Category fetched successfully',
         code: 'FETCHED',
-        data: this.mapCategory(cat as FullCategory, true), // Include subcategories for single category view
+        data: this.mapCategory(cat as FullCategory, true),
         error: null,
       };
     } catch (error) {
@@ -204,7 +331,7 @@ export class CategoriesService {
   }
 
   /** -------------------------------
-   * GET DISCOVERY METADATA (Lightweight list)
+   * GET DISCOVERY METADATA
    * ------------------------------- */
   async getDiscoveryMetadata(dto: DiscoveryParamsDto): Promise<BaseResponseDto<DiscoveryCategoryResponseDto[]>> {
     try {
@@ -267,7 +394,6 @@ export class CategoriesService {
         };
       }
 
-      // Log what's being updated
       this.logger.log(`Updating category: ${existing.name} (${existing.type})`);
 
       const updated = await this.prisma.category.update({
@@ -280,6 +406,7 @@ export class CategoriesService {
           slug: dto.name && !dto.slug ? dto.name.toLowerCase().replace(/ /g, '-') : dto.slug,
           parentId: dto.parentId,
           hasParent: !!dto.parentId,
+          version: (existing.version || 0) + 1,
         },
         include: this.standardInclude,
       });
@@ -290,6 +417,8 @@ export class CategoriesService {
           data: { hasSubcategories: true },
         });
       }
+
+      await this.emitCategoryEvent(CategoryEvents.UPDATED, updated);
 
       return {
         success: true,
@@ -315,41 +444,30 @@ export class CategoriesService {
    * ------------------------------- */
   async getCategoriesWithStats(dto: GetCategoriesRequestDto): Promise<BaseResponseDto<CategoryResponseDto[]>> {
     try {
-      // Build the where clause dynamically
       const where: any = {};
       
-      // Filter by vertical (HOUSING, JOBS, SOCIAL_SUPPORT)
       if (dto.vertical) {
         where.vertical = dto.vertical;
       }
       
-      // Filter by type (MAIN, COMPLIMENTARY)
       if (dto.type) {
         where.type = dto.type;
       }
       
-      // Handle parentId filtering properly
-      // Check for string 'null' (from query params), null, or undefined
       if (dto.parentId === 'null' || dto.parentId === null) {
-        // Explicitly fetch ONLY top-level categories
         where.parentId = null;
       } else if (dto.parentId) {
-        // Fetch subcategories of a specific parent
         where.parentId = dto.parentId;
       }
-      // If no parentId specified, don't add parentId filter - fetch ALL categories
       
-      // Filter by hasSubcategories
       if (dto.hasSubcategories !== undefined && dto.hasSubcategories !== null) {
         where.hasSubcategories = dto.hasSubcategories;
       }
       
-      // Filter by hasParent
       if (dto.hasParent !== undefined && dto.hasParent !== null) {
         where.hasParent = dto.hasParent;
       }
       
-      // Search by name (partial match, case-insensitive)
       if (dto.search && dto.search.trim()) {
         where.name = {
           contains: dto.search.trim(),
@@ -357,8 +475,6 @@ export class CategoriesService {
         };
       }
       
-      // Determine if we need to include nested subcategories
-      // Only use deep nesting if explicitly requested (performance optimization)
       const includeConfig = dto.includeNested 
         ? {
             ...this.standardInclude,
@@ -366,7 +482,7 @@ export class CategoriesService {
               include: {
                 subcategories: {
                   include: {
-                    subcategories: true // Limit to 3 levels to prevent infinite recursion
+                    subcategories: true
                   }
                 }
               }
@@ -374,7 +490,6 @@ export class CategoriesService {
           }
         : this.standardInclude;
       
-      // Execute query with ordering
       const categories = await this.prisma.category.findMany({
         where,
         include: includeConfig,
@@ -384,18 +499,8 @@ export class CategoriesService {
         ]
       });
 
-      // Log the query results for debugging
-      this.logger.debug(`Fetched ${categories.length} categories - Filters: ${JSON.stringify({
-        vertical: dto.vertical || 'ALL',
-        type: dto.type || 'ALL',
-        parentId: dto.parentId || 'ALL (including children)',
-        hasSubcategories: dto.hasSubcategories ?? 'NOT_SET',
-        hasParent: dto.hasParent ?? 'NOT_SET',
-        search: dto.search || 'NONE',
-        includeNested: dto.includeNested || false
-      })}`);
+      this.logger.debug(`Fetched ${categories.length} categories`);
 
-      // Map and return results - pass includeNested flag to control subcategory inclusion
       return {
         success: true,
         message: 'Categories fetched successfully',
@@ -443,7 +548,7 @@ export class CategoriesService {
         success: true,
         message: 'Category fetched successfully',
         code: 'FETCHED',
-        data: this.mapCategory(cat as FullCategory, true), // Include subcategories for single category view
+        data: this.mapCategory(cat as FullCategory, true),
         error: null,
       };
     } catch (error) {
@@ -505,6 +610,8 @@ export class CategoriesService {
 
       await this.prisma.category.delete({ where: { id: dto.id } });
 
+      await this.emitCategoryEvent(CategoryEvents.DELETED, { id: dto.id, name: category.name });
+
       return {
         success: true,
         message: 'Category deleted successfully',
@@ -551,7 +658,7 @@ export class CategoriesService {
         success: true,
         message: 'Category fetched successfully',
         code: 'FETCHED',
-        data: this.mapCategory(cat as FullCategory, true), // Include subcategories for single category view
+        data: this.mapCategory(cat as FullCategory, true),
         error: null,
       };
     } catch (error) {
@@ -562,6 +669,38 @@ export class CategoriesService {
         data: null,
         error: { message: (error as Error).message, details: null },
       };
+    }
+  }
+
+  /** -------------------------------
+   * BULK SYNC CATEGORIES (Public API)
+   * ------------------------------- */
+  async bulkSyncCategories(): Promise<BaseResponseDto<{ syncedCount: number }>> {
+    const syncId = randomUUID();
+    this.logger.log(`Starting bulk sync: ${syncId}`);
+    
+    try {
+      // Count categories first for the response
+      const count = await this.prisma.category.count({
+        where: { type: 'COMPLIMENTARY' }
+      });
+      
+      // Queue the bulk sync job for async processing
+      await this.queueBulkSync(syncId);
+      
+      this.logger.log(`✅ Bulk sync queued: ${syncId} with ${count} categories`);
+      
+      return BaseResponseDto.ok(
+        { syncedCount: count },
+        `Bulk sync queued successfully. Processing ${count} categories asynchronously. Sync ID: ${syncId}`,
+        'ACCEPTED'
+      );
+    } catch (error) {
+      this.logger.error(`Failed to queue bulk sync: ${error.message}`);
+      return BaseResponseDto.fail(
+        `Failed to queue bulk sync: ${error.message}`,
+        'BULK_SYNC_FAILED'
+      );
     }
   }
 }

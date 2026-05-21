@@ -12,6 +12,7 @@ import {
   Patch,
   Post,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { UserService } from '../services/user.service';
 import {
@@ -46,6 +47,9 @@ import {
   UpdateSupportBeneficiaryGrpcRequestDto,
   UpdateIntermediaryAgentGrpcRequestDto,
   AccountResponseDto,
+  SkilledProfessionalPublicProfileDto,
+  DiscoverSkilledProfessionalsDto,
+  SkilledProfessionalDiscoveryResponseDto,
 } from '@pivota-api/dtos';
 import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
 import { 
@@ -57,6 +61,7 @@ import {
   ApiParam,
   getSchemaPath,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { JwtRequest } from '@pivota-api/interfaces';
 
@@ -67,6 +72,7 @@ import { SubscriptionGuard } from '../../../guards/subscription.guard';
 import { SetModule } from '../../../decorators/set-module.decorator';
 import { JobType, ProfileType } from '@pivota-api/constants';
 import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
+import { Public } from '../../../decorators/public.decorator';
 
 @ApiTags('User Profile')
 @ApiBearerAuth() 
@@ -108,11 +114,42 @@ export class UserController {
   @ApiTags('Profile - My Profile')
   @ApiOperation({ 
     summary: 'Get own profile',
-    description: 'Retrieves the authenticated user\'s complete profile information.'
+    description: 'Retrieves the authenticated user\'s complete profile information including all associated profiles (Job Seeker, Skilled Professional, etc.).'
   })
   @ApiResponse({ 
     status: 200, 
-    description: 'Profile aggregate retrieved successfully.' 
+    description: 'Profile aggregate retrieved successfully.',
+    schema: {
+      example: {
+        success: true,
+        message: 'User retrieved',
+        code: 'OK',
+        data: {
+          account: { uuid: '...', accountCode: '...', type: 'INDIVIDUAL' },
+          user: { uuid: '...', firstName: 'John', lastName: 'Doe', email: 'john@example.com' },
+          skilledProfessionalProfile: {
+            id: 'sp_123',
+            uuid: 'sp-uuid-123',
+            title: 'Master Electrician',
+            primaryCategory: {
+              id: 'cat_123',
+              name: 'Electricians',
+              slug: 'electricians',
+              vertical: 'HOUSING',
+              yearsExperience: 8
+            },
+            additionalCategories: [
+              { id: 'cat_456', name: 'Plumbers', slug: 'plumbers', vertical: 'HOUSING' }
+            ],
+            specialties: ['Wiring', 'Solar Installation'],
+            serviceAreas: ['Nairobi', 'Kiambu'],
+            hourlyRate: 800,
+            isVerified: true,
+            averageRating: 4.8
+          }
+        }
+      }
+    }
   })
   @ApiResponse({ 
     status: 401, 
@@ -132,7 +169,7 @@ export class UserController {
   @ApiTags('Profile - My Profile')
   @ApiOperation({ 
     summary: 'Update own profile metadata',
-    description: 'Updates the authenticated user\'s profile information.'
+    description: 'Updates the authenticated user\'s basic profile information (name, bio, profile image, etc.).'
   })
   @ApiBody({ type: UpdateOwnProfileRequestDto })
   @ApiResponse({ 
@@ -166,7 +203,10 @@ export class UserController {
   @Post('profiles/job-seeker')
   @Version('1')
   @ApiTags('Profile - Individual')
-  @ApiOperation({ summary: 'Create job seeker profile' })
+  @ApiOperation({ 
+    summary: 'Create job seeker profile',
+    description: 'Creates a job seeker profile for finding employment opportunities.'
+  })
   @ApiBody({ type: JobSeekerProfileDataDto })
   @ApiResponse({
     status: 201,
@@ -198,17 +238,87 @@ export class UserController {
   @Post('profiles/skilled-professional')
   @Version('1')
   @ApiTags('Profile - Individual')
-  @ApiOperation({ summary: 'Create skilled professional profile' })
+  @ApiOperation({ 
+    summary: 'Create skilled professional profile',
+    description: `
+      Creates a skilled professional profile for offering services. 
+      
+      **Category System:**
+      - Categories are managed in the Listings Service and synced via Kafka
+      - Use \`GET /categories-module/categories/discovery?type=COMPLIMENTARY\` to get available categories
+      - Categories are organized by vertical: HOUSING, JOBS, SOCIAL_SUPPORT
+      
+      **Category Fields:**
+      - \`primaryCategoryId\`: Main service category (required for discovery)
+      - \`yearsExperienceInCategory\`: Years of experience specifically for the primary category
+      - \`additionalCategoryIds\`: Other service categories the professional offers (optional)
+      
+      **Examples:**
+      - Electrician: primaryCategoryId = "electricians" category ID
+      - Plumber: primaryCategoryId = "plumbers" category ID
+      - Handyman: primaryCategoryId = "handyman-services" category ID
+      
+      **Verification Tiers:**
+      - Tier 0: Basic ID verified only
+      - Tier 1: Trusted (ID + reference letter)
+      - Tier 2: Verified (ID + formal certificate)
+      - Tier 3: Professional (formal license)
+      - Tier 4: Enterprise (business registration)
+    `
+  })
   @ApiBody({ type: SkilledProfessionalProfileDataDto })
   @ApiResponse({
     status: 201,
     description: 'Skilled professional profile created successfully',
     schema: {
-      allOf: [
-        { $ref: getSchemaPath(BaseResponseDto) },
-        { properties: { data: { $ref: getSchemaPath(SkilledProfessionalProfileResponseDto) } } }
-      ],
-    },
+      example: {
+        success: true,
+        message: 'Skilled professional profile created successfully',
+        code: 'CREATED',
+        data: {
+          id: 'sp_123',
+          uuid: 'sp-uuid-123',
+          title: 'Master Electrician',
+          primaryCategory: {
+            id: 'cmnboid7w006sarihf05x9txr',
+            name: 'Electricians',
+            slug: 'electricians',
+            vertical: 'HOUSING',
+            yearsExperience: 8
+          },
+          additionalCategories: [
+            {
+              id: 'cmnboiddn006tarihsyral717',
+              name: 'Plumbers',
+              slug: 'plumbers',
+              vertical: 'HOUSING'
+            }
+          ],
+          specialties: ['Wiring', 'Solar Installation'],
+          serviceAreas: ['Nairobi', 'Kiambu'],
+          yearsExperience: 8,
+          licenseNumber: 'EBK/1234/2020',
+          hourlyRate: 800,
+          dailyRate: 5000,
+          isVerified: false,
+          portfolioImages: ['https://cdn.pivota.com/portfolio/image1.jpg'],
+          certifications: ['https://cdn.pivota.com/certs/license.pdf'],
+          completion: { percentage: 65, missingFields: ['insuranceInfo'], isComplete: false }
+        }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Bad request - Invalid category ID or missing required fields' 
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized' 
+  })
+  @ApiResponse({ 
+    status: 409, 
+    description: 'Conflict - Profile already exists for this account' 
   })
   async createSkilledProfessionalProfile(
     @Body() data: SkilledProfessionalProfileDataDto,
@@ -230,7 +340,10 @@ export class UserController {
   @Post('profiles/intermediary-agent')
   @Version('1')
   @ApiTags('Profile - Individual')
-  @ApiOperation({ summary: 'Create intermediary agent profile' })
+  @ApiOperation({ 
+    summary: 'Create intermediary agent profile',
+    description: 'Creates an agent profile for representing clients in transactions (real estate, recruitment, etc.).'
+  })
   @ApiBody({ type: IntermediaryAgentProfileDataDto })
   @ApiResponse({
     status: 201,
@@ -262,7 +375,10 @@ export class UserController {
   @Post('profiles/housing-seeker')
   @Version('1')
   @ApiTags('Profile - Individual')
-  @ApiOperation({ summary: 'Create housing seeker profile' })
+  @ApiOperation({ 
+    summary: 'Create housing seeker profile',
+    description: 'Creates a housing seeker profile for finding rental or purchase properties.'
+  })
   @ApiBody({ type: HousingSeekerProfileDataDto })
   @ApiResponse({
     status: 201,
@@ -294,7 +410,10 @@ export class UserController {
   @Post('profiles/property-owner')
   @Version('1')
   @ApiTags('Profile - Individual')
-  @ApiOperation({ summary: 'Create property owner profile' })
+  @ApiOperation({ 
+    summary: 'Create property owner profile',
+    description: 'Creates a property owner profile for listing properties for rent or sale.'
+  })
   @ApiBody({ type: PropertyOwnerProfileDataDto })
   @ApiResponse({
     status: 201,
@@ -326,7 +445,10 @@ export class UserController {
   @Post('profiles/support-beneficiary')
   @Version('1')
   @ApiTags('Profile - Individual')
-  @ApiOperation({ summary: 'Create support beneficiary profile' })
+  @ApiOperation({ 
+    summary: 'Create support beneficiary profile',
+    description: 'Creates a support beneficiary profile for receiving social support services.'
+  })
   @ApiBody({ type: SupportBeneficiaryProfileDataDto })
   @ApiResponse({
     status: 201,
@@ -362,17 +484,74 @@ export class UserController {
   @Patch('profiles/skilled-professional')
   @Version('1')
   @ApiTags('Profile - Individual')
-  @ApiOperation({ summary: 'Update skilled professional profile' })
+  @ApiOperation({ 
+    summary: 'Update skilled professional profile',
+    description: `
+      Updates an existing skilled professional profile.
+      
+      **Update Rules:**
+      - All fields are optional - only send fields you want to update
+      - Categories can be updated by sending new category IDs
+      - Previous categories are replaced with new ones (not merged)
+      - Portfolio images and certifications are managed via separate media endpoints
+      
+      **Category Update Example:**
+      \`\`\`json
+      {
+        "primaryCategoryId": "new-category-id",
+        "additionalCategoryIds": ["cat1", "cat2"],
+        "title": "Updated Title",
+        "hourlyRate": 1000
+      }
+      \`\`\`
+      
+      **Note:** Portfolio images and certifications should be uploaded via:
+      - \`POST /profile-media/portfolio/skilled-professional\`
+      - \`POST /profile-media/certifications\`
+    `
+  })
   @ApiBody({ type: SkilledProfessionalProfileDataDto })
   @ApiResponse({
     status: 200,
     description: 'Skilled professional profile updated successfully',
     schema: {
-      allOf: [
-        { $ref: getSchemaPath(BaseResponseDto) },
-        { properties: { data: { $ref: getSchemaPath(SkilledProfessionalProfileResponseDto) } } }
-      ],
-    },
+      example: {
+        success: true,
+        message: 'Skilled professional profile updated',
+        code: 'OK',
+        data: {
+          id: 'sp_123',
+          uuid: 'sp-uuid-123',
+          title: 'Senior Master Electrician',
+          primaryCategory: {
+            id: 'cmnboid7w006sarihf05x9txr',
+            name: 'Electricians',
+            slug: 'electricians',
+            vertical: 'HOUSING',
+            yearsExperience: 10
+          },
+          additionalCategories: [
+            { id: 'cmnboiddn006tarihsyral717', name: 'Plumbers', slug: 'plumbers', vertical: 'HOUSING' },
+            { id: 'cmnboiknh0084arihk7i2lcwt', name: 'Oven & Stove Repair', slug: 'oven-stove-repair', vertical: 'HOUSING' }
+          ],
+          specialties: ['Wiring', 'Solar Installation', 'Security Systems'],
+          hourlyRate: 1000,
+          isVerified: true
+        }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Bad request - Invalid category ID' 
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized' 
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Profile not found' 
   })
   async updateSkilledProfessionalProfile(
     @Body() data: SkilledProfessionalProfileDataDto,
@@ -551,16 +730,35 @@ export class UserController {
   @Delete('profiles/:profileType')
   @Version('1')
   @ApiTags('Profile - Individual')
-  @ApiOperation({ summary: 'Remove a profile from the user account' })
+  @ApiOperation({ 
+    summary: 'Remove a profile from the user account',
+    description: 'Permanently removes a specific profile type (e.g., SKILLED_PROFESSIONAL, JOB_SEEKER) from the user\'s account.'
+  })
   @ApiParam({ 
     name: 'profileType', 
     description: 'Type of profile to remove',
-    example: 'JOB_SEEKER',
+    example: 'SKILLED_PROFESSIONAL',
     enum: ['JOB_SEEKER', 'SKILLED_PROFESSIONAL', 'HOUSING_SEEKER', 'PROPERTY_OWNER', 'SUPPORT_BENEFICIARY', 'INTERMEDIARY_AGENT']
   })
   @ApiResponse({
     status: 200,
-    description: 'Profile removed successfully'
+    description: 'Profile removed successfully',
+    schema: {
+      example: {
+        success: true,
+        message: 'Profile removed successfully',
+        code: 'OK',
+        data: null
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized' 
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Profile not found' 
   })
   async removeProfile(
     @Param('profileType') profileType: ProfileType,
@@ -678,6 +876,139 @@ export class UserController {
     };
 
     const response = await this.userService.updateJobSeekerProfile(grpcPayload);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  // ===========================================================
+  // SKILLED PROFESSIONAL - GET MY PROFILE (Authenticated User)
+  // MUST BE BEFORE WILDCARD ROUTES
+  // ===========================================================
+
+  @Get('profiles/skilled-professional/me')
+  @Version('1')
+  @ApiTags('Profile - Skilled Professional')
+  @ApiOperation({ 
+    summary: 'Get my skilled professional profile',
+    description: 'Retrieves the authenticated user\'s own skilled professional profile.'
+  })
+  @ApiResponse({ status: 200, description: 'Profile retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Profile not found' })
+  async getMySkilledProfessionalProfile(
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+    const accountUuid = req.user.accountId;
+    
+    if (!accountUuid) {
+      const response = BaseResponseDto.fail('No account associated with this user', 'BAD_REQUEST');
+      throw response;
+    }
+    
+    this.logger.log(`Fetching my skilled professional profile for account: ${accountUuid}`);
+    const response = await this.userService.getSkilledProfessionalByAccount(accountUuid);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  // ===========================================================
+  // SKILLED PROFESSIONAL - GET BY ACCOUNT (Admin/Owner)
+  // MUST BE BEFORE WILDCARD ROUTES
+  // ===========================================================
+
+  @Get('profiles/skilled-professional/account')
+  @Version('1')
+  @ApiTags('Profile - Skilled Professional')
+  @ApiOperation({ 
+    summary: 'Get skilled professional by account UUID',
+    description: 'Retrieves a skilled professional profile by account UUID. If no accountUuid provided, returns the authenticated user\'s profile.'
+  })
+  @ApiQuery({ 
+    name: 'accountUuid', 
+    required: false,
+    description: 'UUID of the account (optional - defaults to authenticated user)',
+    example: '123e4567-e89b-12d3-a456-426614174000'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Professional retrieved successfully'
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Access denied' })
+  @ApiResponse({ status: 404, description: 'Professional not found' })
+  async getSkilledProfessionalByAccount(
+    @Query('accountUuid') accountUuid: string,
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+    // If no accountUuid provided, use the authenticated user's account
+    const targetAccountUuid = accountUuid || req.user.accountId;
+    
+    // Permission check: allow if own account or admin
+    const isOwnAccount = targetAccountUuid === req.user.accountId;
+    const isAdmin = req.user.role === 'PlatformSystemAdmin';
+    
+    if (!isOwnAccount && !isAdmin) {
+      const response = BaseResponseDto.fail('Access denied', 'FORBIDDEN');
+      throw response;
+    }
+    
+    this.logger.log(`Fetching skilled professional for account: ${targetAccountUuid}`);
+    const response = await this.userService.getSkilledProfessionalByAccount(targetAccountUuid);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  // ===========================================================
+  // SKILLED PROFESSIONAL - DISCOVERY (Public Search)
+  // ===========================================================
+
+  @Get('profiles/skilled-professional/discovery')
+  @Public()
+  @Version('1')
+  @ApiTags('Profile - Skilled Professional')
+  @ApiOperation({ 
+    summary: 'Discover skilled professionals',
+    description: 'Public endpoint to search and discover skilled professionals with filters.'
+  })
+  @ApiQuery({ name: 'categoryId', required: false, description: 'Filter by category ID' })
+  @ApiQuery({ name: 'city', required: false, description: 'Filter by service area/city' })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number, description: 'Minimum hourly rate' })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number, description: 'Maximum hourly rate' })
+  @ApiQuery({ name: 'minRating', required: false, type: Number, description: 'Minimum rating (1-5)' })
+  @ApiQuery({ name: 'isVerified', required: false, type: Boolean, description: 'Filter by verification status' })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['rating', 'price_asc', 'price_desc', 'experience', 'recent'], description: 'Sort order' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page' })
+  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset' })
+  @ApiResponse({ status: 200, description: 'Professionals retrieved successfully' })
+  async discoverSkilledProfessionals(
+    @Query() query: DiscoverSkilledProfessionalsDto,
+  ): Promise<BaseResponseDto<SkilledProfessionalDiscoveryResponseDto>> {
+    this.logger.log(`Discovering skilled professionals with filters: ${JSON.stringify(query)}`);
+    const response = await this.userService.discoverSkilledProfessionals(query);
+    if (!response.success) throw response;
+    return response;
+  }
+
+  // ===========================================================
+  // SKILLED PROFESSIONAL - GET BY UUID (Public)
+  // WILDCARD ROUTE - MUST BE LAST
+  // ===========================================================
+
+  @Get('profiles/skilled-professional/:uuid')
+  @Public()
+  @Version('1')
+  @ApiTags('Profile - Skilled Professional')
+  @ApiOperation({ 
+    summary: 'Get skilled professional by UUID',
+    description: 'Public endpoint to view a skilled professional\'s public profile by their profile UUID.'
+  })
+  @ApiParam({ name: 'uuid', description: 'UUID of the skilled professional profile' })
+  @ApiResponse({ status: 200, description: 'Professional retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Professional not found' })
+  async getSkilledProfessionalByUuid(
+    @Param('uuid') uuid: string,
+  ): Promise<BaseResponseDto<SkilledProfessionalPublicProfileDto>> {
+    this.logger.log(`Fetching skilled professional profile for UUID: ${uuid}`);
+    const response = await this.userService.getSkilledProfessionalByUuid(uuid);
     if (!response.success) throw response;
     return response;
   }

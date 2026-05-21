@@ -112,6 +112,7 @@ export class AuthService implements OnModuleInit {
     this.logger.log('AuthService initialized (gRPC)');
     this.rbacGrpcService = this.rbacClient.getService<RbacServiceGrpc>('RbacService');
     this.logger.log('RbacService initialized (gRPC)');
+    
   }
 
   private getProfileGrpcService(): ProfileServiceGrpc {
@@ -885,17 +886,14 @@ async organisationSignup(
   }
 
   try {
-    // 1. VERIFY OTP
-    const validOtp = await this.prisma.otp.findFirst({
-      where: {
-        email: dto.email,
-        code: dto.code,
-        purpose: 'ORGANIZATION_SIGNUP',
-        expiresAt: { gt: new Date() },
-      },
+    // 1. VERIFY OTP (Redis only - no database)
+    const otpVerification = await this.verifyOtp({
+      email: dto.email,
+      code: dto.code,
+      purpose: 'ORGANIZATION_EMAIL_VERIFICATION'  // Use the correct purpose from your config
     });
 
-    if (!validOtp) {
+    if (!otpVerification.success || !otpVerification.data?.verified) {
       this.logger.warn(`[AUTH] Org Signup blocked: Invalid OTP for ${dto.email}`);
       
       this.kafkaClient.emit('organization.signup.failed', {
@@ -996,13 +994,11 @@ async organisationSignup(
       },
     });
 
-    // 5. CLEANUP OTP
-    await this.prisma.otp.deleteMany({
-      where: { email: dto.email, purpose: 'ORGANIZATION_SIGNUP' }
-    });
+    // ✅ NO NEED to cleanup OTP - verifyOtp already deleted it from Redis
+    // ❌ REMOVE: await this.prisma.otp.deleteMany({...})
 
     /* ======================================================
-       6. PREMIUM BRANCH: PAYMENT HAND-OFF
+       5. PREMIUM BRANCH: PAYMENT HAND-OFF
     ====================================================== */
     if (isPremium && orgResponse.code === 'PAYMENT_REQUIRED') {
       try {
@@ -1071,7 +1067,7 @@ async organisationSignup(
     }
 
     /* ======================================================
-       7. NOTIFICATIONS & ANALYTICS
+       6. NOTIFICATIONS & ANALYTICS
     ====================================================== */
 
     // Send organization welcome email
@@ -1122,13 +1118,9 @@ async organisationSignup(
     const roleType = 'OrganizationAdmin';
     
     const payload: JwtPayload = {
-      // Standard claims
       sub: adminUserUuid,
       jti: tokenId,
       iat: now,
-  
-      
-      // Custom claims
       email: dto.email,
       accountId: accountData.uuid,
       role: roleType,
@@ -1165,7 +1157,7 @@ async organisationSignup(
 
     this.logger.log(`✅ Organization signup completed with auto-login for: ${dto.email}`);
 
-    // 8. Return Success Response with tokens
+    // 7. Return Success Response with tokens
     return BaseResponseDto.ok(
       {
         message: 'Organization created successfully',
@@ -1270,9 +1262,7 @@ async login(
 
     // 4. Queue OTP in background (non-blocking)
     // Don't await - let it run in background
-    this.queueOtpInBackground(loginDto.email, 'LOGIN_2FA').catch(err => {
-      this.logger.error(`Background OTP failed for ${loginDto.email}: ${err.message}`);
-    });
+    this.queueOtpInBackground(loginDto.email, 'LOGIN_2FA');
 
     const elapsed = Date.now() - startTime;
     this.logger.log(`Login stage 1 completed in ${elapsed}ms for: ${loginDto.email}`);
@@ -1311,21 +1301,10 @@ async login(
 private async queueOtpInBackground(email: string, purpose: string): Promise<void> {
   // Generate OTP
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 10 * 60000);
-  const now = new Date();
   
-  // ✅ Store in Redis FIRST (fast lookup for verification)
-  const redisKey = `otp:${email}:${purpose}`;
+  // ✅ Store in Redis ONLY (fast lookup for verification)
+  const redisKey = `otp:${purpose}:${email}`;  // Note: purpose first for consistency
   await this.redisService.setEx(redisKey, otpCode, 600); // 10 minutes TTL
-  
-  // ✅ Store in database (for persistence/fallback)
-  await this.prisma.otp.upsert({
-    where: {
-      email_purpose: { email, purpose }
-    },
-    update: { code: otpCode, expiresAt, createdAt: now },
-    create: { email, code: otpCode, purpose, expiresAt, createdAt: now },
-  });
   
   // Queue email sending (fire and forget - don't await)
   this.queue.addJob(
@@ -1344,7 +1323,7 @@ private async queueOtpInBackground(email: string, purpose: string): Promise<void
     }
   ).catch(err => this.logger.error(`Failed to queue OTP email: ${err.message}`));
   
-  this.logger.debug(`OTP ${otpCode} stored in Redis and DB for ${email}`);
+  this.logger.debug(`OTP ${otpCode} stored in Redis for ${email} (${purpose})`);
 }
 
 
@@ -1430,7 +1409,27 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
       await this.redisSession.cacheUserProfile(userUuid, profileData);
     }
 
-    // 5. Generate new tokens
+    // 5. Get role from cache or credential (FIXED)
+    let roleType = await this.redisSession.getCachedUserRole(userUuid);
+    
+    if (!roleType) {
+      // Try to get from credential
+      const credential = await this.prisma.credential.findUnique({
+        where: { userUuid },
+        select: { role: true }
+      });
+      roleType = credential?.role || 'Individual';
+      
+      // Cache it for next time
+      if (roleType) {
+        await this.redisSession.cacheUserRole(userUuid, roleType);
+        this.logger.debug(`Role cached for ${userUuid}: ${roleType}`);
+      }
+    } else {
+      this.logger.debug(`Role cache HIT for ${userUuid}: ${roleType}`);
+    }
+
+    // 6. Generate new tokens
     const newTokenId = `${userUuid}-${Date.now()}`;
     const now = Math.floor(Date.now() / 1000);
     
@@ -1440,21 +1439,22 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
       iat: now,
       email: profileData.user?.email,
       accountId: profileData.account?.uuid,
-      role: profileData.user?.role || 'Individual',
+      role: roleType,  // ✅ FIXED: Use role from cache/credential
       accountType: profileData.account?.type || 'INDIVIDUAL',
       organizationUuid: profileData.organization?.uuid || null,
     };
 
+    // ✅ FIXED: Access token 15 min, Refresh token 7 days
     const [newAccessToken, newRefreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, { expiresIn: '15m' }),
-      this.jwtService.signAsync(payload, { expiresIn: '7d' })
+      this.jwtService.signAsync(payload, { expiresIn: '15m' }),   // Access token
+      this.jwtService.signAsync(payload, { expiresIn: '7d' })     // Refresh token
     ]);
 
-    // 6. Hash new refresh token
+    // 7. Hash new refresh token
     const hashedNewToken = await bcrypt.hash(newRefreshToken, 10);
     const clientInfo = session?.clientInfo ? JSON.parse(session.clientInfo) : null;
 
-    // 7. Rotate token in Redis
+    // 8. Rotate token in Redis
     await this.redisSession.rotateToken(
       tokenId,
       newTokenId,
@@ -1463,7 +1463,7 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
       clientInfo
     );
 
-    // 8. Queue DB sync for eventual consistency
+    // 9. Queue DB sync for eventual consistency
     await this.queue.addJob(
       'db-sync',
       'session-rotation',
@@ -2123,12 +2123,11 @@ async requestOtp(
   const { email, purpose, phone } = dto;
   const startTime = Date.now();
 
-  // Get purpose-specific configuration
   const config = getRateLimitConfig(purpose);
   const validation = config.validation;
 
   try {
-    // 1. CHECK rate limit (Redis - fast)
+    // 1. CHECK rate limit (Redis only)
     const rateLimitResult = await this.queue.checkRateLimit(
       email, 
       `otp_${purpose}`, 
@@ -2138,130 +2137,86 @@ async requestOtp(
     
     if (!rateLimitResult.allowed) {
       const minutesLeft = Math.ceil(rateLimitResult.resetInSeconds / 60);
-      this.logger.warn(`[OTP] Rate limit exceeded for ${email} (${purpose})`);
       return BaseResponseDto.fail(
         config.errorMessage(minutesLeft, rateLimitResult.attempts),
         'TOO_MANY_REQUESTS'
       );
     }
     
-    // 2. Check user existence (optimized - parallel where possible)
-    let existingUser = null;
-    let existingPhone = null;
-    
-    if (validation && validation.userExists !== 'ignore') {
-      // Single query to check credential
-      existingUser = await this.prisma.credential.findUnique({
-        where: { email },
-        select: { id: true, phone: true, userUuid: true },
-      });
-      
-      // Also check profile service for existing user (for Google signups etc.)
-      if (!existingUser && validation.userExists === 'forbidden') {
-        try {
-          const profileGrpc = this.getProfileGrpcService();
-          const profileResponse = await firstValueFrom(
-            profileGrpc.getUserProfileByEmail({ email })
-          );
-          if (profileResponse?.success && profileResponse.data) {
-            existingUser = { id: 'profile-exists', phone: null, userUuid: profileResponse.data.user.uuid };
-            this.logger.debug(`[OTP] User exists in Profile service for ${email}`);
-          }
-        } catch (profileErr) {
-          this.logger.debug(`[OTP] Profile check failed for ${email}: ${profileErr.message}`);
-        }
+    // 2. CHECK EXISTENCE - ONLY for EMAIL_VERIFICATION (signup)
+    // For other purposes, skip DB entirely
+    if (purpose === 'EMAIL_VERIFICATION') {
+      // Single query for both email and phone
+      const whereCondition: any = { OR: [{ email }] };
+      if (phone) {
+        whereCondition.OR.push({ phone });
       }
-    }
-
-    // 3. Check phone uniqueness ONLY for EMAIL_VERIFICATION (signup) - parallel query
-    if (purpose === 'EMAIL_VERIFICATION' && phone) {
-      existingPhone = await this.prisma.credential.findUnique({
-        where: { phone },
-        select: { id: true },
+      
+      const existing = await this.prisma.credential.findFirst({
+        where: whereCondition,
+        select: { email: true, phone: true }
       });
       
-      if (existingPhone) {
-        this.logger.warn(`[OTP] Signup blocked: Phone ${phone} already registered`);
+      if (existing) {
+        const conflictField = existing.email === email ? 'email' : 'phone';
+        const message = conflictField === 'email' 
+          ? 'This email is already registered.'
+          : 'This phone number is already registered.';
+        
         return BaseResponseDto.fail(
-          'This phone number is already registered.',
+          message,
           'CONFLICT',
-          { code: 'PHONE_EXISTS' }
+          { code: `${conflictField.toUpperCase()}_EXISTS`, field: conflictField }
         );
       }
     }
-
-    this.logger.debug(`[OTP] Validation config for ${purpose}:`, validation);
     
-    // 4. Apply validation rules
-    if (validation?.userExists === 'required' && !existingUser) {
-      if (validation?.requireDelayOnError) {
-        await this.simulateDelay();
-      }
-      return BaseResponseDto.fail(
-        validation?.customMessage?.userNotFound || 'Account not found.',
-        'NOT_FOUND'
-      );
-    }
-
-    if (validation?.userExists === 'forbidden' && existingUser) {
-      this.logger.warn(`[OTP] Signup blocked: Email ${email} already registered`);
-      return BaseResponseDto.fail(
-        validation?.customMessage?.userExists || 'This email is already registered. Please login instead.',
-        'CONFLICT',
-        { code: 'EMAIL_EXISTS', userExists: true }
-      );
-    }
-
-    if (validation?.returnSuccessOnNonExistent && !existingUser) {
-      this.logger.log(`[OTP] Request for non-existent email: ${email} (${purpose})`);
-      return BaseResponseDto.ok(null, validation?.customMessage?.userNotFound || 'If an account exists, a code has been sent.');
-    }
-
-    // 5. Generate OTP
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 10 * 60000);
-
-    // 6. Store OTP in BOTH Database AND Redis (parallel)
-    const redisKey = `otp:${email}:${purpose}`;
+    // 3. Handle other validation rules (PASSWORD_RESET, LOGIN_2FA, etc.)
+    // These don't need DB queries because they're handled differently
     
-    await Promise.all([
-      // Store in Redis (fast, 2-5ms)
-      this.redisService.setEx(redisKey, otpCode, 600), // 10 minutes TTL
+    if (validation?.userExists === 'required') {
+      // For password reset, we want to be fast but secure
+      // Check exists but return generic message
+      const userExists = await this.prisma.credential.findUnique({
+        where: { email },
+        select: { id: true }
+      });
       
-      // Store in Database (for persistence)
-      this.prisma.otp.upsert({
-        where: {
-          email_purpose: { email, purpose }
-        },
-        update: {
-          code: otpCode,
-          expiresAt: expiresAt,
-          createdAt: now,
-        },
-        create: {
-          email,
-          code: otpCode,
-          purpose,
-          expiresAt,
-          createdAt: now,
-        },
-      })
-    ]);
-
-    // Verify it was stored
-    const verifyStored = await this.redisService.get(redisKey);
-    this.logger.debug(`✅ Verified Redis storage: ${verifyStored === otpCode ? 'SUCCESS' : 'FAILED'}`);
-
-    // 7. INCREMENT rate limit counter (Redis)
+      if (!userExists && !validation.returnSuccessOnNonExistent) {
+        if (validation.requireDelayOnError) {
+          await this.simulateDelay();
+        }
+        return BaseResponseDto.fail(
+          validation.customMessage?.userNotFound || 'Account not found.',
+          'NOT_FOUND'
+        );
+      }
+      
+      // For password reset, always return success (security)
+      if (!userExists && validation.returnSuccessOnNonExistent) {
+        return BaseResponseDto.ok(
+          null,
+          validation.customMessage?.userNotFound || 'If an account exists, a code has been sent.'
+        );
+      }
+    }
+    
+    // 4. GENERATE OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // 5. STORE IN REDIS ONLY (NO DATABASE)
+    const redisKey = `otp:${purpose}:${email}`;
+    await this.redisService.setEx(redisKey, otpCode, 600);
+    
+    // 6. INCREMENT rate limit
     await this.queue.incrementRateLimit(
       email, 
       `otp_${purpose}`, 
       config.maxAttempts,
       config.windowSeconds
     );
-
-    // 8. Queue email (fire and forget - don't await if possible)
+    
+    // 7. QUEUE delivery (fire and forget)
     this.queue.addJob(
       'email-queue',
       'send-otp',
@@ -2269,39 +2224,23 @@ async requestOtp(
         to: email,
         code: otpCode,
         purpose: purpose,
+        phone: phone,
       },
       {
         attempts: 3,
         backoff: { type: 'exponential', delay: 5000 },
         removeOnComplete: true,
-        removeOnFail: false,
       }
-    ).catch(err => this.logger.error(`Failed to queue OTP email: ${err.message}`));
-
-    // 9. Async cleanup (fire and forget - don't await)
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-    this.prisma.otpRequestLog.deleteMany({
-      where: {
-        email,
-        purpose,
-        createdAt: { lt: tenMinutesAgo }
-      },
-    }).catch(err => this.logger.debug(`Cleanup failed: ${err.message}`));
-
-    // 10. Create log entry (async, don't await)
-    this.prisma.otpRequestLog.create({
-      data: { email, purpose, createdAt: now },
-    }).catch(err => this.logger.debug(`Log failed: ${err.message}`));
-
+    ).catch(err => this.logger.error(`Failed to queue OTP: ${err.message}`));
+    
     const totalTime = Date.now() - startTime;
-    this.logger.log(`[OTP] Code sent to ${email} for ${purpose} in ${totalTime}ms`);
-
-    return BaseResponseDto.ok(null, config.successMessage || 'Verification code sent to your email');
-
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    this.logger.error(`Failed to generate OTP for ${email}: ${message}`);
-    return BaseResponseDto.fail('An error occurred while processing your request', 'INTERNAL_ERROR');
+    this.logger.log(`⚡ OTP requested in ${totalTime}ms for ${email} (${purpose})`);
+    
+    return BaseResponseDto.ok(null, config.successMessage || 'Verification code sent');
+    
+  } catch (error) {
+    this.logger.error(`OTP request failed: ${error.message}`);
+    return BaseResponseDto.fail('Service error', 'INTERNAL_ERROR');
   }
 }
 
@@ -2322,20 +2261,18 @@ async verifyOtp(
   const startTime = Date.now();
 
   try {
-    // 1. Check Redis first
-    const redisKey = `otp:${email}:${purpose}`;
+    // ✅ Redis ONLY - no database fallback
+    const redisKey = `otp:${purpose}:${email}`;  // Note: purpose first for better key organization
     this.logger.debug(`🔍 Looking for OTP in Redis with key: ${redisKey}`);
     
     const cachedOtp = await this.redisService.get(redisKey);
-    this.logger.debug(`📦 Redis returned: ${cachedOtp}, Expected: ${code}`);
     
     if (cachedOtp === code) {
-      // Valid OTP found in Redis
+      // Valid OTP found - delete immediately
       await this.redisService.delete(redisKey);
-      this.logger.debug(`🗑️ Deleted OTP from Redis`);
       
       const totalTime = Date.now() - startTime;
-      this.logger.log(`✅ OTP verified from Redis in ${totalTime}ms`);
+      this.logger.log(`✅ OTP verified in ${totalTime}ms for ${email}`);
       
       return BaseResponseDto.ok(
         { verified: true },
@@ -2344,33 +2281,12 @@ async verifyOtp(
       );
     }
     
-    // 2. Fallback to database
-    this.logger.debug(`Redis miss for ${email}, checking database...`);
-    const deleteResult = await this.prisma.otp.deleteMany({
-      where: {
-        email,
-        code,
-        purpose,
-        expiresAt: { gt: new Date() },
-      },
-    });
-
-    if (deleteResult.count === 0) {
-      this.logger.warn(`❌ No valid OTP found for ${email}`);
-      return BaseResponseDto.fail(
-        'Invalid or expired verification code.',
-        'UNAUTHORIZED',
-        { code: 'INVALID_OTP', verified: false }
-      );
-    }
-    
-    const totalTime = Date.now() - startTime;
-    this.logger.log(`✅ OTP verified from DB in ${totalTime}ms`);
-    
-    return BaseResponseDto.ok(
-      { verified: true },
-      'Verification successful',
-      'OK'
+    // Invalid or expired
+    this.logger.warn(`❌ Invalid/expired OTP for ${email} - Expected: ${cachedOtp}, Got: ${code}`);
+    return BaseResponseDto.fail(
+      'Invalid or expired verification code.',
+      'UNAUTHORIZED',
+      { code: 'INVALID_OTP', verified: false }
     );
 
   } catch (error: unknown) {
@@ -2622,64 +2538,44 @@ private async sendLoginNotificationAsync(
 async requestPasswordReset(dto: RequestOtpDto): Promise<BaseResponseDto<null>> {
   this.logger.log(`🔐 Password reset requested for: ${dto.email}`);
   
-  // Rate limit by IP and email to prevent abuse
   const rateLimitKey = `password_reset:${dto.email}`;
   const rateLimitResult = await this.queue.checkRateLimit(
     rateLimitKey,
     'password_reset',
-    3, // Max 3 attempts
-    3600 // Per hour
+    3,
+    3600
   );
   
   if (!rateLimitResult.allowed) {
-    this.logger.warn(`Password reset rate limit exceeded for: ${dto.email}`);
-    // Still return success message to prevent enumeration
     return BaseResponseDto.ok(null, 'If an account exists, a reset code has been sent.');
   }
   
-  // Try to get user from cache first (faster)
   let userExists = false;
-  let userUuid: string | undefined;
-  
   const cachedCredential = await this.redisSession.getCachedCredential(dto.email);
   
   if (cachedCredential) {
     userExists = true;
-    userUuid = cachedCredential.userUuid;
-    this.logger.debug(`Password reset - user found in cache: ${dto.email}`);
   } else {
-    // Cache miss - check database
     const credential = await this.prisma.credential.findUnique({ 
       where: { email: dto.email },
       select: { userUuid: true }
     });
     userExists = !!credential;
-    userUuid = credential?.userUuid;
-    
-    if (userExists) {
-      this.logger.debug(`Password reset - user found in DB: ${dto.email}`);
-    }
   }
   
-  // Security: Always return same message
+  // ✅ NO simulateDelay here - the config handles it
   if (!userExists) {
-    this.logger.debug(`Password reset requested for non-existent email: ${dto.email}`);
-    await this.simulateDelay(); // Prevent timing attacks
-    await this.queue.incrementRateLimit(rateLimitKey, 'password_reset', 3, 3600);
+    // Return same message without delay
     return BaseResponseDto.ok(null, 'If an account exists, a reset code has been sent.');
   }
-
-  // Track reset requests for monitoring
-  await this.redisService.increment(`reset_requests:${userUuid}`);
   
   // Generate and send OTP
-  this.logger.log(`🔐 Calling requestOtp for PASSWORD_RESET to: ${dto.email}`);
-  const result = await this.requestOtp({ email: dto.email, purpose: 'PASSWORD_RESET' });
+  const result = await this.requestOtp({ 
+    email: dto.email, 
+    purpose: 'PASSWORD_RESET' 
+  });
   
-  // Increment rate limit counter
   await this.queue.incrementRateLimit(rateLimitKey, 'password_reset', 3, 3600);
-  
-  this.logger.log(`🔐 requestOtp result: ${result.success ? 'SUCCESS' : 'FAILED'} - ${result.message}`);
   
   return result;
 }
@@ -2689,7 +2585,7 @@ async resetPassword(dto: ResetPasswordDto): Promise<BaseResponseDto<null>> {
   const { email, code, newPassword } = dto;
 
   try {
-    // 1. Verify OTP without deleting
+    // 1. Verify OTP (Redis only - this also deletes the OTP)
     const otpVerification = await this.verifyOtp({ 
       email, 
       code, 
@@ -2716,16 +2612,11 @@ async resetPassword(dto: ResetPasswordDto): Promise<BaseResponseDto<null>> {
         select: { userUuid: true }
       });
 
-      // 3. Reuse your existing revokeSessions logic
+      // 3. Revoke all sessions (Redis + DB)
       await this.revokeSessions(updatedCredential.userUuid);
-
-      // 4. DELETE OTP ONLY AFTER SUCCESSFUL PASSWORD RESET
-      await tx.otp.deleteMany({ 
-        where: { email, code, purpose: 'PASSWORD_RESET' } 
-      });
-
       return BaseResponseDto.ok(null, 'Password updated and all active sessions revoked.');
     });
+    
   } catch (error) {
     this.logger.error(`Critical error during password reset for ${email}:`, error);
     return BaseResponseDto.fail('Failed to complete password reset', 'INTERNAL');

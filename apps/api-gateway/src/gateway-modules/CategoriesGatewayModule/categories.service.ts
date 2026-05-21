@@ -36,7 +36,6 @@ interface CategoriesServiceGrpc {
     data: GetCategoriesRequestDto,
   ): Observable<BaseResponseDto<CategoryResponseDto[]>>;
 
-
   GetDiscoveryMetadata(
     data: DiscoveryParamsDto,
   ): Observable<BaseResponseDto<DiscoveryCategoryResponseDto[]>>;
@@ -52,6 +51,11 @@ interface CategoriesServiceGrpc {
   GetCategoryByName(
     data: GetCategoryByNameQueryDto,
   ): Observable<BaseResponseDto<CategoryResponseDto>>;
+
+  // Bulk sync method
+  BulkSyncCategories(
+    data: Record<string, never>, // Empty object
+  ): Observable<BaseResponseDto<null>>;
 }
 
 @Injectable()
@@ -97,16 +101,26 @@ export class CategoriesService {
   }
 
   // ===========================================================
+  // BULK SYNC
+  // ===========================================================
+  async bulkSyncCategories(): Promise<BaseResponseDto<{ syncedCount: number }>> {
+  this.logger.log('gRPC Request: BulkSyncCategories - Starting bulk sync to Profile Service');
+  const res = await firstValueFrom(this.grpcService.BulkSyncCategories({}));
+  return res?.success 
+    ? BaseResponseDto.ok(res.data, res.message, res.code) 
+    : BaseResponseDto.fail(res?.message, res?.code);
+}
+
+  // ===========================================================
   // FETCH METHODS (LISTS)
   // ===========================================================
   async getCategories(dto: GetCategoriesRequestDto): Promise<BaseResponseDto<CategoryResponseDto[]>> {
-  this.logger.debug(`gRPC Request: GetCategories - Filters: ${JSON.stringify(dto)}`);
-  // CHANGED: From GetCategoriesByVertical to GetCategories
-  const res = await firstValueFrom(this.grpcService.GetCategories(dto));
-  return res?.success 
-    ? BaseResponseDto.ok(res.data || [], res.message, res.code) 
-    : BaseResponseDto.fail(res?.message, res?.code);
-}
+    this.logger.debug(`gRPC Request: GetCategories - Filters: ${JSON.stringify(dto)}`);
+    const res = await firstValueFrom(this.grpcService.GetCategories(dto));
+    return res?.success 
+      ? BaseResponseDto.ok(res.data || [], res.message, res.code) 
+      : BaseResponseDto.fail(res?.message, res?.code);
+  }
 
   async getDiscoveryMetadata(dto: DiscoveryParamsDto): Promise<BaseResponseDto<DiscoveryCategoryResponseDto[]>> {
     this.logger.debug(`gRPC Request: GetDiscoveryMetadata - Vertical: ${dto.vertical}`);

@@ -1,5 +1,5 @@
 // libs/shared/redis/src/shared-redis.module.ts
-import { Module, Global, Logger, DynamicModule } from '@nestjs/common';
+import { Module, Global, Logger, DynamicModule, OnModuleInit } from '@nestjs/common';
 import Redis from 'ioredis';
 import { RedisService } from './redis.service';
 import { QueueService } from './queue.service';
@@ -7,9 +7,13 @@ import { RedisSessionService } from './redis-session.service';
 
 @Global()
 @Module({})
-export class SharedRedisModule {
+export class SharedRedisModule implements OnModuleInit {
   private static readonly logger = new Logger('SharedRedisModule');
   private static redisConnection: Redis | null = null;
+
+  async onModuleInit() {
+    SharedRedisModule.logger.log('SharedRedisModule initialized');
+  }
 
   static forRoot(): DynamicModule {
     const config = {

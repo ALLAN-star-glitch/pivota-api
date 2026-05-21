@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Injectable, Inject, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Inject, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Queue, Worker, Job, JobsOptions } from 'bullmq';
 import Redis from 'ioredis';
 
 @Injectable()
-export class QueueService implements OnModuleDestroy {
+export class QueueService implements OnModuleInit,  OnModuleDestroy {
   private readonly logger = new Logger(QueueService.name);
   private readonly connection: Redis;
   private queues: Map<string, Queue> = new Map();
@@ -15,6 +15,24 @@ export class QueueService implements OnModuleDestroy {
     this.connection = redisConnection;
   }
 
+  onModuleInit() {
+    this.logger.log('🚀 Pre-creating queues on startup...');
+    const startTime = Date.now();
+    
+    const queueNames = ['email-queue', 'analytics-queue', 'db-sync'];
+    
+    queueNames.forEach(queueName => {
+      try {
+        this.createQueue(queueName);
+        this.logger.log(`✅ Queue pre-created: ${queueName}`);
+      } catch (err: any) {
+        this.logger.error(`Failed to create queue ${queueName}: ${err.message}`);
+      }
+    });
+    
+    const elapsed = Date.now() - startTime;
+    this.logger.log(`✅ All queues pre-created successfully in ${elapsed}ms`);
+  }
   // ==================== QUEUE MANAGEMENT ====================
   
   /**

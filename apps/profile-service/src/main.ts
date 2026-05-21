@@ -60,6 +60,22 @@ async function bootstrap() {
     },
   });
 
+  // ---------------- Kafka Microservice - CATEGORY EVENTS (Consumer) ----------------
+  // NEW: For consuming category events from listings service
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.KAFKA,
+    options: {
+      client: {
+        clientId: 'profile-service-categories',
+        brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+      },
+      consumer: {
+        groupId: 'profile-service-categories-consumer',
+      },
+      subscribe: { fromBeginning: true }, // Set to true to get all events from start
+    },
+  });
+
   // ---------------- Kafka Microservice - ANALYTICS EVENTS (Producer Only) ----------------
   // Note: This is a producer-only client for emitting analytics events
   // No consumer group needed - configured in ProfileModule with producerOnlyMode: true
@@ -92,6 +108,7 @@ async function bootstrap() {
   Logger.log(`🚀 Profile service is running (Kafka + gRPC + RabbitMQ)`);
   Logger.log(`✅ Kafka General Consumer connected to ${process.env.KAFKA_BROKERS || 'localhost:9092'} (groupId: profile-service-consumer-v2)`);
   Logger.log(`✅ Kafka Storage Consumer connected to ${process.env.KAFKA_BROKERS || 'localhost:9092'} (groupId: profile-service-storage-consumer)`);
+  Logger.log(`✅ Kafka Categories Consumer connected to ${process.env.KAFKA_BROKERS || 'localhost:9092'} (groupId: profile-service-categories-consumer)`);
   Logger.log(`✅ Kafka Analytics Producer ready for emitting events`);
   Logger.log(`✅ gRPC listening on ${process.env.PROFILE_GRPC_URL || '0.0.0.0:50052'}`);
   Logger.log(`✅ RabbitMQ connected to ${process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672'}`);

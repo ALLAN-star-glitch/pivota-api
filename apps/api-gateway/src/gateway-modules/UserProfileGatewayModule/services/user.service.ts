@@ -34,6 +34,9 @@ import {
   PropertyOwnerProfileResponseDto,
   SupportBeneficiaryProfileResponseDto,
   IntermediaryAgentProfileResponseDto,
+  DiscoverSkilledProfessionalsDto,
+  SkilledProfessionalDiscoveryResponseDto,
+  SkilledProfessionalPublicProfileDto,
 } from '@pivota-api/dtos';
 import { firstValueFrom, Observable } from 'rxjs';
 import { StorageService } from '@pivota-api/shared-storage';
@@ -133,6 +136,18 @@ interface ProfileServiceGrpc {
   OnboardIndividualProvider(
     data: OnboardProviderGrpcRequestDto
   ): Observable<BaseResponseDto<ContractorProfileResponseDto>>;
+
+  GetSkilledProfessionalByAccount(
+    data: { accountUuid: string }
+  ): Observable<BaseResponseDto<SkilledProfessionalProfileResponseDto>>;
+  
+  GetSkilledProfessionalByUuid(
+    data: { uuid: string }
+  ): Observable<BaseResponseDto<SkilledProfessionalPublicProfileDto>>;
+  
+  DiscoverSkilledProfessionals(
+    data: DiscoverSkilledProfessionalsDto
+  ): Observable<BaseResponseDto<SkilledProfessionalDiscoveryResponseDto>>;
 }
 
 @Injectable()
@@ -594,4 +609,71 @@ export class UserService {
       return BaseResponseDto.fail('Profile service communication error', 'SERVICE_UNAVAILABLE');
     }
   }
+
+  async getSkilledProfessionalByUuid(
+  uuid: string
+    ): Promise<BaseResponseDto<SkilledProfessionalPublicProfileDto>> {
+      this.logger.log(`Fetching skilled professional by UUID: ${uuid}`);
+      
+      try {
+        const res = await firstValueFrom(
+          this.grpcService.GetSkilledProfessionalByUuid({ uuid })
+        );
+        
+        if (res && res.success) {
+          return BaseResponseDto.ok(res.data, res.message, res.code);
+        }
+        
+        return BaseResponseDto.fail(res.message || 'Professional not found', res.code || 'NOT_FOUND');
+      } catch (err) {
+        this.logger.error(`gRPC Error fetching skilled professional: ${err.message}`);
+        return BaseResponseDto.fail('Profile service communication error', 'SERVICE_UNAVAILABLE');
+      }
+    }
+
+    async getSkilledProfessionalByAccount(
+        accountUuid: string
+      ): Promise<BaseResponseDto<SkilledProfessionalProfileResponseDto>> {
+        this.logger.log(`Fetching skilled professional by account: ${accountUuid}`);
+        
+        try {
+          const res = await firstValueFrom(
+            this.grpcService.GetSkilledProfessionalByAccount({ accountUuid })
+          );
+          
+          if (res && res.success) {
+            return BaseResponseDto.ok(res.data, res.message, res.code);
+          }
+          
+          return BaseResponseDto.fail(res.message || 'Professional not found', res.code || 'NOT_FOUND');
+        } catch (err) {
+          this.logger.error(`gRPC Error fetching skilled professional: ${err.message}`);
+          return BaseResponseDto.fail('Profile service communication error', 'SERVICE_UNAVAILABLE');
+        }
+      }
+
+        async discoverSkilledProfessionals(
+          query: DiscoverSkilledProfessionalsDto
+        ): Promise<BaseResponseDto<SkilledProfessionalDiscoveryResponseDto>> {
+          this.logger.log(`Discovering skilled professionals with filters: ${JSON.stringify(query)}`);
+          
+          try {
+            const res = await firstValueFrom(
+              this.grpcService.DiscoverSkilledProfessionals(query)
+            );
+            
+            if (res && res.success) {
+              return BaseResponseDto.ok(res.data, res.message, res.code);
+            }
+            
+            return BaseResponseDto.fail(res.message || 'Discovery failed', res.code || 'DISCOVERY_FAILED');
+          } catch (err) {
+            this.logger.error(`gRPC Error discovering professionals: ${err.message}`);
+            return BaseResponseDto.fail('Profile service communication error', 'SERVICE_UNAVAILABLE');
+          }
+        }
+
+  
+
+  
 }

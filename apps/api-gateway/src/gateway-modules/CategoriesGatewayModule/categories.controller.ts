@@ -249,6 +249,90 @@ export class CategoriesController {
   }
 
   // ===========================================================
+  // 📁 CATEGORIES - BULK SYNC OPERATIONS
+  // ===========================================================
+
+  /**
+   * Bulk sync categories to Profile Service
+   * 
+   * Triggers a bulk sync of all COMPLIMENTARY categories to the Profile Service cache.
+   * This should be run once after initial deployment or when the cache needs to be rebuilt.
+   * 
+   * @returns Success confirmation with count of synced categories
+   */
+ @Post('categories/bulk-sync')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@Permissions(P.ROLE_CREATE) // Use existing permission or create a new one like P.CATEGORIES_SYNC
+@Version('1')
+@ApiTags('Categories - Admin')
+@ApiOperation({ 
+  summary: 'Bulk sync categories to Profile Service',
+  description: `
+    Triggers a bulk sync of all COMPLIMENTARY categories to the Profile Service cache.
+    
+    **Microservice:** Listings Service
+    **Authentication:** Required (JWT cookie)
+    **Permission Required:** \`${P.ROLE_CREATE}\`
+    **Accessible by:** Platform Admins (SuperAdmin, PlatformSystemAdmin)
+    
+    **When to use:**
+    • Initial deployment of Profile Service
+    • Cache corruption or data loss
+    • After schema changes requiring full resync
+    • Disaster recovery scenarios
+    
+    **What it does:**
+    • Fetches all COMPLIMENTARY categories from the database
+    • Emits Kafka events for each category
+    • Profile Service consumes events and caches them
+    
+    **Important Notes:**
+    • Should be run once after deployment
+    • Can be re-run safely (idempotent)
+    • May take time for large datasets
+    • Does not affect real-time sync of future changes
+    
+    **Performance:**
+    • Processes categories in batches
+    • Emits events asynchronously
+    • Profile Service updates cache incrementally
+  `
+})
+@ApiResponse({ 
+  status: 200, 
+  description: 'Bulk sync completed successfully',
+  schema: {
+    example: {
+      success: true,
+      message: 'Successfully synced 150 categories',
+      code: 'OK',
+      data: { syncedCount: 150 }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 400, 
+  description: 'Bad request - Invalid request' 
+})
+@ApiResponse({ 
+  status: 401, 
+  description: 'Unauthorized - Missing or invalid JWT token' 
+})
+@ApiResponse({ 
+  status: 403, 
+  description: `Forbidden - Requires ${P.ROLE_CREATE} permission` 
+})
+@ApiResponse({ 
+  status: 500, 
+  description: 'Internal server error during sync' 
+})
+async bulkSyncCategories(): Promise<BaseResponseDto<{ syncedCount: number }>> {
+  this.logger.log('REST bulkSyncCategories request - Starting bulk sync to Profile Service');
+  return this.categoriesService.bulkSyncCategories();
+}
+
+  // ===========================================================
   // 📁 CATEGORIES - PUBLIC OPERATIONS
   // ===========================================================
 

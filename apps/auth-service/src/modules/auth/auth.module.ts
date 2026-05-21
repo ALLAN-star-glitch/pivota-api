@@ -1,5 +1,5 @@
 // apps/auth-service/src/modules/auth/auth.module.ts
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
@@ -74,42 +74,46 @@ import { AccountConsumer } from '../../consumers/account.consumer';
   exports: [AuthService],
 })
 export class AuthModule {
+  private readonly logger = new Logger(AuthModule.name);
+
   constructor(
     private emailWorker: EmailWorker,
     private analyticsWorker: AnalyticsWorker,
     private sessionSyncWorker: SessionSyncWorker,
   ) {
-    console.log(
-      '🚀 AuthModule: gRPC Clients & Dual RMQ Event Buses initialized.',
-      '| Profile GRPC:', process.env.PROFILE_GRPC_URL,
-      '| RMQ URL:', process.env.RMQ_URL
-    );
-    console.log('🔥 AuthModule constructor, emailWorker:', !!this.emailWorker);
-    console.log('🔥 AuthModule constructor, analyticsWorker:', !!this.analyticsWorker);
-    console.log('🔥 AuthModule constructor, sessionSyncWorker:', !!this.sessionSyncWorker);
+    this.logger.log('🚀 AuthModule: gRPC Clients & RMQ Event Buses initialized');
+    this.logger.log(`📧 Profile GRPC: ${process.env.PROFILE_GRPC_URL || 'localhost:50052'}`);
+    this.logger.log(`📨 RMQ URL: ${process.env.RMQ_URL || 'amqp://localhost:5672'}`);
     
-    // Initialize email worker immediately
-    setImmediate(() => {
-      console.log('🔥 AuthModule - manually initializing EmailWorker');
-      this.emailWorker.initialize().catch(err => {
-        console.error('🔥 Failed to initialize email worker:', err);
-      });
+    // ✅ Initialize workers immediately in constructor
+    this.initializeWorkers();
+  }
+
+  private async initializeWorkers() {
+    this.logger.log('🔥 AuthModule.initializeWorkers() - Starting workers initialization...');
+    const startTime = Date.now();
+
+    // Small delay to ensure all dependencies are ready
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Initialize all workers in parallel
+    const results = await Promise.allSettled([
+      this.emailWorker.initialize(),
+      this.analyticsWorker.initialize(),
+      this.sessionSyncWorker.initialize(),
+    ]);
+
+    // Log results
+    const workerNames = ['EmailWorker', 'AnalyticsWorker', 'SessionSyncWorker'];
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        this.logger.log(`✅ ${workerNames[index]} initialized successfully`);
+      } else {
+        this.logger.error(`❌ ${workerNames[index]} failed to initialize: ${result.reason}`);
+      }
     });
-    
-    // Initialize analytics worker immediately
-    setImmediate(() => {
-      console.log('🔥 AuthModule - manually initializing AnalyticsWorker');
-      this.analyticsWorker.initialize().catch(err => {
-        console.error('🔥 Failed to initialize analytics worker:', err);
-      });
-    });
-    
-    // Initialize session sync worker immediately
-    setImmediate(() => {
-      console.log('🔥 AuthModule - manually initializing SessionSyncWorker');
-      this.sessionSyncWorker.initialize().catch(err => {
-        console.error('🔥 Failed to initialize session sync worker:', err);
-      });
-    });
+
+    const elapsed = Date.now() - startTime;
+    this.logger.log(`✅ All workers initialized in ${elapsed}ms`);
   }
 }

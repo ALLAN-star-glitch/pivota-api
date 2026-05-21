@@ -9,15 +9,14 @@ service CategoriesService {
   rpc CreateCategory (CreateCategoryRequest) returns (BaseCategoryResponse);
   rpc UpdateCategory (UpdateCategoryRequest) returns (BaseCategoryResponse);
   rpc DeleteCategory (DeleteCategoryRequest) returns (DeleteCategoryResponse);
-  
-  // Updated: Now supports full filtering (type, parentId, search, etc.)
   rpc GetCategories (GetCategoriesRequest) returns (ListCategoriesResponse);
-  
   rpc GetDiscoveryMetadata (GetDiscoveryMetadataRequest) returns (ListDiscoveryResponse);
-  
   rpc GetCategoryById (GetCategoryByIdRequest) returns (BaseCategoryResponse);
   rpc GetCategoryBySlug (GetCategoryBySlugRequest) returns (BaseCategoryResponse);
   rpc GetCategoryByName (GetCategoryByNameRequest) returns (BaseCategoryResponse);
+  
+  // NEW: Bulk sync endpoint
+  rpc BulkSyncCategories (Empty) returns (BulkSyncResponse);
 }
 
 // ----------------------
@@ -29,11 +28,12 @@ message ErrorPayload {
   string details = 3;
 }
 
+// Empty message for requests with no body
+message Empty {}
+
 // ----------------------
 // ENTITY MESSAGES
 // ----------------------
-
-// Perfectly aligned with CategoryResponseDto
 message Category {
   string id = 1;
   string vertical = 2; 
@@ -41,30 +41,27 @@ message Category {
   string name = 4;
   optional string description = 5;
   optional string parentId = 6;
-  string type = 16; // ADDED: MAIN or COMPLIMENTARY
+  string type = 16;
 
-  // Unified Stats
   int32 jobPostsCount = 7;
   int32 servicesCount = 8;
   int32 supportCount = 9;
   
-  // Hierarchy Info
   int32 subcategoriesCount = 10;
   bool hasSubcategories = 11;
   bool hasParent = 12;
-  repeated Category subcategories = 13; // Recursive nesting
+  repeated Category subcategories = 13;
 
   string createdAt = 14;
   string updatedAt = 15;
 }
 
-// Aligned with DiscoveryCategoryResponseDto
 message DiscoveryCategory {
   string id = 1;
   string name = 2;
   string slug = 3;
   string vertical = 4;
-  string type = 6; // ADDED: MAIN or COMPLIMENTARY
+  string type = 6;
   bool hasSubcategories = 5;
 }
 
@@ -77,7 +74,7 @@ message CreateCategoryRequest {
   optional string slug = 3;
   optional string description = 4;
   optional string parentId = 5;
-  string type = 6; // ADDED: MAIN or COMPLIMENTARY (default: MAIN)
+  string type = 6;
 }
 
 message UpdateCategoryRequest {
@@ -87,7 +84,7 @@ message UpdateCategoryRequest {
   optional string slug = 4;
   optional string description = 5;
   optional string parentId = 6;
-  optional string type = 7; // ADDED: MAIN or COMPLIMENTARY
+  optional string type = 7;
 }
 
 message DeleteCategoryRequest {
@@ -103,27 +100,25 @@ message GetCategoryBySlugRequest {
   string slug = 2;
 }
 
-// UPDATED: Now supports all filters
 message GetCategoriesRequest {
   optional string vertical = 1;
-  optional string type = 2;           // MAIN, COMPLIMENTARY
-  optional string parentId = 3;       // null for top-level, specific ID for children
-  optional bool hasSubcategories = 4;  // Filter by hasSubcategories
-  optional bool hasParent = 5;         // Filter by hasParent
-  optional string search = 6;          // Search by name
-  optional bool includeNested = 7;     // Include nested subcategories
+  optional string type = 2;
+  optional string parentId = 3;
+  optional bool hasSubcategories = 4;
+  optional bool hasParent = 5;
+  optional string search = 6;
+  optional bool includeNested = 7;
 }
 
-// UPDATED: Discovery metadata request
 message GetDiscoveryMetadataRequest {
   optional string vertical = 1;
-  optional string type = 2;           // MAIN, COMPLIMENTARY
+  optional string type = 2;
 }
 
 message GetCategoryByNameRequest {
   string name = 1;
   optional string vertical = 2;
-  optional string type = 3;           // ADDED: MAIN, COMPLIMENTARY
+  optional string type = 3;
 }
 
 // ----------------------
@@ -158,4 +153,17 @@ message DeleteCategoryResponse {
   string code = 2;
   string message = 3;
   ErrorPayload error = 4;
+}
+
+// NEW: Bulk sync response
+message BulkSyncResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  BulkSyncData data = 4;
+  ErrorPayload error = 5;
+}
+
+message BulkSyncData {
+  int32 syncedCount = 1;
 }

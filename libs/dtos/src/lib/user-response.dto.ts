@@ -226,6 +226,25 @@ export class JobSeekerProfileResponseDto {
 /* ======================================================
    7. SKILLED PROFESSIONAL PROFILE RESPONSE DTO
 ====================================================== */
+
+// Add a new DTO for category information
+export class ProfessionalCategoryDto {
+  @ApiProperty({ example: 'cmnboiknh0084arihk7i2lcwt' })
+  id!: string;
+
+  @ApiProperty({ example: 'Electrician' })
+  name!: string;
+
+  @ApiProperty({ example: 'electrician' })
+  slug!: string;
+
+  @ApiProperty({ example: 'HOUSING', enum: ['HOUSING', 'JOBS', 'SOCIAL_SUPPORT'] })
+  vertical!: string;
+
+  @ApiPropertyOptional({ example: 8 })
+  yearsExperience?: number;
+}
+
 export class SkilledProfessionalProfileResponseDto {
   @ApiProperty({ example: 'skilled_123abc' })
   id!: string;
@@ -236,8 +255,22 @@ export class SkilledProfessionalProfileResponseDto {
   @ApiPropertyOptional({ example: 'Master Electrician' })
   title?: string;
 
-  @ApiPropertyOptional({ example: 'ELECTRICIAN' })
-  profession?: string;
+  // REMOVE the profession field - use categories instead
+  // @ApiPropertyOptional({ example: 'ELECTRICIAN' })
+  // profession?: string;  // DELETE THIS
+
+  // ADD category fields
+  @ApiPropertyOptional({ description: 'Primary professional category', type: ProfessionalCategoryDto })
+  primaryCategory?: ProfessionalCategoryDto;
+
+  @ApiPropertyOptional({ 
+    description: 'Additional professional categories',
+    type: [ProfessionalCategoryDto],
+    example: [
+      { id: 'cmnboijtf0081arih7wy1n0kb', name: 'Appliance Repair', slug: 'appliance-repair', vertical: 'HOUSING' }
+    ]
+  })
+  additionalCategories?: ProfessionalCategoryDto[];
 
   @ApiProperty({ example: ['Wiring', 'Solar Installation', 'Security Systems'] })
   specialties!: string[];

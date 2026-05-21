@@ -185,6 +185,8 @@ export function isAIDeveloperRole(role: RoleType): boolean {
  * - Business roles have FULL business capabilities (ANY scope for Admin, OWN for Individual)
  * - This ensures platform roles always have more capabilities than business roles
  * 
+ * NOTE: For roles with .any permissions, .own is automatically implied by hasPermission()
+ * 
  * IMPORTANT: Individual role has ALL business actions (CREATE, UPDATE, DELETE, CLOSE, ARCHIVE)
  * with OWN scope. Subscription Guard handles limits (listing count, feature access, etc.)
  */
@@ -202,7 +204,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.ANALYTICS_VIEW,
     Permissions.ANALYTICS_EXPORT,
     
-    // HOUSING - Full ANY scope
+    // HOUSING - Full ANY scope (OWN is automatically implied)
     Permissions.HOUSING_READ,
     Permissions.HOUSING_CREATE_ANY,
     Permissions.HOUSING_UPDATE_ANY,
@@ -213,7 +215,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.HOUSING_APPROVE,
     Permissions.HOUSING_VERIFY,
     
-    // EMPLOYMENT - Full ANY scope
+    // EMPLOYMENT - Full ANY scope (OWN is automatically implied)
     Permissions.EMPLOYMENT_READ,
     Permissions.EMPLOYMENT_CREATE_ANY,
     Permissions.EMPLOYMENT_UPDATE_ANY,
@@ -225,7 +227,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.EMPLOYMENT_VERIFY,
     Permissions.EMPLOYMENT_APPLY,
     
-    // SOCIAL SUPPORT - Full ANY scope
+    // SOCIAL SUPPORT - Full ANY scope (OWN is automatically implied)
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.SOCIAL_SUPPORT_CREATE_ANY,
     Permissions.SOCIAL_SUPPORT_UPDATE_ANY,
@@ -237,7 +239,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.SOCIAL_SUPPORT_VERIFY,
     Permissions.SOCIAL_SUPPORT_REQUEST,
     
-    // PROFESSIONAL SERVICES - Full ANY scope
+    // PROFESSIONAL SERVICES - Full ANY scope (OWN is automatically implied)
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
@@ -288,7 +290,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.REGISTRY_VIEW,
     Permissions.ANALYTICS_VIEW,
     
-    // HOUSING - Full ANY scope with verification
+    // HOUSING - Full ANY scope (OWN automatically implied)
     Permissions.HOUSING_READ,
     Permissions.HOUSING_CREATE_ANY,
     Permissions.HOUSING_UPDATE_ANY,
@@ -299,7 +301,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.HOUSING_APPROVE,
     Permissions.HOUSING_VERIFY,
     
-    // EMPLOYMENT - Full ANY scope with verification
+    // EMPLOYMENT - Full ANY scope (OWN automatically implied)
     Permissions.EMPLOYMENT_READ,
     Permissions.EMPLOYMENT_CREATE_ANY,
     Permissions.EMPLOYMENT_UPDATE_ANY,
@@ -311,7 +313,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.EMPLOYMENT_VERIFY,
     Permissions.EMPLOYMENT_APPLY,
     
-    // SOCIAL SUPPORT - Full ANY scope with verification
+    // SOCIAL SUPPORT - Full ANY scope (OWN automatically implied)
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.SOCIAL_SUPPORT_CREATE_ANY,
     Permissions.SOCIAL_SUPPORT_UPDATE_ANY,
@@ -323,7 +325,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.SOCIAL_SUPPORT_VERIFY,
     Permissions.SOCIAL_SUPPORT_REQUEST,
     
-    // PROFESSIONAL SERVICES - Full ANY scope with verification
+    // PROFESSIONAL SERVICES - Full ANY scope (OWN automatically implied)
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
@@ -373,7 +375,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.REGISTRY_VIEW,
     Permissions.ANALYTICS_VIEW,
     
-    // HOUSING - Full ANY scope
+    // HOUSING - Full ANY scope (OWN automatically implied)
     Permissions.HOUSING_READ,
     Permissions.HOUSING_CREATE_ANY,
     Permissions.HOUSING_UPDATE_ANY,
@@ -383,7 +385,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.HOUSING_MODERATE,
     Permissions.HOUSING_APPROVE,
     
-    // EMPLOYMENT - Full ANY scope
+    // EMPLOYMENT - Full ANY scope (OWN automatically implied)
     Permissions.EMPLOYMENT_READ,
     Permissions.EMPLOYMENT_CREATE_ANY,
     Permissions.EMPLOYMENT_UPDATE_ANY,
@@ -394,7 +396,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.EMPLOYMENT_APPROVE,
     Permissions.EMPLOYMENT_APPLY,
     
-    // SOCIAL SUPPORT - Full ANY scope
+    // SOCIAL SUPPORT - Full ANY scope (OWN automatically implied)
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.SOCIAL_SUPPORT_CREATE_ANY,
     Permissions.SOCIAL_SUPPORT_UPDATE_ANY,
@@ -405,7 +407,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.SOCIAL_SUPPORT_APPROVE,
     Permissions.SOCIAL_SUPPORT_REQUEST,
     
-    // PROFESSIONAL SERVICES - Full ANY scope
+    // PROFESSIONAL SERVICES - Full ANY scope (OWN automatically implied)
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
@@ -502,12 +504,13 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
   ],
   
   // ============ BUSINESS ADMIN ROLE (Business Account Owner) ============
+  // NOTE: Only .any permissions are listed. .own is automatically implied by hasPermission()
   [RoleType.ADMIN]: [
     Permissions.DASHBOARD_VIEW,
     Permissions.REGISTRY_VIEW,
     Permissions.ANALYTICS_VIEW,
     
-    // HOUSING - Full ANY scope
+    // HOUSING - Full ANY scope (OWN automatically implied)
     Permissions.HOUSING_READ,
     Permissions.HOUSING_CREATE_ANY,
     Permissions.HOUSING_UPDATE_ANY,
@@ -515,7 +518,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.HOUSING_CLOSE_ANY,
     Permissions.HOUSING_ARCHIVE_ANY,
     
-    // EMPLOYMENT - Full ANY scope
+    // EMPLOYMENT - Full ANY scope (OWN automatically implied)
     Permissions.EMPLOYMENT_READ,
     Permissions.EMPLOYMENT_CREATE_ANY,
     Permissions.EMPLOYMENT_UPDATE_ANY,
@@ -524,7 +527,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.EMPLOYMENT_ARCHIVE_ANY,
     Permissions.EMPLOYMENT_APPLY,
     
-    // SOCIAL SUPPORT - Full ANY scope
+    // SOCIAL SUPPORT - Full ANY scope (OWN automatically implied)
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.SOCIAL_SUPPORT_CREATE_ANY,
     Permissions.SOCIAL_SUPPORT_UPDATE_ANY,
@@ -533,7 +536,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.SOCIAL_SUPPORT_ARCHIVE_ANY,
     Permissions.SOCIAL_SUPPORT_REQUEST,
     
-    // PROFESSIONAL SERVICES - Full ANY scope
+    // PROFESSIONAL SERVICES - Full ANY scope (OWN automatically implied)
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
@@ -555,12 +558,13 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
   ],
   
   // ============ CONTENT MANAGER ROLE ============
+  // NOTE: Only .any permissions are listed. .own is automatically implied by hasPermission()
   [RoleType.CONTENT_MANAGER_ADMIN]: [
     Permissions.DASHBOARD_VIEW,
     Permissions.REGISTRY_VIEW,
     Permissions.ANALYTICS_VIEW,
     
-    // HOUSING - Full ANY scope with moderation
+    // HOUSING - Full ANY scope with moderation (OWN automatically implied)
     Permissions.HOUSING_READ,
     Permissions.HOUSING_CREATE_ANY,
     Permissions.HOUSING_UPDATE_ANY,
@@ -570,7 +574,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.HOUSING_MODERATE,
     Permissions.HOUSING_APPROVE,
     
-    // EMPLOYMENT - Full ANY scope with moderation
+    // EMPLOYMENT - Full ANY scope with moderation (OWN automatically implied)
     Permissions.EMPLOYMENT_READ,
     Permissions.EMPLOYMENT_CREATE_ANY,
     Permissions.EMPLOYMENT_UPDATE_ANY,
@@ -581,7 +585,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.EMPLOYMENT_APPROVE,
     Permissions.EMPLOYMENT_APPLY,
     
-    // SOCIAL SUPPORT - Full ANY scope with moderation
+    // SOCIAL SUPPORT - Full ANY scope with moderation (OWN automatically implied)
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.SOCIAL_SUPPORT_CREATE_ANY,
     Permissions.SOCIAL_SUPPORT_UPDATE_ANY,
@@ -592,7 +596,7 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.SOCIAL_SUPPORT_APPROVE,
     Permissions.SOCIAL_SUPPORT_REQUEST,
     
-    // PROFESSIONAL SERVICES - Full ANY scope with verification
+    // PROFESSIONAL SERVICES - Full ANY scope with verification (OWN automatically implied)
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
@@ -686,6 +690,13 @@ export function getRoleModules(roleType: RoleType): ModuleSlug[] {
 
 /**
  * Check if a role has a specific permission
+ * 
+ * IMPLEMENTATION NOTE:
+ * If checking for a .own permission and the role has the corresponding .any permission,
+ * it automatically grants the .own permission as well.
+ * 
+ * Example: If role has 'professional-services.create.any', 
+ *          hasPermission(role, 'professional-services.create.own') returns true
  */
 export function hasPermission(
   roleType: RoleType,
@@ -696,6 +707,12 @@ export function hasPermission(
   
   // Super admin has all permissions
   if (permissions.includes(Permissions.SUPER_ADMIN)) return true;
+  
+  // If checking for .own, also check if role has the corresponding .any
+  if (permission.endsWith('.own')) {
+    const anyPermission = permission.replace(/\.own$/, '.any') as Permission;
+    if (permissions.includes(anyPermission)) return true;
+  }
   
   return permissions.includes(permission);
 }

@@ -16,6 +16,11 @@ import {
 } from '@pivota-api/dtos';
 import { CategoriesService } from './categories.service';
 
+// Define the data type for bulk sync response
+interface BulkSyncData {
+  syncedCount: number;
+}
+
 @Controller('categories')
 export class CategoriesController {
   private readonly logger = new Logger(CategoriesController.name);
@@ -96,5 +101,12 @@ export class CategoriesController {
   ): Promise<BaseResponseDto<CategoryResponseDto>> {
     this.logger.debug(`GetCategoryByName request: ${data.name}`);
     return this.categoriesService.getCategoryByName(data);
+  }
+
+  // ===================== BULK SYNC =====================
+  @GrpcMethod('CategoriesService', 'BulkSyncCategories')
+  async bulkSyncCategories(): Promise<BaseResponseDto<BulkSyncData>> {
+    this.logger.log('[gRPC] BulkSyncCategories called - Starting bulk sync to Profile Service');
+    return this.categoriesService.bulkSyncCategories();
   }
 }
