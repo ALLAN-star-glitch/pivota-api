@@ -146,8 +146,8 @@ async validateUser(
   memberStatus?: string;
   isOrganizationMember: boolean;
 } | null> {
-  const MAX_FAILED_ATTEMPTS = 5;
-  const LOCKOUT_DURATION_MINUTES = 15;
+  const MAX_FAILED_ATTEMPTS = 10;      // Increased from 5 to 10
+  const LOCKOUT_DURATION_MINUTES = 30; // Increased from 15 to 30 minutes
 
   try {
     // 1. Check lockout status FIRST (must be real-time, never cached)
@@ -207,11 +207,14 @@ async validateUser(
             lockoutExpires: new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60000)
           },
         });
+        
+        this.logger.warn(`[AUTH] Account locked for ${email} after ${newFailedAttempts} failed attempts. Locked for ${LOCKOUT_DURATION_MINUTES} minutes.`);
       } else {
         await this.prisma.credential.update({
           where: { id: credential.id },
           data: { failedAttempts: newFailedAttempts },
         });
+        this.logger.warn(`[AUTH] Failed attempt ${newFailedAttempts}/${MAX_FAILED_ATTEMPTS} for ${email}`);
       }
       return null;
     }
@@ -1336,31 +1339,64 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
   }
 
   try {
-    // 1. Decode token to get tokenId
+    // 1. Decode token to get user info (no sensitive data cached, using JWT directly)
     const decoded = this.jwtService.decode(refreshToken) as JwtPayload;
-    if (!decoded?.jti || !decoded?.sub) {
+    if (!decoded?.sub || !decoded?.jti) {
       throw new UnauthorizedException('Invalid token structure');
     }
 
-    const { jti: tokenId, sub: userUuid } = decoded;
-    this.logger.log(`🔄 Refreshing token for user: ${userUuid}, tokenId: ${tokenId}`);
+    const { 
+      sub: userUuid, 
+      jti: oldTokenId, 
+      accountId: accountUuid, 
+      email,
+      accountType: oldAccountType 
+    } = decoded;
+    
+    this.logger.log(`🔄 Refreshing token for user: ${userUuid}, tokenId: ${oldTokenId}`);
 
-    // 2. Try Redis first, fallback to Database
-    const session = await this.redisSession.getSession(tokenId);
+    // 2. Get role from Redis cache ONLY (safe - not sensitive)
+    let roleType = await this.redisSession.getCachedUserRole(userUuid);
+    
+    // 3. If role not in cache, get from DB (only select role, no PII caching)
+    if (!roleType) {
+      this.logger.debug(`Role cache miss for ${userUuid}, fetching from DB`);
+      const credential = await this.prisma.credential.findUnique({
+        where: { userUuid },
+        select: { 
+          role: true
+        }
+      });
+      
+      if (!credential) {
+        this.logger.warn(`User not found: ${userUuid}`);
+        throw new UnauthorizedException('User not found');
+      }
+      
+      roleType = credential.role || 'Individual';
+      
+      // ✅ ONLY cache the role (not sensitive)
+      await this.redisSession.cacheUserRole(userUuid, roleType);
+      this.logger.debug(`Role cached for ${userUuid}: ${roleType}`);
+    } else {
+      this.logger.debug(`Role cache HIT for ${userUuid}: ${roleType}`);
+    }
+
+    // 4. Try Redis first for session validation
+    const session = await this.redisSession.getSession(oldTokenId);
     let isValid = false;
     
     if (session) {
-      // Validate in Redis
       const bcrypt = require('bcrypt');
       isValid = await bcrypt.compare(refreshToken, session.refreshTokenHash);
       this.logger.debug(`Redis validation result: ${isValid}`);
     }
     
-    // Fallback to Database if Redis doesn't have it or validation failed
+    // 5. Fallback to Database if Redis doesn't have it or validation failed
     if (!isValid) {
-      this.logger.warn(`Redis validation failed, checking database...`);
+      this.logger.debug(`Redis validation failed, checking database...`);
       const dbSession = await this.prisma.session.findUnique({
-        where: { tokenId },
+        where: { tokenId: oldTokenId },
         select: { hashedToken: true, revoked: true, expiresAt: true, userUuid: true }
       });
       
@@ -1369,9 +1405,9 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
         isValid = await bcrypt.compare(refreshToken, dbSession.hashedToken);
         
         if (isValid) {
-          // Restore to Redis for next time
+          // Restore to Redis for next time (only session data, no PII)
           await this.redisSession.storeSession(
-            tokenId,
+            oldTokenId,
             dbSession.userUuid,
             dbSession.hashedToken,
             null
@@ -1382,54 +1418,18 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
     }
     
     if (!isValid) {
-      this.logger.warn(`Invalid refresh token: ${tokenId}`);
+      this.logger.warn(`Invalid refresh token: ${oldTokenId}`);
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    // 3. Check blacklist
-    const isBlacklisted = await this.redisSession.isBlacklisted(tokenId);
+    // 6. Check blacklist (Redis only - fast, just token IDs)
+    const isBlacklisted = await this.redisSession.isBlacklisted(oldTokenId);
     if (isBlacklisted) {
-      this.logger.warn(`Token is blacklisted: ${tokenId}`);
+      this.logger.warn(`Token is blacklisted: ${oldTokenId}`);
       throw new UnauthorizedException('Token has been revoked');
     }
 
-    // 4. Get user profile (from cache or gRPC)
-    let profileData = await this.redisSession.getCachedUserProfile(userUuid);
-    if (!profileData) {
-      const profileGrpc = this.getProfileGrpcService();
-      const profileResponse = await firstValueFrom(
-        profileGrpc.getUserProfileByUuid({ userUuid })
-      );
-      
-      if (!profileResponse?.success || !profileResponse?.data) {
-        throw new UnauthorizedException('User profile not found');
-      }
-      
-      profileData = profileResponse.data;
-      await this.redisSession.cacheUserProfile(userUuid, profileData);
-    }
-
-    // 5. Get role from cache or credential (FIXED)
-    let roleType = await this.redisSession.getCachedUserRole(userUuid);
-    
-    if (!roleType) {
-      // Try to get from credential
-      const credential = await this.prisma.credential.findUnique({
-        where: { userUuid },
-        select: { role: true }
-      });
-      roleType = credential?.role || 'Individual';
-      
-      // Cache it for next time
-      if (roleType) {
-        await this.redisSession.cacheUserRole(userUuid, roleType);
-        this.logger.debug(`Role cached for ${userUuid}: ${roleType}`);
-      }
-    } else {
-      this.logger.debug(`Role cache HIT for ${userUuid}: ${roleType}`);
-    }
-
-    // 6. Generate new tokens
+    // 7. Generate new tokens (using data from decoded token + role from cache/DB)
     const newTokenId = `${userUuid}-${Date.now()}`;
     const now = Math.floor(Date.now() / 1000);
     
@@ -1437,38 +1437,37 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
       sub: userUuid,
       jti: newTokenId,
       iat: now,
-      email: profileData.user?.email,
-      accountId: profileData.account?.uuid,
-      role: roleType,  // ✅ FIXED: Use role from cache/credential
-      accountType: profileData.account?.type || 'INDIVIDUAL',
-      organizationUuid: profileData.organization?.uuid || null,
+      email: email,
+      accountId: accountUuid,
+      role: roleType,
+      accountType: oldAccountType || 'INDIVIDUAL',
+      organizationUuid: null,
     };
 
-    // ✅ FIXED: Access token 15 min, Refresh token 7 days
     const [newAccessToken, newRefreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, { expiresIn: '15m' }),   // Access token
-      this.jwtService.signAsync(payload, { expiresIn: '7d' })     // Refresh token
+      this.jwtService.signAsync(payload, { expiresIn: '15m' }),   // Access token - 15 minutes
+      this.jwtService.signAsync(payload, { expiresIn: '7d' })     // Refresh token - 7 days
     ]);
 
-    // 7. Hash new refresh token
+    // 8. Hash new refresh token
     const hashedNewToken = await bcrypt.hash(newRefreshToken, 10);
     const clientInfo = session?.clientInfo ? JSON.parse(session.clientInfo) : null;
 
-    // 8. Rotate token in Redis
+    // 9. Rotate token in Redis (fast)
     await this.redisSession.rotateToken(
-      tokenId,
+      oldTokenId,
       newTokenId,
       userUuid,
       hashedNewToken,
       clientInfo
     );
 
-    // 9. Queue DB sync for eventual consistency
-    await this.queue.addJob(
+    // 10. Queue DB sync for eventual consistency (fire and forget - non-blocking)
+    this.queue.addJob(
       'db-sync',
       'session-rotation',
       {
-        oldTokenId: tokenId,
+        oldTokenId: oldTokenId,
         newTokenId: newTokenId,
         userUuid: userUuid,
         newRefreshTokenHash: hashedNewToken,
@@ -1480,7 +1479,7 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
         backoff: { type: 'exponential', delay: 1000 },
         removeOnComplete: true,
       }
-    );
+    ).catch(err => this.logger.error(`Failed to queue session rotation: ${err.message}`));
 
     const elapsed = Date.now() - startTime;
     this.logger.log(`✅ Token refresh completed in ${elapsed}ms for user: ${userUuid}`);

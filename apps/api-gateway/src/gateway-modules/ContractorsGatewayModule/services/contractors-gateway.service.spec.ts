@@ -10,7 +10,7 @@ describe('ProvidersGatewayService', () => {
     }).compile();
 
     service = module.get<ContractorsGatewayService>(ContractorsGatewayService);
-  });
+  }); 
 
   it('should be defined', () => {
     expect(service).toBeDefined();

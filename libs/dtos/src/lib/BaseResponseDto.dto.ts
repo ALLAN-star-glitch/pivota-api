@@ -24,6 +24,17 @@ export class BaseResponseDto<T = unknown> {
   readonly data?: T;
 
   @ApiProperty({
+    description: 'Pagination metadata (for list responses)',
+    required: false,
+  })
+  readonly pagination?: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+
+  @ApiProperty({
     description: 'Error payload (populated on failure)',
     required: false,
     type: Object,
@@ -36,18 +47,30 @@ export class BaseResponseDto<T = unknown> {
     message: string,
     code: string | number,
     data?: T,
+    pagination?: { total: number; limit: number; offset: number; hasMore: boolean },
     error?: ErrorPayload
   ) {
     this.success = success;
     this.message = message;
     this.code = code;
     this.data = data;
+    this.pagination = pagination;
     this.error = error;
   }
 
   // Success factory
   static ok<T>(data: T, message = 'Success', code: string | number = 'OK'): BaseResponseDto<T> {
     return new BaseResponseDto<T>(true, message, code, data);
+  }
+
+  // Success factory with pagination
+  static okWithPagination<T>(
+    data: T,
+    pagination: { total: number; limit: number; offset: number; hasMore: boolean },
+    message = 'Success',
+    code: string | number = 'OK'
+  ): BaseResponseDto<T> {
+    return new BaseResponseDto<T>(true, message, code, data, pagination);
   }
 
   // Failure factory
@@ -60,7 +83,8 @@ export class BaseResponseDto<T = unknown> {
       false,
       message,
       code,
-      null, // Use null instead of undefined for consistent JSON output
+      null,
+      undefined,
       // Only create the error object if there are actual extra details
       details ? { message, code, details } : undefined
     );

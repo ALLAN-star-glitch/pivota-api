@@ -24,7 +24,7 @@ import {
   SupportProgram 
 } from '../../../generated/prisma/client';
 import { CategoryEvents, CategoryEvent } from '@pivota-api/constants';
-import { QueueService } from '@pivota-api/shared-redis';
+import { QueueService, RedisService } from '@pivota-api/shared-redis';
 
 type FullCategory = Category & {
   subcategories: Category[];
@@ -37,6 +37,9 @@ type FullCategory = Category & {
 @Injectable()
 export class CategoriesService {
   private readonly logger = new Logger(CategoriesService.name);
+  private readonly CACHE_TTL = 3600; // 1 hour cache
+  private readonly DISCOVERY_CACHE_PREFIX = 'categories:discovery';
+  private readonly CATEGORY_CACHE_PREFIX = 'category:';
 
   // Standard include block for consistent recursive fetching
   private readonly standardInclude = {
@@ -51,7 +54,41 @@ export class CategoriesService {
     private readonly prisma: PrismaService,
     @Inject('CATEGORIES_CLIENT') private readonly kafkaClient: ClientKafka,
     private queue: QueueService,
+    private readonly redisService: RedisService,
   ) {}
+
+ /**
+ * Invalidate categories cache
+ */
+async invalidateCategoriesCache(categoryId?: string): Promise<void> { 
+  // Queue cache invalidation (fire and forget)
+  this.queue.addJob(
+    'cache-queue',
+    'invalidate-categories-cache',
+    {
+      categoryId,
+      timestamp: new Date().toISOString(),
+    },
+    {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 1000 },
+      removeOnComplete: true,
+    }
+  ).catch(err => this.logger.error(`Failed to queue cache invalidation: ${err.message}`));
+  
+  // Also invalidate immediately in Redis
+  if (categoryId) {
+    await this.redisService.delete(`${this.CATEGORY_CACHE_PREFIX}${categoryId}`);
+    await this.redisService.deletePattern(`${this.CATEGORY_CACHE_PREFIX}slug:*`);
+    await this.redisService.deletePattern(`${this.CATEGORY_CACHE_PREFIX}name:*`);
+  }
+  
+  // Invalidate all list caches (they depend on categories data)
+  await this.redisService.deletePattern(`categories:list:*`);
+  await this.redisService.deletePattern(`${this.DISCOVERY_CACHE_PREFIX}:*`);
+  
+  this.logger.log(`Invalidated categories cache${categoryId ? ` for category: ${categoryId}` : ' (all)'}`);
+}
 
   /**
    * SINGLE SOURCE OF TRUTH: Emit category event to Kafka for Profile Service to consume
@@ -159,6 +196,9 @@ export class CategoriesService {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
+      
+      // Invalidate cache after bulk sync
+      await this.invalidateCategoriesCache();
       
       this.logger.log(`✅ Bulk sync ${syncId} completed: ${syncedCount} synced, ${failedCount} failed`);
       
@@ -271,6 +311,9 @@ export class CategoriesService {
       }
 
       await this.emitCategoryEvent(CategoryEvents.CREATED, created);
+      
+      // Invalidate cache
+      await this.invalidateCategoriesCache(created.id);
 
       return {
         success: true,
@@ -293,10 +336,27 @@ export class CategoriesService {
   }
 
   /** -------------------------------
-   * GET CATEGORY BY SLUG
+   * GET CATEGORY BY SLUG (WITH CACHE)
    * ------------------------------- */
   async getCategoryBySlug(dto: GetCategoryBySlugParamsDto): Promise<BaseResponseDto<CategoryResponseDto>> {
+    const cacheKey = `${this.CATEGORY_CACHE_PREFIX}slug:${dto.vertical}:${dto.slug}`;
+    
     try {
+      // Try cache first
+      const cached = await this.redisService.getObject<CategoryResponseDto>(cacheKey);
+      if (cached) {
+        this.logger.debug(`Cache HIT for category slug: ${dto.vertical}:${dto.slug}`);
+        return {
+          success: true,
+          message: 'Category fetched successfully (cached)',
+          code: 'FETCHED',
+          data: cached,
+          error: null,
+        };
+      }
+      
+      this.logger.debug(`Cache MISS for category slug: ${dto.vertical}:${dto.slug}, fetching from DB`);
+      
       const cat = await this.prisma.category.findUnique({
         where: { vertical_slug: { vertical: dto.vertical, slug: dto.slug } },
         include: this.standardInclude,
@@ -312,11 +372,16 @@ export class CategoriesService {
         };
       }
 
+      const response = this.mapCategory(cat as FullCategory, true);
+      
+      // Cache the result
+      await this.redisService.setObject(cacheKey, response, this.CACHE_TTL);
+
       return {
         success: true,
         message: 'Category fetched successfully',
         code: 'FETCHED',
-        data: this.mapCategory(cat as FullCategory, true),
+        data: response,
         error: null,
       };
     } catch (error) {
@@ -331,13 +396,28 @@ export class CategoriesService {
   }
 
   /** -------------------------------
-   * GET DISCOVERY METADATA
+   * GET DISCOVERY METADATA (WITH CACHE)
    * ------------------------------- */
   async getDiscoveryMetadata(dto: DiscoveryParamsDto): Promise<BaseResponseDto<DiscoveryCategoryResponseDto[]>> {
+    const cacheKey = `${this.DISCOVERY_CACHE_PREFIX}:${dto.vertical || 'all'}:${dto.type || 'all'}`;
+    
     try {
-      const where: any = { 
-        parentId: null,
-      };
+      // Try cache first
+      const cached = await this.redisService.getObject<DiscoveryCategoryResponseDto[]>(cacheKey);
+      if (cached) {
+        this.logger.debug(`Cache HIT for discovery metadata: ${cacheKey}`);
+        return {
+          success: true,
+          message: 'Discovery metadata fetched successfully (cached)',
+          code: 'FETCHED',
+          data: cached,
+          error: null,
+        };
+      }
+      
+      this.logger.debug(`Cache MISS for discovery metadata: ${cacheKey}, fetching from DB`);
+      
+      const where: any = { parentId: null };
       
       if (dto.vertical) {
         where.vertical = dto.vertical;
@@ -349,25 +429,37 @@ export class CategoriesService {
       
       const categories = await this.prisma.category.findMany({
         where,
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          vertical: true,
-          type: true,
-          hasSubcategories: true,
+        include: {
+          subcategories: {
+            select: { id: true }
+          }
         },
         orderBy: { name: 'asc' }
       });
+
+      const discoveryData = categories.map(category => ({
+        id: category.id,
+        name: category.name,
+        slug: category.slug,
+        vertical: category.vertical,
+        type: category.type,
+        hasSubcategories: category.subcategories.length > 0,
+      }));
+
+      // Cache the result
+      await this.redisService.setObject(cacheKey, discoveryData, this.CACHE_TTL);
+      
+      this.logger.debug(`Cached discovery metadata for: ${cacheKey} (TTL: ${this.CACHE_TTL}s)`);
 
       return {
         success: true,
         message: 'Discovery metadata fetched successfully',
         code: 'FETCHED',
-        data: categories,
+        data: discoveryData,
         error: null,
       };
     } catch (error) {
+      this.logger.error(`Failed to fetch discovery metadata: ${(error as Error).message}`);
       return {
         success: false,
         message: 'Failed to fetch discovery metadata',
@@ -419,6 +511,9 @@ export class CategoriesService {
       }
 
       await this.emitCategoryEvent(CategoryEvents.UPDATED, updated);
+      
+      // Invalidate cache
+      await this.invalidateCategoriesCache(updated.id);
 
       return {
         success: true,
@@ -439,96 +534,138 @@ export class CategoriesService {
     }
   }
 
-  /** -------------------------------
-   * GET CATEGORIES WITH FLEXIBLE FILTERING
-   * ------------------------------- */
-  async getCategoriesWithStats(dto: GetCategoriesRequestDto): Promise<BaseResponseDto<CategoryResponseDto[]>> {
-    try {
-      const where: any = {};
-      
-      if (dto.vertical) {
-        where.vertical = dto.vertical;
-      }
-      
-      if (dto.type) {
-        where.type = dto.type;
-      }
-      
-      if (dto.parentId === 'null' || dto.parentId === null) {
-        where.parentId = null;
-      } else if (dto.parentId) {
-        where.parentId = dto.parentId;
-      }
-      
-      if (dto.hasSubcategories !== undefined && dto.hasSubcategories !== null) {
-        where.hasSubcategories = dto.hasSubcategories;
-      }
-      
-      if (dto.hasParent !== undefined && dto.hasParent !== null) {
-        where.hasParent = dto.hasParent;
-      }
-      
-      if (dto.search && dto.search.trim()) {
-        where.name = {
-          contains: dto.search.trim(),
-          mode: 'insensitive'
-        };
-      }
-      
-      const includeConfig = dto.includeNested 
-        ? {
-            ...this.standardInclude,
-            subcategories: {
-              include: {
-                subcategories: {
-                  include: {
-                    subcategories: true
-                  }
+ /** -------------------------------
+ * GET CATEGORIES WITH FLEXIBLE FILTERING (WITH CACHE)
+ * ------------------------------- */
+async getCategoriesWithStats(dto: GetCategoriesRequestDto): Promise<BaseResponseDto<CategoryResponseDto[]>> {
+  // Create a cache key based on all filter parameters
+  const cacheKey = `categories:list:${dto.vertical || 'all'}:${dto.type || 'all'}:${dto.parentId || 'null'}:${dto.hasSubcategories !== undefined ? dto.hasSubcategories : 'any'}:${dto.hasParent !== undefined ? dto.hasParent : 'any'}:${dto.search || 'none'}:${dto.includeNested || false}`;
+  
+  try {
+    // Try cache first
+    const cached = await this.redisService.getObject<CategoryResponseDto[]>(cacheKey);
+    if (cached) {
+      this.logger.debug(`Cache HIT for categories list: ${cacheKey.substring(0, 100)}...`);
+      return {
+        success: true,
+        message: 'Categories fetched successfully (cached)',
+        code: 'FETCHED',
+        data: cached,
+        error: null,
+      };
+    }
+    
+    this.logger.debug(`Cache MISS for categories list, fetching from DB`);
+    const startTime = Date.now();
+    
+    const where: any = {};
+    
+    if (dto.vertical && dto.vertical !== 'ALL') {
+      where.vertical = dto.vertical;
+    }
+    
+    if (dto.type && dto.type !== 'ALL') {
+      where.type = dto.type;
+    }
+    
+    if (dto.parentId === 'null' || dto.parentId === null) {
+      where.parentId = null;
+    } else if (dto.parentId) {
+      where.parentId = dto.parentId;
+    }
+    
+    if (dto.hasSubcategories !== undefined && dto.hasSubcategories !== null) {
+      where.hasSubcategories = dto.hasSubcategories;
+    }
+    
+    if (dto.hasParent !== undefined && dto.hasParent !== null) {
+      where.hasParent = dto.hasParent;
+    }
+    
+    if (dto.search && dto.search.trim() && dto.search !== 'NONE') {
+      where.name = {
+        contains: dto.search.trim(),
+        mode: 'insensitive'
+      };
+    }
+    
+    const includeConfig = dto.includeNested 
+      ? {
+          ...this.standardInclude,
+          subcategories: {
+            include: {
+              subcategories: {
+                include: {
+                  subcategories: true
                 }
               }
             }
           }
-        : this.standardInclude;
-      
-      const categories = await this.prisma.category.findMany({
-        where,
-        include: includeConfig,
-        orderBy: [
-          { vertical: 'asc' },
-          { name: 'asc' }
-        ]
-      });
+        }
+      : this.standardInclude;
+    
+    const categories = await this.prisma.category.findMany({
+      where,
+      include: includeConfig,
+      orderBy: [
+        { vertical: 'asc' },
+        { name: 'asc' }
+      ]
+    });
 
-      this.logger.debug(`Fetched ${categories.length} categories`);
+    const responseData = categories.map((cat) => this.mapCategory(cat as FullCategory, dto.includeNested ?? false));
+    
+    const elapsed = Date.now() - startTime;
+    this.logger.debug(`Fetched ${categories.length} categories in ${elapsed}ms`);
 
-      return {
-        success: true,
-        message: 'Categories fetched successfully',
-        code: 'FETCHED',
-        data: categories.map((cat) => this.mapCategory(cat as FullCategory, dto.includeNested ?? false)),
-        error: null,
-      };
-      
-    } catch (error) {
-      this.logger.error('Fetch categories failed', (error as Error).stack);
-      return {
-        success: false,
-        message: 'Failed to fetch categories',
-        code: 'FETCH_FAILED',
-        data: null,
-        error: { 
-          message: (error as Error).message, 
-          details: process.env.NODE_ENV === 'development' ? (error as Error).stack : null 
-        },
-      };
-    }
+    // Cache the result (shorter TTL for list endpoints - 5 minutes)
+    await this.redisService.setObject(cacheKey, responseData, 300); // 5 minutes TTL
+
+    return {
+      success: true,
+      message: 'Categories fetched successfully',
+      code: 'FETCHED',
+      data: responseData,
+      error: null,
+    };
+    
+  } catch (error) {
+    this.logger.error('Fetch categories failed', (error as Error).stack);
+    return {
+      success: false,
+      message: 'Failed to fetch categories',
+      code: 'FETCH_FAILED',
+      data: null,
+      error: { 
+        message: (error as Error).message, 
+        details: process.env.NODE_ENV === 'development' ? (error as Error).stack : null 
+      },
+    };
   }
+}
 
   /** -------------------------------
-   * GET CATEGORY BY ID
+   * GET CATEGORY BY ID (WITH CACHE)
    * ------------------------------- */
   async getCategoryById(id: string): Promise<BaseResponseDto<CategoryResponseDto>> {
+    const cacheKey = `${this.CATEGORY_CACHE_PREFIX}${id}`;
+    
     try {
+      // Try cache first
+      const cached = await this.redisService.getObject<CategoryResponseDto>(cacheKey);
+      if (cached) {
+        this.logger.debug(`Cache HIT for category ID: ${id}`);
+        return {
+          success: true,
+          message: 'Category fetched successfully (cached)',
+          code: 'FETCHED',
+          data: cached,
+          error: null,
+        };
+      }
+      
+      this.logger.debug(`Cache MISS for category ID: ${id}, fetching from DB`);
+      
       const cat = await this.prisma.category.findUnique({
         where: { id },
         include: this.standardInclude,
@@ -544,11 +681,16 @@ export class CategoriesService {
         };
       }
 
+      const response = this.mapCategory(cat as FullCategory, true);
+      
+      // Cache the result
+      await this.redisService.setObject(cacheKey, response, this.CACHE_TTL);
+
       return {
         success: true,
         message: 'Category fetched successfully',
         code: 'FETCHED',
-        data: this.mapCategory(cat as FullCategory, true),
+        data: response,
         error: null,
       };
     } catch (error) {
@@ -611,6 +753,9 @@ export class CategoriesService {
       await this.prisma.category.delete({ where: { id: dto.id } });
 
       await this.emitCategoryEvent(CategoryEvents.DELETED, { id: dto.id, name: category.name });
+      
+      // Invalidate cache
+      await this.invalidateCategoriesCache(dto.id);
 
       return {
         success: true,
@@ -631,10 +776,25 @@ export class CategoriesService {
   }
 
   /** -------------------------------
-   * GET CATEGORY BY NAME
+   * GET CATEGORY BY NAME (WITH CACHE)
    * ------------------------------- */
   async getCategoryByName(dto: GetCategoryByNameQueryDto): Promise<BaseResponseDto<CategoryResponseDto>> {
+    const cacheKey = `${this.CATEGORY_CACHE_PREFIX}name:${dto.name.toLowerCase()}:${dto.vertical || ''}:${dto.type || ''}`;
+    
     try {
+      // Try cache first
+      const cached = await this.redisService.getObject<CategoryResponseDto>(cacheKey);
+      if (cached) {
+        this.logger.debug(`Cache HIT for category name: ${dto.name}`);
+        return {
+          success: true,
+          message: 'Category fetched successfully (cached)',
+          code: 'FETCHED',
+          data: cached,
+          error: null,
+        };
+      }
+      
       const cat = await this.prisma.category.findFirst({
         where: { 
           name: { equals: dto.name, mode: 'insensitive' },
@@ -654,11 +814,16 @@ export class CategoriesService {
         };
       }
 
+      const response = this.mapCategory(cat as FullCategory, true);
+      
+      // Cache the result
+      await this.redisService.setObject(cacheKey, response, this.CACHE_TTL);
+
       return {
         success: true,
         message: 'Category fetched successfully',
         code: 'FETCHED',
-        data: this.mapCategory(cat as FullCategory, true),
+        data: response,
         error: null,
       };
     } catch (error) {
@@ -701,6 +866,6 @@ export class CategoriesService {
         `Failed to queue bulk sync: ${error.message}`,
         'BULK_SYNC_FAILED'
       );
-    }
+    } 
   }
 }

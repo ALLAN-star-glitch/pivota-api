@@ -26,6 +26,7 @@ import {
   CreatePriceUnitRuleDto,
   PriceUnitRuleResponseDto,
   PricingMetadataResponseDto,
+  PricingUnitsByCategoryResponseDto,
 } from '@pivota-api/dtos';
 
 import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
@@ -187,6 +188,33 @@ export class ContractorsPricingGatewayController {
     this.logger.debug('REST GetPricingMetadata triggered');
     return this.pricingService.getPricingMetadata();
   }
+
+
+// ===========================================================
+// 💰 PRICING - GET UNITS BY CATEGORY (Public)
+// ===========================================================
+
+@Get('units/category/:categoryId')
+@Public()
+@Version('1')
+@ApiTags('Contractors - Pricing')
+@ApiOperation({ 
+  summary: 'Get allowed pricing units for a category',
+  description: 'Returns allowed pricing units, price ranges, and requirements for a specific COMPLIMENTARY category. Used to populate the pricing unit dropdown when posting a service.'
+})
+@ApiParam({ 
+  name: 'categoryId', 
+  description: 'Category ID (must be COMPLIMENTARY type)',
+  example: 'cmnboid7w006sarihf05x9txr'
+})
+@ApiResponse({ status: 200, description: 'Pricing units retrieved successfully' })
+@ApiResponse({ status: 404, description: 'Category not found' })
+async getPricingUnitsByCategory(
+  @Param('categoryId') categoryId: string,
+): Promise<BaseResponseDto<PricingUnitsByCategoryResponseDto>> {
+  this.logger.debug(`REST GetPricingUnitsByCategory: ${categoryId}`);
+  return this.pricingService.getPricingUnitsByCategory(categoryId);
+}
 
   // ===========================================================
   // 💰 PRICING - ADMIN OPERATIONS

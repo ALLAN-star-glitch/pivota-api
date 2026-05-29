@@ -17,6 +17,12 @@ service ContractorsPricingService {
   
   // Toggle rule status
   rpc ToggleRule (ToggleRuleRequest) returns (BasePriceRuleResponse);
+  
+  // ===================================================
+  // NEW: Get pricing units by category
+  // ===================================================
+  // Used by the Mobile/Web Frontend to populate dropdown when selecting a category
+  rpc GetPricingUnitsByCategory (GetPricingUnitsByCategoryRequest) returns (PricingUnitsByCategoryResponse);
 }
 
 // ===================================================
@@ -37,11 +43,11 @@ message PriceUnitRule {
   string id = 1;
   string vertical = 2;
   string unit = 3;
-  string currency = 4; // Added currency field
+  string currency = 4;
   optional string categorySlug = 5; 
   
-  float minPrice = 6;
-  optional float maxPrice = 7;
+  double minPrice = 6;
+  optional double maxPrice = 7;
   
   bool isExperienceRequired = 8;
   bool isNotesRequired = 9;
@@ -51,10 +57,10 @@ message PriceUnitRule {
 
 message PricingMetadataItem {
   string unit = 1;
-  string currency = 2; // Added currency field
+  string currency = 2;
   optional string categorySlug = 3;
-  float min = 4;
-  optional float max = 5;
+  double min = 4;
+  optional double max = 5;
   bool experienceRequired = 6;
   bool notesRequired = 7;
 }
@@ -65,10 +71,10 @@ message PricingMetadataItem {
 message CreatePriceUnitRuleRequest {
   string vertical = 1;
   string unit = 2;
-  string currency = 3; // Added currency field
+  string currency = 3;
   optional string categorySlug = 4;
-  float minPrice = 5;
-  optional float maxPrice = 6;
+  double minPrice = 5;
+  optional double maxPrice = 6;
   bool isExperienceRequired = 7;
   bool isNotesRequired = 8;
   bool isActive = 9;
@@ -79,6 +85,39 @@ message GetPricingMetadataRequest {}
 message ToggleRuleRequest {
   string id = 1;
   bool active = 2;
+}
+
+// ===================================================
+// NEW: Get Pricing Units By Category
+// ===================================================
+message GetPricingUnitsByCategoryRequest {
+  string categoryId = 1;
+}
+
+message PricingUnitOption {
+  string unit = 1;
+  string label = 2;
+  string description = 3;
+  double minPrice = 4;
+  optional double maxPrice = 5;
+  bool experienceRequired = 6;
+  bool notesRequired = 7;
+  string currency = 8;
+}
+
+message PricingUnitsByCategoryData {
+  string categoryId = 1;
+  string categoryName = 2;
+  string vertical = 3;
+  repeated PricingUnitOption allowedUnits = 4;
+}
+
+message PricingUnitsByCategoryResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  PricingUnitsByCategoryData data = 4;
+  ErrorPayload error = 5;
 }
 
 // ===================================================

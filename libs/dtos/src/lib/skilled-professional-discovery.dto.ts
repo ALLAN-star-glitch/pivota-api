@@ -63,6 +63,8 @@ export class SkilledProfessionalDiscoveryResponseDto {
 
 // In dtos/src/profile/skilled-professional.dto.ts
 
+// dtos/src/profile/skilled-professional.dto.ts
+
 export class SkilledProfessionalPublicProfileDto {
   id!: string;
   uuid!: string;
@@ -75,6 +77,7 @@ export class SkilledProfessionalPublicProfileDto {
     name: string;
     slug: string;
     vertical: string;
+    yearsExperience?: number;
   };
   additionalCategories?: Array<{
     id: string;
@@ -83,7 +86,7 @@ export class SkilledProfessionalPublicProfileDto {
     vertical: string;
   }>;
   specialties!: string[];
-  serviceAreas!: string[];
+  serviceAreas!: string[];  // ✅ Already exists
   yearsExperience?: number;
   hourlyRate?: number;
   dailyRate?: number;
@@ -91,6 +94,6 @@ export class SkilledProfessionalPublicProfileDto {
   averageRating!: number;
   totalReviews!: number;
   completedJobs!: number;
-  profileImage?: string;
+  profileImage?: string;  // ✅ Already exists
   portfolioImages!: string[];
 }

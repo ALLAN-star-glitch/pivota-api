@@ -9,6 +9,11 @@ service ContractorsService {
   rpc CreateServiceOffering (CreateServiceOfferingRequest) returns (BaseServiceOfferingResponse);
   rpc GetOfferingsByVertical (GetOfferingsByVerticalRequest) returns (ListServiceOfferingsResponse);
   rpc GetOfferingsByAccount (GetOfferingsByAccountRequest) returns (ListServiceOfferingsResponse);
+  rpc GetOfferingsByProfessional (GetOfferingsByProfessionalRequest) returns (ListServiceOfferingsResponse);
+  rpc GetOfferingById (GetOfferingByIdRequest) returns (BaseServiceOfferingResponse);
+  rpc UpdateServiceOffering (UpdateServiceOfferingRequest) returns (BaseServiceOfferingResponse);
+  rpc DeleteServiceOffering (DeleteServiceOfferingRequest) returns (BaseResponse);
+  rpc GetOfferingsByCategory (GetOfferingsByCategoryRequest) returns (ListServiceOfferingsResponse); 
 }
 
 // ===================================================
@@ -27,6 +32,13 @@ message DayAvailability {
   bool isClosed = 4;   
 }
 
+message BaseResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  ErrorPayload error = 4;
+}
+
 // ===================================================
 // ENTITIES
 // ===================================================
@@ -35,76 +47,114 @@ message ServiceOffering {
   string externalId = 2;
   
   // Identity Pillar
-  string creatorId = 3;      // The human individual
-  string creatorName = 4;    // Denormalized name
-  string accountId = 5;      // The Org or Individual Root Account
-  string accountName = 6;    // Denormalized name
+  string creatorId = 3;
+  string accountId = 4;
+  string skilledProfessionalId = 5;  // Link to profile
   
-  string title = 7;
-  string description = 8;
-  string categoryId = 9; 
-  repeated string verticals = 10; 
+  // Denormalized fields
+  string professionalName = 6;
+  string professionalAvatar = 7;
+  bool isVerified = 8;
   
-  double basePrice = 11;
-  string priceUnit = 12; 
-  string currency = 13;
+  string title = 9;
+  string description = 10;
+  string categoryId = 11;
+  string categoryName = 12;
+  // REMOVED: repeated string verticals = 13; - use category.vertical instead
   
-  string locationCity = 14;
-  string locationNeighborhood = 15;
+  double basePrice = 13;  // Renumbered from 14
+  string priceUnit = 14;  // Renumbered from 15
+  string currency = 15;   // Renumbered from 16
   
-  repeated DayAvailability availability = 16;
+  string locationCity = 16;           // Renumbered from 17
+  string locationNeighborhood = 17;   // Renumbered from 18
   
-  int32 yearsExperience = 17; 
-  string additionalNotes = 18;
+  repeated DayAvailability availability = 18;  // Renumbered from 19
   
-  // Metadata injected by Gateway or Service
-  bool isAccountVerified = 19;
-  double averageRating = 20;
-  int32 reviewCount = 21;
+  int32 yearsExperience = 19;  // Renumbered from 20
+  double hourlyRate = 20;      // Renumbered from 21
+  repeated string serviceAreas = 21;  // Renumbered from 22
   
-  string createdAt = 22;
-  string updatedAt = 23;
+  string status = 22;  // Renumbered from 23
+  string expiresAt = 23;  // Renumbered from 24
+  
+  double averageRating = 24;  // Renumbered from 25
+  int32 reviewCount = 25;     // Renumbered from 26
+  
+  string createdAt = 26;  // Renumbered from 27
+  string updatedAt = 27;  // Renumbered from 28
+  
+  // ADD: vertical from category (for convenience)
+  string vertical = 28;  // Derived from category.vertical
 }
 
 // ===================================================
 // REQUEST MESSAGES
 // ===================================================
 message CreateServiceOfferingRequest {
-  // Identity Injection (from Gateway)
+  // Identity (from Gateway JWT)
   string creatorId = 1;
-  string creatorName = 2;
-  string accountId = 3;
-  string accountName = 4;
+  string accountId = 2;
+  string skilledProfessionalId = 3;
 
-  string title = 5;
-  string description = 6;
-  string categoryId = 7; 
-  string categorySlug = 8;
+  string title = 4;
+  string description = 5;
+  string categoryId = 6;
+  // REMOVED: repeated string verticals = 7;
   
-  repeated string verticals = 9; 
+  double basePrice = 7;  // Renumbered from 8
+  string priceUnit = 8;  // Renumbered from 9
+  string currency = 9;   // Renumbered from 10
   
-  double basePrice = 10;
-  string priceUnit = 11;
-  string currency = 12;
+  string locationCity = 10;           // Renumbered from 11
+  string locationNeighborhood = 11;   // Renumbered from 12
   
-  string locationCity = 13;
-  string locationNeighborhood = 14;
+  int32 yearsExperience = 12;  // Renumbered from 13
+  string additionalNotes = 13;  // Renumbered from 14
   
-  int32 yearsExperience = 15;
-  string additionalNotes = 16;
-  
-  repeated DayAvailability availability = 17;
+  repeated DayAvailability availability = 14;  // Renumbered from 15
 }
 
 message GetOfferingsByVerticalRequest {
-  string vertical = 1; 
-  string city = 2;
-  int32 limit = 3;
-  int32 offset = 4;
+  string vertical = 1;
+  optional string city = 2;
+  optional string categoryId = 3;
+  optional double minPrice = 4;
+  optional double maxPrice = 5;
+  optional double minRating = 6;
+  optional bool isVerified = 7;
+  optional string sortBy = 8;
+  optional int32 limit = 9;
+  optional int32 offset = 10;
 }
 
 message GetOfferingsByAccountRequest {
   string accountId = 1;
+}
+
+message GetOfferingsByProfessionalRequest {
+  string professionalId = 1;
+}
+
+message GetOfferingByIdRequest {
+  string id = 1;
+}
+
+message UpdateServiceOfferingRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string description = 3;
+  optional double basePrice = 4;
+  optional string priceUnit = 5;
+  optional string locationCity = 6;
+  optional string locationNeighborhood = 7;
+  repeated DayAvailability availability = 8;
+  string userId = 9;  // For permission check
+}
+
+message DeleteServiceOfferingRequest {
+  string id = 1;
+  string userId = 2;
 }
 
 // ===================================================
@@ -123,5 +173,22 @@ message ListServiceOfferingsResponse {
   string code = 2;
   string message = 3;
   repeated ServiceOffering data = 4;
-  ErrorPayload error = 5;
+  PaginationInfo pagination = 5;
+  ErrorPayload error = 6;
+}
+
+message PaginationInfo {
+  int32 total = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  bool hasMore = 4;
+}
+
+message GetOfferingsByCategoryRequest {
+  string categoryId = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+  optional string city = 4;
+  optional double minPrice = 5;
+  optional double maxPrice = 6;
 }

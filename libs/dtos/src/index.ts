@@ -1,3 +1,5 @@
+import exp = require('constants');
+
 export * from './lib/shared-dtos.module';
 export * from './lib/LoginResponseDto.dto';
 export * from './lib/SignupResponseDto.dto';
@@ -88,3 +90,6 @@ export * from './lib/housing-training-data.response.dto';
 export * from './lib/profile_media.dto';
 export * from './lib/sync-user-role.dto';
 export * from './lib/skilled-professional-discovery.dto';
+export * from './lib/pagination.dto';
+export * from './lib/update-service-offering.dto';  
+export  * from './lib/pricing-units-response.dto';

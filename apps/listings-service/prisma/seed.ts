@@ -119,8 +119,7 @@ async function main() {
         currency: rule.currency ?? 'KES',
         categoryId: targetCategoryId,
       },
-    });
-
+    }); 
     const commonData = {
       minPrice: rule.minPrice,
       maxPrice: rule.maxPrice,

@@ -6,16 +6,18 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ContractorsPricingGatewayService } from './services/contractors-pricing-gateway.service';
 import { ContractorsPricingGatewayController } from './contractors/contractors-pricing-gateway.controller';
 import { SubscriptionsGatewayModule } from '../SubscriptionsGatewayModule/subscriptions-gateway.module';
+import { UserModule } from '../UserProfileGatewayModule/user.module';
 
 @Module({
   imports: [
     SubscriptionsGatewayModule,
+    UserModule, // Import UserModule to use UserService
     ClientsModule.register([
       {
         name: 'CONTRACTORS_PACKAGE',
         transport: Transport.GRPC,
         options: {
-          url: process.env.LISTINGS_SERVICE_URL || 'localhost:50058',
+          url: process.env.LISTINGS_SERVICE_URL || 'localhost:50061',
           package: 'contractors',
           protoPath: CONTRACTORS_PROTO_PATH,
         },

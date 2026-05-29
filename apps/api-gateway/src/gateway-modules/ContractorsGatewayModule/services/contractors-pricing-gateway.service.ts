@@ -8,6 +8,7 @@ import {
   CreatePriceUnitRuleDto,
   PriceUnitRuleResponseDto,
   PricingMetadataResponseDto,
+  PricingUnitsByCategoryResponseDto,
 } from '@pivota-api/dtos';
 
 // This matches the pricing.proto service definition
@@ -27,6 +28,10 @@ interface PricingServiceGrpc {
   ToggleRule(
     data: { id: string; active: boolean },
   ): Observable<BaseResponseDto<PriceUnitRuleResponseDto>>;
+
+  GetPricingUnitsByCategory(
+    data: { categoryId: string },
+  ): Observable<BaseResponseDto<PricingUnitsByCategoryResponseDto>>;
 }
 
 @Injectable()
@@ -74,6 +79,26 @@ export class ContractorsPricingGatewayService {
     } catch (error) {
       this.logger.error(`gRPC Error fetching pricing metadata: ${error.message}`);
       return BaseResponseDto.fail('Could not load pricing configuration', 'METADATA_ERROR');
+    }
+  }
+
+  // ===========================================================
+  // UI/FRONTEND: GET PRICING UNITS BY CATEGORY
+  // Used for dynamic dropdowns when posting a service
+  // ===========================================================
+  async getPricingUnitsByCategory(
+    categoryId: string,
+  ): Promise<BaseResponseDto<PricingUnitsByCategoryResponseDto>> {
+    try {
+      const res = await firstValueFrom(this.grpcService.GetPricingUnitsByCategory({ categoryId }));
+      
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching pricing units by category: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch pricing units for category', 'PRICING_UNITS_ERROR');
     }
   }
 

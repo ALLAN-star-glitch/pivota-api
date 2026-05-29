@@ -248,69 +248,80 @@ model JobApplicationStatusHistory {
 }
 
 /// =====================================================================
-///                        CONTRACTOR SERVICE OFFERINGS
-/// =====================================================================
-/// =====================================================================
-///                        CONTRACTOR SERVICE OFFERINGS
+///                    SKILLED PROFESSIONAL SERVICE OFFERINGS
 /// =====================================================================
 model ServiceOffering {
   id           String   @id @default(cuid())
   externalId   String   @default(uuid())
   
-  // --- EXTERNAL IDENTITY ANCHORS ---
-  // refers to the individual human user UUID in Profile DB
+  // --- EXTERNAL IDENTITY ANCHORS (From Profile Service) ---
+  // The user who created this offering (from JWT)
   creatorId    String   
-  // refers to the root 'Account' (Org or Individual) in Profile DB
+  // The account (Individual or Organization) that owns this offering
   accountId    String   
-
-  // --- DENORMALIZED DISPLAY METADATA ---
-  // Store names locally to avoid high-frequency cross-service gRPC calls
-  creatorName  String?  
-  accountName  String
-
-  // NOTE: 'contractorType' and 'isVerified' are removed.
-  // These are handled by the Account model in the Profile Service.
-  // The API Gateway/Aggregator will inject these into the response DTO.
-
+  
+  // --- DIRECT LINK TO SKILLED PROFESSIONAL PROFILE ---
+  // UUID from Profile Service's SkilledProfessionalProfile
+  // This is the PRIMARY link - all professional data comes from here
+  skilledProfessionalId String  
+  // TODO: Add relation when profile service is migrated to same DB or via foreign key
+  // For now, this is a reference UUID without DB constraint
+  
+  // --- DENORMALIZED FIELDS (For performance, fetched from Profile Service) ---
+  // These are snapshots at creation time, can be refreshed periodically
+  professionalName   String?   // Denormalized from profile
+  professionalAvatar String?   // Denormalized from profile
+  isVerified         Boolean   @default(false)  // Denormalized from profile
+  yearsExperience    Int?      // Denormalized from profile
+  serviceAreas       Json?     // Denormalized from profile (JSON array)
+  hourlyRate         Float?    // Denormalized from profile's default rate
+  
   // --- LISTING DETAILS ---
   title        String   
   description  String
   
-  // AI Discovery: e.g., ["JOBS", "SOCIAL_SUPPORT"]
-  // This allows one listing to appear in multiple marketplace pillars.
-  verticals    String[] @default(["JOBS"]) 
-
+  // REMOVED: verticals array - use category.vertical instead
+  
+  // Categories from Listings Service
   categoryId   String
   category     Category @relation("ServiceMainCategory", fields: [categoryId], references: [id])
   
   subCategoryId String?
   subCategory   Category? @relation("ServiceSubcategory", fields: [subCategoryId], references: [id])
   
-  // --- PRICING & LOGISTICS ---
+  // --- PRICING (Can override profile defaults) ---
   basePrice    Float
-  priceUnit    String   @default("FIXED") // FIXED, PER_HOUR, PER_SESSION
+  priceUnit    String   @default("PER_HOUR") // PER_HOUR, PER_DAY, FIXED, PER_SESSION
   currency     String   @default("KES")
   
+  // --- LOCATION ---
   locationCity         String
   locationNeighborhood String?
   
-  // Snapshot for quick search results & UI rendering
-  yearsExperience Int?
-  availability    String?  // e.g., JSON string or "Mon-Fri, 8am-5pm"
+  // --- AVAILABILITY & SCHEDULING ---
+  availability    String?  // JSON string for weekly schedule
+  // Example: {"monday": ["09:00-17:00"], "tuesday": ["09:00-17:00"]}
   
+  // --- STATUS & LIFECYCLE ---
+  status     String   @default("ACTIVE")  // ACTIVE, PAUSED, ARCHIVED, DRAFT
+  expiresAt  DateTime?  // Auto-archive after expiration
+  
+  // --- TIMESTAMPS ---
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
-  // --- RELATIONSHIPS (Internal to Listings DB) ---
+  
+  // --- RELATIONSHIPS ---
   bookings        ServiceBooking[]
   reviews         Rating[] @relation("ServiceReviews")
-
+  
   // --- INDEXES ---
-  @@index([locationCity])
-  @@index([verticals])   
-  @@index([creatorId])
+  @@index([skilledProfessionalId])
   @@index([accountId])
+  @@index([creatorId])
   @@index([categoryId])
+  @@index([locationCity])
+  @@index([status])
+  @@index([createdAt])
 }
 
 /// =====================================================================
