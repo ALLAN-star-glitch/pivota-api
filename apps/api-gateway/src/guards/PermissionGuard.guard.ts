@@ -1,5 +1,3 @@
-// apps/gateway/src/guards/permissions.guard.ts
-
 import {
   Injectable,
   CanActivate,
@@ -9,20 +7,9 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Request } from 'express';
-import { UserResponseDto } from '@pivota-api/dtos';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-// Remove MODULE_KEY import - it's not used in this guard
 import { hasPermission, RoleType } from '@pivota-api/access-management';
-
-/**
- * Represents an authenticated user
- */
-interface AuthenticatedUser extends UserResponseDto {
-  role?: RoleType;
-  accountId: string;
-}
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -38,17 +25,23 @@ export class PermissionsGuard implements CanActivate {
     ]);
 
     if (isPublic) {
-      return true; // Bypass all auth logic for public endpoints
+      return true;
     }
 
     // 2. Get user from request
-    const user = this.extractUser(context);
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+    
     if (!user) {
       this.logger.warn('Access denied: Missing authenticated user');
       throw new UnauthorizedException('Authentication required');
     }
 
-    // 3. Check required permissions from @Permissions() decorator
+    // 3. Get user ID - try all possible field names
+    const userId = user.userUuid || user.sub || user.uuid || user.id || 'unknown';
+    const userRole = user.role as RoleType; // ✅ Using RoleType for type safety
+
+    // 4. Check required permissions
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -56,24 +49,22 @@ export class PermissionsGuard implements CanActivate {
 
     // If no specific permissions required, just being logged in is enough
     if (!requiredPermissions || requiredPermissions.length === 0) {
-      this.logger.debug(`Access granted: User ${user.uuid} [${user.role}] - no permissions required`);
+      this.logger.debug(`Access granted: User ${userId} [${userRole}] - no permissions required`);
       return true;
     }
 
-    const userRole = user.role;
-
     if (!userRole) {
-      this.logger.warn(`Access denied: User ${user.uuid} has no role assigned`);
+      this.logger.warn(`Access denied: User ${userId} has no role assigned`);
       throw new ForbiddenException('User has no valid role');
     }
 
-    // Check each required permission using the shared hasPermission function
+    // Check each required permission
     for (const permission of requiredPermissions) {
-      const hasPerm = hasPermission(userRole, permission);
+      const hasPerm = hasPermission(userRole, permission); // ✅ Now passing RoleType
       
       if (!hasPerm) {
         this.logger.warn(
-          `Forbidden: User ${user.uuid} [${userRole}] lacks permission: ${permission}`
+          `Forbidden: User ${userId} [${userRole}] lacks permission: ${permission}`
         );
         throw new ForbiddenException(
           `Insufficient permissions. Required: ${permission}`
@@ -82,26 +73,8 @@ export class PermissionsGuard implements CanActivate {
     }
 
     this.logger.debug(
-      `Access granted: User ${user.uuid} [${userRole}] | Permissions: [${requiredPermissions.join(', ')}]`
+      `Access granted: User ${userId} [${userRole}] | Permissions: [${requiredPermissions.join(', ')}]`
     );
     return true;
-  }
-
-  /**
-   * Safely extracts the authenticated user depending on transport type.
-   */
-  private extractUser(context: ExecutionContext): AuthenticatedUser | null {
-    const type = context.getType<'http' | 'rpc' | 'ws'>();
-
-    switch (type) {
-      case 'http':
-        return context.switchToHttp().getRequest<Request & { user?: AuthenticatedUser }>().user ?? null;
-      case 'rpc':
-        return context.switchToRpc().getData<{ user?: AuthenticatedUser }>().user ?? null;
-      case 'ws':
-        return context.switchToWs().getClient<{ user?: AuthenticatedUser }>().user ?? null;
-      default:
-        return null;
-    }
   }
 }

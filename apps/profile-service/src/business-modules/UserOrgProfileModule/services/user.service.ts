@@ -2721,6 +2721,10 @@ async getSkilledProfessionalByUuid(
 /**
  * Discover skilled professionals with filters
  */
+/**
+ * Discover skilled professionals with filters
+ * Note: For privacy, contact info is only included for authenticated users or after booking
+ */
 async discoverSkilledProfessionals(
   query: DiscoverSkilledProfessionalsDto
 ): Promise<BaseResponseDto<SkilledProfessionalDiscoveryResponseDto>> {
@@ -2794,8 +2798,19 @@ async discoverSkilledProfessionals(
         account: {
           include: {
             individualProfile: true,
-            organizationProfile: true,  // Include org profile
-            users: { take: 1 }
+            intermediaryAgentProfile: true,
+            users: {
+              take: 1,
+              select: {
+                email: true,
+                phone: true,
+                profileImage: true,
+              }
+            },
+            verifications: {
+              where: { status: 'APPROVED' },
+              select: { type: true }
+            }
           }
         }
       },
@@ -2804,7 +2819,18 @@ async discoverSkilledProfessionals(
       take: query.limit || 20,
     });
     
-    const mappedProfessionals = professionals.map(prof => this.mapToPublicProfile(prof));
+    // For discovery, optionally hide full contact info until booking
+    const mappedProfessionals = professionals.map(prof => {
+      const publicProfile = this.mapToPublicProfile(prof);
+      
+      // If this is a public discovery endpoint, mask contact info
+      if (!query.includeContactInfo) {
+        publicProfile.email = this.maskEmail(publicProfile.email);
+        publicProfile.phone = this.maskPhone(publicProfile.phone);
+      }
+      
+      return publicProfile;
+    });
     
     return BaseResponseDto.ok(
       {
@@ -2826,7 +2852,30 @@ async discoverSkilledProfessionals(
 }
 
 /**
+ * Mask email for privacy in public listings
+ */
+private maskEmail(email: string): string {
+  if (!email) return '';
+  const [localPart, domain] = email.split('@');
+  if (localPart.length <= 2) return email;
+  const maskedLocal = localPart.substring(0, 2) + '***' + localPart.substring(localPart.length - 1);
+  return `${maskedLocal}@${domain}`;
+}
+
+/**
+ * Mask phone number for privacy in public listings
+ */
+private maskPhone(phone: string): string {
+  if (!phone) return '';
+  if (phone.length <= 6) return phone;
+  const visibleStart = phone.substring(0, 4);
+  const visibleEnd = phone.substring(phone.length - 3);
+  return `${visibleStart}***${visibleEnd}`;
+}
+
+/**
  * Map to public profile (for discovery and public views)
+ * Includes contact information for booking communication
  */
 private mapToPublicProfile(profile: any): SkilledProfessionalPublicProfileDto {
   const categories = profile.categories || [];
@@ -2835,12 +2884,71 @@ private mapToPublicProfile(profile: any): SkilledProfessionalPublicProfileDto {
   const user = profile.account?.users?.[0];
   const individualProfile = profile.account?.individualProfile;
   const organizationProfile = profile.account?.organizationProfile;
+  const intermediaryAgentProfile = profile.account?.intermediaryAgentProfile;
   
   // Determine account type and get appropriate display info
   const accountType = profile.account?.type;
   const displayName = accountType === 'ORGANIZATION' 
     ? organizationProfile?.name 
     : `${individualProfile?.firstName || ''} ${individualProfile?.lastName || ''}`.trim();
+  
+  // Get email from user record (always available)
+  const email = user?.email;
+  
+  // Get phone number (priority: intermediaryAgentProfile, then user)
+  const phone = intermediaryAgentProfile?.contactPhone ?? user?.phone;
+  
+  // Get alternative phone if available (from intermediary agent profile)
+  const alternativePhone = intermediaryAgentProfile?.contactPhone !== phone 
+    ? intermediaryAgentProfile?.contactPhone 
+    : undefined;
+  
+  // Get professional bio/description
+  const bio = intermediaryAgentProfile?.about ?? individualProfile?.bio ?? organizationProfile?.about;
+  
+  // Get preferred contact method (from intermediary agent or default)
+  const preferredContactMethod = intermediaryAgentProfile?.preferredContactMethod ?? 'PLATFORM';
+  
+  // Get languages spoken (from individual profile or default)
+  const languagesSpoken = individualProfile?.languagesSpoken 
+    ? this.parseJsonField<string[]>(individualProfile.languagesSpoken, [])
+    : ['English']; // Default to English for Kenya
+  
+  // Get professional's location from various sources
+  const city = profile.serviceAreas && Array.isArray(profile.serviceAreas) && profile.serviceAreas.length > 0
+    ? profile.serviceAreas[0] // First service area as primary city
+    : individualProfile?.city ?? organizationProfile?.physicalAddress?.split(',')[0];
+  
+  const neighborhood = individualProfile?.neighborhood ?? organizationProfile?.neighborhood;
+  
+  // Get response metrics
+  const responseRate = profile.responseRate ?? 95; // Default 95% if not available
+  const responseTime = profile.responseTime ?? 'within 2 hours';
+  
+  // Get total earnings (for analytics - can be aggregated from bookings)
+  const totalEarnings = profile.totalEarnings ?? undefined;
+  
+  // Get booking acceptance rate
+  const bookingAcceptanceRate = profile.bookingAcceptanceRate ?? undefined;
+  
+  // Determine verification badges based on verification records
+  const verificationBadges: string[] = [];
+  if (profile.isVerified) {
+    verificationBadges.push('ID_VERIFIED');
+    if (profile.licenseNumber) verificationBadges.push('LICENSE_VERIFIED');
+    if (profile.account?.verifications?.some((v: any) => v.status === 'APPROVED')) {
+      verificationBadges.push('BACKGROUND_CHECKED');
+    }
+  }
+  
+  
+  // Parse availability schedule if it exists
+  const availabilitySchedule = profile.availabilitySchedule
+    ? this.parseJsonField<any>(profile.availabilitySchedule, null)
+    : null;
+  
+  // Check if available now (based on schedule and current time)
+  const isAvailableNow = this.checkAvailabilityNow(availabilitySchedule);
   
   return {
     id: profile.id,
@@ -2849,11 +2957,29 @@ private mapToPublicProfile(profile: any): SkilledProfessionalPublicProfileDto {
     accountType: accountType,
     displayName: displayName,
     title: profile.title ?? undefined,
+    
+    // ========== CONTACT INFORMATION ==========
+    email: email,
+    phone: phone || '',
+    alternativePhone: alternativePhone,
+    website: intermediaryAgentProfile?.website ?? organizationProfile?.website,
+    
+    // ========== LOCATION DETAILS ==========
+    address: organizationProfile?.physicalAddress ?? individualProfile?.address,
+    city: city,
+    neighborhood: neighborhood,
+    locationCoordinates: (profile.latitude && profile.longitude) ? {
+      latitude: profile.latitude,
+      longitude: profile.longitude,
+    } : undefined,
+    
+    // ========== PROFESSIONAL DETAILS ==========
     primaryCategory: primaryCategory ? {
       id: primaryCategory.category.id,
       name: primaryCategory.category.name,
       slug: primaryCategory.category.slug,
       vertical: primaryCategory.category.vertical,
+      yearsExperience: primaryCategory.yearsExperience,
     } : undefined,
     additionalCategories: additionalCategories.map((c: any) => ({
       id: c.category.id,
@@ -2863,16 +2989,124 @@ private mapToPublicProfile(profile: any): SkilledProfessionalPublicProfileDto {
     })),
     specialties: this.parseJsonField<string[]>(profile.specialties, []),
     serviceAreas: this.parseJsonField<string[]>(profile.serviceAreas, []),
+    serviceRadius: profile.serviceRadius ?? 10, // Default 10km radius
     yearsExperience: profile.yearsExperience ?? undefined,
+    
+    // ========== PRICING ==========
     hourlyRate: profile.hourlyRate ?? undefined,
     dailyRate: profile.dailyRate ?? undefined,
+    weeklyRate: profile.weeklyRate ?? undefined,
+    monthlyRate: profile.monthlyRate ?? undefined,
+    currency: profile.currency ?? 'KES',
+
+    
+    // ========== VERIFICATION & TRUST ==========
     isVerified: profile.isVerified,
+    verificationBadges: verificationBadges,
     averageRating: profile.averageRating,
     totalReviews: profile.totalReviews,
     completedJobs: profile.completedJobs,
+    responseRate: responseRate,
+    responseTime: responseTime,
+    
+    // ========== MEDIA & DOCUMENTS ==========
     profileImage: individualProfile?.profileImage ?? organizationProfile?.logo ?? user?.profileImage,
+    coverImage: individualProfile?.coverPhoto ?? organizationProfile?.coverPhoto,
     portfolioImages: this.parseJsonField<string[]>(profile.portfolioImages, []),
+    identificationDocument: profile.isVerified ? {
+      type: 'NATIONAL_ID',
+      isVerified: true,
+    } : undefined,
+    
+    // ========== AVAILABILITY ==========
+    availabilitySchedule: availabilitySchedule,
+    isAvailableNow: isAvailableNow,
+    nextAvailableSlot: this.getNextAvailableSlot(availabilitySchedule),
+    
+    // ========== BUSINESS DETAILS ==========
+    businessRegistrationNumber: organizationProfile?.registrationNo ?? profile.businessRegistrationNumber,
+    taxIdentificationNumber: organizationProfile?.kraPin ?? profile.taxIdentificationNumber,
+    insuranceProvider: profile.insuranceProvider,
+    insuranceExpiry: profile.insuranceExpiry,
+    licenseNumber: profile.licenseNumber,
+    licenseExpiry: profile.licenseExpiry,
+    licenseIssuingBody: profile.licenseBody ?? profile.licenseIssuingBody,
+    
+    // ========== SOCIAL & COMMUNICATION ==========
+    socialLinks: intermediaryAgentProfile?.socialLinks 
+      ? this.parseJsonField<Record<string, string>>(intermediaryAgentProfile.socialLinks, {})
+      : {},
+    preferredContactMethod: preferredContactMethod as any,
+    languagesSpoken: languagesSpoken,
+    
+    // ========== ADDITIONAL METADATA ==========
+    bio: bio,
+    joinedDate: profile.createdAt,
+    lastActiveAt: user?.lastLoginAt ?? profile.updatedAt,
+    totalEarnings: totalEarnings,
+    bookingAcceptanceRate: bookingAcceptanceRate,
+    
+    // ========== EMERGENCY CONTACT ==========
+    emergencyContact: profile.emergencyContact
+      ? this.parseJsonField<any>(profile.emergencyContact, null)
+      : undefined,
   };
+}
+
+/**
+ * Helper method to check if professional is available now based on schedule
+ */
+private checkAvailabilityNow(availabilitySchedule: any): boolean {
+  if (!availabilitySchedule) return false;
+  
+  const now = new Date();
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const currentDay = dayNames[now.getDay()];
+  const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+  
+  const daySchedule = availabilitySchedule[currentDay];
+  if (!daySchedule || !Array.isArray(daySchedule)) return false;
+  
+  // Check if current time falls within any time slot
+  return daySchedule.some((slot: string) => {
+    const [start, end] = slot.split('-');
+    return currentTime >= start && currentTime <= end;
+  });
+}
+
+/**
+ * Helper method to get next available slot
+ */
+private getNextAvailableSlot(availabilitySchedule: any): Date | undefined {
+  if (!availabilitySchedule) return undefined;
+  
+  const now = new Date();
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  
+  // Check next 7 days
+  for (let i = 0; i <= 7; i++) {
+    const checkDate = new Date(now);
+    checkDate.setDate(now.getDate() + i);
+    const dayName = dayNames[checkDate.getDay()];
+    const daySchedule = availabilitySchedule[dayName];
+    
+    if (daySchedule && Array.isArray(daySchedule) && daySchedule.length > 0) {
+      // Get earliest slot of that day
+      const earliestSlot = daySchedule[0];
+      const [startHour, startMinute] = earliestSlot.split('-')[0].split(':');
+      
+      checkDate.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
+      
+      // If it's today, ensure the slot is in the future
+      if (i === 0 && checkDate <= now) {
+        continue;
+      }
+      
+      return checkDate;
+    }
+  }
+  
+  return undefined;
 }
 
 // In profile-service/src/modules/user/user.service.ts

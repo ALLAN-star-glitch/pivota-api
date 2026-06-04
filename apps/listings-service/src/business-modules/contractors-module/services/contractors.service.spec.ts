@@ -11,7 +11,7 @@ describe('ProvidersService', () => {
 
     service = module.get<ContractorsService>(ContractorsService);
   });
-
+ 
   it('should be defined', () => {
     expect(service).toBeDefined();
   });

@@ -468,14 +468,29 @@ model SkilledProfessionalProfile {
   certifications    Json      @default("[]")
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+
+  // ========== BOOKING & ESCROW FIELDS ==========
+  currency               String?   @default("KES")  // Currency for transactions
+  serviceRadius          Int?      @default(10)      // Max distance in km
+  availabilitySchedule   Json      @default("{}")    // Weekly availability
+  responseRate           Float?    @default(95.0)    // Response rate to booking requests
+  responseTime           String?   @default("within 2 hours") // Avg response time
+  bookingAcceptanceRate  Float?    @default(80.0)    // Percentage of bookings accepted
+  preferredContactMethod String?   @default("PLATFORM") // PHONE, EMAIL, WHATSAPP, PLATFORM
+  
+  // Analytics (populated by escrow service)
+  totalEarnings          Float?    @default(0)       // Lifetime earnings from escrow
+  
   account           Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
   
- // Relations - Type of relation is many-to-many through SkilledProfessionalCategory
+  // Relations
   categories        SkilledProfessionalCategory[]
   
   @@index([accountUuid])
   @@index([isVerified])
   @@index([averageRating])
+  @@index([responseRate])
+  @@index([bookingAcceptanceRate])
   @@map("skilled_professional_profiles")
 }
 

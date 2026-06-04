@@ -12,7 +12,7 @@ datasource db {
 /// =====================================================================
 model Category {
   id            String   @id @default(cuid())
-  externalId    String   @default(uuid())
+  externalId    String   @default(uuid()) @unique
   
   // NEW: Discriminator for which pillar this belongs to
   vertical      String   // e.g., "JOBS", "HOUSING", "SOCIAL_SUPPORT"
@@ -252,7 +252,7 @@ model JobApplicationStatusHistory {
 /// =====================================================================
 model ServiceOffering {
   id           String   @id @default(cuid())
-  externalId   String   @default(uuid())
+  externalId   String   @default(uuid()) @unique
   
   // --- EXTERNAL IDENTITY ANCHORS (From Profile Service) ---
   // The user who created this offering (from JWT)
@@ -329,7 +329,7 @@ model ServiceOffering {
 /// =====================================================================
 model ServiceBooking {
   id            String   @id @default(cuid())
-  externalId    String   @default(uuid())
+  externalId    String   @default(uuid()) @unique
 
   // ======================
   // THE WHO (External IDs)
@@ -348,6 +348,9 @@ model ServiceBooking {
 
   // Denormalized for quick display in "My Bookings"
   contractorName String?  
+  clientName     String?   // Client's name at time of booking
+  clientPhone    String?   // Client's phone for SMS notifications
+  clientEmail    String?   // Client's email for email notifications
   serviceTitle   String?  
 
   // ======================
@@ -378,7 +381,7 @@ model ServiceBooking {
 /// =====================================================================
 model Rating {
   id              String           @id @default(cuid())
-  externalId      String           @default(uuid())
+  externalId      String           @default(uuid())  @unique
   
   // Relation to JobPost (Optional, for employer reviews)
   jobPostId       String?
@@ -401,7 +404,7 @@ model Rating {
 /// =====================================================================
 model HouseListing {
   id           String   @id @default(cuid())
-  externalId   String   @default(uuid())
+  externalId   String   @default(uuid()) @unique
   creatorId    String
   creatorName  String?
   accountId    String
@@ -501,7 +504,7 @@ model HouseViewing {
 /// =====================================================================
 model SupportProgram {
   id           String   @id @default(cuid())
-  externalId   String   @default(uuid())
+  externalId   String   @default(uuid()) @unique
 
   // --- IDENTITY ANCHORS ---
   // accountId refers to the root 'Account' (Individual or Organization) in Profile DB
@@ -586,7 +589,7 @@ model SupportProgram {
 
 model SupportApplication {
   id           String         @id @default(cuid())
-  externalId   String         @default(uuid())
+  externalId   String         @default(uuid()) @unique
   
   programId    String
   program      SupportProgram @relation(fields: [programId], references: [id])
@@ -707,7 +710,7 @@ model SupportDocument {
 
 model SupportMilestone {
   id          String         @id @default(cuid())
-  externalId  String         @default(uuid())
+  externalId  String         @default(uuid()) @unique
   
   programId   String
   program     SupportProgram @relation(fields: [programId], references: [id], onDelete: Cascade)

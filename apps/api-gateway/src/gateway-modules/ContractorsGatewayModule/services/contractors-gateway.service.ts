@@ -10,11 +10,26 @@ import {
   CreateServiceGrpcOfferingDto,
   CreateServiceOfferingDto,
   UpdateServiceOfferingDto,
+  CreateBookingRequestDto,
+  AcceptBookingRequestDto,
+  DeclineBookingRequestDto,
+  CancelBookingRequestDto,
+  CompleteBookingRequestDto,
+  GetCustomerBookingsRequestDto,
+  GetContractorBookingsRequestDto,
+  GetBookingDetailsRequestDto,
+  GetUpcomingBookingsRequestDto,
+  GetProfessionalStatsRequestDto,
+  BookingResponseDto,
+  BookingStatisticsResponseDto,
+  PaginatedBookingsResponseDto,
+  UpcomingBookingResponseDto,
 } from '@pivota-api/dtos';
 import { UserService } from '../../UserProfileGatewayModule/services/user.service';
 
 // This matches the contractors.proto
 interface ContractorsServiceGrpc {
+  // Service Offering Methods
   CreateServiceOffering(
     data: CreateServiceGrpcOfferingDto,
   ): Observable<BaseResponseDto<ServiceOfferingResponseDto>>;
@@ -54,7 +69,46 @@ interface ContractorsServiceGrpc {
     }
   ): Observable<BaseResponseDto<ServiceOfferingResponseDto[]>>;
 
-  
+  // Booking Methods
+  CreateBooking(
+    data: CreateBookingRequestDto,
+  ): Observable<BaseResponseDto<BookingResponseDto>>;
+
+  AcceptBooking(
+    data: AcceptBookingRequestDto,
+  ): Observable<BaseResponseDto<BookingResponseDto>>;
+
+  DeclineBooking(
+    data: DeclineBookingRequestDto,
+  ): Observable<BaseResponseDto<BookingResponseDto>>;
+
+  CancelBooking(
+    data: CancelBookingRequestDto,
+  ): Observable<BaseResponseDto<BookingResponseDto>>;
+
+  CompleteBooking(
+    data: CompleteBookingRequestDto,
+  ): Observable<BaseResponseDto<BookingResponseDto>>;
+
+  GetMyBookingsAsCustomer(
+    data: GetCustomerBookingsRequestDto,
+  ): Observable<BaseResponseDto<PaginatedBookingsResponseDto>>;
+
+  GetMyBookingsAsProfessional(
+    data: GetContractorBookingsRequestDto,
+  ): Observable<BaseResponseDto<PaginatedBookingsResponseDto>>;
+
+  GetBookingDetails(
+    data: GetBookingDetailsRequestDto,
+  ): Observable<BaseResponseDto<BookingResponseDto>>;
+
+  GetUpcomingBookingsForProfessional(
+    data: GetUpcomingBookingsRequestDto,
+  ): Observable<BaseResponseDto<UpcomingBookingResponseDto[]>>;
+
+  GetProfessionalBookingStats(
+    data: GetProfessionalStatsRequestDto,
+  ): Observable<BaseResponseDto<BookingStatisticsResponseDto>>;
 }
 
 @Injectable()
@@ -71,15 +125,15 @@ export class ContractorsGatewayService {
   }
 
   // ===========================================================
-  // CREATE SERVICE OFFERING
+  // SERVICE OFFERING METHODS
   // ===========================================================
+
   async createServiceOffering(
     dto: CreateServiceOfferingDto,
     userId: string,
     accountId: string,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
     try {
-      // 1. Get the skilled professional profile for this account
       const professionalProfile = await this.userService.getSkilledProfessionalByAccount(accountId);
       
       if (!professionalProfile.success || !professionalProfile.data) {
@@ -89,7 +143,6 @@ export class ContractorsGatewayService {
         );
       }
 
-      // 2. Build the gRPC request with identity fields
       const grpcRequest: CreateServiceGrpcOfferingDto = {
         ...dto,
         skilledProfessionalId: professionalProfile.data.uuid,
@@ -112,9 +165,6 @@ export class ContractorsGatewayService {
     }
   }
 
-  // ===========================================================
-  // GET OFFERINGS BY VERTICAL (Discovery)
-  // ===========================================================
   async getOfferingsByVertical(
     dto: GetOfferingByVerticalRequestDto,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
@@ -134,9 +184,6 @@ export class ContractorsGatewayService {
     }
   }
 
-  // ===========================================================
-  // GET OFFERINGS BY ACCOUNT
-  // ===========================================================
   async getOfferingsByAccount(
     accountId: string,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
@@ -156,9 +203,6 @@ export class ContractorsGatewayService {
     }
   }
 
-  // ===========================================================
-  // GET OFFERINGS BY PROFESSIONAL
-  // ===========================================================
   async getOfferingsByProfessional(
     professionalId: string,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
@@ -178,9 +222,6 @@ export class ContractorsGatewayService {
     }
   }
 
-  // ===========================================================
-  // GET OFFERING BY ID
-  // ===========================================================
   async getOfferingById(
     id: string,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
@@ -200,9 +241,6 @@ export class ContractorsGatewayService {
     }
   }
 
-  // ===========================================================
-  // UPDATE SERVICE OFFERING
-  // ===========================================================
   async updateServiceOffering(
     id: string,
     dto: UpdateServiceOfferingDto,
@@ -226,12 +264,8 @@ export class ContractorsGatewayService {
       this.logger.error(`gRPC Error updating offering: ${error.message}`);
       return BaseResponseDto.fail('Failed to update offering', 'UPDATE_ERROR');
     } 
-  
   }
 
-  // ===========================================================
-  // DELETE SERVICE OFFERING
-  // ===========================================================
   async deleteServiceOffering(
     id: string,
     userId: string,
@@ -252,38 +286,228 @@ export class ContractorsGatewayService {
     }
   }
 
+  async getOfferingsByCategory(
+    categoryId: string,
+    limit?: number,
+    offset?: number,
+    city?: string,
+    minPrice?: number,
+    maxPrice?: number,
+  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.GetOfferingsByCategory({ 
+          categoryId, 
+          limit: limit || 20, 
+          offset: offset || 0,
+          city,
+          minPrice,
+          maxPrice,
+        })
+      );
 
-// ===========================================================
-// GET OFFERINGS BY CATEGORY
-// ===========================================================
-async getOfferingsByCategory(
-  categoryId: string,
-  limit?: number,
-  offset?: number,
-  city?: string,
-  minPrice?: number,
-  maxPrice?: number,
-): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-  try {
-    const res = await firstValueFrom(
-      this.grpcService.GetOfferingsByCategory({ 
-        categoryId, 
-        limit: limit || 20, 
-        offset: offset || 0,
-        city,
-        minPrice,
-        maxPrice,
-      })
-    );
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data || [], res.message, res.code);
+      }
 
-    if (res?.success) {
-      return BaseResponseDto.ok(res.data || [], res.message, res.code);
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching offerings by category: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch offerings', 'FETCH_ERROR');
     }
-
-    return BaseResponseDto.fail(res?.message, res?.code);
-  } catch (error) {
-    this.logger.error(`gRPC Error fetching offerings by category: ${error.message}`);
-    return BaseResponseDto.fail('Failed to fetch offerings', 'FETCH_ERROR');
   }
-}
+
+  // ===========================================================
+  // BOOKING METHODS
+  // ===========================================================
+
+  async createBooking(
+    dto: CreateBookingRequestDto,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    try {
+      const res = await firstValueFrom(this.grpcService.CreateBooking(dto));
+
+      this.logger.debug(`CreateBooking gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error creating booking: ${error.message}`);
+      return BaseResponseDto.fail('Failed to create booking', 'GRPC_ERROR');
+    }
+  }
+
+  async acceptBooking(
+    dto: AcceptBookingRequestDto,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    try {
+      const res = await firstValueFrom(this.grpcService.AcceptBooking(dto));
+
+      this.logger.debug(`AcceptBooking gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error accepting booking: ${error.message}`);
+      return BaseResponseDto.fail('Failed to accept booking', 'GRPC_ERROR');
+    }
+  }
+
+  async declineBooking(
+    dto: DeclineBookingRequestDto,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    try {
+      const res = await firstValueFrom(this.grpcService.DeclineBooking(dto));
+
+      this.logger.debug(`DeclineBooking gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error declining booking: ${error.message}`);
+      return BaseResponseDto.fail('Failed to decline booking', 'GRPC_ERROR');
+    }
+  }
+
+  async cancelBooking(
+    dto: CancelBookingRequestDto,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    try {
+      const res = await firstValueFrom(this.grpcService.CancelBooking(dto));
+
+      this.logger.debug(`CancelBooking gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error cancelling booking: ${error.message}`);
+      return BaseResponseDto.fail('Failed to cancel booking', 'GRPC_ERROR');
+    }
+  }
+
+  async completeBooking(
+    dto: CompleteBookingRequestDto,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    try {
+      const res = await firstValueFrom(this.grpcService.CompleteBooking(dto));
+
+      this.logger.debug(`CompleteBooking gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error completing booking: ${error.message}`);
+      return BaseResponseDto.fail('Failed to complete booking', 'GRPC_ERROR');
+    }
+  }
+
+  async getMyBookingsAsCustomer(
+    dto: GetCustomerBookingsRequestDto,
+  ): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
+    try {
+      const res = await firstValueFrom(this.grpcService.GetMyBookingsAsCustomer(dto));
+
+      this.logger.debug(`GetMyBookingsAsCustomer gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching customer bookings: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch bookings', 'FETCH_ERROR');
+    }
+  }
+
+  async getMyBookingsAsProfessional(
+    dto: GetContractorBookingsRequestDto,
+  ): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
+    try {
+      const res = await firstValueFrom(this.grpcService.GetMyBookingsAsProfessional(dto));
+
+      this.logger.debug(`GetMyBookingsAsProfessional gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching contractor bookings: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch bookings', 'FETCH_ERROR');
+    }
+  }
+
+  async getBookingDetails(
+    dto: GetBookingDetailsRequestDto,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    try {
+      const res = await firstValueFrom(this.grpcService.GetBookingDetails(dto));
+
+      this.logger.debug(`GetBookingDetails gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching booking details: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch booking details', 'FETCH_ERROR');
+    }
+  }
+
+  async getUpcomingBookingsForProfessional(
+    dto: GetUpcomingBookingsRequestDto,
+  ): Promise<BaseResponseDto<UpcomingBookingResponseDto[]>> {
+    try {
+      const res = await firstValueFrom(this.grpcService.GetUpcomingBookingsForProfessional(dto));
+
+      this.logger.debug(`GetUpcomingBookingsForProfessional gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data || [], res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching upcoming bookings: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch upcoming bookings', 'FETCH_ERROR');
+    }
+  }
+
+  async getProfessionalBookingStats(
+    dto: GetProfessionalStatsRequestDto,
+  ): Promise<BaseResponseDto<BookingStatisticsResponseDto>> {
+    try {
+      const res = await firstValueFrom(this.grpcService.GetProfessionalBookingStats(dto));
+
+      this.logger.debug(`GetProfessionalBookingStats gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching booking stats: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch booking statistics', 'FETCH_ERROR');
+    }
+  }
 }

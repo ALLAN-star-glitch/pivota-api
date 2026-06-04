@@ -1677,6 +1677,8 @@ message DiscoverSkilledProfessionalsRequest {
   optional string sortBy = 7;
   optional int32 limit = 8;
   optional int32 offset = 9;
+  optional string vertical = 10;              // ADD THIS - filter by HOUSING, JOBS, SOCIAL_SUPPORT
+  optional bool includeContactInfo = 11;      // ADD THIS - controls whether to mask contact info
 }
 
 message SkilledProfessionalPublicResponse {
@@ -1707,6 +1709,63 @@ message SkilledProfessionalPublicData {
   int32 completedJobs = 17;
   optional string profileImage = 18;
   repeated string portfolioImages = 19;
+  
+  // ========== NEW FIELDS FOR CONTACT & BOOKING ==========
+  // Contact Information (masked when includeContactInfo=false)
+  optional string email = 20;                 // ADD THIS
+  optional string phone = 21;                 // ADD THIS
+  optional string alternativePhone = 22;      // ADD THIS
+  optional string website = 23;               // ADD THIS
+  
+  // Location Details
+  optional string address = 24;               // ADD THIS
+  optional string city = 25;                  // ADD THIS
+  optional string neighborhood = 26;          // ADD THIS
+  
+  // Professional Details
+  optional string bio = 27;                   // ADD THIS
+  optional int32 serviceRadius = 28;          // ADD THIS - max distance in km
+  
+  // Pricing
+  optional double weeklyRate = 29;            // ADD THIS
+  optional double monthlyRate = 30;           // ADD THIS
+  optional string currency = 31;              // ADD THIS - default "KES"
+  
+  // Verification & Trust
+  repeated string verificationBadges = 32;    // ADD THIS - e.g., ["ID_VERIFIED", "LICENSE_VERIFIED"]
+  optional double responseRate = 33;          // ADD THIS - percentage
+  optional string responseTime = 34;          // ADD THIS - e.g., "within 2 hours"
+  optional double bookingAcceptanceRate = 35; // ADD THIS - percentage
+  
+  // Media
+  optional string coverImage = 36;            // ADD THIS - banner image
+  
+  // Availability
+  optional string availabilitySchedule = 37;  // ADD THIS - JSON string of weekly schedule
+  optional bool isAvailableNow = 38;          // ADD THIS
+  optional string nextAvailableSlot = 39;     // ADD THIS - ISO timestamp
+  
+  // Business Details
+  optional string businessRegistrationNumber = 40; // ADD THIS
+  optional string taxIdentificationNumber = 41;    // ADD THIS
+  optional string insuranceProvider = 42;           // ADD THIS
+  optional string insuranceExpiry = 43;             // ADD THIS - ISO timestamp
+  optional string licenseNumber = 44;               // ADD THIS
+  optional string licenseExpiry = 45;               // ADD THIS - ISO timestamp
+  optional string licenseIssuingBody = 46;          // ADD THIS
+  
+  // Social & Communication
+  map<string, string> socialLinks = 47;       // ADD THIS
+  optional string preferredContactMethod = 48; // ADD THIS - PHONE, EMAIL, WHATSAPP, PLATFORM
+  repeated string languagesSpoken = 49;       // ADD THIS - e.g., ["English", "Swahili"]
+  
+  // Metadata
+  optional string joinedDate = 50;             // ADD THIS - ISO timestamp
+  optional string lastActiveAt = 51;           // ADD THIS - ISO timestamp
+  optional double totalEarnings = 52;          // ADD THIS
+  
+  // Emergency Contact
+  optional string emergencyContact = 53;       // ADD THIS - JSON string
 }
 
 message SkilledProfessionalDiscoveryResponse {

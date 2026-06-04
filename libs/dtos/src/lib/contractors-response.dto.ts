@@ -43,6 +43,12 @@ export class ServiceOfferingResponseDto {
   @IsString()
   externalId!: string;
 
+   @ApiProperty({ 
+    description: 'UUID of the skilled professional (contractor) - use this for booking',
+    example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e'
+  })
+  skilledProfessionalId!: string;
+
   /* --- Identity Pillar --- */
   @ApiProperty({ description: 'The human individual who created the offering' })
   @IsObject()

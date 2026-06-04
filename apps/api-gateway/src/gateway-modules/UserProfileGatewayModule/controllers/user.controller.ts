@@ -1012,4 +1012,76 @@ export class UserController {
     if (!response.success) throw response;
     return response;
   }
+
+  // Add this after the admin routes section and before the skilled professional routes
+
+// ===========================================================
+// ACCOUNT MANAGEMENT
+// ===========================================================
+
+@Get('accounts/:accountUuid')
+@Permissions(P.USER_VIEW)
+@Version('1')
+@ApiTags('Profile - Account')
+@ApiOperation({ 
+  summary: 'Get account by UUID',
+  description: 'Retrieves account details by account UUID. Requires USER_VIEW permission.'
+})
+@ApiParam({ 
+  name: 'accountUuid', 
+  description: 'UUID of the account to retrieve',
+  example: '123e4567-e89b-12d3-a456-426614174000'
+})
+@ApiResponse({ 
+  status: 200, 
+  description: 'Account retrieved successfully',
+  schema: {
+    example: {
+      success: true,
+      message: 'Account retrieved',
+      code: 'OK',
+      data: {
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        accountCode: 'ACC-ABC123',
+        type: 'INDIVIDUAL',
+        status: 'ACTIVE',
+        userRole: 'Individual',
+        name: 'John Doe',
+        isVerified: true,
+        activeProfiles: ['SKILLED_PROFESSIONAL', 'JOB_SEEKER'],
+        individualProfile: {
+          accountUuid: '123e4567-e89b-12d3-a456-426614174000',
+          firstName: 'John',
+          lastName: 'Doe',
+          profileImage: 'https://cdn.pivota.com/profiles/john.jpg'
+        },
+        completion: {
+          percentage: 75,
+          missingFields: ['bio', 'gender'],
+          isComplete: false
+        }
+      }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 401, 
+  description: 'Unauthorized' 
+})
+@ApiResponse({ 
+  status: 403, 
+  description: 'Forbidden - Requires USER_VIEW permission' 
+})
+@ApiResponse({ 
+  status: 404, 
+  description: 'Account not found' 
+})
+async getAccountByUuid(
+  @Param('accountUuid') accountUuid: string,
+): Promise<BaseResponseDto<AccountResponseDto>> {
+  this.logger.log(`Fetching account by UUID: ${accountUuid}`);
+  const response = await this.userService.getAccountByUuid(accountUuid);
+  if (!response.success) throw response;
+  return response;
+}
 }

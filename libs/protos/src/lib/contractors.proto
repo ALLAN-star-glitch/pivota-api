@@ -6,6 +6,7 @@ package contractors;
 // SERVICE DEFINITION
 // ===================================================
 service ContractorsService {
+  // Service Offering Methods
   rpc CreateServiceOffering (CreateServiceOfferingRequest) returns (BaseServiceOfferingResponse);
   rpc GetOfferingsByVertical (GetOfferingsByVerticalRequest) returns (ListServiceOfferingsResponse);
   rpc GetOfferingsByAccount (GetOfferingsByAccountRequest) returns (ListServiceOfferingsResponse);
@@ -13,7 +14,19 @@ service ContractorsService {
   rpc GetOfferingById (GetOfferingByIdRequest) returns (BaseServiceOfferingResponse);
   rpc UpdateServiceOffering (UpdateServiceOfferingRequest) returns (BaseServiceOfferingResponse);
   rpc DeleteServiceOffering (DeleteServiceOfferingRequest) returns (BaseResponse);
-  rpc GetOfferingsByCategory (GetOfferingsByCategoryRequest) returns (ListServiceOfferingsResponse); 
+  rpc GetOfferingsByCategory (GetOfferingsByCategoryRequest) returns (ListServiceOfferingsResponse);
+  
+  // Booking Methods
+  rpc CreateBooking (CreateBookingRequest) returns (BaseBookingResponse);
+  rpc AcceptBooking (AcceptBookingRequest) returns (BaseBookingResponse);
+  rpc DeclineBooking (DeclineBookingRequest) returns (BaseBookingResponse);
+  rpc CancelBooking (CancelBookingRequest) returns (BaseBookingResponse);
+  rpc CompleteBooking (CompleteBookingRequest) returns (BaseBookingResponse);
+  rpc GetMyBookingsAsCustomer (GetCustomerBookingsRequest) returns (PaginatedBookingsResponse);
+  rpc GetMyBookingsAsProfessional (GetContractorBookingsRequest) returns (PaginatedBookingsResponse);
+  rpc GetBookingDetails (GetBookingDetailsRequest) returns (BaseBookingResponse);
+  rpc GetUpcomingBookingsForProfessional (GetUpcomingBookingsRequest) returns (ListUpcomingBookingsResponse);
+  rpc GetProfessionalBookingStats (GetProfessionalStatsRequest) returns (BaseBookingStatsResponse);
 }
 
 // ===================================================
@@ -49,7 +62,7 @@ message ServiceOffering {
   // Identity Pillar
   string creatorId = 3;
   string accountId = 4;
-  string skilledProfessionalId = 5;  // Link to profile
+  string skilledProfessionalId = 5;
   
   // Denormalized fields
   string professionalName = 6;
@@ -60,59 +73,134 @@ message ServiceOffering {
   string description = 10;
   string categoryId = 11;
   string categoryName = 12;
-  // REMOVED: repeated string verticals = 13; - use category.vertical instead
   
-  double basePrice = 13;  // Renumbered from 14
-  string priceUnit = 14;  // Renumbered from 15
-  string currency = 15;   // Renumbered from 16
+  double basePrice = 13;
+  string priceUnit = 14;
+  string currency = 15;
   
-  string locationCity = 16;           // Renumbered from 17
-  string locationNeighborhood = 17;   // Renumbered from 18
+  string locationCity = 16;
+  string locationNeighborhood = 17;
   
-  repeated DayAvailability availability = 18;  // Renumbered from 19
+  repeated DayAvailability availability = 18;
   
-  int32 yearsExperience = 19;  // Renumbered from 20
-  double hourlyRate = 20;      // Renumbered from 21
-  repeated string serviceAreas = 21;  // Renumbered from 22
+  int32 yearsExperience = 19;
+  double hourlyRate = 20;
+  repeated string serviceAreas = 21;
   
-  string status = 22;  // Renumbered from 23
-  string expiresAt = 23;  // Renumbered from 24
+  string status = 22;
+  string expiresAt = 23;
   
-  double averageRating = 24;  // Renumbered from 25
-  int32 reviewCount = 25;     // Renumbered from 26
+  double averageRating = 24;
+  int32 reviewCount = 25;
   
-  string createdAt = 26;  // Renumbered from 27
-  string updatedAt = 27;  // Renumbered from 28
+  string createdAt = 26;
+  string updatedAt = 27;
   
-  // ADD: vertical from category (for convenience)
-  string vertical = 28;  // Derived from category.vertical
+  string vertical = 28;
+}
+
+// Booking Entity
+message Booking {
+  string id = 1;
+  string externalId = 2;
+  string contractorId = 3;
+  string clientId = 4;
+  optional string serviceId = 5;
+  
+  // Denormalized fields
+  optional string contractorName = 6;
+  optional string serviceTitle = 7;
+  string status = 8;
+  optional string scheduledDate = 9;
+  optional string locationCity = 10;
+  optional double agreedPrice = 11;
+  string currency = 12;
+  optional string customerNotes = 13;
+  string createdAt = 14;
+  string updatedAt = 15;
+  
+  // Enriched fields (for responses)
+  optional BookingServiceInfo service = 16;
+  optional BookingClientInfo client = 17;
+  optional BookingContractorInfo contractor = 18;
+  optional BookingServiceDetails serviceDetails = 19;
+}
+
+message BookingServiceInfo {
+  string id = 1;
+  string title = 2;
+  double basePrice = 3;
+  string priceUnit = 4;
+  string currency = 5;
+}
+
+message BookingClientInfo {
+  string uuid = 1;
+  string name = 2;
+  string email = 3;
+  string phone = 4;
+}
+
+message BookingContractorInfo {
+  string uuid = 1;
+  string name = 2;
+  optional string profileImage = 3;
+  bool isVerified = 4;
+  double rating = 5;
+  string phone = 6;
+  string email = 7;
+}
+
+message BookingServiceDetails {
+  string id = 1;
+  string title = 2;
+  optional string description = 3;
+  double basePrice = 4;
+  string priceUnit = 5;
+  optional string category = 6;
+  string locationCity = 7;
+  optional string locationNeighborhood = 8;
+}
+
+message BookingStatistics {
+  int32 total = 1;
+  int32 pending = 2;
+  int32 confirmed = 3;
+  int32 completed = 4;
+  int32 cancelled = 5;
+  int32 upcoming = 6;
+  int32 completedThisMonth = 7;
+}
+
+message UpcomingBooking {
+  string id = 1;
+  optional string serviceTitle = 2;
+  optional string scheduledDate = 3;
+  optional string locationCity = 4;
+  optional string clientName = 5;
+  optional string clientPhone = 6;
+  optional double agreedPrice = 7;
+  string currency = 8;
 }
 
 // ===================================================
-// REQUEST MESSAGES
+// REQUEST MESSAGES - SERVICE OFFERINGS
 // ===================================================
 message CreateServiceOfferingRequest {
-  // Identity (from Gateway JWT)
   string creatorId = 1;
   string accountId = 2;
   string skilledProfessionalId = 3;
-
   string title = 4;
   string description = 5;
   string categoryId = 6;
-  // REMOVED: repeated string verticals = 7;
-  
-  double basePrice = 7;  // Renumbered from 8
-  string priceUnit = 8;  // Renumbered from 9
-  string currency = 9;   // Renumbered from 10
-  
-  string locationCity = 10;           // Renumbered from 11
-  string locationNeighborhood = 11;   // Renumbered from 12
-  
-  int32 yearsExperience = 12;  // Renumbered from 13
-  string additionalNotes = 13;  // Renumbered from 14
-  
-  repeated DayAvailability availability = 14;  // Renumbered from 15
+  double basePrice = 7;
+  string priceUnit = 8;
+  string currency = 9;
+  string locationCity = 10;
+  optional string locationNeighborhood = 11;
+  optional int32 yearsExperience = 12;
+  optional string additionalNotes = 13;
+  repeated DayAvailability availability = 14;
 }
 
 message GetOfferingsByVerticalRequest {
@@ -149,7 +237,7 @@ message UpdateServiceOfferingRequest {
   optional string locationCity = 6;
   optional string locationNeighborhood = 7;
   repeated DayAvailability availability = 8;
-  string userId = 9;  // For permission check
+  string userId = 9;
 }
 
 message DeleteServiceOfferingRequest {
@@ -157,8 +245,84 @@ message DeleteServiceOfferingRequest {
   string userId = 2;
 }
 
+message GetOfferingsByCategoryRequest {
+  string categoryId = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+  optional string city = 4;
+  optional double minPrice = 5;
+  optional double maxPrice = 6;
+}
+
 // ===================================================
-// RESPONSE MESSAGES
+// REQUEST MESSAGES - BOOKINGS
+// ===================================================
+message CreateBookingRequest {
+  string serviceId = 1;
+  string contractorId = 2;
+  string clientId = 3;
+  string scheduledDate = 4;
+  optional string locationCity = 5;
+  optional string customerNotes = 6;
+  optional double agreedPrice = 7;
+  optional string currency = 8;
+  optional int32 durationHours = 9;
+}
+
+message AcceptBookingRequest {
+  string bookingId = 1;
+  string contractorId = 2;
+}
+
+message DeclineBookingRequest {
+  string bookingId = 1;
+  string contractorId = 2;
+  optional string reason = 3;
+}
+
+message CancelBookingRequest {
+  string bookingId = 1;
+  string userId = 2;
+  string userType = 3;  // "CLIENT" or "CONTRACTOR"
+  optional string reason = 4;
+}
+
+message CompleteBookingRequest {
+  string bookingId = 1;
+  string contractorId = 2;
+}
+
+message GetCustomerBookingsRequest {
+  string clientId = 1;
+  optional string status = 2;
+  optional int32 limit = 3;
+  optional int32 offset = 4;
+}
+
+message GetContractorBookingsRequest {
+  string contractorId = 1;
+  optional string status = 2;
+  optional int32 limit = 3;
+  optional int32 offset = 4;
+}
+
+message GetBookingDetailsRequest {
+  string bookingId = 1;
+  string userId = 2;
+  string userType = 3;  // "CLIENT" or "CONTRACTOR"
+}
+
+message GetUpcomingBookingsRequest {
+  string contractorId = 1;
+  optional int32 limit = 2;
+}
+
+message GetProfessionalStatsRequest {
+  string contractorId = 1;
+}
+
+// ===================================================
+// RESPONSE MESSAGES - SERVICE OFFERINGS
 // ===================================================
 message BaseServiceOfferingResponse {
   bool success = 1;
@@ -184,11 +348,38 @@ message PaginationInfo {
   bool hasMore = 4;
 }
 
-message GetOfferingsByCategoryRequest {
-  string categoryId = 1;
-  optional int32 limit = 2;
-  optional int32 offset = 3;
-  optional string city = 4;
-  optional double minPrice = 5;
-  optional double maxPrice = 6;
+// ===================================================
+// RESPONSE MESSAGES - BOOKINGS
+// ===================================================
+message BaseBookingResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  Booking data = 4;
+  ErrorPayload error = 5;
+}
+
+message PaginatedBookingsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated Booking data = 4;
+  PaginationInfo pagination = 5;
+  ErrorPayload error = 6;
+}
+
+message ListUpcomingBookingsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated UpcomingBooking data = 4;
+  ErrorPayload error = 5;
+}
+
+message BaseBookingStatsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  BookingStatistics data = 4;
+  ErrorPayload error = 5;
 }

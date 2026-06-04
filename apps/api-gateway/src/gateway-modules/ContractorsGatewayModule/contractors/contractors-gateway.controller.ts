@@ -29,6 +29,21 @@ import {
   GetOfferingByVerticalRequestDto,
   CreateServiceOfferingDto,
   UpdateServiceOfferingDto,
+  // Booking DTOs
+  CreateBookingRequestDto,
+  AcceptBookingRequestDto,
+  DeclineBookingRequestDto,
+  CancelBookingRequestDto,
+  CompleteBookingRequestDto,
+  GetCustomerBookingsRequestDto,
+  GetContractorBookingsRequestDto,
+  GetBookingDetailsRequestDto,
+  GetUpcomingBookingsRequestDto,
+  GetProfessionalStatsRequestDto,
+  BookingResponseDto,
+  BookingStatisticsResponseDto,
+  PaginatedBookingsResponseDto,
+  UpcomingBookingResponseDto,
 } from '@pivota-api/dtos';
 
 import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
@@ -42,6 +57,7 @@ import { Permissions } from '../../../decorators/permissions.decorator';
 import { Public } from '../../../decorators/public.decorator';
 import { SetModule } from '../../../decorators/set-module.decorator';
 import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
+import { UserService } from '../../UserProfileGatewayModule/services/user.service';
 
 @ApiTags('Contractors')
 @ApiBearerAuth()
@@ -51,7 +67,9 @@ import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 export class ContractorsGatewayController {
   private readonly logger = new Logger(ContractorsGatewayController.name);
 
-  constructor(private readonly contractorsService: ContractorsGatewayService) {}
+  constructor(private readonly contractorsService: ContractorsGatewayService,
+     private readonly userService: UserService,
+  ) {}
  
   // ===========================================================
   // 🛠️ CONTRACTORS - SERVICE MANAGEMENT
@@ -264,5 +282,263 @@ export class ContractorsGatewayController {
     return this.contractorsService.getOfferingsByCategory(
       categoryId, limit, offset, city, minPrice, maxPrice
     );
+  }
+
+  // ===========================================================
+  // 📅 BOOKING MANAGEMENT - CLIENT ENDPOINTS
+  // ===========================================================
+
+ @Post('bookings')
+@Version('1')
+@ApiTags('Contractors - Bookings')
+@ApiOperation({ summary: 'Create a new booking' })
+@ApiResponse({ status: 201, description: 'Booking created successfully' })
+@ApiResponse({ status: 400, description: 'Validation error' })
+@ApiResponse({ status: 401, description: 'Unauthorized' })
+@ApiResponse({ status: 404, description: 'Service offering or profiles not found' })
+@ApiResponse({ status: 409, description: 'Time slot conflict' })
+async createBooking(
+  @Body() dto: CreateBookingRequestDto,
+  @Req() req: JwtRequest,
+): Promise<BaseResponseDto<BookingResponseDto>> {
+  const clientId = req.user.sub;  // Get clientId from JWT token
+  
+  // Create the full request with clientId from JWT
+  const fullRequest: CreateBookingRequestDto & { clientId: string } = {
+    ...dto,
+    clientId,  // Add the clientId from JWT
+  };
+  
+  this.logger.debug(`Creating booking for client: ${clientId}, contractor: ${dto.contractorId}`);
+  return this.contractorsService.createBooking(fullRequest);
+}
+
+  @Get('bookings/me/customer')
+  @Version('1')
+  @ApiTags('Contractors - Bookings')
+  @ApiOperation({ summary: 'Get my bookings as a customer' })
+  @ApiQuery({ name: 'status', required: false, enum: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'], description: 'Filter by status' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page (default: 20, max: 100)' })
+  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset' })
+  @ApiResponse({ status: 200, description: 'Bookings retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getMyBookingsAsCustomer(
+    @Req() req: JwtRequest,
+    @Query('status') status?: string,
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+  ): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
+    const clientId = req.user.sub;
+    const dto: GetCustomerBookingsRequestDto = {
+      clientId,
+      status,
+      limit: limit || 20,
+      offset: offset || 0,
+    };
+    this.logger.debug(`Fetching customer bookings for: ${clientId}`);
+    return this.contractorsService.getMyBookingsAsCustomer(dto);
+  }
+
+@Get('bookings/me/contractor')
+@Version('1')
+@ApiTags('Contractors - Bookings')
+@ApiOperation({ summary: 'Get my bookings as a contractor/professional' })
+@ApiQuery({ name: 'status', required: false, enum: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'], description: 'Filter by status' })
+@ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page (default: 20, max: 100)' })
+@ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset' })
+@ApiResponse({ status: 200, description: 'Bookings retrieved successfully' })
+@ApiResponse({ status: 401, description: 'Unauthorized' })
+async getMyBookingsAsProfessional(
+  @Req() req: JwtRequest,
+  @Query('status') status?: string,
+  @Query('limit') limit?: number,
+  @Query('offset') offset?: number,
+): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
+  // Get the user's skilled professional profile UUID
+  const professionalProfile = await this.userService.getSkilledProfessionalByAccount(req.user.accountId);
+  
+  if (!professionalProfile.success || !professionalProfile.data) {
+    return BaseResponseDto.fail(
+      'No skilled professional profile found. Please create a professional profile first.',
+      'PROFILE_NOT_FOUND'
+    );
+  }
+  
+  const contractorId = professionalProfile.data.uuid; // This is the professional UUID
+  
+  const dto: GetContractorBookingsRequestDto = {
+    contractorId,
+    status,
+    limit: limit || 20,
+    offset: offset || 0,
+  };
+   
+  
+  this.logger.debug(`Fetching contractor bookings for professional: ${contractorId} (user: ${req.user.sub})`);
+  return this.contractorsService.getMyBookingsAsProfessional(dto);
+}
+
+  @Get('bookings/:bookingId')
+  @Version('1')
+  @ApiTags('Contractors - Bookings')
+  @ApiOperation({ summary: 'Get booking details by ID' })
+  @ApiParam({ name: 'bookingId', description: 'Booking UUID', example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e' })
+  @ApiResponse({ status: 200, description: 'Booking details retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not your booking' })
+  @ApiResponse({ status: 404, description: 'Booking not found' })
+  async getBookingDetails(
+    @Param('bookingId') bookingId: string,
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    const userId = req.user.sub;
+    // Determine user type based on the relationship (this could be enhanced)
+    // For now, we'll let the service figure it out by checking both roles
+    const dto: GetBookingDetailsRequestDto = {
+      bookingId,
+      userId,
+      userType: 'CLIENT', // Default, service will check both
+    };
+    this.logger.debug(`Fetching booking details: ${bookingId} for user: ${userId}`);
+    return this.contractorsService.getBookingDetails(dto);
+  }
+
+  @Patch('bookings/:bookingId/accept')
+  @Version('1')
+  @ApiTags('Contractors - Bookings')
+  @ApiOperation({ summary: 'Accept a booking (Contractor action)' })
+  @ApiParam({ name: 'bookingId', description: 'Booking UUID', example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e' })
+  @ApiResponse({ status: 200, description: 'Booking accepted successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid status transition' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not your booking' })
+  @ApiResponse({ status: 404, description: 'Booking not found' })
+  async acceptBooking(
+    @Param('bookingId') bookingId: string,
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    const contractorId = req.user.sub;
+    const dto: AcceptBookingRequestDto = {
+      bookingId,
+      contractorId,
+    };
+    this.logger.debug(`Accepting booking: ${bookingId} by contractor: ${contractorId}`);
+    return this.contractorsService.acceptBooking(dto);
+  }
+
+  @Patch('bookings/:bookingId/decline')
+  @Version('1')
+  @ApiTags('Contractors - Bookings')
+  @ApiOperation({ summary: 'Decline a booking (Contractor action)' })
+  @ApiParam({ name: 'bookingId', description: 'Booking UUID', example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e' })
+  @ApiResponse({ status: 200, description: 'Booking declined successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid status transition' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not your booking' })
+  @ApiResponse({ status: 404, description: 'Booking not found' })
+  async declineBooking(
+    @Param('bookingId') bookingId: string,
+    @Body('reason') reason: string,
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    const contractorId = req.user.sub;
+    const dto: DeclineBookingRequestDto = {
+      bookingId,
+      contractorId,
+      reason,
+    };
+    this.logger.debug(`Declining booking: ${bookingId} by contractor: ${contractorId}`);
+    return this.contractorsService.declineBooking(dto);
+  }
+
+  @Patch('bookings/:bookingId/cancel')
+  @Version('1')
+  @ApiTags('Contractors - Bookings')
+  @ApiOperation({ summary: 'Cancel a booking (Client or Contractor action)' })
+  @ApiParam({ name: 'bookingId', description: 'Booking UUID', example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e' })
+  @ApiResponse({ status: 200, description: 'Booking cancelled successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid status transition' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not your booking' })
+  @ApiResponse({ status: 404, description: 'Booking not found' })
+  async cancelBooking(
+    @Param('bookingId') bookingId: string,
+    @Body('userType') userType: 'CLIENT' | 'CONTRACTOR',
+    @Body('reason') reason: string,
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    const userId = req.user.sub;
+    const dto: CancelBookingRequestDto = {
+      bookingId,
+      userId,
+      userType,
+      reason,
+    };
+    this.logger.debug(`Cancelling booking: ${bookingId} by: ${userType}`);
+    return this.contractorsService.cancelBooking(dto);
+  }
+
+  @Patch('bookings/:bookingId/complete')
+  @Version('1')
+  @ApiTags('Contractors - Bookings')
+  @ApiOperation({ summary: 'Complete a booking (Contractor action)' })
+  @ApiParam({ name: 'bookingId', description: 'Booking UUID', example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e' })
+  @ApiResponse({ status: 200, description: 'Booking completed successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid status transition' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not your booking' })
+  @ApiResponse({ status: 404, description: 'Booking not found' })
+  async completeBooking(
+    @Param('bookingId') bookingId: string,
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    const contractorId = req.user.sub;
+    const dto: CompleteBookingRequestDto = {
+      bookingId,
+      contractorId,
+    };
+    this.logger.debug(`Completing booking: ${bookingId} by contractor: ${contractorId}`);
+    return this.contractorsService.completeBooking(dto);
+  }
+
+  // ===========================================================
+  // 📊 CONTRACTOR DASHBOARD ENDPOINTS
+  // ===========================================================
+
+  @Get('contractor/upcoming-bookings')
+  @Version('1')
+  @ApiTags('Contractors - Dashboard')
+  @ApiOperation({ summary: 'Get upcoming bookings for contractor dashboard' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max results (default: 10, max: 50)' })
+  @ApiResponse({ status: 200, description: 'Upcoming bookings retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getUpcomingBookingsForProfessional(
+    @Req() req: JwtRequest,
+    @Query('limit') limit?: number,
+  ): Promise<BaseResponseDto<UpcomingBookingResponseDto[]>> {
+    const contractorId = req.user.sub;
+    const dto: GetUpcomingBookingsRequestDto = {
+      contractorId,
+      limit: limit || 10,
+    };
+    this.logger.debug(`Fetching upcoming bookings for contractor: ${contractorId}`);
+    return this.contractorsService.getUpcomingBookingsForProfessional(dto);
+  }
+
+  @Get('contractor/booking-stats')
+  @Version('1')
+  @ApiTags('Contractors - Dashboard')
+  @ApiOperation({ summary: 'Get booking statistics for contractor dashboard' })
+  @ApiResponse({ status: 200, description: 'Statistics retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getProfessionalBookingStats(
+    @Req() req: JwtRequest,
+  ): Promise<BaseResponseDto<BookingStatisticsResponseDto>> {
+    const contractorId = req.user.sub;
+    const dto: GetProfessionalStatsRequestDto = {
+      contractorId,
+    };
+    this.logger.debug(`Fetching booking stats for contractor: ${contractorId}`);
+    return this.contractorsService.getProfessionalBookingStats(dto);
   }
 }
