@@ -19,7 +19,14 @@ export class QueueService implements OnModuleInit,  OnModuleDestroy {
     this.logger.log('🚀 Pre-creating queues on startup...');
     const startTime = Date.now();
     
-    const queueNames = ['email-queue', 'analytics-queue', 'db-sync', 'cache-queue', 'categories-queue'];
+      const queueNames = [
+      'email-queue', // for auth email notifications
+      'analytics-queue', 
+      'db-sync', 
+      'cache-queue', 
+      'categories-queue',
+      'notification-queue'  //booking notifications
+    ];
     
     queueNames.forEach(queueName => {
       try {

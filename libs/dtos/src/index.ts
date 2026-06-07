@@ -91,6 +91,5 @@ export * from './lib/profile_media.dto';
 export * from './lib/sync-user-role.dto';
 export * from './lib/skilled-professional-discovery.dto';
 export * from './lib/pagination.dto';
-export * from './lib/update-service-offering.dto';  
 export  * from './lib/pricing-units-response.dto';
 export * from './lib/service-booking-dtos.dto';

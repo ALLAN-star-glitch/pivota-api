@@ -65,6 +65,7 @@ import { PhoneUtils, StringUtils } from '@pivota-api/utils';
 import { QueueService } from '@pivota-api/shared-redis';
 import { StorageService } from '@pivota-api/shared-storage';
 import { CategoryService } from './category.service';
+import { BusinessProfileType, createBusinessProfile } from '../../utils/business-profiles-creator.utils';
 
 
 // ==================== Type Definitions ====================
@@ -536,7 +537,7 @@ async createIndividualAccountWithProfiles(
   this.logger.log(`🔍 Email: ${data.email}`);
   this.logger.log(`🔍 FirstName: ${data.firstName}`);
   this.logger.log(`🔍 LastName: ${data.lastName}`);
-  this.logger.log(`🔍 Phone: ${data.phone}`);
+  this.logger.log(`🔍 Phone: ${data.phone}`); 
   this.logger.log(`🔍 PlanSlug: ${data.planSlug || 'free-forever'}`);
   this.logger.log(`🔍 PrimaryPurpose: ${data.primaryPurpose || 'NOT PROVIDED'}`);
   this.logger.log(`🔍 Has jobSeekerData: ${!!data.jobSeekerData}`);
@@ -639,16 +640,16 @@ async createIndividualAccountWithProfiles(
   this.logger.log(`User UUID: ${userUuid}`);
 
   try {
-    // ============ STEP 1: Parallel service calls (both CRITICAL) ============
+    // ============ STEP 1: Plan service call ============
     const planRes = await lastValueFrom(
-  this.plansGrpc.GetPlanIdBySlug({ slug: targetPlanSlug }).pipe(
-    timeout(5000),
-    catchError((err) => {
-      this.logger.error(`❌ Plan service error: ${err.message}`);
-      return throwError(() => new Error('Plan service unavailable'));
-    })
-  )
-);
+      this.plansGrpc.GetPlanIdBySlug({ slug: targetPlanSlug }).pipe(
+        timeout(5000),
+        catchError((err) => {
+          this.logger.error(`❌ Plan service error: ${err.message}`);
+          return throwError(() => new Error('Plan service unavailable'));
+        })
+      )
+    );
 
     this.logger.log(`✅ Role Type: ${roleType}`);
     this.logger.log(`✅ Plan ID: ${planRes?.data?.planId}`);
@@ -658,65 +659,60 @@ async createIndividualAccountWithProfiles(
       return BaseResponseDto.fail(`Plan ${targetPlanSlug} not found`, 'NOT_FOUND');
     }
 
-    // ============ STEP 2: Database transaction ============
-    this.logger.log('🔍 Starting database transaction...');
-    await this.prisma.$transaction(async (tx) => {
-      this.logger.log('🔍 Creating account...');
-      const accountName = data.lastName 
-        ? `${data.firstName} ${data.lastName}`.trim()
-        : data.firstName;
-      const account = await tx.account.create({
-        data: {
-          uuid: accountUuid,
-          accountCode,
-          type: "INDIVIDUAL",
-          name: accountName,
-          status: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
-          userRole: roleType,
-          planSlug: targetPlanSlug,
-          activeProfiles: '[]',
-          isVerified: false,
-          verifiedFeatures: StringUtils.stringifyJsonField([]),
-        },
-      });
-      this.logger.log(`✅ Account created: ${account.uuid}`);
-      const roleScope = roleType === 'Individual' ? 'BUSINESS' : 'SYSTEM';
-
-      this.logger.log('🔍 Creating user and individual profile...');
-      await Promise.all([
-        tx.user.create({
-          data: {
-            uuid: userUuid,
-            userCode,
-            email: normalizedEmail,
-            phone: normalizedPhone,
-            accountUuid: account.uuid,
-            roleName: roleType,
-            roleScope: roleScope,
-            status: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
-            profileImage: data.profileImage,
-          },
-        }),
-        tx.individualProfile.create({
-          data: {
-            accountUuid: account.uuid,
-            firstName: data.firstName,
-            lastName: data.lastName || '',
-            profileImage: data.profileImage,
-            businessName: data.businessName ?? null,
-            logo: data.logo ?? null,
-            coverPhoto: data.coverPhoto ?? null,
-          },
-        }),
-      ]);
-      this.logger.log(`✅ User and individual profile created`);
-    }, {
-      timeout: 15000,
-      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+    // ============ STEP 2: Create account (NO TRANSACTION - sequential) ============
+    const accountName = data.lastName 
+      ? `${data.firstName} ${data.lastName}`.trim()
+      : data.firstName;
+    
+    const account = await this.prisma.account.create({
+      data: {
+        uuid: accountUuid,
+        accountCode,
+        type: "INDIVIDUAL",
+        name: accountName,
+        status: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
+        userRole: roleType,
+        planSlug: targetPlanSlug,
+        activeProfiles: '[]',
+        isVerified: false,
+        verifiedFeatures: StringUtils.stringifyJsonField([]),
+      },
     });
-    this.logger.log('✅ Database transaction completed successfully');
+    this.logger.log(`✅ Account created: ${account.uuid}`);
 
-    // ============ STEP 3: Assign Role ============
+    // ============ STEP 3: Create user and individual profile ============
+    const roleScope = roleType === 'Individual' ? 'BUSINESS' : 'SYSTEM';
+    
+    const [user, individualProfile] = await Promise.all([
+      this.prisma.user.create({
+        data: {
+          uuid: userUuid,
+          userCode,
+          email: normalizedEmail,
+          phone: normalizedPhone,
+          accountUuid: account.uuid,
+          roleName: roleType,
+          roleScope: roleScope,
+          status: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
+          profileImage: data.profileImage,
+        },
+      }),
+      this.prisma.individualProfile.create({
+        data: {
+          accountUuid: account.uuid,
+          firstName: data.firstName,
+          lastName: data.lastName || '',
+          profileImage: data.profileImage,
+          businessName: data.businessName ?? null,
+          logo: data.logo ?? null,
+          coverPhoto: data.coverPhoto ?? null,
+        },
+      }),
+    ]);
+    
+    this.logger.log(`✅ User and individual profile created`);
+
+    // ============ STEP 4: Assign Role ============
     this.logger.log(`🔍 Calling AssignRoleToUser with: userUuid=${userUuid}, roleType=${roleType}`);
     const roleAssignment = await lastValueFrom(
       this.rbacGrpc.AssignRoleToUser({
@@ -726,14 +722,15 @@ async createIndividualAccountWithProfiles(
     );
 
     if (!roleAssignment?.success) {
-      this.logger.error('❌ Role assignment failed, rolling back account creation');
-      await this.prisma.account.delete({ where: { uuid: accountUuid } });
+      this.logger.error('❌ Role assignment failed, cleaning up...');
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      await this.prisma.account.delete({ where: { uuid: accountUuid } }).catch(() => {});
       return BaseResponseDto.fail('Failed to assign user role. Account creation rolled back.', 'INTERNAL_ERROR');
     }
 
     this.logger.log(`✅ Role assigned successfully for user ${userUuid}`);
 
-    // ============ STEP 4: Handle Subscription ============
+    // ============ STEP 5: Handle Subscription ============
     if (!isPremium) {
       this.logger.log('🔍 Creating subscription for free plan...');
       const subscriptionResult = await lastValueFrom(
@@ -747,90 +744,112 @@ async createIndividualAccountWithProfiles(
       );
 
       if (!subscriptionResult?.success) {
-        this.logger.error('❌ Subscription creation failed, rolling back account creation');
-        await this.prisma.account.delete({ where: { uuid: accountUuid } });
+        this.logger.error('❌ Subscription creation failed, cleaning up...');
+        await this.prisma.account.delete({ where: { uuid: accountUuid } }).catch(() => { /* empty */ });
         return BaseResponseDto.fail('Failed to create subscription. Account creation rolled back.', 'INTERNAL_ERROR');
       }
       
       this.logger.log(`✅ Subscription created successfully for account ${accountUuid}`);
     }
+ 
+    // ============ STEP 6: Create profile ============
+    let createdProfileUuid: string | undefined;
 
-    // ============ STEP 5: QUEUE BUSINESS PROFILE CREATION ============
     if (profileToCreate && this.isIndividualProfile(profileToCreate.type)) {
-      this.logger.log(`🔍 Queueing profile data for ${profileToCreate.type}`);
+      this.logger.log(`🔍 Creating profile for ${profileToCreate.type}`);
       this.logger.log(`🔍 Profile data: ${JSON.stringify(profileToCreate.data, null, 2)}`);
+      
+      try {
+        // Use the existing createBusinessProfile utility
+        await createBusinessProfile(
+          this.prisma as any,
+          accountUuid,
+          profileToCreate.type as BusinessProfileType,
+          profileToCreate.data,
+          {
+            userUuid: userUuid,
+            queueService: this.queue,
+            logger: this.logger,
+          }
+        );
+        
+        // If it's a skilled professional profile, capture the UUID
+        if (profileToCreate.type === 'SKILLED_PROFESSIONAL') {
+          const skilledProfile = await this.prisma.skilledProfessionalProfile.findUnique({
+            where: { accountUuid: accountUuid },
+            select: { uuid: true }
+          });
+          if (skilledProfile) {
+            createdProfileUuid = skilledProfile.uuid;
+            this.logger.log(`✅ Skilled professional profile created with UUID: ${createdProfileUuid}`);
+          }
+        }
+        
+        this.logger.log(`✅ Profile created successfully for ${profileToCreate.type}`);
+      } catch (profileError) {
+        this.logger.error(`❌ Failed to create profile: ${profileError.message}`);
+        // Don't fail the entire signup, just log the error
+      }
+    } else {
+      this.logger.log(`ℹ️ No profile to create (profileToCreate: ${!!profileToCreate})`);
+    }
+
+    // ============ STEP 7: Emit Kafka event for Auth Service ============
+    if (!data.skipEventEmission) {
+      this.logger.log('📤 Emitting account.created event for Auth Service...');
+      
+      let professionalIdForEvent: string | undefined = createdProfileUuid;
+      
+      if (!professionalIdForEvent && profileToCreate?.type === 'SKILLED_PROFESSIONAL') {
+        try {
+          const skilledProfile = await this.prisma.skilledProfessionalProfile.findUnique({
+            where: { accountUuid: accountUuid },
+            select: { uuid: true }
+          });
+          if (skilledProfile) {
+            professionalIdForEvent = skilledProfile.uuid;
+          }
+        } catch (err) {
+          this.logger.warn(`Could not fetch professional ID: ${err.message}`);
+        }
+      }
       
       await this.queue.addJob(
         'profile-queue',
-        'create-business-profile',
+        'emit-account-created-event',
         {
-          accountUuid: accountUuid,
-          profileType: profileToCreate.type,
-          profileData: profileToCreate.data,
           userUuid: userUuid,
-          isPremium: isPremium,
+          accountUuid: accountUuid,
+          email: normalizedEmail,
+          phone: normalizedPhone,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          accountStatus: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
+          accountType: 'INDIVIDUAL',
+          roleName: roleType,
+          professionalId: professionalIdForEvent,
+          timestamp: new Date().toISOString(),
         },
         {
           attempts: 3,
-          backoff: { type: 'exponential', delay: 5000 },
+          backoff: { type: 'exponential', delay: 2000 },
           removeOnComplete: true,
           removeOnFail: false,
         }
       );
-      this.logger.log(`✅ Queued business profile creation for ${profileToCreate.type}`);
-    } else {
-      this.logger.log(`ℹ️ No profile to queue (profileToCreate: ${!!profileToCreate}, isIndividual: ${profileToCreate ? this.isIndividualProfile(profileToCreate.type) : 'N/A'})`);
+      
+      this.logger.log(`✅ Queued account.created event for user: ${userUuid} with professionalId: ${professionalIdForEvent || 'none'}`);
     }
 
-    // ============ STEP 6: EMIT KAFKA EVENT FOR AUTH SERVICE ============
-
-// ============ EMIT KAFKA EVENT FOR AUTH SERVICE ============
-// Only emit if NOT skipped
-// ============ EMIT KAFKA EVENT FOR AUTH SERVICE ============
-// Only emit if NOT skipped
-if (!data.skipEventEmission) {
-  this.logger.log('📤 Emitting account.created event for Auth Service...');
-  
-  await this.queue.addJob(
-    'profile-queue',
-    'emit-account-created-event',
-    {
-      userUuid: userUuid,
-      accountUuid: accountUuid,
-      email: normalizedEmail,
-      phone: normalizedPhone,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      accountStatus: isPremium ? 'PENDING_PAYMENT' : 'ACTIVE',
-      accountType: 'INDIVIDUAL',
-      roleName: roleType,
-      timestamp: new Date().toISOString(),
-    },
-    {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 2000 },
-      removeOnComplete: true,
-      removeOnFail: false,
-    }
-  );
-  
-  this.logger.log(`✅ Queued account.created event for user: ${userUuid}`);
-} else {
-  this.logger.log(`ℹ️ Skipping account.created event emission (skipEventEmission=true) for user: ${userUuid}`);
-}
-
-    
-
-
-    // ============ STEP 7: Return success ============
+    // ============ STEP 8: Return success ============
     this.logger.log('🔍 Fetching created account data...');
-    const accountData = await this.getAccountByUuid(accountUuid);
+    const accountResult = await this.getAccountByUuid(accountUuid);
     
     this.logger.log(`✅ Successfully created account for ${normalizedEmail}`);
     
     if (isPremium) {
       return BaseResponseDto.ok(
-        accountData.data as AccountResponseDto,
+        accountResult.data as AccountResponseDto,
         'Account created. Payment required.',
         'PAYMENT_REQUIRED'
       );
@@ -843,7 +862,7 @@ if (!data.skipEventEmission) {
         'profile-queue',
         'download-profile-picture',
         {
-          accountUuid: accountUuid,  // Use accountUuid
+          accountUuid: accountUuid,
           pictureUrl: data.profileImage,
         },
         { 
@@ -856,14 +875,13 @@ if (!data.skipEventEmission) {
     }
     
     return BaseResponseDto.ok(
-      accountData.data as AccountResponseDto,
+      accountResult.data as AccountResponseDto,
       'Account created successfully',
       'CREATED'
     );
 
   } catch (error) {
     this.logger.error(`❌ Account creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    this.logger.error(`❌ Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
     
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       this.logger.error(`❌ Prisma error code: ${error.code}`);
@@ -871,7 +889,6 @@ if (!data.skipEventEmission) {
       
       if (error.code === 'P2002') {
         const target = error.meta?.target as string[];
-        this.logger.error(`❌ Unique constraint violation on: ${target?.join(', ')}`);
         if (target?.includes('email')) {
           return BaseResponseDto.fail('Email already exists', 'ALREADY_EXISTS');
         }
@@ -882,9 +899,15 @@ if (!data.skipEventEmission) {
       }
     }
     
+    // Clean up if account was created
     try {
-      await this.prisma.account.delete({ where: { uuid: accountUuid } });
-      this.logger.log(`🧹 Cleaned up account ${accountUuid} after failure`);
+      const existingAccount = await this.prisma.account.findUnique({
+        where: { uuid: accountUuid }
+      });
+      if (existingAccount) {
+        await this.prisma.account.delete({ where: { uuid: accountUuid } });
+        this.logger.log(`🧹 Cleaned up account ${accountUuid} after failure`);
+      }
     } catch (cleanupError) {
       this.logger.warn(`⚠️ Could not clean up account: ${cleanupError.message}`);
     }
@@ -2499,11 +2522,12 @@ private async emitHousingPreferencesEvent(
         preferredLocations: profileData.preferredCities,
         preferredNeighborhoods: profileData.preferredNeighborhoods,
         preferredPropertyTypes: profileData.preferredTypes,
+
         minBedrooms: profileData.minBedrooms,
         maxBedrooms: profileData.maxBedrooms,
         moveInDate: profileData.moveInDate,
         hasPets: profileData.hasPets,
-        latitude: profileData.latitude,
+        latitude: profileData.latitude, 
         longitude: profileData.longitude,
         searchRadiusKm: profileData.searchRadiusKm,
         searchType: profileData.searchType,                    // ADD THIS

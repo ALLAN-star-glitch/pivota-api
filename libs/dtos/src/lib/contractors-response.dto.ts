@@ -32,8 +32,6 @@ export class AccountBasicDto {
   isVerified?: boolean;
 }
 
-
-
 export class ServiceOfferingResponseDto {
   @ApiProperty({ example: 'clv123abc', description: 'Internal database ID' })
   @IsString()
@@ -43,7 +41,7 @@ export class ServiceOfferingResponseDto {
   @IsString()
   externalId!: string;
 
-   @ApiProperty({ 
+  @ApiProperty({ 
     description: 'UUID of the skilled professional (contractor) - use this for booking',
     example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e'
   })
@@ -90,15 +88,16 @@ export class ServiceOfferingResponseDto {
   @IsNumber()
   yearsExperience?: number;
 
+  // ✅ UPDATED: Renamed from serviceAreas to coverageAreas
   @ApiPropertyOptional({ 
-    example: ['Plumbing', 'Electrical'], 
+    example: ['Nairobi CBD', 'Westlands', 'Kilimani'], 
     type: [String], 
-    description: 'Service areas the professional covers' 
+    description: 'Cities/neighborhoods where this specific service is available' 
   })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  serviceAreas?: string[];
+  coverageAreas?: string[];
 
   @ApiPropertyOptional({ example: 800, description: 'Hourly rate from profile' })
   @IsOptional()
@@ -115,7 +114,7 @@ export class ServiceOfferingResponseDto {
   description!: string;
 
   @ApiProperty({ 
-    example: ['PROFESSIONAL_SERVICES', 'HOUSING'], 
+    example: ['PROFESSIONAL_SERVICES'], 
     type: [String], 
     description: 'PivotaConnect verticals this service belongs to' 
   })
@@ -157,15 +156,7 @@ export class ServiceOfferingResponseDto {
   @IsString()
   currency!: string;
 
-  /* --- Location --- */
-  @ApiProperty({ example: 'Nairobi' })
-  @IsString()
-  locationCity!: string;
-
-  @ApiPropertyOptional({ example: 'Westlands' })
-  @IsOptional()
-  @IsString()
-  locationNeighborhood?: string;
+  // ❌ REMOVED locationCity and locationNeighborhood - use coverageAreas instead
 
   /* --- Availability --- */
   @ApiPropertyOptional({ 

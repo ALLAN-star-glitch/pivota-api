@@ -9,6 +9,8 @@ export class AuthAnalyticsController {
   private readonly logger = new Logger(AuthAnalyticsController.name);
   constructor(private readonly analyticsService: AuthAnalyticsService) {}
 
+   
+  
   /**
    * Handle user.registered event
    * Emitted on successful user signup (email or Google)

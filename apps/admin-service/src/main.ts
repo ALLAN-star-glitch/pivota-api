@@ -11,7 +11,7 @@ import { AppModule } from './app/app.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { RBAC_PROTO_PATH, PLANS_PROTO_PATH, SUBSCRIPTIONS_PROTO_PATH, HOUSING_TRAINING_DATA_PROTO_PATH } from '@pivota-api/protos';
 
-
+ 
 async function bootstrap() {
   const logger = new Logger('AdminServiceBootstrap');
 

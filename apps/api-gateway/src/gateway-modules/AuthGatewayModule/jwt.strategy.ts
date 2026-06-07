@@ -24,6 +24,9 @@ interface AuthServiceUserResponse {
     uuid: string;
     name: string;
   };
+  skilledProfessionalProfile?: {
+    uuid: string;
+  };
 }
 
 @Injectable()
@@ -61,10 +64,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const dbUser = response.user;
     const dbAccount = response.account;
     const dbOrganization = response.organization;
+    const dbProfessionalProfile = response.skilledProfessionalProfile;
 
     this.logger.debug(
       `✅ Authenticated user (${dbUser.firstName} ${dbUser.lastName}) ${dbUser.email} (UUID: ${payload.sub}) with role: ${dbUser.roleName}`,
     );
+
+    if (dbProfessionalProfile?.uuid) {
+      this.logger.debug(`✅ User has professional profile: ${dbProfessionalProfile.uuid}`);
+    }
 
     const rawRole = payload.role || dbUser.roleName;
     const normalizedRole = rawRole.replace(/\s+/g, '');
@@ -79,6 +87,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       accountId: payload.accountId,
       tokenId: payload.jti,
       
+      // Professional ID (from JWT or enriched from DB)
+      professionalId: payload.professionalId || dbProfessionalProfile?.uuid,
+      
       // Enriched data (from database/cache)
       firstName: dbUser.firstName,
       lastName: dbUser.lastName,
@@ -88,6 +99,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       organizationUuid: dbOrganization?.uuid,
       planSlug: payload.planSlug,
       status: dbUser.status,
-    };
+    }; 
   }
 }

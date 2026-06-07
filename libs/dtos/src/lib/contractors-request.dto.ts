@@ -48,15 +48,18 @@ export class CreateServiceOfferingDto {
   @IsString()
   currency?: string;
 
-  @ApiProperty({ example: 'Nairobi' })
-  @IsString()
+  // ✅ NEW: Coverage areas where this service is available
+  @ApiProperty({ 
+    description: 'Cities/neighborhoods where this service is available',
+    example: ['Nairobi CBD', 'Westlands', 'Kilimani', 'Karen'],
+    type: [String]
+  })
+  @IsArray()
   @IsNotEmpty()
-  locationCity!: string;
+  @ArrayMinSize(1)
+  coverageAreas!: string[];
 
-  @ApiPropertyOptional({ example: 'Westlands' })
-  @IsOptional()
-  @IsString()
-  locationNeighborhood?: string;
+  // ❌ REMOVED locationCity and locationNeighborhood
 
   @ApiPropertyOptional({ example: 5, description: 'Years of professional experience.' })
   @IsNumber()
@@ -71,6 +74,51 @@ export class CreateServiceOfferingDto {
   @IsOptional()
   @IsString()
   additionalNotes?: string;
+
+  @ApiPropertyOptional({ type: [DayAvailabilityDto], description: 'Weekly schedule' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DayAvailabilityDto)
+  availability?: DayAvailabilityDto[];
+}
+
+/* ======================================================
+   UPDATE SERVICE OFFERING DTO
+====================================================== */
+
+export class UpdateServiceOfferingDto {
+  @ApiPropertyOptional({ example: 'Professional House Painting' })
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiPropertyOptional({ example: 'High-quality interior and exterior painting services.' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ example: 5000, description: 'Base price' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  basePrice?: number;
+
+  @ApiPropertyOptional({ example: 'PER_HOUR', enum: PRICE_UNITS })
+  @IsOptional()
+  @IsString()
+  @IsIn(PRICE_UNITS)
+  priceUnit?: string;
+
+  // ✅ NEW: Coverage areas for update
+  @ApiPropertyOptional({ 
+    description: 'Cities/neighborhoods where this service is available',
+    example: ['Nairobi CBD', 'Westlands', 'Kilimani'],
+    type: [String]
+  })
+  @IsOptional()
+  @IsArray()
+  coverageAreas?: string[];
 
   @ApiPropertyOptional({ type: [DayAvailabilityDto], description: 'Weekly schedule' })
   @IsOptional()

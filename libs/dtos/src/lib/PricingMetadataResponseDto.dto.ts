@@ -11,7 +11,7 @@ export class PricingMetadataItemDto {
     description: 'ISO 4217 currency code (e.g., KES, USD)',
     example: 'KES',
   })
-  currency!: string; // Added to match .proto
+  currency!: string;
 
   @ApiPropertyOptional({
     description: 'If this rule is specific to a category, the slug is shown here.',
@@ -19,6 +19,13 @@ export class PricingMetadataItemDto {
     nullable: true,
   })
   categorySlug!: string | null;
+
+  @ApiPropertyOptional({
+    description: 'If this rule is specific to a category, the name is shown here.',
+    example: 'Plumbing Services',
+    nullable: true,
+  })
+  categoryName!: string | null;
 
   @ApiPropertyOptional({
     description: 'Minimum price allowed for this unit',
@@ -71,8 +78,19 @@ export class PricingMetadataResponseDto {
             unit: 'PER_HOUR', 
             currency: 'KES', 
             categorySlug: null, 
+            categoryName: null,
             min: 500, 
             max: 10000, 
+            experienceRequired: true, 
+            notesRequired: false 
+          },
+          { 
+            unit: 'PER_PROJECT', 
+            currency: 'KES', 
+            categorySlug: 'mobile-app-dev', 
+            categoryName: 'Mobile App Development',
+            min: 50000, 
+            max: 2000000, 
             experienceRequired: true, 
             notesRequired: false 
           }

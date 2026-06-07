@@ -21,6 +21,68 @@ export class ContractorsPricingService {
   private readonly PRICING_UNITS_CACHE_PREFIX = 'pricing_units:';
   private readonly PRICING_METADATA_CACHE_KEY = 'pricing_metadata';
 
+  // Unit labels for display
+  private readonly UNIT_LABELS: Record<string, string> = {
+    'PER_HOUR': 'per hour',
+    'PER_DAY': 'per day',
+    'PER_WEEK': 'per week',
+    'PER_MONTH': 'per month',
+    'PER_YEAR': 'per year',
+    'FIXED': 'fixed price',
+    'PER_VISIT': 'per visit',
+    'PER_SESSION': 'per session',
+    'PER_UNIT': 'per unit',
+    'PER_SQUARE_FOOT': 'per square foot',
+    'PER_SQUARE_METER': 'per square meter',
+    'PER_TRIP': 'per trip',
+    'PER_PAGE': 'per page',
+    'PER_TEST': 'per test',
+    'PER_COURSE': 'per course',
+    'PER_BOOTH': 'per booth',
+    'PER_EVENT': 'per event',
+    'PER_WATT': 'per watt',
+    'PER_KILOWATT': 'per kilowatt',
+    'PER_ACRE': 'per acre',
+    'PER_ANIMAL': 'per animal',
+    'PER_BIRD': 'per bird',
+    'PER_DEVICE': 'per device',
+    'PER_POINT': 'per point',
+    'PER_FIXTURE': 'per fixture',
+    'PER_ITEM': 'per item',
+    'PER_ROOM': 'per room',
+    'PER_GUEST': 'per guest',
+    'PER_PERSON': 'per person',
+    'PER_DOCUMENT': 'per document',
+    'PER_PLACEMENT': 'per placement',
+    'PER_EMPLOYEE': 'per employee',
+    'PER_RETURN': 'per return',
+    'PER_PROJECT': 'per project',
+    'PER_SERVICE': 'per service',
+    'PER_CONSULTATION': 'per consultation',
+    'PER_SAMPLE': 'per sample',
+    'PER_SITE': 'per site',
+    'PER_PROPERTY': 'per property',
+    'PER_CAMERA': 'per camera',
+    'PER_WINDOW': 'per window',
+    'PER_BOX': 'per box',
+    'PER_BIN': 'per bin',
+    'PER_POST': 'per post',
+    'PER_DESIGN': 'per design',
+    'PER_ARTICLE': 'per article',
+    'PER_MINUTE': 'per minute',
+    'PER_SECOND': 'per second',
+    'PER_WORD': 'per word',
+    'PER_LEVEL': 'per level',
+    'PER_SUBJECT': 'per subject',
+    'PER_SHIRT': 'per shirt',
+    'PER_BULK': 'per bulk order',
+    'PER_HUNDRED': 'per hundred',
+    'PER_COPY': 'per copy',
+    'PERCENTAGE': 'percentage',
+    'PACKAGE': 'package',
+    'FREE': 'free'
+  };
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
@@ -32,6 +94,7 @@ export class ContractorsPricingService {
   // ===================================================
 
   async validateOfferingPricing(dto: CreateServiceOfferingDto): Promise<void> {
+    // 1. Get the category
     const category = await this.prisma.category.findUnique({
       where: { id: dto.categoryId }
     });
@@ -39,7 +102,8 @@ export class ContractorsPricingService {
     if (!category) {
       throw new BadRequestException(`Category with ID ${dto.categoryId} not found`);
     }
-    
+
+    // 2. Find pricing rules - order by specificity (category-specific first, then global)
     const rules = await this.prisma.contractorPricingRule.findMany({
       where: {
         vertical: category.vertical,
@@ -48,34 +112,96 @@ export class ContractorsPricingService {
         OR: [
           { categoryId: dto.categoryId },
           { categoryId: null }
-        ]
+        ]   
       },
+      orderBy: {
+        categoryId: 'desc' // Non-null (specific) comes before null (global)
+      }
     });
 
+    // 3. Check if any rules exist for this unit
     if (rules.length === 0) {
-      this.logger.warn(`Unauthorized pricing unit: ${dto.priceUnit} for vertical ${category.vertical}`);
+      const allowedUnits = await this.getPermittedUnitsForCategory(category.id);
+      const allowedUnitsList = allowedUnits.map(u => this.UNIT_LABELS[u] || u).join(', ');
+      
+      this.logger.warn(`Unauthorized pricing unit: ${dto.priceUnit} for category ${category.name} (${category.vertical})`);
       throw new BadRequestException(
-        `The pricing unit '${dto.priceUnit}' is not permitted for the selected category.`
+        `'${this.UNIT_LABELS[dto.priceUnit] || dto.priceUnit}' is not allowed for "${category.name}". ` +
+        `Allowed units: ${allowedUnitsList}`
       );
     }
 
-    for (const rule of rules) {
-      if (rule.minPrice && dto.basePrice < Number(rule.minPrice)) {
-        throw new BadRequestException(`Price for ${rule.vertical} must be at least ${rule.minPrice}`);
-      }
+    // 4. Use the most specific rule (first in array)
+    const rule = rules[0];
 
-      if (rule.maxPrice && dto.basePrice > Number(rule.maxPrice)) {
-        throw new BadRequestException(`Price for ${rule.vertical} cannot exceed ${rule.maxPrice}`);
-      }
-
-      if (rule.isExperienceRequired && (dto.yearsExperience === undefined || dto.yearsExperience === null)) {
-        throw new BadRequestException(`Professional experience (years) is mandatory for ${rule.vertical} offerings.`);
-      }
-
-      if (rule.isNotesRequired && !dto.additionalNotes) {
-        throw new BadRequestException(`Please provide additional details/notes for this ${rule.vertical} service.`);
-      }
+    // 5. Validate price range
+    if (rule.minPrice !== null && dto.basePrice < Number(rule.minPrice)) {
+      const unitLabel = this.UNIT_LABELS[dto.priceUnit] || dto.priceUnit;
+      throw new BadRequestException(
+        `"${category.name}" with ${unitLabel} pricing must cost at least ${rule.minPrice.toLocaleString()} ${rule.currency}. ` +
+        `Your price: ${dto.basePrice.toLocaleString()} ${rule.currency}`
+      );
     }
+
+    if (rule.maxPrice !== null && dto.basePrice > Number(rule.maxPrice)) {
+      const unitLabel = this.UNIT_LABELS[dto.priceUnit] || dto.priceUnit;
+      throw new BadRequestException(
+        `"${category.name}" with ${unitLabel} pricing cannot exceed ${rule.maxPrice.toLocaleString()} ${rule.currency}. ` +
+        `Your price: ${dto.basePrice.toLocaleString()} ${rule.currency}`
+      );
+    }
+
+    // 6. Validate experience requirement
+    if (rule.isExperienceRequired && (dto.yearsExperience === undefined || dto.yearsExperience === null)) {
+      throw new BadRequestException(
+        `Years of professional experience is required for "${category.name}". ` +
+        `Please specify how many years of experience you have in this field.`
+      );
+    }
+
+    // 7. Validate notes requirement
+    if (rule.isNotesRequired && (!dto.additionalNotes || dto.additionalNotes.trim() === '')) {
+      throw new BadRequestException(
+        `Additional details/notes are required for "${category.name}". ` +
+        `Please provide more information about your service.`
+      );
+    }
+
+    // 8. Additional validation: years experience cannot be negative
+    if (dto.yearsExperience !== undefined && dto.yearsExperience !== null && dto.yearsExperience < 0) {
+      throw new BadRequestException(`Years of experience cannot be negative.`);
+    }
+
+    // 9. Additional validation: base price cannot be negative
+    if (dto.basePrice < 0) {
+      throw new BadRequestException(`Price cannot be negative.`);
+    }
+
+    this.logger.debug(`Validation passed for ${category.name} - ${dto.priceUnit} at ${dto.basePrice} ${rule.currency}`);
+  }
+
+  // Helper method to get permitted units for a category
+  private async getPermittedUnitsForCategory(categoryId: string): Promise<string[]> {
+    const category = await this.prisma.category.findUnique({
+      where: { id: categoryId },
+      select: { vertical: true }
+    });
+
+    if (!category) return [];
+
+    const rules = await this.prisma.contractorPricingRule.findMany({
+      where: {
+        vertical: category.vertical,
+        isActive: true,
+        OR: [
+          { categoryId: categoryId },
+          { categoryId: null }
+        ]
+      },
+      distinct: ['unit']
+    });
+
+    return rules.map(r => r.unit);
   }
 
   // ===================================================
@@ -193,7 +319,7 @@ export class ContractorsPricingService {
       const rules = await this.prisma.contractorPricingRule.findMany({
         where: { isActive: true },
         include: {
-          category: { select: { slug: true } }
+          category: { select: { slug: true, name: true } }
         }
       });
 
@@ -207,6 +333,7 @@ export class ContractorsPricingService {
         const metadataItem: PricingMetadataItemDto = {
           unit: rule.unit,
           categorySlug: rule.category?.slug ?? null,
+          categoryName: rule.category?.name ?? null,
           min: rule.minPrice ? Number(rule.minPrice) : null,
           max: rule.maxPrice ? Number(rule.maxPrice) : null,
           experienceRequired: rule.isExperienceRequired,
@@ -375,13 +502,14 @@ export class ContractorsPricingService {
   async getAllRules(): Promise<BaseResponseDto<PriceUnitRuleResponseDto[]>> {
     try {
       const rules = await this.prisma.contractorPricingRule.findMany({
-        include: { category: { select: { slug: true } } },
+        include: { category: { select: { slug: true, name: true } } },
         orderBy: { vertical: 'asc' }
       });
 
       const mappedRules = rules.map(r => ({
         ...r,
-        categorySlug: r.category?.slug ?? null
+        categorySlug: r.category?.slug ?? null,
+        categoryName: r.category?.name ?? null
       }));
 
       return { 
@@ -425,8 +553,46 @@ export class ContractorsPricingService {
       'PER_BOOTH': 'Per Booth',
       'PER_EVENT': 'Per Event',
       'PER_WATT': 'Per Watt',
+      'PER_KILOWATT': 'Per Kilowatt',
+      'PER_ACRE': 'Per Acre',
+      'PER_ANIMAL': 'Per Animal',
+      'PER_BIRD': 'Per Bird',
+      'PER_DEVICE': 'Per Device',
+      'PER_POINT': 'Per Point',
+      'PER_FIXTURE': 'Per Fixture',
+      'PER_ITEM': 'Per Item',
+      'PER_ROOM': 'Per Room',
+      'PER_GUEST': 'Per Guest',
+      'PER_PERSON': 'Per Person',
+      'PER_DOCUMENT': 'Per Document',
+      'PER_PLACEMENT': 'Per Placement',
+      'PER_EMPLOYEE': 'Per Employee',
+      'PER_RETURN': 'Per Return',
+      'PER_PROJECT': 'Per Project',
+      'PER_SERVICE': 'Per Service',
+      'PER_CONSULTATION': 'Per Consultation',
+      'PER_SAMPLE': 'Per Sample',
+      'PER_SITE': 'Per Site',
+      'PER_PROPERTY': 'Per Property',
+      'PER_CAMERA': 'Per Camera',
+      'PER_WINDOW': 'Per Window',
+      'PER_BOX': 'Per Box',
+      'PER_BIN': 'Per Bin',
+      'PER_POST': 'Per Post',
+      'PER_DESIGN': 'Per Design',
+      'PER_ARTICLE': 'Per Article',
+      'PER_MINUTE': 'Per Minute',
+      'PER_SECOND': 'Per Second',
+      'PER_WORD': 'Per Word',
+      'PER_LEVEL': 'Per Level',
+      'PER_SUBJECT': 'Per Subject',
+      'PER_SHIRT': 'Per Shirt',
+      'PER_BULK': 'Per Bulk Order',
+      'PER_HUNDRED': 'Per Hundred',
+      'PER_COPY': 'Per Copy',
       'PERCENTAGE': 'Percentage',
-      'PACKAGE': 'Package'
+      'PACKAGE': 'Package',
+      'FREE': 'Free'
     };
     return labels[unit] || unit;
   }
@@ -451,8 +617,13 @@ export class ContractorsPricingService {
       'PER_BOOTH': 'Charged per booth (for event services)',
       'PER_EVENT': 'Charged per event (for event services)',
       'PER_WATT': 'Charged per watt (for solar installation)',
-      'PERCENTAGE': 'Percentage of total value (for real estate agents)',
-      'PACKAGE': 'Package price for bundled services'
+      'PER_KILOWATT': 'Charged per kilowatt (for solar installation)',
+      'PER_ACRE': 'Charged per acre (for farming services)',
+      'PER_ANIMAL': 'Charged per animal (for veterinary services)',
+      'PER_PROJECT': 'Charged per project (for IT, design, development)',
+      'PERCENTAGE': 'Percentage of total value (for real estate agents, recruiters)',
+      'PACKAGE': 'Package price for bundled services',
+      'FREE': 'Free service (for pro-bono / charitable work)'
     };
     return descriptions[unit] || unit;
   }

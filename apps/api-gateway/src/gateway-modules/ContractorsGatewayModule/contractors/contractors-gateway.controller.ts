@@ -21,6 +21,7 @@ import {
   ApiResponse,
   ApiTags,
   ApiParam,
+  ApiBody,
 } from '@nestjs/swagger';
 
 import {
@@ -44,6 +45,8 @@ import {
   BookingStatisticsResponseDto,
   PaginatedBookingsResponseDto,
   UpcomingBookingResponseDto,
+  BookingActionResponseDto,
+  BookingStatusListResponseDto,
 } from '@pivota-api/dtos';
 
 import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
@@ -56,7 +59,7 @@ import { ContractorsGatewayService } from '../services/contractors-gateway.servi
 import { Permissions } from '../../../decorators/permissions.decorator';
 import { Public } from '../../../decorators/public.decorator';
 import { SetModule } from '../../../decorators/set-module.decorator';
-import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
+import { Permissions as P, ModuleSlug, isPlatformRole, RoleType } from '@pivota-api/access-management';
 import { UserService } from '../../UserProfileGatewayModule/services/user.service';
 
 @ApiTags('Contractors')
@@ -67,9 +70,18 @@ import { UserService } from '../../UserProfileGatewayModule/services/user.servic
 export class ContractorsGatewayController {
   private readonly logger = new Logger(ContractorsGatewayController.name);
 
-  constructor(private readonly contractorsService: ContractorsGatewayService,
-     private readonly userService: UserService,
+  constructor(
+    private readonly contractorsService: ContractorsGatewayService,
+    private readonly userService: UserService,
   ) {}
+
+  /**
+   * Helper to check if user has platform role (bypass business logic)
+   */
+  private hasPlatformRole(user: JwtRequest['user']): boolean {
+    const userRole = user.role as RoleType;
+    return isPlatformRole(userRole);
+  }
  
   // ===========================================================
   // 🛠️ CONTRACTORS - SERVICE MANAGEMENT
@@ -94,7 +106,13 @@ export class ContractorsGatewayController {
 
     this.logger.debug(`Creating service offering for user: ${userId}, account: ${accountId}`);
 
-    return this.contractorsService.createServiceOffering(dto, userId, accountId);
+    const response = await this.contractorsService.createServiceOffering(dto, userId, accountId);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   // ===========================================================
@@ -111,7 +129,13 @@ export class ContractorsGatewayController {
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
     const accountId = req.user.accountId;
-    return this.contractorsService.getOfferingsByAccount(accountId);
+    const response = await this.contractorsService.getOfferingsByAccount(accountId);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   // ===========================================================
@@ -130,7 +154,13 @@ export class ContractorsGatewayController {
   async getOfferingsByAccount(
     @Param('accountId') accountId: string,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    return this.contractorsService.getOfferingsByAccount(accountId);
+    const response = await this.contractorsService.getOfferingsByAccount(accountId);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   // ===========================================================
@@ -148,7 +178,13 @@ export class ContractorsGatewayController {
   async getOfferingsByProfessional(
     @Param('professionalId') professionalId: string,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    return this.contractorsService.getOfferingsByProfessional(professionalId);
+    const response = await this.contractorsService.getOfferingsByProfessional(professionalId);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   // ===========================================================
@@ -166,7 +202,13 @@ export class ContractorsGatewayController {
   async getOfferingById(
     @Param('id') id: string,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
-    return this.contractorsService.getOfferingById(id);
+    const response = await this.contractorsService.getOfferingById(id);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   // ===========================================================
@@ -190,7 +232,13 @@ export class ContractorsGatewayController {
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
     const userId = req.user.sub;
-    return this.contractorsService.updateServiceOffering(id, dto, userId);
+    const response = await this.contractorsService.updateServiceOffering(id, dto, userId);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   // ===========================================================
@@ -212,7 +260,13 @@ export class ContractorsGatewayController {
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<null>> {
     const userId = req.user.sub;
-    return this.contractorsService.deleteServiceOffering(id, userId);
+    const response = await this.contractorsService.deleteServiceOffering(id, userId);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   // ===========================================================
@@ -243,7 +297,13 @@ export class ContractorsGatewayController {
     @Query() dto: GetOfferingByVerticalRequestDto,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
     this.logger.debug(`REST GetOfferingsByVertical: ${dto.vertical} in ${dto.city || 'All Cities'}`);
-    return this.contractorsService.getOfferingsByVertical(dto);
+    const response = await this.contractorsService.getOfferingsByVertical(dto);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   // ===========================================================
@@ -279,71 +339,95 @@ export class ContractorsGatewayController {
     @Query('maxPrice') maxPrice?: number,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
     this.logger.debug(`REST GetOfferingsByCategory: ${categoryId}`);
-    return this.contractorsService.getOfferingsByCategory(
+    const response = await this.contractorsService.getOfferingsByCategory(
       categoryId, limit, offset, city, minPrice, maxPrice
     );
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   // ===========================================================
   // 📅 BOOKING MANAGEMENT - CLIENT ENDPOINTS
   // ===========================================================
 
- @Post('bookings')
-@Version('1')
-@ApiTags('Contractors - Bookings')
-@ApiOperation({ summary: 'Create a new booking' })
-@ApiResponse({ status: 201, description: 'Booking created successfully' })
-@ApiResponse({ status: 400, description: 'Validation error' })
-@ApiResponse({ status: 401, description: 'Unauthorized' })
-@ApiResponse({ status: 404, description: 'Service offering or profiles not found' })
-@ApiResponse({ status: 409, description: 'Time slot conflict' })
-async createBooking(
-  @Body() dto: CreateBookingRequestDto,
-  @Req() req: JwtRequest,
-): Promise<BaseResponseDto<BookingResponseDto>> {
-  const clientId = req.user.sub;  // Get clientId from JWT token
-  
-  // Create the full request with clientId from JWT
-  const fullRequest: CreateBookingRequestDto & { clientId: string } = {
-    ...dto,
-    clientId,  // Add the clientId from JWT
-  };
-  
-  this.logger.debug(`Creating booking for client: ${clientId}, contractor: ${dto.contractorId}`);
-  return this.contractorsService.createBooking(fullRequest);
-}
-
-  @Get('bookings/me/customer')
+  @Post('bookings')
+  @Permissions(P.PROFESSIONAL_SERVICES_BOOK_OWN)
   @Version('1')
   @ApiTags('Contractors - Bookings')
-  @ApiOperation({ summary: 'Get my bookings as a customer' })
-  @ApiQuery({ name: 'status', required: false, enum: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'], description: 'Filter by status' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page (default: 20, max: 100)' })
-  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset' })
-  @ApiResponse({ status: 200, description: 'Bookings retrieved successfully' })
+  @ApiOperation({ summary: 'Create a new booking' })
+  @ApiResponse({ status: 201, description: 'Booking created successfully' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getMyBookingsAsCustomer(
+  @ApiResponse({ status: 404, description: 'Service offering or profiles not found' })
+  @ApiResponse({ status: 409, description: 'Time slot conflict' })
+  async createBooking(
+    @Body() dto: CreateBookingRequestDto,
     @Req() req: JwtRequest,
-    @Query('status') status?: string,
-    @Query('limit') limit?: number,
-    @Query('offset') offset?: number,
-  ): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
     const clientId = req.user.sub;
-    const dto: GetCustomerBookingsRequestDto = {
+    const fullRequest: CreateBookingRequestDto & { clientId: string } = {
+      ...dto,
       clientId,
-      status,
-      limit: limit || 20,
-      offset: offset || 0,
     };
-    this.logger.debug(`Fetching customer bookings for: ${clientId}`);
-    return this.contractorsService.getMyBookingsAsCustomer(dto);
+
+    this.logger.debug(`Creating booking for client: ${clientId}, contractor: ${dto.contractorId}`);
+
+    const response = await this.contractorsService.createBooking(fullRequest);
+
+    if (!response.success) {
+      this.logger.error(`Failed to create booking for client: ${clientId}, contractor: ${dto.contractorId}`);
+      throw response;
+    }
+
+    return response;
   }
 
-@Get('bookings/me/contractor')
+  @Get('bookings/me/customer')
+@Version('1')
+@ApiTags('Contractors - Bookings')
+@ApiOperation({ summary: 'Get my bookings as a customer' })
+@ApiQuery({ name: 'status', required: false, enum: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'DECLINED'], description: 'Filter by status' })
+@ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page (default: 20, max: 100)' })
+@ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset' })
+@ApiResponse({ status: 200, description: 'Bookings retrieved successfully' })
+@ApiResponse({ status: 401, description: 'Unauthorized' })
+async getMyBookingsAsCustomer(
+  @Req() req: JwtRequest,
+  @Query('status') status?: string,
+  @Query('limit') limit?: number,
+  @Query('offset') offset?: number,
+): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
+  const clientId = req.user.sub;
+  const isPlatformAdmin = this.hasPlatformRole(req.user);  // ✅ Get the flag
+  
+  const dto: GetCustomerBookingsRequestDto & { isPlatformAdmin?: boolean } = {
+    clientId,
+    status,
+    limit: limit || 20,
+    offset: offset || 0,
+    isPlatformAdmin,  // ✅ Pass it
+  };
+  
+  this.logger.debug(`Fetching customer bookings for: ${clientId}, isPlatformAdmin: ${isPlatformAdmin}`);
+  const response = await this.contractorsService.getMyBookingsAsCustomer(dto);
+  
+  if (!response.success) {
+    throw response;
+  }
+  
+  return response;
+}
+
+  @Get('bookings/me/contractor')
+@Permissions(P.PROFESSIONAL_SERVICES_READ)
 @Version('1')
 @ApiTags('Contractors - Bookings')
 @ApiOperation({ summary: 'Get my bookings as a contractor/professional' })
-@ApiQuery({ name: 'status', required: false, enum: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'], description: 'Filter by status' })
+@ApiQuery({ name: 'status', required: false, enum: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'DECLINED'], description: 'Filter by status' })
 @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page (default: 20, max: 100)' })
 @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset' })
 @ApiResponse({ status: 200, description: 'Bookings retrieved successfully' })
@@ -354,29 +438,51 @@ async getMyBookingsAsProfessional(
   @Query('limit') limit?: number,
   @Query('offset') offset?: number,
 ): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
-  // Get the user's skilled professional profile UUID
-  const professionalProfile = await this.userService.getSkilledProfessionalByAccount(req.user.accountId);
-  
-  if (!professionalProfile.success || !professionalProfile.data) {
-    return BaseResponseDto.fail(
-      'No skilled professional profile found. Please create a professional profile first.',
+  const contractorId = req.user.professionalId;
+  const isPlatformAdmin = this.hasPlatformRole(req.user);
+
+  if (!contractorId && !isPlatformAdmin) {
+    const response = BaseResponseDto.fail(
+      'No professional profile found. Please create a professional profile first.',
       'PROFILE_NOT_FOUND'
     );
+    throw response;
   }
-  
-  const contractorId = professionalProfile.data.uuid; // This is the professional UUID
-  
-  const dto: GetContractorBookingsRequestDto = {
-    contractorId,
+
+  const dto: GetContractorBookingsRequestDto & { isPlatformAdmin?: boolean } = {
+    contractorId: contractorId || '',
     status,
     limit: limit || 20,
     offset: offset || 0,
+    isPlatformAdmin,  // ✅ Pass it
   };
-   
+
+  this.logger.debug(`Fetching contractor bookings for professional: ${contractorId || 'platform-admin'} (user: ${req.user.sub}), isPlatformAdmin: ${isPlatformAdmin}`);
+  const response = await this.contractorsService.getMyBookingsAsProfessional(dto);
   
-  this.logger.debug(`Fetching contractor bookings for professional: ${contractorId} (user: ${req.user.sub})`);
-  return this.contractorsService.getMyBookingsAsProfessional(dto);
+  if (!response.success) {
+    throw response;
+  }
+  
+  return response;
 }
+
+   @Get('bookings/statuses')
+  @Public()  
+  @Version('1')
+  @ApiTags('Contractors - Bookings')
+  @ApiOperation({ summary: 'Get all booking statuses for dropdown/UI' })
+  @ApiResponse({ status: 200, description: 'Booking statuses retrieved successfully' })
+  async getBookingStatuses(): Promise<BaseResponseDto<BookingStatusListResponseDto>> {
+    this.logger.debug(`Fetching booking statuses`);
+    const response = await this.contractorsService.getBookingStatuses();
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
+  }
 
   @Get('bookings/:bookingId')
   @Version('1')
@@ -392,18 +498,23 @@ async getMyBookingsAsProfessional(
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
     const userId = req.user.sub;
-    // Determine user type based on the relationship (this could be enhanced)
-    // For now, we'll let the service figure it out by checking both roles
-    const dto: GetBookingDetailsRequestDto = {
-      bookingId,
-      userId,
-      userType: 'CLIENT', // Default, service will check both
-    };
-    this.logger.debug(`Fetching booking details: ${bookingId} for user: ${userId}`);
-    return this.contractorsService.getBookingDetails(dto);
+    const professionalId = req.user.professionalId;
+    const isPlatformAdmin = this.hasPlatformRole(req.user);
+    
+    this.logger.debug(`Fetching booking details: ${bookingId} for userId: ${userId}, professionalId: ${professionalId}, isPlatformAdmin: ${isPlatformAdmin}`);
+    
+    // Pass isPlatformAdmin to service for authorization bypass
+    const response = await this.contractorsService.getBookingDetails(bookingId, userId, professionalId, isPlatformAdmin);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   @Patch('bookings/:bookingId/accept')
+  @Permissions(P.PROFESSIONAL_SERVICES_ACCEPT_OWN)
   @Version('1')
   @ApiTags('Contractors - Bookings')
   @ApiOperation({ summary: 'Accept a booking (Contractor action)' })
@@ -416,17 +527,36 @@ async getMyBookingsAsProfessional(
   async acceptBooking(
     @Param('bookingId') bookingId: string,
     @Req() req: JwtRequest,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
-    const contractorId = req.user.sub;
+  ): Promise<BaseResponseDto<BookingActionResponseDto>> {
+    const contractorId = req.user.professionalId;
+    const isPlatformAdmin = this.hasPlatformRole(req.user);
+
+    // ✅ Platform admins are exempt from professionalId requirement
+    if (!contractorId && !isPlatformAdmin) {
+      const response = BaseResponseDto.fail(
+        'No professional profile found. Please create a professional profile first.',
+        'PROFILE_NOT_FOUND'
+      );
+      throw response;
+    }
+
     const dto: AcceptBookingRequestDto = {
       bookingId,
-      contractorId,
+      contractorId: contractorId || '', // Allow empty for platform admins
     };
-    this.logger.debug(`Accepting booking: ${bookingId} by contractor: ${contractorId}`);
-    return this.contractorsService.acceptBooking(dto);
+    
+    this.logger.debug(`Accepting booking: ${bookingId} by contractor: ${contractorId || 'platform-admin'}, isPlatformAdmin: ${isPlatformAdmin}`);
+    const response = await this.contractorsService.acceptBooking(dto);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   @Patch('bookings/:bookingId/decline')
+  @Permissions(P.PROFESSIONAL_SERVICES_DECLINE_OWN)
   @Version('1')
   @ApiTags('Contractors - Bookings')
   @ApiOperation({ summary: 'Decline a booking (Contractor action)' })
@@ -440,45 +570,76 @@ async getMyBookingsAsProfessional(
     @Param('bookingId') bookingId: string,
     @Body('reason') reason: string,
     @Req() req: JwtRequest,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
-    const contractorId = req.user.sub;
+  ): Promise<BaseResponseDto<BookingActionResponseDto>> {
+    const contractorId = req.user.professionalId;
+    const isPlatformAdmin = this.hasPlatformRole(req.user);
+
+    // ✅ Platform admins are exempt from professionalId requirement
+    if (!contractorId && !isPlatformAdmin) {
+      const response = BaseResponseDto.fail(
+        'No professional profile found. Please create a professional profile first.',
+        'PROFILE_NOT_FOUND'
+      );
+      throw response;
+    }
+
     const dto: DeclineBookingRequestDto = {
       bookingId,
-      contractorId,
+      contractorId: contractorId || '', // Allow empty for platform admins
       reason,
     };
-    this.logger.debug(`Declining booking: ${bookingId} by contractor: ${contractorId}`);
-    return this.contractorsService.declineBooking(dto);
+    
+    this.logger.debug(`Declining booking: ${bookingId} by contractor: ${contractorId || 'platform-admin'}, isPlatformAdmin: ${isPlatformAdmin}`);
+    const response = await this.contractorsService.declineBooking(dto);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   @Patch('bookings/:bookingId/cancel')
-  @Version('1')
-  @ApiTags('Contractors - Bookings')
-  @ApiOperation({ summary: 'Cancel a booking (Client or Contractor action)' })
-  @ApiParam({ name: 'bookingId', description: 'Booking UUID', example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e' })
-  @ApiResponse({ status: 200, description: 'Booking cancelled successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid status transition' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - not your booking' })
-  @ApiResponse({ status: 404, description: 'Booking not found' })
-  async cancelBooking(
-    @Param('bookingId') bookingId: string,
-    @Body('userType') userType: 'CLIENT' | 'CONTRACTOR',
-    @Body('reason') reason: string,
-    @Req() req: JwtRequest,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
-    const userId = req.user.sub;
-    const dto: CancelBookingRequestDto = {
-      bookingId,
-      userId,
-      userType,
-      reason,
-    };
-    this.logger.debug(`Cancelling booking: ${bookingId} by: ${userType}`);
-    return this.contractorsService.cancelBooking(dto);
+@Permissions(P.PROFESSIONAL_SERVICES_CANCEL_OWN)
+@Version('1')
+@ApiTags('Contractors - Bookings')
+@ApiOperation({ summary: 'Cancel a booking' })
+@ApiParam({ name: 'bookingId', description: 'Booking UUID', example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e' })
+@ApiBody({
+  schema: {
+    type: 'object',
+    properties: {
+      reason: { type: 'string', example: 'Changed my mind', description: 'Reason for cancellation' }
+    }
   }
+})
+@ApiResponse({ status: 200, description: 'Booking cancelled successfully' })
+@ApiResponse({ status: 400, description: 'Invalid status transition' })
+@ApiResponse({ status: 401, description: 'Unauthorized' })
+@ApiResponse({ status: 403, description: 'Forbidden - not your booking' })
+@ApiResponse({ status: 404, description: 'Booking not found' })
+async cancelBooking(
+  @Param('bookingId') bookingId: string,
+  @Body('reason') reason: string,
+  @Req() req: JwtRequest,
+): Promise<BaseResponseDto<BookingActionResponseDto>> {
+  const userId = req.user.sub;
+  const professionalId = req.user.professionalId;
+  const isPlatformAdmin = this.hasPlatformRole(req.user);
+  
+  this.logger.debug(`Cancelling booking: ${bookingId} by userId: ${userId}, professionalId: ${professionalId}, isPlatformAdmin: ${isPlatformAdmin}`);
+  
+  const response = await this.contractorsService.cancelBooking(bookingId, userId, professionalId, reason, isPlatformAdmin);  // ✅ Pass isPlatformAdmin
+  
+  if (!response.success) {
+    throw response;
+  }
+  
+  return response;
+}
 
   @Patch('bookings/:bookingId/complete')
+  @Permissions(P.PROFESSIONAL_SERVICES_COMPLETE_OWN)
   @Version('1')
   @ApiTags('Contractors - Bookings')
   @ApiOperation({ summary: 'Complete a booking (Contractor action)' })
@@ -491,21 +652,41 @@ async getMyBookingsAsProfessional(
   async completeBooking(
     @Param('bookingId') bookingId: string,
     @Req() req: JwtRequest,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
-    const contractorId = req.user.sub;
+  ): Promise<BaseResponseDto<BookingActionResponseDto>> {
+    const contractorId = req.user.professionalId;
+    const isPlatformAdmin = this.hasPlatformRole(req.user);
+
+    // ✅ Platform admins are exempt from professionalId requirement
+    if (!contractorId && !isPlatformAdmin) {
+      const response = BaseResponseDto.fail(
+        'No professional profile found. Please create a professional profile first.',
+        'PROFILE_NOT_FOUND'
+      );
+      throw response;
+    }
+
     const dto: CompleteBookingRequestDto = {
       bookingId,
-      contractorId,
+      contractorId: contractorId || '', // Allow empty for platform admins
     };
-    this.logger.debug(`Completing booking: ${bookingId} by contractor: ${contractorId}`);
-    return this.contractorsService.completeBooking(dto);
+    
+    this.logger.debug(`Completing booking: ${bookingId} by contractor: ${contractorId || 'platform-admin'}, isPlatformAdmin: ${isPlatformAdmin}`);
+    const response = await this.contractorsService.completeBooking(dto);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
+
 
   // ===========================================================
   // 📊 CONTRACTOR DASHBOARD ENDPOINTS
   // ===========================================================
 
   @Get('contractor/upcoming-bookings')
+  @Permissions(P.PROFESSIONAL_SERVICES_READ)
   @Version('1')
   @ApiTags('Contractors - Dashboard')
   @ApiOperation({ summary: 'Get upcoming bookings for contractor dashboard' })
@@ -516,16 +697,35 @@ async getMyBookingsAsProfessional(
     @Req() req: JwtRequest,
     @Query('limit') limit?: number,
   ): Promise<BaseResponseDto<UpcomingBookingResponseDto[]>> {
-    const contractorId = req.user.sub;
+    const contractorId = req.user.professionalId;
+    const isPlatformAdmin = this.hasPlatformRole(req.user);
+
+    // ✅ Platform admins are exempt from professionalId requirement
+    if (!contractorId && !isPlatformAdmin) {
+      const response = BaseResponseDto.fail(
+        'No professional profile found. Please create a professional profile first.',
+        'PROFILE_NOT_FOUND'
+      );
+      throw response;
+    }
+
     const dto: GetUpcomingBookingsRequestDto = {
-      contractorId,
+      contractorId: contractorId || '', // Allow empty for platform admins
       limit: limit || 10,
     };
-    this.logger.debug(`Fetching upcoming bookings for contractor: ${contractorId}`);
-    return this.contractorsService.getUpcomingBookingsForProfessional(dto);
+    
+    this.logger.debug(`Fetching upcoming bookings for contractor: ${contractorId || 'platform-admin'}, isPlatformAdmin: ${isPlatformAdmin}`);
+    const response = await this.contractorsService.getUpcomingBookingsForProfessional(dto);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 
   @Get('contractor/booking-stats')
+  @Permissions(P.PROFESSIONAL_SERVICES_READ)
   @Version('1')
   @ApiTags('Contractors - Dashboard')
   @ApiOperation({ summary: 'Get booking statistics for contractor dashboard' })
@@ -534,11 +734,29 @@ async getMyBookingsAsProfessional(
   async getProfessionalBookingStats(
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<BookingStatisticsResponseDto>> {
-    const contractorId = req.user.sub;
+    const contractorId = req.user.professionalId;
+    const isPlatformAdmin = this.hasPlatformRole(req.user);
+
+    // ✅ Platform admins are exempt from professionalId requirement
+    if (!contractorId && !isPlatformAdmin) {
+      const response = BaseResponseDto.fail(
+        'No professional profile found. Please create a professional profile first.',
+        'PROFILE_NOT_FOUND'
+      );
+      throw response;
+    }
+
     const dto: GetProfessionalStatsRequestDto = {
-      contractorId,
+      contractorId: contractorId || '', // Allow empty for platform admins
     };
-    this.logger.debug(`Fetching booking stats for contractor: ${contractorId}`);
-    return this.contractorsService.getProfessionalBookingStats(dto);
+    
+    this.logger.debug(`Fetching booking stats for contractor: ${contractorId || 'platform-admin'}, isPlatformAdmin: ${isPlatformAdmin}`);
+    const response = await this.contractorsService.getProfessionalBookingStats(dto);
+    
+    if (!response.success) {
+      throw response;
+    }
+    
+    return response;
   }
 }

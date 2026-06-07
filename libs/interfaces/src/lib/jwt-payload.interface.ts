@@ -11,5 +11,6 @@ export interface JwtPayload {
   role: string;
   accountType: 'INDIVIDUAL' | 'ORGANIZATION';
   organizationUuid?: string;
+  professionalId?: string; // Optional claim for skilled professionals
   planSlug?: string;
 }

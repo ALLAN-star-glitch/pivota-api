@@ -75,6 +75,10 @@ export enum PermissionAction {
   MODERATE = 'moderate',
   VERIFY = 'verify',
   BOOK = 'book',        // Special action for booking services
+  CANCEL = 'cancel',    // Special action for cancelling bookings
+  ACCEPT = 'accept',    // Special action for accepting bookings (contractor)
+  DECLINE = 'decline',  // Special action for declining bookings (contractor)
+  COMPLETE = 'complete', // Special action for completing bookings (contractor)
   REVIEW = 'review',    // Special action for reviews/ratings
   INVITE = 'invite',    // Special action for inviting members
   REMOVE = 'remove',    // Special action for removing members
@@ -235,8 +239,27 @@ export const Permissions = {
   PROFESSIONAL_SERVICES_DELETE_OWN: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.DELETE, PermissionScope.OWN),
   PROFESSIONAL_SERVICES_DELETE_ANY: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.DELETE, PermissionScope.ANY),
   
-  // Special actions
-  PROFESSIONAL_SERVICES_BOOK: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.BOOK),
+  // Book actions (with scope)
+  PROFESSIONAL_SERVICES_BOOK_OWN: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.BOOK, PermissionScope.OWN),
+  PROFESSIONAL_SERVICES_BOOK_ANY: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.BOOK, PermissionScope.ANY),
+  
+  // Cancel actions (with scope)
+  PROFESSIONAL_SERVICES_CANCEL_OWN: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.CANCEL, PermissionScope.OWN),
+  PROFESSIONAL_SERVICES_CANCEL_ANY: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.CANCEL, PermissionScope.ANY),
+  
+  // Accept actions (contractor accepts booking)
+  PROFESSIONAL_SERVICES_ACCEPT_OWN: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.ACCEPT, PermissionScope.OWN),
+  PROFESSIONAL_SERVICES_ACCEPT_ANY: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.ACCEPT, PermissionScope.ANY),
+  
+  // Decline actions (contractor declines booking)
+  PROFESSIONAL_SERVICES_DECLINE_OWN: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.DECLINE, PermissionScope.OWN),
+  PROFESSIONAL_SERVICES_DECLINE_ANY: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.DECLINE, PermissionScope.ANY),
+  
+  // Complete actions (contractor completes service)
+  PROFESSIONAL_SERVICES_COMPLETE_OWN: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.COMPLETE, PermissionScope.OWN),
+  PROFESSIONAL_SERVICES_COMPLETE_ANY: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.COMPLETE, PermissionScope.ANY),
+  
+  // Review
   PROFESSIONAL_SERVICES_REVIEW: buildPermission(ModuleSlug.PROFESSIONAL_SERVICES, PermissionAction.REVIEW),
   
   // Moderation

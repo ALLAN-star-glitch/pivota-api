@@ -1274,30 +1274,22 @@ async requestOtp(
    
   this.logger.log(`📩 OTP Request [${purpose}] for: ${email}${phone ? ` with phone: ${phone}` : ''}`);
    
-  try {  
+ 
     const result = await this.authService.requestOtp(
       { email, phone },   
       purpose            
     );
-    
+     
     if (!result.success) {
       this.logger.warn(`⚠️ OTP Request failed for ${email} [${purpose}]: ${result.message}`);
-      throw result;
+      throw result; 
+
+      
     } 
     
     this.logger.log(`✅ OTP Request successful for ${email} [${purpose}]`);
     return result;
     
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    this.logger.error(`❌ OTP Request error for ${email} [${purpose}]: ${errorMessage}`);
-    
-    return BaseResponseDto.fail(
-      'An error occurred while processing your request',
-      'INTERNAL_ERROR',
-      { code: 'INTERNAL', message: errorMessage }
-    );
-  }
 }
 
   @Post('otp/verify')

@@ -169,6 +169,18 @@ async getCachedUserRole(userUuid: string): Promise<string | null> {
   return role;
 }
 
+
+// In your RedisSessionService, add:
+async cacheProfessionalId(userUuid: string, professionalId: string): Promise<void> {
+  const key = `professional:${userUuid}`;
+  await this.redis.setEx(key, professionalId, 3600); // 1 hour cache
+}
+
+async getCachedProfessionalId(userUuid: string): Promise<string | null> {
+  const key = `professional:${userUuid}`;
+  return await this.redis.get(key);
+}
+
 /**
  * Invalidate user role cache
  */
@@ -177,4 +189,6 @@ async invalidateUserRoleCache(userUuid: string): Promise<void> {
   await this.redis.delete(cacheKey);
   this.logger.debug(`User role cache invalidated for ${userUuid}`);
 }
+
+
 }

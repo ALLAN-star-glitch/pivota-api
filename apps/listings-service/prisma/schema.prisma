@@ -273,14 +273,17 @@ model ServiceOffering {
   professionalAvatar String?   // Denormalized from profile
   isVerified         Boolean   @default(false)  // Denormalized from profile
   yearsExperience    Int?      // Denormalized from profile
-  serviceAreas       Json?     // Denormalized from profile (JSON array)
   hourlyRate         Float?    // Denormalized from profile's default rate
+  
+  // --- SERVICE COVERAGE (Where this service is available) ---
+  // JSON array of cities/neighborhoods where this service can be delivered
+  // Format: ["Nairobi CBD", "Westlands", "Kilimani"] or ["Nairobi", "Kiambu"]
+  // This is the PRIMARY location field for the offering
+  coverageAreas      Json?     
   
   // --- LISTING DETAILS ---
   title        String   
   description  String
-  
-  // REMOVED: verticals array - use category.vertical instead
   
   // Categories from Listings Service
   categoryId   String
@@ -289,14 +292,10 @@ model ServiceOffering {
   subCategoryId String?
   subCategory   Category? @relation("ServiceSubcategory", fields: [subCategoryId], references: [id])
   
-  // --- PRICING (Can override profile defaults) ---
+  // --- PRICING ---
   basePrice    Float
   priceUnit    String   @default("PER_HOUR") // PER_HOUR, PER_DAY, FIXED, PER_SESSION
   currency     String   @default("KES")
-  
-  // --- LOCATION ---
-  locationCity         String
-  locationNeighborhood String?
   
   // --- AVAILABILITY & SCHEDULING ---
   availability    String?  // JSON string for weekly schedule
@@ -319,9 +318,16 @@ model ServiceOffering {
   @@index([accountId])
   @@index([creatorId])
   @@index([categoryId])
-  @@index([locationCity])
   @@index([status])
   @@index([createdAt])
+}
+
+enum BookingStatus {
+  PENDING    // Booking created, waiting for contractor response
+  CONFIRMED  // Contractor accepted the booking
+  COMPLETED  // Service completed successfully
+  CANCELLED  // Cancelled by client or contractor (after confirmation)
+  DECLINED   // Contractor declined the booking
 }
 
 /// =====================================================================
@@ -346,8 +352,10 @@ model ServiceBooking {
   serviceId     String?
   service       ServiceOffering? @relation(fields: [serviceId], references: [id])
 
-  // Denormalized for quick display in "My Bookings"
-  contractorName String?  
+  // Denormalized for quick display in "My Bookings" & Notifications
+  contractorName String?   // Contractor's full name
+  contractorEmail String?  //  ADD THIS - Contractor's email for notifications
+  contractorPhone String?  //  ADD THIS - Contractor's phone for SMS (future)
   clientName     String?   // Client's name at time of booking
   clientPhone    String?   // Client's phone for SMS notifications
   clientEmail    String?   // Client's email for email notifications
@@ -356,7 +364,7 @@ model ServiceBooking {
   // ======================
   // THE WHEN & WHERE
   // ======================
-  status        String    @default("PENDING") // PENDING | CONFIRMED | COMPLETED | CANCELLED
+  status        BookingStatus @default(PENDING)
   scheduledDate DateTime?
   locationCity  String?
   
@@ -366,6 +374,12 @@ model ServiceBooking {
   agreedPrice   Float?
   currency      String    @default("KES")
   customerNotes String?   // "Please come after 2 PM"
+  
+  // Optional timestamps for tracking state changes
+  confirmedAt   DateTime?  // When contractor accepted
+  declinedAt    DateTime?  // When contractor declined
+  cancelledAt   DateTime?  // When cancelled by client/contractor
+  completedAt   DateTime?  // When service was completed
   
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

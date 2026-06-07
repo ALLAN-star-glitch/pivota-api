@@ -16,13 +16,14 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   console.log('🔴 STEP 3: Nest app created');
   
-  console.log('🔴 STEP 4: Connecting to RabbitMQ at:', process.env.RMQ_URL || 'amqp://localhost:5672');
+  const rmqUrl = process.env.RMQ_URL || process.env.RABBITMQ_URL || 'amqp://localhost:5672';
+  console.log('🔴 STEP 4: Connecting to RabbitMQ at:', rmqUrl);
 
   // RabbitMQ connection for auth-related emails
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RMQ_URL || 'amqp://localhost:5672'],
+      urls: [rmqUrl],
       queue: 'notification_email_queue',
       noAck: false,
       prefetchCount: 1,
@@ -38,7 +39,7 @@ async function bootstrap() {
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
+      urls: [rmqUrl],
       queue: 'housing_notification_queue',
       noAck: false,
       prefetchCount: 1,
@@ -55,15 +56,47 @@ async function bootstrap() {
   
   console.log('🔴 STEP 6: Housing email microservice connected');
 
+  //  NEW: RabbitMQ connection for booking-related emails
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [rmqUrl],
+      queue: 'booking_notification_queue',
+      noAck: false,
+      prefetchCount: 1,
+    }, 
+  }, { inheritAppConfig: true });
+  
+  console.log('🔴 STEP 7: Booking email microservice connected');
+
+  // ✅ NEW: RabbitMQ connection for general notification events
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [rmqUrl],
+      queue: 'notification_events',
+      noAck: false,
+      prefetchCount: 1,
+      queueOptions: { 
+        durable: true,
+        autoDelete: false,
+      },
+    }, 
+  }, { inheritAppConfig: true });
+  
+  console.log('🔴 STEP 8: General notification events microservice connected');
+
   await app.startAllMicroservices();
-  console.log('🔴 STEP 7: All microservices started');
+  console.log('🔴 STEP 9: All microservices started');
   
   logger.log('🚀 Notification Microservice is running');
   logger.log(`✅ RabbitMQ listening on queue: notification_email_queue`);
   logger.log(`✅ RabbitMQ listening on queue: housing_notification_queue`);
+  logger.log(`✅ RabbitMQ listening on queue: booking_notification_queue`);
+  logger.log(`✅ RabbitMQ listening on queue: notification_events`);
   logger.log(`⚠️ Kafka is DISABLED (only RabbitMQ for emails)`);
   
-  console.log('🔴 STEP 8: Bootstrap complete - service is ready');
+  console.log('🔴 STEP 10: Bootstrap complete - service is ready');
 }
 
 bootstrap();

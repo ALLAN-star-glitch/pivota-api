@@ -102,10 +102,10 @@ export class AuthDevController {
   async loginSuperAdmin(@Res({ passthrough: true }) res: Response): Promise<BaseResponseDto<TokenPairDto>> {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      'eeafe623-65e7-4fb8-9fd4-b9c17991afd9',
-      'allanmathenge67@gmail.com',
+      'ed2bc7ab-7ea8-4b7f-9d6c-bef48de89736',
+      'allanmathenge319@gmail.com',
       'SuperAdmin',
-      'e25328b9-1b68-47c4-bb9f-86188f530e88', 
+      'f5394538-6afe-4aff-b6f0-23a8925a7ba8', 
       res,
     );
   }
@@ -145,10 +145,10 @@ export class AuthDevController {
   async loginPlatformSystemAdmin(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      'plat-sys-admin-uuid-1111',
-      'platform.system@pivota-dev.com',
+      'b9668188-c98d-4deb-af8a-232ea9a78702',
+      'allanmathenge67@gmail.com',
       'PlatformSystemAdmin',
-      'plat-sys-admin-account-id',
+      '1f8459af-bd74-4c4a-aaf6-12c3a75b5a4d',
       res,
     );
   }
@@ -190,10 +190,10 @@ export class AuthDevController {
   async loginPlatformComplianceAdmin(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      'plat-comp-admin-uuid-2222',
-      'platform.compliance@pivota-dev.com',
+      '6d5ee496-6c1b-4153-8bce-5948e02e4cac',
+      'allanmathenge22@gmail.com', 
       'PlatformComplianceAdmin',
-      'plat-comp-admin-account-id',
+      'b41cf497-4597-48c9-ae6b-569dea2ff8ad',
       res,
     );
   }
@@ -234,10 +234,10 @@ export class AuthDevController {
   async loginPlatformAnalyticsAdmin(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      'plat-analyt-admin-uuid-3333',
-      'platform.analytics@pivota-dev.com',
+      '94d2773a-d179-4bad-a643-783c6f361260',
+      'carolkim194@gmail.com',
       'PlatformAnalyticsAdmin',
-      'plat-analyt-admin-account-id',
+      '665befa8-623a-4c9f-b9ff-bf8142e3d2fb', 
       res,
     );
   }
@@ -278,10 +278,10 @@ export class AuthDevController {
   async loginPlatformModuleManager(@Res({ passthrough: true }) res: Response) {
     this.validateDevMode();
     return this.authService.generateDevTokenOnly(
-      'plat-mod-mgr-uuid-4444',
-      'platform.module@pivota-dev.com',
+      '888dbfb6-813b-4b5d-be3a-777815fee128',
+      'allanmathenge82@gmail.com',
       'PlatformModuleManager',
-      'plat-mod-mgr-account-id', 
+      'f6524aba-8d5f-4fee-a955-e66634d715a6', 
       res,
     );
   }

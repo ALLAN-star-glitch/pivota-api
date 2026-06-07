@@ -21,6 +21,8 @@ import {
   GetCustomerBookingsRequestDto,
   GetProfessionalStatsRequestDto,
   GetUpcomingBookingsRequestDto,
+  BookingActionResponseDto,
+  BookingStatusListResponseDto,  // ✅ Add this import
 } from '@pivota-api/dtos';
 import { ContractorsPricingService } from '../services/contractors-pricing.service';
 import { ContractorsService } from '../services/contractors.service';
@@ -113,93 +115,130 @@ export class ContractorsController {
   // BOOKING MANAGEMENT METHODS
   // ========================================================================
 
- @GrpcMethod('ContractorsService', 'CreateBooking')
-async createBooking(
-  data: CreateBookingRequestDto & { clientId: string },  // clientId is now included from gateway
-): Promise<BaseResponseDto<BookingResponseDto>> {
-  this.logger.log(`[gRPC] CreateBooking called: serviceId=${data.serviceId}, clientId=${data.clientId}, contractorId=${data.contractorId}`);
-  return this.contractorsService.createBooking(data);
-}
+  @GrpcMethod('ContractorsService', 'GetBookingStatuses')
+  async getBookingStatuses(
+  ): Promise<BaseResponseDto<BookingStatusListResponseDto>> {
+    this.logger.log(`[gRPC] GetBookingStatuses called`);
+    return this.contractorsService.getBookingStatuses();
+  }
+  
+
+  @GrpcMethod('ContractorsService', 'CreateBooking')
+  async createBooking(
+    data: CreateBookingRequestDto & { clientId: string; isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    this.logger.log(`[gRPC] CreateBooking called: serviceId=${data.serviceId}, clientId=${data.clientId}, contractorId=${data.contractorId}, isPlatformAdmin=${data.isPlatformAdmin}`);
+    return this.contractorsService.createBooking(data);
+  }
 
   @GrpcMethod('ContractorsService', 'AcceptBooking')
   async acceptBooking(
-    data: AcceptBookingRequestDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
-    this.logger.log(`[gRPC] AcceptBooking called: ${data.bookingId}`);
-    return this.contractorsService.acceptBooking(data.bookingId, data.contractorId);
+    data: AcceptBookingRequestDto & { isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<BookingActionResponseDto>> {
+    this.logger.log(`[gRPC] AcceptBooking called: ${data.bookingId}, isPlatformAdmin=${data.isPlatformAdmin}`);
+    return this.contractorsService.acceptBooking(data.bookingId, data.contractorId, data.isPlatformAdmin);
   }
 
   @GrpcMethod('ContractorsService', 'DeclineBooking')
   async declineBooking(
-    data: DeclineBookingRequestDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
-    this.logger.log(`[gRPC] DeclineBooking called: ${data.bookingId}`);
-    return this.contractorsService.declineBooking(data.bookingId, data.contractorId, data.reason);
+    data: DeclineBookingRequestDto & { isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<BookingActionResponseDto>> {
+    this.logger.log(`[gRPC] DeclineBooking called: ${data.bookingId}, isPlatformAdmin=${data.isPlatformAdmin}`);
+    return this.contractorsService.declineBooking(data.bookingId, data.contractorId, data.reason, data.isPlatformAdmin);
   }
 
   @GrpcMethod('ContractorsService', 'CancelBooking')
   async cancelBooking(
-    data: CancelBookingRequestDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
-    this.logger.log(`[gRPC] CancelBooking called: ${data.bookingId}`);
-    return this.contractorsService.cancelBooking(data.bookingId, data.userId, data.userType, data.reason);
+    data: CancelBookingRequestDto & { isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<BookingActionResponseDto>> {
+    this.logger.log(`[gRPC] CancelBooking - RAW data received: ${JSON.stringify(data)}`);
+    this.logger.log(`[gRPC] CancelBooking - typeof data: ${typeof data}`);
+    this.logger.log(`[gRPC] CancelBooking - data keys: ${data ? Object.keys(data).join(', ') : 'data is undefined'}`);
+    
+    if (!data) {
+      this.logger.error(`[gRPC] CancelBooking - data is undefined!`);
+      return BaseResponseDto.fail('Invalid request data', 'BAD_REQUEST');
+    }
+    
+    this.logger.log(`[gRPC] CancelBooking called: ${data.bookingId}, isPlatformAdmin=${data.isPlatformAdmin}`);
+    return this.contractorsService.cancelBooking(
+      data.bookingId, 
+      data.userId, 
+      data.professionalId, 
+      data.reason,
+      data.isPlatformAdmin
+    );
   }
 
   @GrpcMethod('ContractorsService', 'CompleteBooking')
   async completeBooking(
-    data: CompleteBookingRequestDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
-    this.logger.log(`[gRPC] CompleteBooking called: ${data.bookingId}`);
-    return this.contractorsService.completeBooking(data.bookingId, data.contractorId);
+    data: CompleteBookingRequestDto & { isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<BookingActionResponseDto>> {
+    this.logger.log(`[gRPC] CompleteBooking called: ${data.bookingId}, isPlatformAdmin=${data.isPlatformAdmin}`);
+    return this.contractorsService.completeBooking(data.bookingId, data.contractorId, data.isPlatformAdmin);
   }
 
   @GrpcMethod('ContractorsService', 'GetMyBookingsAsCustomer')
-async getMyBookingsAsCustomer(
-  data: GetCustomerBookingsRequestDto,
-): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
-  this.logger.log(`[gRPC] GetMyBookingsAsCustomer called: ${data.clientId}`);
-  return this.contractorsService.getMyBookingsAsCustomer(
-    data.clientId,
-    data.status,
-    data.limit ?? 20,
-    data.offset ?? 0,
-  );
-}
+  async getMyBookingsAsCustomer(
+    data: GetCustomerBookingsRequestDto & { isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
+    this.logger.log(`[gRPC] GetMyBookingsAsCustomer called: ${data.clientId}, isPlatformAdmin=${data.isPlatformAdmin}`);
+    return this.contractorsService.getMyBookingsAsCustomer(
+      data.clientId,
+      data.status,
+      data.limit ?? 20,
+      data.offset ?? 0,
+      data.isPlatformAdmin,
+    );
+  }
 
   @GrpcMethod('ContractorsService', 'GetMyBookingsAsProfessional')
-async getMyBookingsAsProfessional(
-  data: GetContractorBookingsRequestDto,
-): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
-  this.logger.log(`[gRPC] GetMyBookingsAsProfessional called: ${data.contractorId}`);
-  return this.contractorsService.getMyBookingsAsProfessional(
-    data.contractorId,
-    data.status,
-    data.limit ?? 20,
-    data.offset ?? 0,
-  );
-}
+  async getMyBookingsAsProfessional(
+    data: GetContractorBookingsRequestDto & { isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
+    this.logger.log(`[gRPC] GetMyBookingsAsProfessional called: ${data.contractorId}, isPlatformAdmin=${data.isPlatformAdmin}`);
+    return this.contractorsService.getMyBookingsAsProfessional(
+      data.contractorId,
+      data.status,
+      data.limit ?? 20,
+      data.offset ?? 0,
+      data.isPlatformAdmin,
+    );
+  }
 
- @GrpcMethod('ContractorsService', 'GetBookingDetails')
-async getBookingDetails(
-  data: GetBookingDetailsRequestDto,
-): Promise<BaseResponseDto<BookingResponseDto>> {
-  this.logger.log(`[gRPC] GetBookingDetails called: ${data.bookingId}`);
-  return this.contractorsService.getBookingDetails(data.bookingId, data.userId, data.userType);
-}
+  @GrpcMethod('ContractorsService', 'GetBookingDetails')
+  async getBookingDetails(
+    data: GetBookingDetailsRequestDto & { isPlatformAdmin?: boolean }
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    this.logger.log(`[gRPC] GetBookingDetails called: ${data.bookingId} by userId: ${data.userId}, professionalId: ${data.professionalId}, isPlatformAdmin=${data.isPlatformAdmin}`);
+    return this.contractorsService.getBookingDetails(
+      data.bookingId, 
+      data.userId, 
+      data.professionalId,
+      data.isPlatformAdmin
+    );
+  }
 
-@GrpcMethod('ContractorsService', 'GetUpcomingBookingsForProfessional')
-async getUpcomingBookingsForProfessional(
-  data: GetUpcomingBookingsRequestDto,
-): Promise<BaseResponseDto<UpcomingBookingResponseDto[]>> {
-  this.logger.log(`[gRPC] GetUpcomingBookingsForProfessional called: ${data.contractorId}`);
-  return this.contractorsService.getUpcomingBookingsForProfessional(data.contractorId, data.limit ?? 10);
-}
+  @GrpcMethod('ContractorsService', 'GetUpcomingBookingsForProfessional')
+  async getUpcomingBookingsForProfessional(
+    data: GetUpcomingBookingsRequestDto & { isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<UpcomingBookingResponseDto[]>> {
+    this.logger.log(`[gRPC] GetUpcomingBookingsForProfessional called: ${data.contractorId}, isPlatformAdmin=${data.isPlatformAdmin}`);
+    return this.contractorsService.getUpcomingBookingsForProfessional(
+      data.contractorId, 
+      data.limit ?? 10,
+      data.isPlatformAdmin
+    );
+  }
 
- @GrpcMethod('ContractorsService', 'GetProfessionalBookingStats')
-async getProfessionalBookingStats(
-  data: GetProfessionalStatsRequestDto,
-): Promise<BaseResponseDto<BookingStatisticsResponseDto>> {
-  this.logger.log(`[gRPC] GetProfessionalBookingStats called: ${data.contractorId}`);
-  return this.contractorsService.getProfessionalBookingStats(data.contractorId);
-}
+  @GrpcMethod('ContractorsService', 'GetProfessionalBookingStats')
+  async getProfessionalBookingStats(
+    data: GetProfessionalStatsRequestDto & { isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<BookingStatisticsResponseDto>> {
+    this.logger.log(`[gRPC] GetProfessionalBookingStats called: ${data.contractorId}, isPlatformAdmin=${data.isPlatformAdmin}`);
+    return this.contractorsService.getProfessionalBookingStats(
+      data.contractorId,
+      data.isPlatformAdmin
+    );
+  }
 }

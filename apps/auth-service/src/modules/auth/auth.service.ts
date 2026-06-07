@@ -34,6 +34,7 @@ import {
   SignupResponseDto,
   GoogleLoginRequestDto,
   SyncUserRoleResponseDto,
+  SkilledProfessionalProfileResponseDto,
 } from '@pivota-api/dtos';
 import { firstValueFrom, lastValueFrom, Observable } from 'rxjs';
 import { BaseGetUserRoleReponseGrpc, JwtPayload } from '@pivota-api/interfaces';
@@ -68,6 +69,10 @@ interface ProfileServiceGrpc {
     pictureUrl: string;
     oldImageUrl?: string | null;
   }): Observable<BaseResponseDto<null>>;
+
+  getSkilledProfessionalByAccount(
+    data: { accountUuid: string }
+  ): Observable<BaseResponseDto<SkilledProfessionalProfileResponseDto>>;
 }
 
 interface RbacServiceGrpc {
@@ -300,7 +305,29 @@ async generateTokens(
   const accountData = profile.account;
   const orgData = profile.organization;
 
-  this.logger.debug(`[AUTH] Generating tokens for User: ${userData.uuid} in Account: ${accountData.uuid}`);
+  let professionalId: string | undefined;
+
+  // Try to get from profile first
+  if (profile.skilledProfessionalProfile?.uuid) {
+    professionalId = profile.skilledProfessionalProfile.uuid;
+  } else {
+    // ✅ Fallback: Fetch from Profile Service directly if not in profile object
+    try {
+      const profileGrpc = this.getProfileGrpcService();
+      const skilledProfileResponse = await firstValueFrom(
+        profileGrpc.getSkilledProfessionalByAccount({ accountUuid: accountData.uuid })
+      );
+      if (skilledProfileResponse?.success && skilledProfileResponse?.data?.uuid) {
+        professionalId = skilledProfileResponse.data.uuid;
+        this.logger.debug(`[AUTH] Professional ID fetched via fallback: ${professionalId}`);
+      }
+    } catch (err) {
+      // No professional profile found, that's fine
+      this.logger.debug(`[AUTH] No professional profile for account ${accountData.uuid}`);
+    }
+  }
+
+  this.logger.debug(`[AUTH] Generating tokens for User: ${userData.uuid} in Account: ${accountData.uuid}, professionalId: ${professionalId || 'none'}`);
 
   // 1. Fetch the User Role via gRPC
   const rbacService = this.getRbacGrpcService();
@@ -325,6 +352,7 @@ async generateTokens(
     role: roleType,
     accountType: accountData.type as 'INDIVIDUAL' | 'ORGANIZATION',
     organizationUuid: orgData?.uuid,
+    professionalId,  // ✅ Already included
   };
 
   // 3. Sign Access and Refresh Tokens
@@ -625,7 +653,7 @@ async signup(
     // 7. Reset rate limit on successful signup
     await this.queue.resetRateLimit(signupDto.email, 'signup_attempts');
 
-    // ============ PREMIUM BRANCH: PAYMENT HAND-OFF (keep as is) ============
+    // ============ PREMIUM BRANCH: PAYMENT HAND-OFF ============
     if (isPremium && profileResponse.code === 'PAYMENT_REQUIRED') {
       try {
         const paymentPayload = {
@@ -693,7 +721,7 @@ async signup(
       }
     }
 
-    // ============ FREE PLAN - QUEUE BACKGROUND JOBS (keep as is) ============
+    // ============ FREE PLAN - QUEUE BACKGROUND JOBS ============
     
     await this.queue.addJob(
       'email-queue',
@@ -768,25 +796,57 @@ async signup(
       }
     );
 
-    // ✅ Generate tokens with standard JWT claims
+    // ============ ✅ FETCH PROFESSIONAL ID AFTER PROFILE CREATION ============
+let professionalId: string | undefined;
+
+if (profileType === 'SKILLED_PROFESSIONAL') {
+  this.logger.log(`🔍 Fetching professional ID for account ${accountData.uuid}`);
+  
+  // Try multiple times with a small delay to ensure profile is saved
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      // Use gRPC to get the skilled professional profile
+      const skilledProfileResponse = await firstValueFrom(
+        profileGrpcService.getSkilledProfessionalByAccount({ accountUuid: accountData.uuid })
+      ); 
+      
+      if (skilledProfileResponse?.success && skilledProfileResponse?.data?.uuid) {
+        professionalId = skilledProfileResponse.data.uuid;
+        this.logger.log(`✅ Retrieved professional ID on attempt ${attempt}: ${professionalId}`);
+        break;
+      }
+    } catch (err) {
+      this.logger.warn(`Attempt ${attempt} to fetch professional ID failed: ${err.message}`);
+    }
+    
+    if (attempt < 3) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  
+  if (!professionalId) {
+    this.logger.warn(`⚠️ Could not retrieve professional ID for account ${accountData.uuid}`);
+  }
+}
+
+    // ============ GENERATE TOKENS ============
     const tokenId = `${userData.uuid}-${Date.now()}`;
     const now = Math.floor(Date.now() / 1000);
 
-
     const payload: JwtPayload = {
-      // Standard claims
       sub: userData.uuid,
       jti: tokenId,
       iat: now,
-      
-      // Custom claims
       email: signupDto.email,
       accountId: accountData.uuid,
       role: roleType,
       accountType: 'INDIVIDUAL',
       organizationUuid: null,
       planSlug: targetPlanSlug,
+      professionalId,  // ✅ Will now be populated for skilled professionals
     };
+
+    this.logger.log(`📋 Generating JWT with professionalId: ${professionalId || 'none'}`);
 
     const accessToken = await this.jwtService.signAsync(payload, { expiresIn: '15m' });
     const refreshToken = await this.jwtService.signAsync(payload, { expiresIn: '7d' });
@@ -1345,15 +1405,17 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
       throw new UnauthorizedException('Invalid token structure');
     }
 
+    // ✅ Extract professionalId from old token
     const { 
       sub: userUuid, 
       jti: oldTokenId, 
       accountId: accountUuid, 
       email,
-      accountType: oldAccountType 
+      accountType: oldAccountType,
+      professionalId: oldProfessionalId  // ✅ Get professionalId from old token
     } = decoded;
     
-    this.logger.log(`🔄 Refreshing token for user: ${userUuid}, tokenId: ${oldTokenId}`);
+    this.logger.log(`🔄 Refreshing token for user: ${userUuid}, tokenId: ${oldTokenId}, professionalId: ${oldProfessionalId || 'none'}`);
 
     // 2. Get role from Redis cache ONLY (safe - not sensitive)
     let roleType = await this.redisSession.getCachedUserRole(userUuid);
@@ -1433,6 +1495,7 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
     const newTokenId = `${userUuid}-${Date.now()}`;
     const now = Math.floor(Date.now() / 1000);
     
+    // ✅ Preserve professionalId from old token
     const payload: JwtPayload = {
       sub: userUuid,
       jti: newTokenId,
@@ -1442,7 +1505,10 @@ async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>>
       role: roleType,
       accountType: oldAccountType || 'INDIVIDUAL',
       organizationUuid: null,
+      professionalId: oldProfessionalId,  // ✅ Preserve professionalId
     };
+
+    this.logger.log(`📋 New token payload includes professionalId: ${oldProfessionalId || 'none'}`);
 
     const [newAccessToken, newRefreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, { expiresIn: '15m' }),   // Access token - 15 minutes
@@ -1558,6 +1624,7 @@ async signInWithGoogle(
     let firstName = payload?.given_name || 'User';
     let lastName = payload?.family_name || '';
     const profileImage = payload?.picture?.replace('=s96-c', '=s400-c') || null;
+    let professionalId: string | undefined;
 
     // Clean up names
     if (firstName === 'undefined' || firstName === 'null') firstName = 'User';
@@ -1597,6 +1664,34 @@ async signInWithGoogle(
       userUuid = existingCredential.userUuid;
       accountUuid = existingCredential.accountUuid;
       accountStatus = existingCredential.accountStatus;
+      
+      // ✅ Try to get professionalId from cache first
+      professionalId = await this.redisSession.getCachedProfessionalId(userUuid);
+      
+      if (!professionalId) {
+        // ✅ USE getSkilledProfessionalByAccount - this returns the profile WITH UUID
+        try {
+          const skilledProfileResponse = await firstValueFrom(
+            profileGrpc.getSkilledProfessionalByAccount({ accountUuid: accountUuid })
+          );
+          
+          this.logger.log(`🔍 Skilled profile by account response success: ${skilledProfileResponse?.success}`);
+          this.logger.log(`🔍 Skilled profile data: ${JSON.stringify(skilledProfileResponse?.data)}`);
+          
+          if (skilledProfileResponse?.success && skilledProfileResponse?.data?.uuid) {
+            professionalId = skilledProfileResponse.data.uuid;
+            this.logger.debug(`✅ Professional ID found for existing user ${userUuid}: ${professionalId}`);
+            // Cache it for future
+            await this.redisSession.cacheProfessionalId(userUuid, professionalId);
+          } else {
+            this.logger.warn(`⚠️ No professional ID found for account ${accountUuid}`);
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to fetch professional profile for existing user: ${err.message}`);
+        }
+      } else {
+        this.logger.debug(`✅ Professional ID cache HIT for ${userUuid}: ${professionalId}`);
+      }
       
       // Link Google ID if not already linked (fire and forget)
       if (!credentialId) {
@@ -1703,6 +1798,14 @@ async signInWithGoogle(
       userUuid = userData.uuid;
       accountUuid = accountData.uuid;
       accountStatus = 'ACTIVE';
+
+      // ✅ Get professionalId from created account data
+      if (accountData.skilledProfessionalProfile?.uuid) {
+        professionalId = accountData.skilledProfessionalProfile.uuid;
+        this.logger.debug(`✅ Professional ID found for new user ${userUuid}: ${professionalId}`);
+        // Cache it for future
+        await this.redisSession.cacheProfessionalId(userUuid, professionalId);
+      }
 
       await this.prisma.credential.create({
         data: {
@@ -1811,6 +1914,9 @@ async signInWithGoogle(
       this.logger.debug(`Role cache HIT for ${userUuid}: ${roleType}`);
     }
 
+    // Log professionalId before generating JWT
+    this.logger.log(`🔑 Generating JWT for user ${userUuid}, isNewUser: ${isNewUser}, professionalId: ${professionalId || 'not found'}`);
+
     const jwtPayload: JwtPayload = {
       sub: userUuid,
       jti: tokenId,
@@ -1820,7 +1926,10 @@ async signInWithGoogle(
       role: roleType,
       accountType: 'INDIVIDUAL',
       organizationUuid: null,
+      professionalId: professionalId || undefined,
     };
+
+    this.logger.log(`📋 JWT Payload: ${JSON.stringify(jwtPayload)}`);
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(jwtPayload, { expiresIn: '15m' }),
@@ -2039,74 +2148,125 @@ async generateDevToken(
   role: string, 
   accountId: string
 ): Promise<BaseResponseDto<TokenPairDto>> {
-  const userGrpcService = this.getProfileGrpcService();
+  const profileGrpcService = this.getProfileGrpcService();
+  const rbacService = this.getRbacGrpcService();
   
   try {
-    // 1. Fetch user profile
+    // ✅ 1. Fetch full profile (like generateTokens does)
+    this.logger.log(`[DEV TOKEN] Fetching profile for user: ${userUuid}`);
+    
     const profileResponse = await firstValueFrom(
-      userGrpcService.getUserProfileByUuid({ userUuid: userUuid })
+      profileGrpcService.getUserProfileByUuid({ userUuid: userUuid })
     );
     
-    const { user: userData, account: accountData, organization: organizationData } = profileResponse.data;
-    const organizationUuid = organizationData?.uuid || null;
-
-    // 2. Generate Dev Token ID
+    if (!profileResponse?.success || !profileResponse?.data) {
+      this.logger.warn(`[DEV TOKEN] Profile not found for ${userUuid}, using fallback data`);
+      
+      // ✅ Fallback: Generate token without professionalId (like generateTokens fallback)
+      const devTokenId = `dev-${userUuid}-${Date.now()}`;
+      const now = Math.floor(Date.now() / 1000);
+      
+      const payload: JwtPayload = {
+        sub: userUuid,
+        jti: devTokenId,
+        iat: now,
+        email: email,
+        accountId: accountId,
+        role: role,
+        accountType: role.includes('Organization') || role === 'Admin' ? 'ORGANIZATION' : 'INDIVIDUAL',
+        organizationUuid: null,
+        professionalId: undefined,
+      };
+      
+      const [accessToken, refreshToken] = await Promise.all([
+        this.jwtService.signAsync(payload, { expiresIn: '1h' }),
+        this.jwtService.signAsync(payload, { expiresIn: '7d' }),
+      ]);
+      
+      return BaseResponseDto.ok(
+        { accessToken, refreshToken },
+        'Dev tokens generated successfully (fallback)',
+        'OK'
+      );
+    }
+    
+    const userData = profileResponse.data.user;
+    const accountData = profileResponse.data.account;
+    const orgData = profileResponse.data.organization;
+    
+    // ✅ 2. Get professionalId exactly like generateTokens does
+    let professionalId: string | undefined;
+    
+    // Try to get from profile first
+    if (profileResponse.data.skilledProfessionalProfile?.uuid) {
+      professionalId = profileResponse.data.skilledProfessionalProfile.uuid;
+      this.logger.log(`[DEV TOKEN] Professional ID found in profile: ${professionalId}`);
+    } else {
+      // ✅ Fallback: Fetch from Profile Service directly
+      try {
+        const skilledProfileResponse = await firstValueFrom(
+          profileGrpcService.getSkilledProfessionalByAccount({ accountUuid: accountData.uuid })
+        );
+        if (skilledProfileResponse?.success && skilledProfileResponse?.data?.uuid) {
+          professionalId = skilledProfileResponse.data.uuid;
+          this.logger.log(`[DEV TOKEN] Professional ID fetched via fallback: ${professionalId}`);
+        }
+      } catch (err) {
+        this.logger.debug(`[DEV TOKEN] No professional profile for account ${accountData.uuid}`);
+      }
+    }
+    
+    // ✅ 3. Get role via gRPC (like generateTokens does)
+    let roleType = role; // Default to passed role
+    try {
+      const userRoleResponse = await firstValueFrom(
+        rbacService.getUserRole({ userUuid: userUuid })
+      );
+      if (userRoleResponse?.role?.roleType) {
+        roleType = userRoleResponse.role.roleType;
+        this.logger.log(`[DEV TOKEN] Role from RBAC: ${roleType}`);
+      }
+    } catch (err) {
+      this.logger.warn(`[DEV TOKEN] Could not fetch role from RBAC, using provided role: ${role}`);
+    }
+    
+    // ✅ 4. Generate token with professionalId (exactly like generateTokens)
     const devTokenId = `dev-${userUuid}-${Date.now()}`;
     const now = Math.floor(Date.now() / 1000);
- 
-    // 3. Prepare Payload with standard JWT claims
+    
     const payload: JwtPayload = {
-      // Standard claims
       sub: userUuid,
       jti: devTokenId,
       iat: now,
-
-      
-      // Custom claims
-      email: email,
-      accountId: accountId,
-      role: role,
+      email: userData.email || email,
+      accountId: accountData.uuid,
+      role: roleType,
       accountType: accountData.type as 'INDIVIDUAL' | 'ORGANIZATION',
-      organizationUuid: organizationUuid,
+      organizationUuid: orgData?.uuid || null,
+      professionalId: professionalId, // ✅ This will be included!
     };
-
-    // 4. Parallel token signing
+    
+    this.logger.log(`[DEV TOKEN] Generating JWT with professionalId: ${professionalId || 'none'}`);
+    this.logger.log(`[DEV TOKEN] Payload: ${JSON.stringify(payload, null, 2)}`);
+    
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, { expiresIn: '1h' }),
       this.jwtService.signAsync(payload, { expiresIn: '7d' }),
     ]);
-
-    // 5. Hash refresh token
-    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
-
-    // 6. Batch database operations
-    await this.prisma.$transaction([
-      this.prisma.session.deleteMany({
-        where: {
-          userUuid,
-          device: 'Postman-Dev',
-        },
-      }),
-      this.prisma.session.create({
-        data: {
-          userUuid,
-          tokenId: devTokenId,
-          hashedToken: hashedRefreshToken,
-          device: 'Postman-Dev',
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          revoked: false,
-          lastActiveAt: new Date(),
-        },
-      }),
-    ]);
-
-    this.logger.log(`🔑 Dev token generated for ${email}`);
-
+    
+    // ✅ 5. Skip database session creation for dev tokens (to avoid foreign key errors)
+    // Just log that we're skipping it
+    this.logger.debug(`[DEV TOKEN] Skipping database session creation for dev token`);
+    
+    this.logger.log(`🔑 Dev token generated for ${email} with professionalId: ${professionalId || 'none'}`);
+    
     return BaseResponseDto.ok(
       { accessToken, refreshToken },
       'Dev tokens generated successfully',
       'OK'
     );
+    
+
 
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : 'Dev token generation failed';
@@ -2306,6 +2466,7 @@ async verifyMfaLogin(
 ): Promise<BaseResponseDto<LoginResponseDto>> {
   const startTime = Date.now();
   this.logger.debug(`MFA verification for: ${verifyDto.email}`);
+  let professionalId: string | undefined;
 
   try {
     // 1. Verify OTP (already fast - 1ms)
@@ -2383,7 +2544,37 @@ async verifyMfaLogin(
       this.logger.debug(`Role cache HIT for ${credential.userUuid}: ${roleType}`);
     }
 
-    // 5. Generate tokens
+    // ✅ UPDATED: Use getSkilledProfessionalByAccount instead of getUserProfileByUuid
+    // Try to get professionalId from cache first
+    professionalId = await this.redisSession.getCachedProfessionalId(credential.userUuid);
+    
+    if (!professionalId) {
+      try {
+        const profileGrpc = this.getProfileGrpcService();
+        // ✅ Use getSkilledProfessionalByAccount - this returns the profile WITH UUID
+        const skilledProfileResponse = await firstValueFrom(
+          profileGrpc.getSkilledProfessionalByAccount({ accountUuid: credential.accountUuid })
+        );
+        
+        this.logger.log(`🔍 Skilled profile by account response success: ${skilledProfileResponse?.success}`);
+        
+        if (skilledProfileResponse?.success && skilledProfileResponse?.data?.uuid) {
+          professionalId = skilledProfileResponse.data.uuid;
+          this.logger.debug(`✅ Professional ID found for user ${credential.userUuid}: ${professionalId}`);
+          // Cache it for future
+          await this.redisSession.cacheProfessionalId(credential.userUuid, professionalId);
+        } else {
+          this.logger.debug(`No professional profile found for account ${credential.accountUuid}`);
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to fetch professional profile for ${credential.userUuid}: ${err.message}`);
+        // Don't fail the login - professionalId remains undefined
+      }
+    } else {
+      this.logger.debug(`✅ Professional ID cache HIT for ${credential.userUuid}: ${professionalId}`);
+    }
+
+    // 5. Generate tokens with professionalId
     const tokenId = `${credential.userUuid}-${Date.now()}`;
     const now = Math.floor(Date.now() / 1000);
     
@@ -2396,7 +2587,10 @@ async verifyMfaLogin(
       role: roleType,
       accountType: 'INDIVIDUAL',
       organizationUuid: null,
+      professionalId,  // Will be undefined if user is not a professional
     };
+
+    this.logger.log(`🔑 Generating JWT for MFA login, professionalId: ${professionalId || 'not found'}`);
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, { expiresIn: '15m' }),
@@ -2442,7 +2636,8 @@ async verifyMfaLogin(
       clientInfo
     );
 
-    // 8. Fire and forget - Profile fetch, caching, and notification (don't await)
+    // 8. Fire and forget - Cache professional ID for future logins (already done above)
+    // 9. Fire and forget - Profile fetch and notification
     const profileObservable = this.getProfileGrpcService().getUserProfileByUuid({ 
       userUuid: credential.userUuid 
     });
@@ -2479,13 +2674,14 @@ async verifyMfaLogin(
       .catch(err => this.logger.warn(`Profile fetch failed: ${err.message}`));
 
     const totalTime = Date.now() - startTime;
-    this.logger.log(`✅ MFA verification completed in ${totalTime}ms`);
+    this.logger.log(`✅ MFA verification completed in ${totalTime}ms for user: ${credential.userUuid}`);
 
     return BaseResponseDto.ok(
       { 
         accessToken, 
         refreshToken,
-        message: 'Login successful'
+        message: 'Login successful',
+        hasProfessionalProfile: !!professionalId
       } as LoginResponseDto,
       'Login successful',
       'OK'

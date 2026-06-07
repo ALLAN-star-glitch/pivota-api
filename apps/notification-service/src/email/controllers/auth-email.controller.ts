@@ -13,7 +13,7 @@
  * 
  * @example
  * // Event payload for user.onboarded
- * {
+ * { 
  *   email: 'user@example.com',
  *   firstName: 'John',
  *   accountId: 'ACC-12345',

@@ -14,8 +14,8 @@ import { RpcException } from '@nestjs/microservices';
 interface BaseResponseShape {
   success: boolean;
   message: string;
-  code: string | number; // Allow numeric HTTP codes or string business codes
-  status?: string;       // To hold the string version (e.g., "NOT_FOUND")
+  code: string | number;
+  status?: string;
   error?: {
     message: string;
     code: string | number;
@@ -44,13 +44,15 @@ function isBaseResponse(obj: unknown): obj is BaseResponseShape {
   );
 }
 
-
 // Map internal codes → HTTP status
 const httpStatusMap: Record<string, number> = {
-  OK: HttpStatus.OK, //200
-  SUCCESS_EMPTY: HttpStatus.OK, // Map this to 200 so the frontend gets an empty array gracefully
+  // Success
+  OK: HttpStatus.OK,
+  SUCCESS_EMPTY: HttpStatus.OK,
   CREATED: HttpStatus.CREATED,
   ACCEPTED: HttpStatus.ACCEPTED,
+  
+  // Client Errors (4xx)
   BAD_REQUEST: HttpStatus.BAD_REQUEST,
   UNAUTHORIZED: HttpStatus.UNAUTHORIZED,
   INVALID_OTP: HttpStatus.UNAUTHORIZED,
@@ -59,25 +61,48 @@ const httpStatusMap: Record<string, number> = {
   ALREADY_EXISTS: HttpStatus.CONFLICT,
   CONFLICT: HttpStatus.CONFLICT,
   
-  // --- Invitation Status ---
-  INVITATION_SENT: HttpStatus.CREATED, // 201 - Add this!
+  // Booking specific errors
+  SERVICE_UNAVAILABLE: HttpStatus.BAD_REQUEST,
+  CLIENT_NOT_FOUND: HttpStatus.NOT_FOUND,
+  CONTRACTOR_NOT_FOUND: HttpStatus.NOT_FOUND,
+  SELF_BOOKING_NOT_ALLOWED: HttpStatus.BAD_REQUEST,
+  SERVICE_AREA_NOT_COVERED: HttpStatus.BAD_REQUEST,
+  INVALID_DURATION_UNIT: HttpStatus.BAD_REQUEST,
+  DURATION_REQUIRED: HttpStatus.BAD_REQUEST,
+  DURATION_EXCEEDS_LIMIT: HttpStatus.BAD_REQUEST,
+  DURATION_NOT_ALLOWED: HttpStatus.BAD_REQUEST,
+  DAY_NOT_AVAILABLE: HttpStatus.BAD_REQUEST,
+  DAY_CLOSED: HttpStatus.BAD_REQUEST,
+  TIME_OUTSIDE_HOURS: HttpStatus.BAD_REQUEST,
+  END_TIME_EXCEEDS_CLOSING: HttpStatus.BAD_REQUEST,
+  CONFLICTING_BOOKING: HttpStatus.CONFLICT,
+  INVALID_STATUS: HttpStatus.BAD_REQUEST,
+  VALIDATION_ERROR: HttpStatus.BAD_REQUEST,
+  FETCH_ERROR: HttpStatus.BAD_REQUEST,
   
-  // --- Rate Limiting ---
-  TOO_MANY_REQUESTS: HttpStatus.TOO_MANY_REQUESTS, // 429
+  // Invitation
+  INVITATION_SENT: HttpStatus.CREATED,
   
-  // --- Payment / Premium Branch ---
-  PAYMENT_REQUIRED: HttpStatus.PAYMENT_REQUIRED, // 402
-  PAYMENT_SERVICE_OFFLINE: HttpStatus.OK, 
+  // Rate Limiting
+  TOO_MANY_REQUESTS: HttpStatus.TOO_MANY_REQUESTS,
   
-  // --- Server Errors ---
+  // Payment
+  PAYMENT_REQUIRED: HttpStatus.PAYMENT_REQUIRED,
+  PAYMENT_SERVICE_OFFLINE: HttpStatus.OK,
+  
+  // Profile specific
+  PROFILE_NOT_FOUND: HttpStatus.NOT_FOUND,
+  
+  // User specific
+  USER_NOT_FOUND: HttpStatus.NOT_FOUND,
+  CATEGORY_NOT_FOUND: HttpStatus.NOT_FOUND,
+  ACCOUNT_MISMATCH: HttpStatus.FORBIDDEN,
+  
+  // Server Errors (5xx)
   INTERNAL: HttpStatus.INTERNAL_SERVER_ERROR,
   INTERNAL_ERROR: HttpStatus.INTERNAL_SERVER_ERROR,
-  SERVICE_UNAVAILABLE: HttpStatus.SERVICE_UNAVAILABLE,
+  SERVICE_UNAVAILABLE_SERVER: HttpStatus.SERVICE_UNAVAILABLE,  // Renamed to avoid duplicate
   GATEWAY_TIMEOUT: HttpStatus.GATEWAY_TIMEOUT,
-
-  USER_NOT_FOUND: HttpStatus.NOT_FOUND,      // 404
-  CATEGORY_NOT_FOUND: HttpStatus.NOT_FOUND,  // 404
-  ACCOUNT_MISMATCH: HttpStatus.FORBIDDEN,    // 403
 };
 
 @Catch()
@@ -85,6 +110,7 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse();
+    const request = ctx.getRequest();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
@@ -99,11 +125,11 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
 
       const finalResponse: BaseResponseShape = {
         ...exception,
-        code: numericStatus,         
-        status: String(exception.code), 
+        code: numericStatus,
+        status: String(exception.code),
         error: exception.error ? {
-          ... (exception.error as { message: string; code: string | number; details?: unknown } ),
-          code: numericStatus        
+          ...(exception.error as { message: string; code: string | number; details?: unknown }),
+          code: numericStatus
         } : undefined
       };
 
@@ -112,24 +138,23 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     }
 
     // ---------------------------------------------------------
-    // NEW: Handle ThrottlerException specifically
+    // 2. Handle ThrottlerException specifically
     // ---------------------------------------------------------
-   if (
+    if (
       typeof exception === 'object' && 
       exception !== null && 
-      exception.constructor.name === 'ThrottlerException'
+      exception.constructor?.name === 'ThrottlerException'
     ) {
       return response.status(HttpStatus.TOO_MANY_REQUESTS).json({
         success: false,
-        message: 'Security lockout: Multiple requests detected. Please wait 60 seconds.',
+        message: 'Too many requests. Please try again later.',
         code: 429,
         status: 'TOO_MANY_REQUESTS'
       });
     }
 
-     
     // ---------------------------------------------------------
-    // 2. HTTP Exceptions (REST layer)
+    // 3. HTTP Exceptions (REST layer)
     // ---------------------------------------------------------
     if (exception instanceof HttpException) {
       const excResponse = exception.getResponse() as ExceptionResponse;
@@ -144,7 +169,7 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     }
 
     // ---------------------------------------------------------
-    // 3. RPC Exceptions (gRPC / Kafka)
+    // 4. RPC Exceptions (gRPC / Kafka)
     // ---------------------------------------------------------
     else if (exception instanceof RpcException) {
       const rpcError = exception.getError() as ExceptionResponse;
@@ -161,23 +186,47 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     }
 
     // ---------------------------------------------------------
-    // 4. Unknown runtime errors
+    // 5. Unknown runtime errors
     // ---------------------------------------------------------
     else if (exception instanceof Error) {
-        message = exception.message.includes('ECONNREFUSED') 
-          ? 'Service communication failure. Please try again later.' 
-          : exception.message;
-        
-        // Only show stack traces in development mode
-        details = process.env['NODE_ENV'] === 'development' ? exception.stack : null;
+      // Check for common error patterns
+      if (exception.message.includes('ECONNREFUSED')) {
+        message = 'Service communication failure. Please try again later.';
+        code = 'SERVICE_UNAVAILABLE_SERVER';
+        status = HttpStatus.SERVICE_UNAVAILABLE;
+      } else if (exception.message.includes('Prisma')) {
+        message = 'Database error occurred. Please try again.';
+        code = 'DATABASE_ERROR';
+        status = HttpStatus.INTERNAL_SERVER_ERROR;
+      } else {
+        message = exception.message;
       }
+      
+      // Only show stack traces in development mode
+      if (process.env['NODE_ENV'] === 'development') {
+        details = exception.stack;
+      }
+    }
 
+    // ---------------------------------------------------------
+    // 6. Log the error for debugging
+    // ---------------------------------------------------------
+    if (status >= 500) {
+      console.error(`[ERROR] ${request?.method || 'UNKNOWN'} ${request?.url || 'UNKNOWN'} - ${status}: ${message}`);
+      if (details && process.env['NODE_ENV'] === 'development') {
+        console.error(details);
+      }
+    }
+
+    // ---------------------------------------------------------
+    // 7. Send the final response
+    // ---------------------------------------------------------
     response.status(status).json({
       success: false,
       message,
-      code: status, 
-      status: code, 
-      error: details,
+      code: status,
+      status: code,
+      error: details ? { message: String(details), code } : null,
     });
   }
 }

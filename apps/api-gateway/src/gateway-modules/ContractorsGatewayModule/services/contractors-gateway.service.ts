@@ -1,5 +1,3 @@
-// apps/gateway/src/modules/contractors/services/contractors-gateway.service.ts
-
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom, Observable } from 'rxjs';
@@ -24,6 +22,8 @@ import {
   BookingStatisticsResponseDto,
   PaginatedBookingsResponseDto,
   UpcomingBookingResponseDto,
+  BookingActionResponseDto,
+  BookingStatusListResponseDto,
 } from '@pivota-api/dtos';
 import { UserService } from '../../UserProfileGatewayModule/services/user.service';
 
@@ -71,44 +71,48 @@ interface ContractorsServiceGrpc {
 
   // Booking Methods
   CreateBooking(
-    data: CreateBookingRequestDto,
+    data: CreateBookingRequestDto & { isPlatformAdmin?: boolean },
   ): Observable<BaseResponseDto<BookingResponseDto>>;
 
   AcceptBooking(
-    data: AcceptBookingRequestDto,
-  ): Observable<BaseResponseDto<BookingResponseDto>>;
+    data: AcceptBookingRequestDto & { isPlatformAdmin?: boolean },
+  ): Observable<BaseResponseDto<BookingActionResponseDto>>;
 
   DeclineBooking(
-    data: DeclineBookingRequestDto,
-  ): Observable<BaseResponseDto<BookingResponseDto>>;
+    data: DeclineBookingRequestDto & { isPlatformAdmin?: boolean },
+  ): Observable<BaseResponseDto<BookingActionResponseDto>>;
 
   CancelBooking(
-    data: CancelBookingRequestDto,
-  ): Observable<BaseResponseDto<BookingResponseDto>>;
+    data: CancelBookingRequestDto & { isPlatformAdmin?: boolean },
+  ): Observable<BaseResponseDto<BookingActionResponseDto>>;
 
   CompleteBooking(
-    data: CompleteBookingRequestDto,
-  ): Observable<BaseResponseDto<BookingResponseDto>>;
+    data: CompleteBookingRequestDto & { isPlatformAdmin?: boolean },
+  ): Observable<BaseResponseDto<BookingActionResponseDto>>;
 
   GetMyBookingsAsCustomer(
-    data: GetCustomerBookingsRequestDto,
+    data: GetCustomerBookingsRequestDto & { isPlatformAdmin?: boolean },
   ): Observable<BaseResponseDto<PaginatedBookingsResponseDto>>;
 
   GetMyBookingsAsProfessional(
-    data: GetContractorBookingsRequestDto,
+    data: GetContractorBookingsRequestDto & { isPlatformAdmin?: boolean },
   ): Observable<BaseResponseDto<PaginatedBookingsResponseDto>>;
 
   GetBookingDetails(
-    data: GetBookingDetailsRequestDto,
+    data: GetBookingDetailsRequestDto & { isPlatformAdmin?: boolean },
   ): Observable<BaseResponseDto<BookingResponseDto>>;
 
   GetUpcomingBookingsForProfessional(
-    data: GetUpcomingBookingsRequestDto,
+    data: GetUpcomingBookingsRequestDto & { isPlatformAdmin?: boolean },
   ): Observable<BaseResponseDto<UpcomingBookingResponseDto[]>>;
 
   GetProfessionalBookingStats(
-    data: GetProfessionalStatsRequestDto,
+    data: GetProfessionalStatsRequestDto & { isPlatformAdmin?: boolean },
   ): Observable<BaseResponseDto<BookingStatisticsResponseDto>>;
+
+  GetBookingStatuses(
+    data: Record<string, never>,
+  ): Observable<BaseResponseDto<BookingStatusListResponseDto>>;
 }
 
 @Injectable()
@@ -321,30 +325,35 @@ export class ContractorsGatewayService {
   // BOOKING METHODS
   // ===========================================================
 
-  async createBooking(
-    dto: CreateBookingRequestDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
-    try {
-      const res = await firstValueFrom(this.grpcService.CreateBooking(dto));
+ async createBooking(
+  dto: CreateBookingRequestDto & { clientId: string; isPlatformAdmin?: boolean },
+): Promise<BaseResponseDto<BookingResponseDto>> {
+  try {
+    // ✅ Just spread the entire dto - it already contains all fields including clientId
+    const res = await firstValueFrom(this.grpcService.CreateBooking(dto));
 
-      this.logger.debug(`CreateBooking gRPC Response: ${JSON.stringify(res)}`);
+    this.logger.debug(`CreateBooking gRPC Response: ${JSON.stringify(res)}`);
 
-      if (res?.success) {
-        return BaseResponseDto.ok(res.data, res.message, res.code);
-      }
-
-      return BaseResponseDto.fail(res?.message, res?.code);
-    } catch (error) {
-      this.logger.error(`gRPC Error creating booking: ${error.message}`);
-      return BaseResponseDto.fail('Failed to create booking', 'GRPC_ERROR');
+    if (res?.success) {
+      return BaseResponseDto.ok(res.data, res.message, res.code);
     }
+
+    return BaseResponseDto.fail(res?.message, res?.code);
+  } catch (error) {
+    this.logger.error(`gRPC Error creating booking: ${error.message}`);
+    return BaseResponseDto.fail('Failed to create booking', 'GRPC_ERROR');
   }
+}
 
   async acceptBooking(
-    dto: AcceptBookingRequestDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    dto: AcceptBookingRequestDto & { isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<BookingActionResponseDto>> {
     try {
-      const res = await firstValueFrom(this.grpcService.AcceptBooking(dto));
+      const res = await firstValueFrom(this.grpcService.AcceptBooking({
+        bookingId: dto.bookingId,
+        contractorId: dto.contractorId,
+        isPlatformAdmin: dto.isPlatformAdmin,
+      }));
 
       this.logger.debug(`AcceptBooking gRPC Response: ${JSON.stringify(res)}`);
 
@@ -360,10 +369,15 @@ export class ContractorsGatewayService {
   }
 
   async declineBooking(
-    dto: DeclineBookingRequestDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    dto: DeclineBookingRequestDto & { isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<BookingActionResponseDto>> {
     try {
-      const res = await firstValueFrom(this.grpcService.DeclineBooking(dto));
+      const res = await firstValueFrom(this.grpcService.DeclineBooking({
+        bookingId: dto.bookingId,
+        contractorId: dto.contractorId,
+        reason: dto.reason,
+        isPlatformAdmin: dto.isPlatformAdmin,
+      }));
 
       this.logger.debug(`DeclineBooking gRPC Response: ${JSON.stringify(res)}`);
 
@@ -379,17 +393,27 @@ export class ContractorsGatewayService {
   }
 
   async cancelBooking(
-    dto: CancelBookingRequestDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    bookingId: string,
+    userId: string,
+    professionalId: string | undefined,
+    reason?: string,
+    isPlatformAdmin?: boolean,
+  ): Promise<BaseResponseDto<BookingActionResponseDto>> {
     try {
-      const res = await firstValueFrom(this.grpcService.CancelBooking(dto));
-
-      this.logger.debug(`CancelBooking gRPC Response: ${JSON.stringify(res)}`);
-
+      const res = await firstValueFrom(
+        this.grpcService.CancelBooking({ 
+          bookingId, 
+          userId, 
+          professionalId, 
+          reason,
+          isPlatformAdmin,
+        })
+      );
+      
       if (res?.success) {
         return BaseResponseDto.ok(res.data, res.message, res.code);
       }
-
+      
       return BaseResponseDto.fail(res?.message, res?.code);
     } catch (error) {
       this.logger.error(`gRPC Error cancelling booking: ${error.message}`);
@@ -398,10 +422,14 @@ export class ContractorsGatewayService {
   }
 
   async completeBooking(
-    dto: CompleteBookingRequestDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    dto: CompleteBookingRequestDto & { isPlatformAdmin?: boolean },
+  ): Promise<BaseResponseDto<BookingActionResponseDto>> {
     try {
-      const res = await firstValueFrom(this.grpcService.CompleteBooking(dto));
+      const res = await firstValueFrom(this.grpcService.CompleteBooking({
+        bookingId: dto.bookingId,
+        contractorId: dto.contractorId,
+        isPlatformAdmin: dto.isPlatformAdmin,
+      }));
 
       this.logger.debug(`CompleteBooking gRPC Response: ${JSON.stringify(res)}`);
 
@@ -417,10 +445,16 @@ export class ContractorsGatewayService {
   }
 
   async getMyBookingsAsCustomer(
-    dto: GetCustomerBookingsRequestDto,
+    dto: GetCustomerBookingsRequestDto & { isPlatformAdmin?: boolean },
   ): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
     try {
-      const res = await firstValueFrom(this.grpcService.GetMyBookingsAsCustomer(dto));
+      const res = await firstValueFrom(this.grpcService.GetMyBookingsAsCustomer({
+        clientId: dto.clientId,
+        status: dto.status,
+        limit: dto.limit,
+        offset: dto.offset,
+        isPlatformAdmin: dto.isPlatformAdmin,
+      }));
 
       this.logger.debug(`GetMyBookingsAsCustomer gRPC Response: ${JSON.stringify(res)}`);
 
@@ -436,10 +470,16 @@ export class ContractorsGatewayService {
   }
 
   async getMyBookingsAsProfessional(
-    dto: GetContractorBookingsRequestDto,
+    dto: GetContractorBookingsRequestDto & { isPlatformAdmin?: boolean },
   ): Promise<BaseResponseDto<PaginatedBookingsResponseDto>> {
     try {
-      const res = await firstValueFrom(this.grpcService.GetMyBookingsAsProfessional(dto));
+      const res = await firstValueFrom(this.grpcService.GetMyBookingsAsProfessional({
+        contractorId: dto.contractorId,
+        status: dto.status,
+        limit: dto.limit,
+        offset: dto.offset,
+        isPlatformAdmin: dto.isPlatformAdmin,
+      }));
 
       this.logger.debug(`GetMyBookingsAsProfessional gRPC Response: ${JSON.stringify(res)}`);
 
@@ -455,17 +495,25 @@ export class ContractorsGatewayService {
   }
 
   async getBookingDetails(
-    dto: GetBookingDetailsRequestDto,
+    bookingId: string,
+    userId: string,
+    professionalId?: string,
+    isPlatformAdmin?: boolean,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
     try {
-      const res = await firstValueFrom(this.grpcService.GetBookingDetails(dto));
-
-      this.logger.debug(`GetBookingDetails gRPC Response: ${JSON.stringify(res)}`);
-
+      const res = await firstValueFrom(
+        this.grpcService.GetBookingDetails({ 
+          bookingId, 
+          userId, 
+          professionalId,
+          isPlatformAdmin,
+        })
+      );
+      
       if (res?.success) {
         return BaseResponseDto.ok(res.data, res.message, res.code);
       }
-
+      
       return BaseResponseDto.fail(res?.message, res?.code);
     } catch (error) {
       this.logger.error(`gRPC Error fetching booking details: ${error.message}`);
@@ -474,10 +522,14 @@ export class ContractorsGatewayService {
   }
 
   async getUpcomingBookingsForProfessional(
-    dto: GetUpcomingBookingsRequestDto,
+    dto: GetUpcomingBookingsRequestDto & { isPlatformAdmin?: boolean },
   ): Promise<BaseResponseDto<UpcomingBookingResponseDto[]>> {
     try {
-      const res = await firstValueFrom(this.grpcService.GetUpcomingBookingsForProfessional(dto));
+      const res = await firstValueFrom(this.grpcService.GetUpcomingBookingsForProfessional({
+        contractorId: dto.contractorId,
+        limit: dto.limit,
+        isPlatformAdmin: dto.isPlatformAdmin,
+      }));
 
       this.logger.debug(`GetUpcomingBookingsForProfessional gRPC Response: ${JSON.stringify(res)}`);
 
@@ -493,10 +545,13 @@ export class ContractorsGatewayService {
   }
 
   async getProfessionalBookingStats(
-    dto: GetProfessionalStatsRequestDto,
+    dto: GetProfessionalStatsRequestDto & { isPlatformAdmin?: boolean },
   ): Promise<BaseResponseDto<BookingStatisticsResponseDto>> {
     try {
-      const res = await firstValueFrom(this.grpcService.GetProfessionalBookingStats(dto));
+      const res = await firstValueFrom(this.grpcService.GetProfessionalBookingStats({
+        contractorId: dto.contractorId,
+        isPlatformAdmin: dto.isPlatformAdmin,
+      }));
 
       this.logger.debug(`GetProfessionalBookingStats gRPC Response: ${JSON.stringify(res)}`);
 
@@ -508,6 +563,25 @@ export class ContractorsGatewayService {
     } catch (error) {
       this.logger.error(`gRPC Error fetching booking stats: ${error.message}`);
       return BaseResponseDto.fail('Failed to fetch booking statistics', 'FETCH_ERROR');
+    }
+  }
+
+  async getBookingStatuses(): Promise<BaseResponseDto<BookingStatusListResponseDto>> {
+    try {
+      const res = await firstValueFrom(
+        this.grpcService.GetBookingStatuses({})
+      );
+
+      this.logger.debug(`GetBookingStatuses gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching booking statuses: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch booking statuses', 'GRPC_ERROR');
     }
   }
 }

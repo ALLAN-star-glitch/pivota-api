@@ -18,6 +18,10 @@ import { OrganizationEmailController } from './controllers/organization-email.co
 import { PropertyEmailController } from './controllers/property-email.controller';
 import { PaymentEmailController } from './controllers/payment-email.controller';
 import { SecurityEmailController } from './controllers/security-email.controller';
+import { BookingEmailController } from './controllers/booking-email.controller'; 
+import { BookingEmailService } from './services/handlers/booking-email.service';
+import { ServiceOfferingEmailService } from './services/handlers/service-offering-email.service';
+import { ServiceOfferingEmailController } from './controllers/service-offering-email.controller';
 
 @Module({
   imports: [
@@ -111,7 +115,8 @@ import { SecurityEmailController } from './controllers/security-email.controller
     OrganizationEmailController,
     PropertyEmailController,
     PaymentEmailController,
-    SecurityEmailController,
+    BookingEmailController,
+    ServiceOfferingEmailController
   ],
   providers: [
     EmailClientService,
@@ -121,6 +126,8 @@ import { SecurityEmailController } from './controllers/security-email.controller
     PropertyEmailService,
     PaymentEmailService,
     SecurityEmailService,
+    BookingEmailService,
+    ServiceOfferingEmailService
   ],
   exports: [
     EmailClientService,
@@ -130,6 +137,8 @@ import { SecurityEmailController } from './controllers/security-email.controller
     PropertyEmailService,
     PaymentEmailService,
     SecurityEmailService,
+    BookingEmailService,
+    ServiceOfferingEmailService
   ],
 })
 export class EmailModule {}

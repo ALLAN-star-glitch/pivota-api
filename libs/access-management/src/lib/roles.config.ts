@@ -244,7 +244,11 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_DELETE_ANY,
-    Permissions.PROFESSIONAL_SERVICES_BOOK,
+    Permissions.PROFESSIONAL_SERVICES_BOOK_ANY,    // ✅ Platform admins can book any service
+    Permissions.PROFESSIONAL_SERVICES_CANCEL_ANY,  // ✅ Platform admins can cancel any booking
+    Permissions.PROFESSIONAL_SERVICES_ACCEPT_ANY,  // ✅ Platform admins can accept any booking
+    Permissions.PROFESSIONAL_SERVICES_DECLINE_ANY, // ✅ Platform admins can decline any booking
+    Permissions.PROFESSIONAL_SERVICES_COMPLETE_ANY,// ✅ Platform admins can complete any booking
     Permissions.PROFESSIONAL_SERVICES_REVIEW,
     Permissions.PROFESSIONAL_SERVICES_VERIFY,
     
@@ -330,7 +334,11 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_DELETE_ANY,
-    Permissions.PROFESSIONAL_SERVICES_BOOK,
+    Permissions.PROFESSIONAL_SERVICES_BOOK_ANY,
+    Permissions.PROFESSIONAL_SERVICES_CANCEL_ANY,
+    Permissions.PROFESSIONAL_SERVICES_ACCEPT_ANY,
+    Permissions.PROFESSIONAL_SERVICES_DECLINE_ANY,
+    Permissions.PROFESSIONAL_SERVICES_COMPLETE_ANY,
     Permissions.PROFESSIONAL_SERVICES_REVIEW,
     Permissions.PROFESSIONAL_SERVICES_VERIFY,
     
@@ -359,6 +367,13 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.LISTINGS_READ,
+    
+    // Platform admins can test booking flow
+    Permissions.PROFESSIONAL_SERVICES_BOOK_ANY,
+    Permissions.PROFESSIONAL_SERVICES_CANCEL_ANY,
+    Permissions.PROFESSIONAL_SERVICES_ACCEPT_ANY,
+    Permissions.PROFESSIONAL_SERVICES_DECLINE_ANY,
+    Permissions.PROFESSIONAL_SERVICES_COMPLETE_ANY,
     
     // ACCOUNT (limited)
     Permissions.ACCOUNT_VIEW,
@@ -412,7 +427,11 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_DELETE_ANY,
-    Permissions.PROFESSIONAL_SERVICES_BOOK,
+    Permissions.PROFESSIONAL_SERVICES_BOOK_ANY,
+    Permissions.PROFESSIONAL_SERVICES_CANCEL_ANY,
+    Permissions.PROFESSIONAL_SERVICES_ACCEPT_ANY,
+    Permissions.PROFESSIONAL_SERVICES_DECLINE_ANY,
+    Permissions.PROFESSIONAL_SERVICES_COMPLETE_ANY,
     Permissions.PROFESSIONAL_SERVICES_REVIEW,
     
     // ACCOUNT & TEAM (limited)
@@ -443,6 +462,10 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.SOCIAL_SUPPORT_READ,
     Permissions.PROFESSIONAL_SERVICES_READ,
     Permissions.LISTINGS_READ,
+    
+    // Can test booking flow for training data
+    Permissions.PROFESSIONAL_SERVICES_BOOK_ANY,
+    Permissions.PROFESSIONAL_SERVICES_CANCEL_ANY,
     
     // Training data permissions
     Permissions.TRAINING_DATA_ACCESS,
@@ -492,7 +515,8 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.PROFESSIONAL_SERVICES_CREATE_OWN,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_OWN,
     Permissions.PROFESSIONAL_SERVICES_DELETE_OWN,
-    Permissions.PROFESSIONAL_SERVICES_BOOK,
+    Permissions.PROFESSIONAL_SERVICES_BOOK_OWN,      // ✅ Individuals can book their own services
+    Permissions.PROFESSIONAL_SERVICES_CANCEL_OWN,    // ✅ Individuals can cancel their own bookings
     Permissions.PROFESSIONAL_SERVICES_REVIEW,
     
     // ============ ACCOUNT MODULE ============
@@ -541,7 +565,11 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_DELETE_ANY,
-    Permissions.PROFESSIONAL_SERVICES_BOOK,
+    Permissions.PROFESSIONAL_SERVICES_BOOK_ANY,      // ✅ Business admins can book any service
+    Permissions.PROFESSIONAL_SERVICES_CANCEL_ANY,    // ✅ Business admins can cancel any booking
+    Permissions.PROFESSIONAL_SERVICES_ACCEPT_ANY,    // ✅ Business admins can accept bookings
+    Permissions.PROFESSIONAL_SERVICES_DECLINE_ANY,   // ✅ Business admins can decline bookings
+    Permissions.PROFESSIONAL_SERVICES_COMPLETE_ANY,  // ✅ Business admins can complete bookings
     Permissions.PROFESSIONAL_SERVICES_REVIEW,
     
     // ACCOUNT & TEAM
@@ -601,7 +629,11 @@ export const RolePermissionsMap: Record<RoleType, string[]> = {
     Permissions.PROFESSIONAL_SERVICES_CREATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_UPDATE_ANY,
     Permissions.PROFESSIONAL_SERVICES_DELETE_ANY,
-    Permissions.PROFESSIONAL_SERVICES_BOOK,
+    Permissions.PROFESSIONAL_SERVICES_BOOK_ANY,      // ✅ Content managers can book any service
+    Permissions.PROFESSIONAL_SERVICES_CANCEL_ANY,    // ✅ Content managers can cancel any booking
+    Permissions.PROFESSIONAL_SERVICES_ACCEPT_ANY,    // ✅ Content managers can accept bookings
+    Permissions.PROFESSIONAL_SERVICES_DECLINE_ANY,   // ✅ Content managers can decline bookings
+    Permissions.PROFESSIONAL_SERVICES_COMPLETE_ANY,  // ✅ Content managers can complete bookings
     Permissions.PROFESSIONAL_SERVICES_REVIEW,
     Permissions.PROFESSIONAL_SERVICES_VERIFY,
     
@@ -723,11 +755,12 @@ export function hasPermission(
 export function getRolePermissions(roleType: RoleType): Permission[] {
   const permissions = RolePermissionsMap[roleType];
   if (!permissions) return [];
-  
+   
   // If super admin, return all permissions
   if (permissions.includes(Permissions.SUPER_ADMIN)) {
     return Object.values(Permissions);
   }
+  
   
   return permissions as Permission[];
 }

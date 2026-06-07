@@ -21,7 +21,6 @@ import { Type } from 'class-transformer';
    PENDING -> CANCELLED (contractor declines OR client cancels)
    CONFIRMED -> COMPLETED (contractor finishes service)
    CONFIRMED -> CANCELLED (either party cancels)
-   CONFIRMED -> (no other transitions allowed)
 */
 
 /* ======================================================
@@ -35,89 +34,67 @@ import { Type } from 'class-transformer';
  * {
  *   "serviceId": "cmnboid7w006sarihf05x9txr",
  *   "contractorId": "5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e",
- *   "clientId": "7e2c8d4a-6b1e-4d1a-9f3b-5f8d0a3b4c2e",
- *   "scheduledDate": "2024-03-25T14:00:00.000Z",
+ *   "scheduledDate": "2024-03-25T14:00:00",
  *   "locationCity": "Nairobi",
  *   "customerNotes": "Please call when you arrive at the gate",
- *   "agreedPrice": 5500,
- *   "currency": "KES"
+ *   "durationHours": 2
  * }
  */
 export class CreateBookingRequestDto {
-  @ApiProperty({ 
-    description: 'Service offering ID - references a specific service listing',
-    example: 'cmnboid7w006sarihf05x9txr',
-    required: true 
-  })
-  @IsUUID('4', { message: 'serviceId must be a valid UUID v4' })
-  @IsNotEmpty({ message: 'serviceId is required' })
+  @ApiProperty({ description: 'Service offering external UUID', example: 'cmnboid7w006sarihf05x9txr' })
+  @IsUUID()
+  @IsNotEmpty()
   serviceId!: string;
 
-  @ApiProperty({ 
-    description: 'Professional\'s UUID from Profile Service - the service provider',
-    example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e',
-    required: true 
-  })
-  @IsUUID('4', { message: 'contractorId must be a valid UUID v4' })
-  @IsNotEmpty({ message: 'contractorId is required' })
+  @ApiProperty({ description: 'Professional\'s UUID', example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e' })
+  @IsUUID()
+  @IsNotEmpty()
   contractorId!: string;
 
+  // Note: clientId comes from JWT, not from request body
+
   @ApiProperty({ 
-    description: 'Date and time when the service should be performed (ISO 8601 format)',
-    example: '2024-03-25T14:00:00.000Z',
-    required: true 
+    description: 'When the service should be performed (Nairobi local time, EAT UTC+3. Do not include Z or timezone offset)',
+    example: '2024-03-25T14:00:00'
   })
-  @IsDateString({}, { message: 'scheduledDate must be a valid ISO 8601 date string' })
-  @IsNotEmpty({ message: 'scheduledDate is required' })
+  @IsDateString()
+  @IsNotEmpty()
   scheduledDate!: Date;
 
-  @ApiPropertyOptional({ 
-    description: 'Override location if different from service offering\'s default location',
-    example: 'Westlands',
-    default: 'Uses service offering location'
-  })
+  @ApiPropertyOptional({ description: 'Override location', example: 'Nairobi' })
   @IsOptional()
-  @IsString({ message: 'locationCity must be a string' })
+  @IsString()
   locationCity?: string;
 
-  @ApiPropertyOptional({ 
-    description: 'Special instructions or notes for the professional about the service',
-    example: 'The gate code is 1234. Please call when you arrive.',
-    maxLength: 500
-  })
+  @ApiPropertyOptional({ description: 'Special instructions', example: 'Please call when you arrive at the gate' })
   @IsOptional()
-  @IsString({ message: 'customerNotes must be a string' })
+  @IsString()
   customerNotes?: string;
 
-  @ApiPropertyOptional({ 
-    description: 'Override the listed price - can be used for negotiations',
-    example: 5500,
-    minimum: 0
-  })
+  // Duration fields (only one should be provided based on priceUnit)
+  @ApiPropertyOptional({ description: 'Duration in hours (for PER_HOUR services)', example: 2 })
   @IsOptional()
-  @IsNumber({}, { message: 'agreedPrice must be a number' })
-  @Min(0, { message: 'agreedPrice must be greater than or equal to 0' })
-  agreedPrice?: number;
-
-  @ApiPropertyOptional({ 
-    description: 'Currency code for the transaction (ISO 4217)',
-    example: 'KES',
-    default: 'KES',
-    enum: ['KES', 'USD', 'UGX', 'TZS', 'NGN']
-  })
-  @IsOptional()
-  @IsString({ message: 'currency must be a string' })
-  currency?: string;
-
-    @ApiPropertyOptional({
-    description: 'Duration of the service in hours',
-    example: 2,
-    minimum: 0
-  })
-  @IsOptional()
-  @IsNumber({}, { message: 'durationHours must be a number' })
-  @Min(0, { message: 'durationHours must be greater than or equal to 0' })      
+  @IsNumber()
+  @Min(0.5)
   durationHours?: number;
+
+  @ApiPropertyOptional({ description: 'Duration in days (for PER_DAY services)', example: 3 })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  durationDays?: number;
+
+  @ApiPropertyOptional({ description: 'Duration in weeks (for PER_WEEK services)', example: 2 })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  durationWeeks?: number;
+
+  @ApiPropertyOptional({ description: 'Duration in months (for PER_MONTH services)', example: 3 })
+  @IsOptional()
+  @IsNumber() 
+  @Min(1)
+  durationMonths?: number;
 }
 
 /**
@@ -274,45 +251,28 @@ export class GetBookingsRequestDto {
  * {
  *   "bookingId": "5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e",
  *   "userId": "7e2c8d4a-6b1e-4d1a-9f3b-5f8d0a3b4c2e",
- *   "userType": "CLIENT",
  *   "reason": "Found another service provider"
  * }
  */
 export class CancelBookingRequestDto {
-  @ApiProperty({ 
-    description: 'Unique identifier of the booking to cancel',
-    example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e',
-    required: true 
-  })
-  @IsUUID('4', { message: 'bookingId must be a valid UUID v4' })
-  @IsNotEmpty({ message: 'bookingId is required' })
+  @ApiProperty({ description: 'Booking external ID (UUID)' })
+  @IsUUID()
+  @IsNotEmpty()
   bookingId!: string;
 
-  @ApiProperty({ 
-    description: 'UUID of the user cancelling the booking',
-    example: '7e2c8d4a-6b1e-4d1a-9f3b-5f8d0a3b4c2e',
-    required: true 
-  })
-  @IsUUID('4', { message: 'userId must be a valid UUID v4' })
-  @IsNotEmpty({ message: 'userId is required' })
+  @ApiProperty({ description: 'User UUID cancelling the booking' })
+  @IsUUID()
+  @IsNotEmpty()
   userId!: string;
 
-  @ApiProperty({ 
-    description: 'Role of the user cancelling (determines permissions)',
-    enum: ['CLIENT', 'CONTRACTOR'],
-    enumName: 'UserType',
-    required: true
-  })
-  @IsIn(['CLIENT', 'CONTRACTOR'], { message: 'userType must be either CLIENT or CONTRACTOR' })
-  userType!: 'CLIENT' | 'CONTRACTOR';
-
-  @ApiPropertyOptional({ 
-    description: 'Reason for cancellation (helps with analytics and dispute resolution)',
-    example: 'Emergency came up, need to reschedule',
-    maxLength: 500
-  })
+  @ApiPropertyOptional({ description: 'UUID of the professional associated with the booking' })
+  @IsUUID()
   @IsOptional()
-  @IsString({ message: 'reason must be a string' })
+  professionalId?: string;  
+
+  @ApiPropertyOptional({ description: 'Reason for cancellation' })
+  @IsOptional()
+  @IsString()
   reason?: string;
 }
 
@@ -416,6 +376,38 @@ export class CompleteBookingRequestDto {
 /* ======================================================
    RESPONSE DTOS
    =====================================================*/
+
+/**
+ * Minimal response for booking actions (accept, decline, cancel, complete)
+ * Used when the client only needs confirmation, not full booking details
+ * 
+ * @example
+ * {
+ *   "id": "cmq16vtkb0000cn6nsr8ot0e0",
+ *   "status": "CANCELLED",
+ *   "updatedAt": "2026-06-05T18:22:00.000Z"
+ * }
+ */
+export class BookingActionResponseDto {
+  @ApiProperty({ 
+    description: 'Booking unique identifier',
+    example: 'cmq16vtkb0000cn6nsr8ot0e0'
+  })
+  id!: string;
+
+  @ApiProperty({ 
+    description: 'New booking status',
+    enum: ['CONFIRMED', 'COMPLETED', 'CANCELLED'],
+    example: 'CANCELLED'
+  })
+  status!: string;
+
+  @ApiProperty({ 
+    description: 'Last update timestamp',
+    example: '2026-06-05T18:22:00.000Z'
+  })
+  updatedAt!: Date;
+}
 
 /**
  * Basic service information included in booking response
@@ -584,36 +576,36 @@ export class BookingServiceDetailsDto {
 }
 
 /**
- * Complete booking response DTO
+ * Complete booking response DTO (for GET endpoints and POST /bookings)
  */
 export class BookingResponseDto {
   @ApiProperty({ 
     description: 'Booking unique identifier',
-    example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e'
+    example: 'cmq16vtkb0000cn6nsr8ot0e0'
   })
   id!: string;
 
   @ApiProperty({ 
     description: 'Public-facing booking identifier',
-    example: 'BKG-2024-00123'
+    example: '3784904e-0524-4146-bcee-22009a0a748a'
   })
   externalId!: string;
 
   @ApiProperty({ 
     description: 'Contractor UUID',
-    example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e'
+    example: '4bedf398-3649-4653-9e99-2a9a4efdb3ee'
   })
   contractorId!: string;
 
   @ApiProperty({ 
     description: 'Client UUID',
-    example: '7e2c8d4a-6b1e-4d1a-9f3b-5f8d0a3b4c2e'
+    example: 'b9668188-c98d-4deb-af8a-232ea9a78702'
   })
   clientId!: string;
 
   @ApiPropertyOptional({ 
     description: 'Service offering ID (if applicable)',
-    example: 'cmnboid7w006sarihf05x9txr'
+    example: 'cmpr6hgen0003dt84f83qtl2o'
   })
   serviceId?: string | null;
 
@@ -625,26 +617,26 @@ export class BookingResponseDto {
 
   @ApiPropertyOptional({ 
     description: 'Contractor name (denormalized for performance)',
-    example: 'Jane Smith'
+    example: 'Allantezz Mathenge'
   })
   contractorName?: string | null;
 
   @ApiPropertyOptional({ 
     description: 'Service title (denormalized for performance)',
-    example: 'Professional House Painting'
+    example: 'House Cleaning Services'
   })
   serviceTitle?: string | null;
 
   @ApiProperty({ 
     description: 'Current booking status',
     enum: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'],
-    example: 'CONFIRMED'
+    example: 'PENDING'
   })
   status!: string;
 
   @ApiPropertyOptional({ 
     description: 'Scheduled date and time for the service',
-    example: '2024-03-25T14:00:00.000Z'
+    example: '2026-08-25T15:00:00.000Z'
   })
   scheduledDate?: Date | null;
 
@@ -655,8 +647,8 @@ export class BookingResponseDto {
   locationCity?: string | null;
 
   @ApiPropertyOptional({ 
-    description: 'Agreed price for the service (may differ from base price)',
-    example: 5500
+    description: 'Agreed price for the service',
+    example: 90000
   })
   agreedPrice?: number | null;
 
@@ -674,13 +666,13 @@ export class BookingResponseDto {
 
   @ApiProperty({ 
     description: 'Booking creation timestamp',
-    example: '2024-03-20T10:30:00.000Z'
+    example: '2026-06-05T20:19:39.000Z'
   })
   createdAt!: Date;
 
   @ApiProperty({ 
     description: 'Last update timestamp',
-    example: '2024-03-21T15:45:00.000Z'
+    example: '2026-06-05T21:22:00.000Z'
   })
   updatedAt!: Date;
 
@@ -773,32 +765,32 @@ export class BookingStatisticsResponseDto {
  * 
  * @example
  * {
- *   "id": "5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e",
- *   "serviceTitle": "House Painting",
- *   "scheduledDate": "2024-03-25T14:00:00.000Z",
+ *   "id": "cmq16vtkb0000cn6nsr8ot0e0",
+ *   "serviceTitle": "House Cleaning Services",
+ *   "scheduledDate": "2026-08-25T15:00:00.000Z",
  *   "locationCity": "Nairobi",
- *   "clientName": "John Doe",
- *   "clientPhone": "+254712345678",
- *   "agreedPrice": 5500,
+ *   "clientName": "Allan Muthoni",
+ *   "clientPhone": "254790123456",
+ *   "agreedPrice": 90000,
  *   "currency": "KES"
  * }
  */
 export class UpcomingBookingResponseDto {
   @ApiProperty({ 
     description: 'Booking ID',
-    example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e'
+    example: 'cmq16vtkb0000cn6nsr8ot0e0'
   })
   id!: string;
 
   @ApiProperty({ 
     description: 'Service title',
-    example: 'Professional House Painting'
+    example: 'House Cleaning Services'
   })
   serviceTitle!: string | null;
 
   @ApiProperty({ 
     description: 'Scheduled date and time',
-    example: '2024-03-25T14:00:00.000Z'
+    example: '2026-08-25T15:00:00.000Z'
   })
   scheduledDate!: Date | null;
 
@@ -810,19 +802,19 @@ export class UpcomingBookingResponseDto {
 
   @ApiProperty({ 
     description: 'Client name',
-    example: 'John Doe'
+    example: 'Allan Muthoni'
   })
   clientName!: string | null;
 
   @ApiProperty({ 
     description: 'Client phone number (for contact)',
-    example: '+254712345678'
+    example: '254790123456'
   })
   clientPhone!: string | null;
 
   @ApiProperty({ 
     description: 'Agreed service price',
-    example: 5500
+    example: 90000
   })
   agreedPrice!: number | null;
 
@@ -882,7 +874,7 @@ export class PaginatedBookingsResponseDto {
 export class GetCustomerBookingsRequestDto {
   @ApiProperty({ 
     description: 'Client UUID - the customer whose bookings to fetch',
-    example: '7e2c8d4a-6b1e-4d1a-9f3b-5f8d0a3b4c2e',
+    example: 'b9668188-c98d-4deb-af8a-232ea9a78702',
     required: true 
   })
   @IsUUID('4', { message: 'clientId must be a valid UUID v4' })
@@ -928,7 +920,7 @@ export class GetCustomerBookingsRequestDto {
  * 
  * @example
  * {
- *   "contractorId": "5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e",
+ *   "contractorId": "4bedf398-3649-4653-9e99-2a9a4efdb3ee",
  *   "status": "PENDING",
  *   "limit": 10,
  *   "offset": 0
@@ -937,7 +929,7 @@ export class GetCustomerBookingsRequestDto {
 export class GetContractorBookingsRequestDto {
   @ApiProperty({ 
     description: 'Contractor UUID - the professional whose bookings to fetch',
-    example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e',
+    example: '4bedf398-3649-4653-9e99-2a9a4efdb3ee',
     required: true 
   })
   @IsUUID('4', { message: 'contractorId must be a valid UUID v4' })
@@ -983,15 +975,14 @@ export class GetContractorBookingsRequestDto {
  * 
  * @example
  * {
- *   "bookingId": "5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e",
- *   "userId": "7e2c8d4a-6b1e-4d1a-9f3b-5f8d0a3b4c2e",
- *   "userType": "CLIENT"
+ *   "bookingId": "3784904e-0524-4146-bcee-22009a0a748a",
+ *   "userId": "b9668188-c98d-4deb-af8a-232ea9a78702"
  * }
  */
 export class GetBookingDetailsRequestDto {
   @ApiProperty({ 
-    description: 'Unique identifier of the booking',
-    example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e',
+    description: 'Unique identifier of the booking (external ID)',
+    example: '3784904e-0524-4146-bcee-22009a0a748a',
     required: true 
   })
   @IsUUID('4', { message: 'bookingId must be a valid UUID v4' })
@@ -1000,21 +991,19 @@ export class GetBookingDetailsRequestDto {
 
   @ApiProperty({ 
     description: 'UUID of the user requesting details',
-    example: '7e2c8d4a-6b1e-4d1a-9f3b-5f8d0a3b4c2e',
+    example: 'b9668188-c98d-4deb-af8a-232ea9a78702',
     required: true 
   })
   @IsUUID('4', { message: 'userId must be a valid UUID v4' })
   @IsNotEmpty({ message: 'userId is required' })
   userId!: string;
 
-  @ApiProperty({ 
-    description: 'Type of user requesting details (determines authorization)',
-    enum: ['CLIENT', 'CONTRACTOR'],
-    enumName: 'UserType',
-    required: true
+  @ApiPropertyOptional({
+    description: 'UUID of the professional associated with the booking',
+    example: '4bedf398-3649-4653-9e99-2a9a4efdb3ee',
   })
-  @IsIn(['CLIENT', 'CONTRACTOR'], { message: 'userType must be either CLIENT or CONTRACTOR' })
-  userType!: 'CLIENT' | 'CONTRACTOR';
+  @IsUUID('4', { message: 'professionalId must be a valid UUID v4' })
+  professionalId?: string;  
 }
 
 /**
@@ -1022,14 +1011,14 @@ export class GetBookingDetailsRequestDto {
  * 
  * @example
  * {
- *   "contractorId": "5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e",
+ *   "contractorId": "4bedf398-3649-4653-9e99-2a9a4efdb3ee",
  *   "limit": 10
  * }
  */
 export class GetUpcomingBookingsRequestDto {
   @ApiProperty({ 
     description: 'Contractor UUID - the professional whose upcoming bookings to fetch',
-    example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e',
+    example: '4bedf398-3649-4653-9e99-2a9a4efdb3ee',
     required: true 
   })
   @IsUUID('4', { message: 'contractorId must be a valid UUID v4' })
@@ -1055,16 +1044,59 @@ export class GetUpcomingBookingsRequestDto {
  * 
  * @example
  * {
- *   "contractorId": "5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e"
+ *   "contractorId": "4bedf398-3649-4653-9e99-2a9a4efdb3ee"
  * }
  */
 export class GetProfessionalStatsRequestDto {
   @ApiProperty({ 
     description: 'Contractor UUID - the professional whose statistics to fetch',
-    example: '5f8d0a3b-4c2e-4d1a-9f3b-7e2c8d4a6b1e',
+    example: '4bedf398-3649-4653-9e99-2a9a4efdb3ee',
     required: true 
   })
   @IsUUID('4', { message: 'contractorId must be a valid UUID v4' })
   @IsNotEmpty({ message: 'contractorId is required' })
   contractorId!: string;
+}
+
+
+export class BookingStatusDto {
+  @ApiProperty({ 
+    description: 'Status value (stored in database)',
+    example: 'PENDING'
+  })
+  value!: string;
+
+  @ApiProperty({ 
+    description: 'Display label for UI',
+    example: 'Pending'
+  })
+  label!: string;
+
+  @ApiProperty({ 
+    description: 'Description of what this status means',
+    example: 'Booking created, waiting for contractor response'
+  })
+  description!: string;
+
+  @ApiProperty({ 
+    description: 'CSS class or badge variant for UI',
+    example: 'warning',
+    enum: ['warning', 'success', 'info', 'danger', 'secondary']
+  })
+  badgeVariant!: string;
+
+  @ApiProperty({ 
+    description: 'Order for display in dropdown',
+    example: 1,
+    minimum: 1
+  })
+  order!: number;
+}
+
+export class BookingStatusListResponseDto {
+  @ApiProperty({ 
+    description: 'List of all booking statuses',
+    type: [BookingStatusDto]
+  })
+  statuses!: BookingStatusDto[];
 }

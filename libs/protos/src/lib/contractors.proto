@@ -18,15 +18,41 @@ service ContractorsService {
   
   // Booking Methods
   rpc CreateBooking (CreateBookingRequest) returns (BaseBookingResponse);
-  rpc AcceptBooking (AcceptBookingRequest) returns (BaseBookingResponse);
-  rpc DeclineBooking (DeclineBookingRequest) returns (BaseBookingResponse);
-  rpc CancelBooking (CancelBookingRequest) returns (BaseBookingResponse);
-  rpc CompleteBooking (CompleteBookingRequest) returns (BaseBookingResponse);
+  rpc AcceptBooking (AcceptBookingRequest) returns (BookingActionResponse);
+  rpc DeclineBooking (DeclineBookingRequest) returns (BookingActionResponse);
+  rpc CancelBooking (CancelBookingRequest) returns (BookingActionResponse);
+  rpc CompleteBooking (CompleteBookingRequest) returns (BookingActionResponse);
   rpc GetMyBookingsAsCustomer (GetCustomerBookingsRequest) returns (PaginatedBookingsResponse);
   rpc GetMyBookingsAsProfessional (GetContractorBookingsRequest) returns (PaginatedBookingsResponse);
   rpc GetBookingDetails (GetBookingDetailsRequest) returns (BaseBookingResponse);
   rpc GetUpcomingBookingsForProfessional (GetUpcomingBookingsRequest) returns (ListUpcomingBookingsResponse);
   rpc GetProfessionalBookingStats (GetProfessionalStatsRequest) returns (BaseBookingStatsResponse);
+
+  rpc GetBookingStatuses (EmptyRequest) returns (BaseBookingStatusListResponse);
+}
+
+// Add this message
+message EmptyRequest {}
+
+// Add this response
+message BaseBookingStatusListResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  BookingStatusList data = 4;
+  ErrorPayload error = 5;
+}
+
+message BookingStatusList {
+  repeated BookingStatusDto statuses = 1;
+}
+
+message BookingStatusDto {
+  string value = 1;
+  string label = 2;
+  string description = 3;
+  string badgeVariant = 4;
+  int32 order = 5;
 }
 
 // ===================================================
@@ -78,28 +104,28 @@ message ServiceOffering {
   string priceUnit = 14;
   string currency = 15;
   
-  string locationCity = 16;
-  string locationNeighborhood = 17;
+  //  REMOVED locationCity and locationNeighborhood
+  //  ADDED coverageAreas
+  repeated string coverageAreas = 16;  // Cities/neighborhoods where service is available
   
-  repeated DayAvailability availability = 18;
+  repeated DayAvailability availability = 17;
   
-  int32 yearsExperience = 19;
-  double hourlyRate = 20;
-  repeated string serviceAreas = 21;
+  int32 yearsExperience = 18;
+  double hourlyRate = 19;
   
-  string status = 22;
-  string expiresAt = 23;
+  string status = 20;
+  string expiresAt = 21;
   
-  double averageRating = 24;
-  int32 reviewCount = 25;
+  double averageRating = 22;
+  int32 reviewCount = 23;
   
-  string createdAt = 26;
-  string updatedAt = 27;
+  string createdAt = 24;
+  string updatedAt = 25;
   
-  string vertical = 28;
+  string vertical = 26;
 }
 
-// Booking Entity
+// Booking Entity (Full response - for GET and CREATE)
 message Booking {
   string id = 1;
   string externalId = 2;
@@ -124,6 +150,13 @@ message Booking {
   optional BookingClientInfo client = 17;
   optional BookingContractorInfo contractor = 18;
   optional BookingServiceDetails serviceDetails = 19;
+}
+
+// Minimal booking action response (for accept, decline, cancel, complete)
+message BookingAction {
+  string id = 1;
+  string status = 2;
+  string updatedAt = 3;
 }
 
 message BookingServiceInfo {
@@ -158,8 +191,7 @@ message BookingServiceDetails {
   double basePrice = 4;
   string priceUnit = 5;
   optional string category = 6;
-  string locationCity = 7;
-  optional string locationNeighborhood = 8;
+  //  REMOVED locationCity and locationNeighborhood - use coverageAreas from service offering
 }
 
 message BookingStatistics {
@@ -196,24 +228,24 @@ message CreateServiceOfferingRequest {
   double basePrice = 7;
   string priceUnit = 8;
   string currency = 9;
-  string locationCity = 10;
-  optional string locationNeighborhood = 11;
-  optional int32 yearsExperience = 12;
-  optional string additionalNotes = 13;
-  repeated DayAvailability availability = 14;
+  //  REMOVED locationCity and locationNeighborhood
+  repeated string coverageAreas = 10;  // Required - cities/neighborhoods where service is available
+  optional int32 yearsExperience = 11;
+  optional string additionalNotes = 12;
+  repeated DayAvailability availability = 13;
 }
 
 message GetOfferingsByVerticalRequest {
   string vertical = 1;
-  optional string city = 2;
-  optional string categoryId = 3;
-  optional double minPrice = 4;
-  optional double maxPrice = 5;
-  optional double minRating = 6;
-  optional bool isVerified = 7;
-  optional string sortBy = 8;
-  optional int32 limit = 9;
-  optional int32 offset = 10;
+  //  REMOVED city filter - use coverageAreas in response for client-side filtering
+  optional string categoryId = 2;
+  optional double minPrice = 3;
+  optional double maxPrice = 4;
+  optional double minRating = 5;
+  optional bool isVerified = 6;
+  optional string sortBy = 7;
+  optional int32 limit = 8;
+  optional int32 offset = 9;
 }
 
 message GetOfferingsByAccountRequest {
@@ -234,10 +266,10 @@ message UpdateServiceOfferingRequest {
   optional string description = 3;
   optional double basePrice = 4;
   optional string priceUnit = 5;
-  optional string locationCity = 6;
-  optional string locationNeighborhood = 7;
-  repeated DayAvailability availability = 8;
-  string userId = 9;
+  //  REMOVED locationCity and locationNeighborhood
+  repeated string coverageAreas = 6;  //  Optional - update coverage areas
+  repeated DayAvailability availability = 7;
+  string userId = 8;
 }
 
 message DeleteServiceOfferingRequest {
@@ -249,47 +281,53 @@ message GetOfferingsByCategoryRequest {
   string categoryId = 1;
   optional int32 limit = 2;
   optional int32 offset = 3;
-  optional string city = 4;
-  optional double minPrice = 5;
-  optional double maxPrice = 6;
+  //  REMOVED city filter
+  optional double minPrice = 4;
+  optional double maxPrice = 5;
 }
 
 // ===================================================
-// REQUEST MESSAGES - BOOKINGS
+// REQUEST MESSAGES - BOOKINGS (WITH PLATFORM ADMIN SUPPORT)
 // ===================================================
 message CreateBookingRequest {
   string serviceId = 1;
   string contractorId = 2;
   string clientId = 3;
   string scheduledDate = 4;
-  optional string locationCity = 5;
+  optional string locationCity = 5;  //  Required for booking - where service will be delivered
   optional string customerNotes = 6;
-  optional double agreedPrice = 7;
-  optional string currency = 8;
-  optional int32 durationHours = 9;
+  optional int32 durationHours = 7;
+  optional int32 durationDays = 8;
+  optional int32 durationWeeks = 9;
+  optional int32 durationMonths = 10;
+  bool isPlatformAdmin = 11;  //  Internal flag for platform admin bypass
 }
 
 message AcceptBookingRequest {
   string bookingId = 1;
   string contractorId = 2;
+  bool isPlatformAdmin = 3;  //  Internal flag for platform admin bypass
 }
 
 message DeclineBookingRequest {
   string bookingId = 1;
   string contractorId = 2;
   optional string reason = 3;
+  bool isPlatformAdmin = 4;  //  Internal flag for platform admin bypass
 }
 
 message CancelBookingRequest {
   string bookingId = 1;
   string userId = 2;
-  string userType = 3;  // "CLIENT" or "CONTRACTOR"
+  optional string professionalId = 3;
   optional string reason = 4;
+  bool isPlatformAdmin = 5;  // Internal flag for platform admin bypass
 }
 
 message CompleteBookingRequest {
   string bookingId = 1;
   string contractorId = 2;
+  bool isPlatformAdmin = 3;  //  Internal flag for platform admin bypass
 }
 
 message GetCustomerBookingsRequest {
@@ -297,6 +335,7 @@ message GetCustomerBookingsRequest {
   optional string status = 2;
   optional int32 limit = 3;
   optional int32 offset = 4;
+  bool isPlatformAdmin = 5;  //  Internal flag for platform admin bypass
 }
 
 message GetContractorBookingsRequest {
@@ -304,21 +343,25 @@ message GetContractorBookingsRequest {
   optional string status = 2;
   optional int32 limit = 3;
   optional int32 offset = 4;
+  bool isPlatformAdmin = 5;  //  Internal flag for platform admin bypass
 }
 
 message GetBookingDetailsRequest {
   string bookingId = 1;
   string userId = 2;
-  string userType = 3;  // "CLIENT" or "CONTRACTOR"
+  optional string professionalId = 3;
+  bool isPlatformAdmin = 4;  //  Internal flag for platform admin bypass
 }
 
 message GetUpcomingBookingsRequest {
   string contractorId = 1;
   optional int32 limit = 2;
+  bool isPlatformAdmin = 3;  //  Internal flag for platform admin bypass
 }
 
 message GetProfessionalStatsRequest {
   string contractorId = 1;
+  bool isPlatformAdmin = 2;  //  Internal flag for platform admin bypass
 }
 
 // ===================================================
@@ -356,6 +399,15 @@ message BaseBookingResponse {
   string code = 2;
   string message = 3;
   Booking data = 4;
+  ErrorPayload error = 5;
+}
+
+// Minimal booking action response
+message BookingActionResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  BookingAction data = 4;
   ErrorPayload error = 5;
 }
 
