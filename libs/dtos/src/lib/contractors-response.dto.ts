@@ -88,7 +88,6 @@ export class ServiceOfferingResponseDto {
   @IsNumber()
   yearsExperience?: number;
 
-  // ✅ UPDATED: Renamed from serviceAreas to coverageAreas
   @ApiPropertyOptional({ 
     example: ['Nairobi CBD', 'Westlands', 'Kilimani'], 
     type: [String], 
@@ -156,7 +155,34 @@ export class ServiceOfferingResponseDto {
   @IsString()
   currency!: string;
 
-  // ❌ REMOVED locationCity and locationNeighborhood - use coverageAreas instead
+  // ========== NEW: NEGOTIABLE PRICING FIELDS ==========
+
+  @ApiPropertyOptional({ 
+    description: 'Whether the price is negotiable (customer can propose different price)',
+    example: true,
+    default: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  isNegotiable?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Minimum price professional is willing to accept (if negotiable)',
+    example: 3000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  minNegotiablePrice?: number | null;
+
+  @ApiPropertyOptional({ 
+    description: 'Maximum price professional will charge (upper limit for negotiation)',
+    example: 8000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  maxNegotiablePrice?: number | null;
 
   /* --- Availability --- */
   @ApiPropertyOptional({ 
@@ -187,6 +213,58 @@ export class ServiceOfferingResponseDto {
   @ApiProperty({ example: 24, description: 'Total number of reviews' })
   @IsNumber()
   reviewCount!: number;
+
+  // ========== BOOKING FEE OVERRIDE FIELDS ==========
+
+  @ApiPropertyOptional({ 
+    description: 'Whether this service uses a custom booking fee (overrides profile default)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  useCustomBookingFee?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Custom booking fee enabled status for this service',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  customBookingFeeEnabled?: boolean | null;
+
+  @ApiPropertyOptional({ 
+    description: 'Custom booking fee amount for this service',
+    example: 500
+  })
+  @IsOptional()
+  @IsNumber()
+  customBookingFeeAmount?: number | null;
+
+  @ApiPropertyOptional({ 
+    description: 'Custom booking fee currency for this service',
+    example: 'KES',
+    default: 'KES'
+  })
+  @IsOptional()
+  @IsString()
+  customBookingFeeCurrency?: string | null;
+
+  @ApiPropertyOptional({ 
+    description: 'Custom description for booking fee on this service',
+    example: 'Call-out fee covers travel to your location and initial inspection'
+  })
+  @IsOptional()
+  @IsString()
+  customBookingFeeDescription?: string | null;
+
+  @ApiPropertyOptional({ 
+    description: 'Whether booking fee is refundable on cancellation for this service',
+    example: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  customBookingFeeRefundable?: boolean | null;
 
   /* --- Timestamps --- */
   @ApiProperty({ example: '2025-12-29T12:00:00Z' })

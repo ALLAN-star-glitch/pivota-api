@@ -51,6 +51,15 @@ export class CreateBookingRequestDto {
   @IsNotEmpty()
   contractorId!: string;
 
+    @ApiPropertyOptional({ 
+    description: 'Proposed price for negotiation (if service is negotiable)',
+    example: 1200
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  proposedPrice?: number;
+
   // Note: clientId comes from JWT, not from request body
 
   @ApiProperty({ 

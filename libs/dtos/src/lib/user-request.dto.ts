@@ -480,6 +480,54 @@ export class SkilledProfessionalProfileDataDto {
   @IsBoolean()
   emergencyService?: boolean;
 
+  // ========== NEW: BOOKING FEE FIELDS (Profile Level Default) ==========
+  
+  @ApiPropertyOptional({ 
+    description: 'Whether the professional charges a booking fee by default (call-out fee)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  profileBookingFeeEnabled?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Default booking fee amount (e.g., 500 KES call-out fee)',
+    example: 500,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  profileBookingFeeAmount?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Currency for the booking fee',
+    example: 'KES',
+    default: 'KES'
+  })
+  @IsOptional()
+  @IsString()
+  @Length(3, 3)
+  profileBookingFeeCurrency?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Description of what the booking fee covers',
+    example: 'Call-out fee covers travel to your location and initial consultation'
+  })
+  @IsOptional()
+  @IsString()
+  profileBookingFeeDescription?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Whether the booking fee is refundable if customer cancels',
+    example: false,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  profileBookingFeeRefundable?: boolean;
+
   // Hide from Swagger - these are handled by media service endpoints
   @ApiHideProperty()
   @IsOptional()

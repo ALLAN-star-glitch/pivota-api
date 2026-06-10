@@ -8,18 +8,54 @@
  * 
  * Events Handled:
  * - service-offering-created - Confirmation email when a professional posts a new service
+ * - service-offering-updated - Notification when a service offering is updated
+ * - service-offering-deleted - Notification when a service offering is deleted
  * 
  * @example
  * // Event payload for service offering created
  * {
  *   to: 'professional@example.com',
  *   professionalName: 'Jane Smith',
- *   serviceTitle: 'Android Development Services',
+ *   professionalPhone: '+254712345678',
+ *   serviceId: 'service-id-123',
  *   serviceExternalId: 'service-uuid-123',
+ *   serviceTitle: 'Android Development Services',
+ *   serviceDescription: 'Custom Android app development',
  *   categoryName: 'Mobile App Development',
- *   basePrice: '50,000',
+ *   categorySlug: 'mobile-app-dev',
+ *   vertical: 'JOBS',
+ *   basePrice: '50,000 KES',
  *   priceUnit: 'PER_PROJECT',
- *   createdAt: 'March 25, 2024 at 2:00 PM'
+ *   isNegotiable: true,
+ *   priceRange: '45,000 - 60,000 KES',
+ *   bookingFeeAmount: '500 KES - Call-out fee covers travel',
+ *   bookingFeeRefundable: false,
+ *   coverageAreas: 'Nairobi, Kiambu, Machakos',
+ *   createdAt: 'March 25, 2024 at 2:00 PM',
+ *   serviceUrl: 'https://pivota.com/services/service-uuid-123',
+ *   dashboardUrl: 'https://pivota.com/professional/dashboard/services/service-uuid-123'
+ * }
+ * 
+ * // Event payload for service offering updated
+ * {
+ *   to: 'professional@example.com',
+ *   professionalName: 'Jane Smith',
+ *   serviceId: 'service-id-123',
+ *   serviceExternalId: 'service-uuid-123',
+ *   serviceTitle: 'Android Development Services',
+ *   updatedAt: 'March 26, 2024 at 3:00 PM',
+ *   dashboardUrl: 'https://pivota.com/professional/dashboard/services/service-uuid-123'
+ * }
+ * 
+ * // Event payload for service offering deleted
+ * {
+ *   to: 'professional@example.com',
+ *   professionalName: 'Jane Smith',
+ *   serviceId: 'service-id-123',
+ *   serviceExternalId: 'service-uuid-123',
+ *   serviceTitle: 'Android Development Services',
+ *   deletedAt: 'March 26, 2024 at 4:00 PM',
+ *   dashboardUrl: 'https://pivota.com/professional/dashboard/services'
  * }
  */
 
@@ -44,12 +80,24 @@ export class ServiceOfferingEmailController {
     @Payload() data: {
       to: string;
       professionalName: string;
-      serviceTitle: string;
+      professionalPhone?: string;
+      serviceId?: string;
       serviceExternalId: string;
+      serviceTitle: string;
+      serviceDescription?: string;
       categoryName: string;
+      categorySlug?: string;
+      vertical?: string;
       basePrice: string;
       priceUnit: string;
+      isNegotiable?: boolean;
+      priceRange?: string;
+      bookingFeeAmount?: string;
+      bookingFeeRefundable?: boolean;
+      coverageAreas?: string;
       createdAt: string;
+      serviceUrl?: string;
+      dashboardUrl?: string;
     },
     @Ctx() context: RmqContext
   ) {
@@ -58,12 +106,76 @@ export class ServiceOfferingEmailController {
     console.log('👤 Professional:', data.professionalName);
     console.log('📋 Service:', data.serviceTitle);
     console.log('📂 Category:', data.categoryName);
-    console.log('💰 Price:', `${data.basePrice} (${data.priceUnit})`);
+    console.log('💰 Price:', data.basePrice);
+    console.log('🎯 Negotiable:', data.isNegotiable ? 'Yes' : 'No');
+    if (data.bookingFeeAmount) {
+      console.log('💵 Booking Fee:', data.bookingFeeAmount);
+    }
     
     this.logger.debug(`[RMQ] Service offering created event for: ${data.to}`);
     await this.processEvent(
       context,
       () => this.serviceOfferingEmailService.sendServiceOfferingCreated(data),
+      data.to
+    );
+  }
+
+  /**
+   * Handle service offering updated - Professional notification email
+   */
+  @EventPattern('service-offering-updated', Transport.RMQ)
+  async handleServiceOfferingUpdated(
+    @Payload() data: {
+      to: string;
+      professionalName: string;
+      serviceId: string;
+      serviceExternalId: string;
+      serviceTitle: string;
+      updatedAt: string;
+      dashboardUrl: string;
+    },
+    @Ctx() context: RmqContext
+  ) {
+    console.log('🔍🔍🔍 ========== SERVICE OFFERING UPDATED EVENT RECEIVED ==========');
+    console.log('📧 Email:', data.to);
+    console.log('👤 Professional:', data.professionalName);
+    console.log('📋 Service:', data.serviceTitle);
+    console.log('🕐 Updated At:', data.updatedAt);
+    
+    this.logger.debug(`[RMQ] Service offering updated event for: ${data.to}`);
+    await this.processEvent(
+      context,
+      () => this.serviceOfferingEmailService.sendServiceOfferingUpdated(data),
+      data.to
+    );
+  }
+
+  /**
+   * Handle service offering deleted - Professional notification email
+   */
+  @EventPattern('service-offering-deleted', Transport.RMQ)
+  async handleServiceOfferingDeleted(
+    @Payload() data: {
+      to: string;
+      professionalName: string;
+      serviceId: string;
+      serviceExternalId: string;
+      serviceTitle: string;
+      deletedAt: string;
+      dashboardUrl: string;
+    },
+    @Ctx() context: RmqContext
+  ) {
+    console.log('🔍🔍🔍 ========== SERVICE OFFERING DELETED EVENT RECEIVED ==========');
+    console.log('📧 Email:', data.to);
+    console.log('👤 Professional:', data.professionalName);
+    console.log('📋 Service:', data.serviceTitle);
+    console.log('🕐 Deleted At:', data.deletedAt);
+    
+    this.logger.debug(`[RMQ] Service offering deleted event for: ${data.to}`);
+    await this.processEvent(
+      context,
+      () => this.serviceOfferingEmailService.sendServiceOfferingDeleted(data),
       data.to
     );
   }

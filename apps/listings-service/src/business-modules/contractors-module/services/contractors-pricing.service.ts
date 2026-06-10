@@ -134,7 +134,7 @@ export class ContractorsPricingService {
     // 4. Use the most specific rule (first in array)
     const rule = rules[0];
 
-    // 5. Validate price range
+    // 5. Validate base price range
     if (rule.minPrice !== null && dto.basePrice < Number(rule.minPrice)) {
       const unitLabel = this.UNIT_LABELS[dto.priceUnit] || dto.priceUnit;
       throw new BadRequestException(
@@ -151,7 +151,10 @@ export class ContractorsPricingService {
       );
     }
 
-    // 6. Validate experience requirement
+    // 6. Validate negotiable range (min and max must be within platform range)
+    await this.validateNegotiableRange(category, rule, dto);
+
+    // 7. Validate experience requirement
     if (rule.isExperienceRequired && (dto.yearsExperience === undefined || dto.yearsExperience === null)) {
       throw new BadRequestException(
         `Years of professional experience is required for "${category.name}". ` +
@@ -159,7 +162,7 @@ export class ContractorsPricingService {
       );
     }
 
-    // 7. Validate notes requirement
+    // 8. Validate notes requirement
     if (rule.isNotesRequired && (!dto.additionalNotes || dto.additionalNotes.trim() === '')) {
       throw new BadRequestException(
         `Additional details/notes are required for "${category.name}". ` +
@@ -167,17 +170,82 @@ export class ContractorsPricingService {
       );
     }
 
-    // 8. Additional validation: years experience cannot be negative
+    // 9. Additional validation: years experience cannot be negative
     if (dto.yearsExperience !== undefined && dto.yearsExperience !== null && dto.yearsExperience < 0) {
       throw new BadRequestException(`Years of experience cannot be negative.`);
     }
 
-    // 9. Additional validation: base price cannot be negative
+    // 10. Additional validation: base price cannot be negative
     if (dto.basePrice < 0) {
       throw new BadRequestException(`Price cannot be negative.`);
     }
 
     this.logger.debug(`Validation passed for ${category.name} - ${dto.priceUnit} at ${dto.basePrice} ${rule.currency}`);
+  }
+
+  // ========== NEW: Validate negotiable range ==========
+  private async validateNegotiableRange(
+    category: any,
+    rule: any,
+    dto: CreateServiceOfferingDto
+  ): Promise<void> {
+    // If not negotiable, no need to validate min/max
+    if (dto.isNegotiable === false) {
+      return;
+    }
+
+    // Check if minNegotiablePrice is provided and valid
+    if (dto.minNegotiablePrice !== undefined && dto.minNegotiablePrice !== null) {
+      if (rule.minPrice !== null && dto.minNegotiablePrice < Number(rule.minPrice)) {
+        throw new BadRequestException(
+          `Minimum negotiable price (${dto.minNegotiablePrice.toLocaleString()} ${rule.currency}) cannot be below ` +
+          `platform minimum (${rule.minPrice.toLocaleString()} ${rule.currency}) for "${category.name}".`
+        );
+      }
+      
+      if (dto.minNegotiablePrice < 0) {
+        throw new BadRequestException(`Minimum negotiable price cannot be negative.`);
+      }
+    }
+
+    // Check if maxNegotiablePrice is provided and valid
+    if (dto.maxNegotiablePrice !== undefined && dto.maxNegotiablePrice !== null) {
+      if (rule.maxPrice !== null && dto.maxNegotiablePrice > Number(rule.maxPrice)) {
+        throw new BadRequestException(
+          `Maximum negotiable price (${dto.maxNegotiablePrice.toLocaleString()} ${rule.currency}) cannot exceed ` +
+          `platform maximum (${rule.maxPrice.toLocaleString()} ${rule.currency}) for "${category.name}".`
+        );
+      }
+    }
+
+    // Check that min <= max (if both provided)
+    if (dto.minNegotiablePrice !== undefined && dto.minNegotiablePrice !== null &&
+        dto.maxNegotiablePrice !== undefined && dto.maxNegotiablePrice !== null &&
+        dto.minNegotiablePrice > dto.maxNegotiablePrice) {
+      throw new BadRequestException(
+        `Minimum negotiable price (${dto.minNegotiablePrice.toLocaleString()} ${rule.currency}) cannot be ` +
+        `greater than maximum negotiable price (${dto.maxNegotiablePrice.toLocaleString()} ${rule.currency}).`
+      );
+    }
+
+    // Check that basePrice is within negotiable range (if range is defined)
+    if (dto.minNegotiablePrice !== undefined && dto.minNegotiablePrice !== null &&
+        dto.basePrice < dto.minNegotiablePrice) {
+      throw new BadRequestException(
+        `Base price (${dto.basePrice.toLocaleString()} ${rule.currency}) cannot be less than ` +
+        `minimum negotiable price (${dto.minNegotiablePrice.toLocaleString()} ${rule.currency}).`
+      );
+    }
+
+    if (dto.maxNegotiablePrice !== undefined && dto.maxNegotiablePrice !== null &&
+        dto.basePrice > dto.maxNegotiablePrice) {
+      throw new BadRequestException(
+        `Base price (${dto.basePrice.toLocaleString()} ${rule.currency}) cannot exceed ` +
+        `maximum negotiable price (${dto.maxNegotiablePrice.toLocaleString()} ${rule.currency}).`
+      );
+    }
+
+    this.logger.debug(`Negotiable range validation passed for ${category.name}`);
   }
 
   // Helper method to get permitted units for a category

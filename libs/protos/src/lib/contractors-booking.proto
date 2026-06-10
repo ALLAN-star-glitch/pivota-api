@@ -1,0 +1,269 @@
+syntax = "proto3";
+
+package contractors_booking;
+
+// ===================================================
+// SERVICE DEFINITION
+// ===================================================
+service BookingService {
+  // Booking Status Methods
+  rpc GetBookingStatuses (EmptyRequest) returns (BaseBookingStatusListResponse);
+  
+  // Booking CRUD Methods
+  rpc CreateBooking (CreateBookingRequest) returns (BaseBookingResponse);
+  rpc AcceptBooking (AcceptBookingRequest) returns (BookingActionResponse);
+  rpc DeclineBooking (DeclineBookingRequest) returns (BookingActionResponse);
+  rpc CancelBooking (CancelBookingRequest) returns (BookingActionResponse);
+  
+  // Booking Retrieval Methods
+  rpc GetMyBookingsAsCustomer (GetCustomerBookingsRequest) returns (PaginatedBookingsResponse);
+  rpc GetMyBookingsAsProfessional (GetContractorBookingsRequest) returns (PaginatedBookingsResponse);
+  rpc GetBookingDetails (GetBookingDetailsRequest) returns (BaseBookingResponse);
+  rpc GetUpcomingBookingsForProfessional (GetUpcomingBookingsRequest) returns (ListUpcomingBookingsResponse);
+  rpc GetProfessionalBookingStats (GetProfessionalStatsRequest) returns (BaseBookingStatsResponse);
+}
+
+// ===================================================
+// SHARED MESSAGES
+// ===================================================
+message EmptyRequest {}
+
+message ErrorPayload {
+  string code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+message PaginationInfo {
+  int32 total = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  bool hasMore = 4;
+}
+
+// ===================================================
+// ENTITIES
+// ===================================================
+message Booking {
+  string id = 1;
+  string externalId = 2;
+  string contractorId = 3;
+  string clientId = 4;
+  optional string serviceId = 5;
+  
+  // Denormalized fields
+  optional string contractorName = 6;
+  optional string serviceTitle = 7;
+  string status = 8;
+  optional string scheduledDate = 9;
+  optional string locationCity = 10;
+  optional double agreedPrice = 11;
+  string currency = 12;
+  optional string customerNotes = 13;
+  string createdAt = 14;
+  string updatedAt = 15;
+  
+  // Enriched fields (for responses)
+  optional BookingServiceInfo service = 16;
+  optional BookingClientInfo client = 17;
+  optional BookingContractorInfo contractor = 18;
+  optional BookingServiceDetails serviceDetails = 19;
+}
+
+message BookingAction {
+  string id = 1;
+  string status = 2;
+  string updatedAt = 3;
+}
+
+message BookingServiceInfo {
+  string id = 1;
+  string title = 2;
+  double basePrice = 3;
+  string priceUnit = 4;
+  string currency = 5;
+}
+
+message BookingClientInfo {
+  string uuid = 1;
+  string name = 2;
+  string email = 3;
+  string phone = 4;
+}
+
+message BookingContractorInfo {
+  string uuid = 1;
+  string name = 2;
+  optional string profileImage = 3;
+  bool isVerified = 4;
+  double rating = 5;
+  string phone = 6;
+  string email = 7;
+}
+
+message BookingServiceDetails {
+  string id = 1;
+  string title = 2;
+  optional string description = 3;
+  double basePrice = 4;
+  string priceUnit = 5;
+  optional string category = 6;
+}
+
+message UpcomingBooking {
+  string id = 1;
+  optional string serviceTitle = 2;
+  optional string scheduledDate = 3;
+  optional string locationCity = 4;
+  optional string clientName = 5;
+  optional string clientPhone = 6;
+  optional double agreedPrice = 7;
+  string currency = 8;
+}
+
+message BookingStatistics {
+  int32 total = 1;
+  int32 pending = 2;
+  int32 confirmed = 3;
+  int32 completed = 4;
+  int32 cancelled = 5;
+  int32 declined = 6;
+  int32 upcoming = 7;
+  int32 completedThisMonth = 8;
+}
+
+message BookingStatusList {
+  repeated BookingStatusDto statuses = 1;
+}
+
+message BookingStatusDto {
+  string value = 1;
+  string label = 2;
+  string description = 3;
+  string badgeVariant = 4;
+  int32 order = 5;
+}
+
+// ===================================================
+// REQUEST MESSAGES - BOOKINGS
+// ===================================================
+message CreateBookingRequest {
+  string serviceId = 1;
+  string contractorId = 2;
+  string clientId = 3;
+  string scheduledDate = 4;
+  optional string locationCity = 5;
+  optional string customerNotes = 6;
+  optional int32 durationHours = 7;
+  optional int32 durationDays = 8;
+  optional int32 durationWeeks = 9;
+  optional int32 durationMonths = 10;
+  bool isPlatformAdmin = 11;
+}
+
+message AcceptBookingRequest {
+  string bookingId = 1;
+  string contractorId = 2;
+  bool isPlatformAdmin = 3;
+}
+
+message DeclineBookingRequest {
+  string bookingId = 1;
+  string contractorId = 2;
+  optional string reason = 3;
+  bool isPlatformAdmin = 4;
+}
+
+message CancelBookingRequest {
+  string bookingId = 1;
+  string userId = 2;
+  optional string professionalId = 3;
+  optional string reason = 4;
+  bool isPlatformAdmin = 5;
+}
+
+message GetCustomerBookingsRequest {
+  string clientId = 1;
+  optional string status = 2;
+  optional int32 limit = 3;
+  optional int32 offset = 4;
+  bool isPlatformAdmin = 5;
+}
+
+message GetContractorBookingsRequest {
+  string contractorId = 1;
+  optional string status = 2;
+  optional int32 limit = 3;
+  optional int32 offset = 4;
+  bool isPlatformAdmin = 5;
+}
+
+message GetBookingDetailsRequest {
+  string bookingId = 1;
+  string userId = 2;
+  optional string professionalId = 3;
+  bool isPlatformAdmin = 4;
+}
+
+message GetUpcomingBookingsRequest {
+  string contractorId = 1;
+  optional int32 limit = 2;
+  bool isPlatformAdmin = 3;
+}
+
+message GetProfessionalStatsRequest {
+  string contractorId = 1;
+  bool isPlatformAdmin = 2;
+}
+
+// ===================================================
+// RESPONSE MESSAGES - BOOKINGS
+// ===================================================
+message BaseBookingResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  Booking data = 4;
+  ErrorPayload error = 5;
+}
+
+message BookingActionResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  BookingAction data = 4;
+  ErrorPayload error = 5;
+}
+
+message PaginatedBookingsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated Booking data = 4;
+  PaginationInfo pagination = 5;
+  ErrorPayload error = 6;
+}
+
+message ListUpcomingBookingsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  repeated UpcomingBooking data = 4;
+  ErrorPayload error = 5;
+}
+
+message BaseBookingStatsResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  BookingStatistics data = 4;
+  ErrorPayload error = 5;
+}
+
+message BaseBookingStatusListResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  BookingStatusList data = 4;
+  ErrorPayload error = 5;
+}

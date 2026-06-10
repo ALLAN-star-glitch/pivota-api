@@ -404,24 +404,31 @@ private async updateActiveProfiles(
   /**
    * Convert Prisma SkilledProfessionalProfile to SkilledProfessionalProfileDataDto
    */
-  private skilledProfessionalProfileToDataDto(profile: SkilledProfessionalProfile): SkilledProfessionalProfileDataDto {
-    return {
-      title: profile.title ?? undefined,
-      specialties: this.parseJsonField<string[]>(profile.specialties, []),
-      serviceAreas: this.parseJsonField<string[]>(profile.serviceAreas, []),
-      yearsExperience: profile.yearsExperience ?? undefined,
-      licenseNumber: profile.licenseNumber ?? undefined,
-      insuranceInfo: profile.insuranceInfo ?? undefined,
-      hourlyRate: profile.hourlyRate ?? undefined,
-      dailyRate: profile.dailyRate ?? undefined,
-      paymentTerms: profile.paymentTerms ?? undefined,
-      availableToday: profile.availableToday ?? undefined,
-      availableWeekends: profile.availableWeekends ?? undefined,
-      emergencyService: profile.emergencyService ?? undefined,
-      portfolioImages: this.parseJsonField<string[]>(profile.portfolioImages, []),
-      certifications: this.parseJsonField<string[]>(profile.certifications, []),
-    };
-  }
+ private skilledProfessionalProfileToDataDto(profile: SkilledProfessionalProfile): SkilledProfessionalProfileDataDto {
+  return {
+    title: profile.title ?? undefined,
+    specialties: this.parseJsonField<string[]>(profile.specialties, []),
+    serviceAreas: this.parseJsonField<string[]>(profile.serviceAreas, []),
+    yearsExperience: profile.yearsExperience ?? undefined,
+    licenseNumber: profile.licenseNumber ?? undefined,
+    insuranceInfo: profile.insuranceInfo ?? undefined,
+    hourlyRate: profile.hourlyRate ?? undefined,
+    dailyRate: profile.dailyRate ?? undefined,
+    paymentTerms: profile.paymentTerms ?? undefined,
+    availableToday: profile.availableToday ?? undefined,
+    availableWeekends: profile.availableWeekends ?? undefined,
+    emergencyService: profile.emergencyService ?? undefined,
+    portfolioImages: this.parseJsonField<string[]>(profile.portfolioImages, []),
+    certifications: this.parseJsonField<string[]>(profile.certifications, []),
+    
+    // ========== NEW: Booking Fee Fields ==========
+    profileBookingFeeEnabled: profile.profileBookingFeeEnabled ?? false,
+    profileBookingFeeAmount: profile.profileBookingFeeAmount ?? undefined,
+    profileBookingFeeCurrency: profile.profileBookingFeeCurrency ?? 'KES',
+    profileBookingFeeDescription: profile.profileBookingFeeDescription ?? undefined,
+    profileBookingFeeRefundable: profile.profileBookingFeeRefundable ?? false,
+  };
+}
 
   /**
    * Convert Prisma HousingSeekerProfile to HousingSeekerProfileDataDto
@@ -1028,6 +1035,13 @@ async createSkilledProfessionalProfile(
           emergencyService: data.emergencyService ?? false,
           portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
           certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
+          
+          // ========== NEW: Booking Fee Fields ==========
+          profileBookingFeeEnabled: data.profileBookingFeeEnabled ?? false,
+          profileBookingFeeAmount: data.profileBookingFeeAmount ?? null,
+          profileBookingFeeCurrency: data.profileBookingFeeCurrency ?? 'KES',
+          profileBookingFeeDescription: data.profileBookingFeeDescription ?? null,
+          profileBookingFeeRefundable: data.profileBookingFeeRefundable ?? false,
         }
       });
       
@@ -2255,7 +2269,7 @@ private mapToUserProfileResponse(user: UserWithAccount): UserProfileResponseDto 
     };
   }
 
-  private mapToSkilledProfessionalResponse(
+private mapToSkilledProfessionalResponse(
   profile: any, // Type includes categories relation
   completion?: number, 
   missingFields?: string[]
@@ -2302,6 +2316,14 @@ private mapToUserProfileResponse(user: UserWithAccount): UserProfileResponseDto 
     completionRate: profile.completionRate ?? undefined,
     portfolioImages: this.parseJsonField<string[]>(profile.portfolioImages, []),
     certifications: this.parseJsonField<string[]>(profile.certifications, []),
+    
+    // ========== NEW: Booking Fee Fields ==========
+    profileBookingFeeEnabled: profile.profileBookingFeeEnabled ?? false,
+    profileBookingFeeAmount: profile.profileBookingFeeAmount ?? undefined,
+    profileBookingFeeCurrency: profile.profileBookingFeeCurrency ?? 'KES',
+    profileBookingFeeDescription: profile.profileBookingFeeDescription ?? undefined,
+    profileBookingFeeRefundable: profile.profileBookingFeeRefundable ?? false,
+    
     completion: completion ? {
       percentage: completion,
       missingFields: missingFields || [],
@@ -3022,7 +3044,6 @@ private mapToPublicProfile(profile: any): SkilledProfessionalPublicProfileDto {
     weeklyRate: profile.weeklyRate ?? undefined,
     monthlyRate: profile.monthlyRate ?? undefined,
     currency: profile.currency ?? 'KES',
-
     
     // ========== VERIFICATION & TRUST ==========
     isVerified: profile.isVerified,
@@ -3069,6 +3090,13 @@ private mapToPublicProfile(profile: any): SkilledProfessionalPublicProfileDto {
     lastActiveAt: user?.lastLoginAt ?? profile.updatedAt,
     totalEarnings: totalEarnings,
     bookingAcceptanceRate: bookingAcceptanceRate,
+    
+    // ========== BOOKING FEE SETTINGS (Profile Level Default) ==========
+    profileBookingFeeEnabled: profile.profileBookingFeeEnabled ?? false,
+    profileBookingFeeAmount: profile.profileBookingFeeAmount ?? undefined,
+    profileBookingFeeCurrency: profile.profileBookingFeeCurrency ?? 'KES',
+    profileBookingFeeDescription: profile.profileBookingFeeDescription ?? undefined,
+    profileBookingFeeRefundable: profile.profileBookingFeeRefundable ?? false,
     
     // ========== EMERGENCY CONTACT ==========
     emergencyContact: profile.emergencyContact

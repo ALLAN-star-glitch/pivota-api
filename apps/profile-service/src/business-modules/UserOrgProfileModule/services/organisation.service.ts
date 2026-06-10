@@ -856,27 +856,32 @@ export class OrganisationService implements OnModuleInit {
     // For now, we'll skip validation and let the DB handle it via foreign keys
     
     const profile = await this.prisma.skilledProfessionalProfile.create({
-      data: {
-        accountUuid,
-        uuid: randomUUID(),
-        title: data.title,
-        // Remove profession field - we use categories now
-        // profession: data.profession,
-        specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
-        serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
-        yearsExperience: data.yearsExperience,
-        licenseNumber: data.licenseNumber,
-        insuranceInfo: data.insuranceInfo,
-        hourlyRate: data.hourlyRate,
-        dailyRate: data.dailyRate,
-        paymentTerms: data.paymentTerms,
-        availableToday: data.availableToday ?? false,
-        availableWeekends: data.availableWeekends ?? true,
-        emergencyService: data.emergencyService ?? false,
-        portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
-        certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
-      }
-    });
+    data: {
+      accountUuid,
+      uuid: randomUUID(),
+      title: data.title,
+      specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
+      serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
+      yearsExperience: data.yearsExperience,
+      licenseNumber: data.licenseNumber,
+      insuranceInfo: data.insuranceInfo,
+      hourlyRate: data.hourlyRate,
+      dailyRate: data.dailyRate,
+      paymentTerms: data.paymentTerms,
+      availableToday: data.availableToday ?? false,
+      availableWeekends: data.availableWeekends ?? true,
+      emergencyService: data.emergencyService ?? false,
+      portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
+      certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
+      
+      // ========== NEW: Booking Fee Fields ==========
+      profileBookingFeeEnabled: data.profileBookingFeeEnabled ?? false,
+      profileBookingFeeAmount: data.profileBookingFeeAmount ?? null,
+      profileBookingFeeCurrency: data.profileBookingFeeCurrency ?? 'KES',
+      profileBookingFeeDescription: data.profileBookingFeeDescription ?? null,
+      profileBookingFeeRefundable: data.profileBookingFeeRefundable ?? false,
+    }
+});
 
     // Create category relations if categories are provided
     if (data.primaryCategoryId || data.additionalCategoryIds?.length) {
@@ -1379,7 +1384,6 @@ export class OrganisationService implements OnModuleInit {
         where: { accountUuid },
         update: {
           title: data.title,
-          // profession: data.profession, // Remove this
           specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
           serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           yearsExperience: data.yearsExperience,
@@ -1393,12 +1397,18 @@ export class OrganisationService implements OnModuleInit {
           emergencyService: data.emergencyService,
           portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
           certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
+          
+          // ========== NEW: Booking Fee Fields ==========
+          profileBookingFeeEnabled: data.profileBookingFeeEnabled,
+          profileBookingFeeAmount: data.profileBookingFeeAmount,
+          profileBookingFeeCurrency: data.profileBookingFeeCurrency,
+          profileBookingFeeDescription: data.profileBookingFeeDescription,
+          profileBookingFeeRefundable: data.profileBookingFeeRefundable,
         },
         create: {
           accountUuid,
           uuid: randomUUID(),
           title: data.title,
-          // profession: data.profession,
           specialties: StringUtils.stringifyJsonField(data.specialties ?? []),
           serviceAreas: StringUtils.stringifyJsonField(data.serviceAreas ?? []),
           yearsExperience: data.yearsExperience,
@@ -1412,6 +1422,13 @@ export class OrganisationService implements OnModuleInit {
           emergencyService: data.emergencyService ?? false,
           portfolioImages: StringUtils.stringifyJsonField(data.portfolioImages ?? []),
           certifications: StringUtils.stringifyJsonField(data.certifications ?? []),
+          
+          // ========== NEW: Booking Fee Fields ==========
+          profileBookingFeeEnabled: data.profileBookingFeeEnabled ?? false,
+          profileBookingFeeAmount: data.profileBookingFeeAmount ?? null,
+          profileBookingFeeCurrency: data.profileBookingFeeCurrency ?? 'KES',
+          profileBookingFeeDescription: data.profileBookingFeeDescription ?? null,
+          profileBookingFeeRefundable: data.profileBookingFeeRefundable ?? false,
         },
       });
       
@@ -2305,6 +2322,14 @@ private mapToOrganizationProfileResponse(
     completionRate: profile.completionRate ?? undefined,
     portfolioImages: this.parseJsonField<string[]>(profile.portfolioImages, []),
     certifications: this.parseJsonField<string[]>(profile.certifications, []),
+    
+    // ========== NEW: Booking Fee Fields ==========
+    profileBookingFeeEnabled: profile.profileBookingFeeEnabled ?? false,
+    profileBookingFeeAmount: profile.profileBookingFeeAmount ?? undefined,
+    profileBookingFeeCurrency: profile.profileBookingFeeCurrency ?? 'KES',
+    profileBookingFeeDescription: profile.profileBookingFeeDescription ?? undefined,
+    profileBookingFeeRefundable: profile.profileBookingFeeRefundable ?? false,
+    
     completion: completion ? {
       percentage: completion,
       missingFields: missingFields || [],

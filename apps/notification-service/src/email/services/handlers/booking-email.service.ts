@@ -23,10 +23,17 @@ export class BookingEmailService {
     serviceTitle: string;
     scheduledDate: string;
     location: string;
-    price: string;
+    servicePrice: string;
+    bookingFee: string;
+    totalPrice: string;
+    isNegotiated: boolean;
     notes?: string;
   }): Promise<void> {
     const startTime = Date.now();
+
+    const negotiatedText = data.isNegotiated 
+      ? '<p><strong>Note:</strong> This price was negotiated and agreed upon.</p>'
+      : '';
 
     const content = `
       <h1>Booking Request Sent</h1>
@@ -40,7 +47,10 @@ export class BookingEmailService {
           <li><strong>Service Provider:</strong> ${data.contractorName}</li>
           <li><strong>Date & Time:</strong> ${data.scheduledDate}</li>
           <li><strong>Location:</strong> ${data.location}</li>
-          <li><strong>Total Price:</strong> ${data.price}</li>
+          <li><strong>Service Price:</strong> ${data.servicePrice}</li>
+          <li><strong>Booking Fee:</strong> ${data.bookingFee}</li>
+          <li><strong>Total Price:</strong> ${data.totalPrice}</li>
+          ${negotiatedText}
           ${data.notes ? `<li><strong>Your Notes:</strong> ${data.notes}</li>` : ''}
         </ul>
       </div>
@@ -60,7 +70,7 @@ export class BookingEmailService {
     const textContent = this.template.stripHtml(content);
 
     try {
-      const result = await this.mailerService.sendMail({
+      await this.mailerService.sendMail({
         to: data.to,
         subject: `Booking Request Sent: ${data.serviceTitle}`,
         html: htmlContent,
@@ -68,9 +78,9 @@ export class BookingEmailService {
       });
       
       const duration = Date.now() - startTime;
-      this.logger.log(`✅ Booking created email sent to customer ${data.to} in ${duration}ms`);
+      this.logger.log(`Booking created email sent to customer ${data.to} in ${duration}ms`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send booking created email to ${data.to}: ${error.message}`);
+      this.logger.error(`Failed to send booking created email to ${data.to}: ${error.message}`);
       throw error;
     }
   }
@@ -78,67 +88,73 @@ export class BookingEmailService {
   /**
    * Send booking created email to contractor
    */
+  async sendBookingCreatedContractor(data: {
+    to: string;
+    contractorName: string;
+    customerName: string;
+    customerPhone: string;
+    serviceTitle: string;
+    scheduledDate: string;
+    location: string;
+    servicePrice: string;
+    bookingFee: string;
+    totalPrice: string;
+    isNegotiated: boolean;
+    bookingExternalId: string;
+    notes?: string;
+  }): Promise<void> {
+    const startTime = Date.now();
 
-/**
- * Send booking created email to contractor
- */
-async sendBookingCreatedContractor(data: {
-  to: string;
-  contractorName: string;
-  customerName: string;
-  customerPhone: string;
-  serviceTitle: string;
-  scheduledDate: string;
-  location: string;
-  price: string;
-  bookingExternalId: string;  // ✅ Add this
-  notes?: string;
-}): Promise<void> {
-  const startTime = Date.now();
+    const negotiatedText = data.isNegotiated 
+      ? '<p><strong>Note:</strong> The customer has proposed a negotiated price for this service.</p>'
+      : '';
 
-  const content = `
-    <h1>New Booking Request</h1>
-    <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.contractorName},</p>
-    <p>You have a new booking request from <strong>${data.customerName}</strong> for your service.</p>
-    
-    <div class="info-box">
-      <h3>Booking Details</h3>
-      <ul>
-        <li><strong>Service:</strong> ${data.serviceTitle}</li>
-        <li><strong>Customer:</strong> ${data.customerName}</li>
-        <li><strong>Customer Phone:</strong> ${data.customerPhone}</li>
-        <li><strong>Date & Time:</strong> ${data.scheduledDate}</li>
-        <li><strong>Location:</strong> ${data.location}</li>
-        <li><strong>Total Price:</strong> ${data.price}</li>
-        ${data.notes ? `<li><strong>Customer Notes:</strong> ${data.notes}</li>` : ''}
-      </ul>
-    </div>
-    
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="${this.template.getSocial().website}/contractor/bookings/${data.bookingExternalId}" class="button">Review & Respond</a>
-    </div>
-    
-    <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">Please respond within 24 hours to confirm or decline this booking.</p>
-  `;
+    const content = `
+      <h1>New Booking Request</h1>
+      <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.contractorName},</p>
+      <p>You have a new booking request from <strong>${data.customerName}</strong> for your service.</p>
+      
+      <div class="info-box">
+        <h3>Booking Details</h3>
+        <ul>
+          <li><strong>Service:</strong> ${data.serviceTitle}</li>
+          <li><strong>Customer:</strong> ${data.customerName}</li>
+          <li><strong>Customer Phone:</strong> ${data.customerPhone}</li>
+          <li><strong>Date & Time:</strong> ${data.scheduledDate}</li>
+          <li><strong>Location:</strong> ${data.location}</li>
+          <li><strong>Service Price:</strong> ${data.servicePrice}</li>
+          <li><strong>Booking Fee:</strong> ${data.bookingFee}</li>
+          <li><strong>Total Price:</strong> ${data.totalPrice}</li>
+          ${negotiatedText}
+          ${data.notes ? `<li><strong>Customer Notes:</strong> ${data.notes}</li>` : ''}
+        </ul>
+      </div>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${this.template.getSocial().website}/contractor/bookings/${data.bookingExternalId}" class="button">Review & Respond</a>
+      </div>
+      
+      <p style="font-size: 14px; color: ${this.template.getColors().textSecondary};">Please respond within 24 hours to confirm or decline this booking.</p>
+    `;
 
-  const htmlContent = this.template.render(content);
-  const textContent = this.template.stripHtml(content);
+    const htmlContent = this.template.render(content);
+    const textContent = this.template.stripHtml(content);
 
-  try {
-    const result = await this.mailerService.sendMail({
-      to: data.to,
-      subject: `New Booking Request: ${data.serviceTitle}`,
-      html: htmlContent,
-      text: textContent,
-    });
-    
-    const duration = Date.now() - startTime;
-    this.logger.log(`✅ Booking created email sent to contractor ${data.to} in ${duration}ms`);
-  } catch (error) {
-    this.logger.error(`❌ Failed to send booking created email to contractor ${data.to}: ${error.message}`);
-    throw error;
+    try {
+      await this.mailerService.sendMail({
+        to: data.to,
+        subject: `New Booking Request: ${data.serviceTitle}`,
+        html: htmlContent,
+        text: textContent,
+      });
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`Booking created email sent to contractor ${data.to} in ${duration}ms`);
+    } catch (error) {
+      this.logger.error(`Failed to send booking created email to contractor ${data.to}: ${error.message}`);
+      throw error;
+    }
   }
-}
 
   /**
    * Send booking confirmed email to customer
@@ -150,14 +166,14 @@ async sendBookingCreatedContractor(data: {
     serviceTitle: string;
     scheduledDate: string;
     location: string;
-    price: string;
+    totalAmount: string;
   }): Promise<void> {
     const startTime = Date.now();
 
     const content = `
-      <h1>Booking Confirmed! ✓</h1>
+      <h1>Booking Confirmed</h1>
       <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.customerName},</p>
-      <p>Great news! <strong>${data.contractorName}</strong> has confirmed your booking.</p>
+      <p>Good news! <strong>${data.contractorName}</strong> has confirmed your booking.</p>
       
       <div class="success-box">
         <h3>Booking Confirmed</h3>
@@ -166,7 +182,7 @@ async sendBookingCreatedContractor(data: {
           <li><strong>Service Provider:</strong> ${data.contractorName}</li>
           <li><strong>Date & Time:</strong> ${data.scheduledDate}</li>
           <li><strong>Location:</strong> ${data.location}</li>
-          <li><strong>Total Price:</strong> ${data.price}</li>
+          <li><strong>Total Amount:</strong> ${data.totalAmount}</li>
         </ul>
       </div>
       
@@ -185,7 +201,7 @@ async sendBookingCreatedContractor(data: {
     const textContent = this.template.stripHtml(content);
 
     try {
-      const result = await this.mailerService.sendMail({
+      await this.mailerService.sendMail({
         to: data.to,
         subject: `Booking Confirmed: ${data.serviceTitle}`,
         html: htmlContent,
@@ -193,9 +209,9 @@ async sendBookingCreatedContractor(data: {
       });
       
       const duration = Date.now() - startTime;
-      this.logger.log(`✅ Booking confirmed email sent to customer ${data.to} in ${duration}ms`);
+      this.logger.log(`Booking confirmed email sent to customer ${data.to} in ${duration}ms`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send booking confirmed email to ${data.to}: ${error.message}`);
+      this.logger.error(`Failed to send booking confirmed email to ${data.to}: ${error.message}`);
       throw error;
     }
   }
@@ -211,7 +227,7 @@ async sendBookingCreatedContractor(data: {
     serviceTitle: string;
     scheduledDate: string;
     location: string;
-    price: string;
+    totalAmount: string;
   }): Promise<void> {
     const startTime = Date.now();
 
@@ -228,10 +244,10 @@ async sendBookingCreatedContractor(data: {
           <li><strong>Customer Phone:</strong> ${data.customerPhone}</li>
           <li><strong>Date & Time:</strong> ${data.scheduledDate}</li>
           <li><strong>Location:</strong> ${data.location}</li>
-          <li><strong>Total Price:</strong> ${data.price}</li>
+          <li><strong>Total Amount:</strong> ${data.totalAmount}</li>
         </ul>
       </div>
-      
+       
       <div class="success-box">
         <p>Payment is secured in escrow and will be released after you complete the service.</p>
       </div>
@@ -245,7 +261,7 @@ async sendBookingCreatedContractor(data: {
     const textContent = this.template.stripHtml(content);
 
     try {
-      const result = await this.mailerService.sendMail({
+      await this.mailerService.sendMail({
         to: data.to,
         subject: `Booking Confirmed: ${data.serviceTitle}`,
         html: htmlContent,
@@ -253,9 +269,9 @@ async sendBookingCreatedContractor(data: {
       });
       
       const duration = Date.now() - startTime;
-      this.logger.log(`✅ Booking confirmed email sent to contractor ${data.to} in ${duration}ms`);
+      this.logger.log(`Booking confirmed email sent to contractor ${data.to} in ${duration}ms`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send booking confirmed email to contractor ${data.to}: ${error.message}`);
+      this.logger.error(`Failed to send booking confirmed email to contractor ${data.to}: ${error.message}`);
       throw error;
     }
   }
@@ -270,6 +286,7 @@ async sendBookingCreatedContractor(data: {
     serviceTitle: string;
     scheduledDate: string;
     reason?: string;
+    declinedBy: string;
   }): Promise<void> {
     const startTime = Date.now();
 
@@ -300,7 +317,7 @@ async sendBookingCreatedContractor(data: {
     const textContent = this.template.stripHtml(content);
 
     try {
-      const result = await this.mailerService.sendMail({
+      await this.mailerService.sendMail({
         to: data.to,
         subject: `Booking Declined: ${data.serviceTitle}`,
         html: htmlContent,
@@ -308,9 +325,9 @@ async sendBookingCreatedContractor(data: {
       });
       
       const duration = Date.now() - startTime;
-      this.logger.log(`✅ Booking declined email sent to customer ${data.to} in ${duration}ms`);
+      this.logger.log(`Booking declined email sent to customer ${data.to} in ${duration}ms`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send booking declined email to ${data.to}: ${error.message}`);
+      this.logger.error(`Failed to send booking declined email to ${data.to}: ${error.message}`);
       throw error;
     }
   }
@@ -352,7 +369,7 @@ async sendBookingCreatedContractor(data: {
     const textContent = this.template.stripHtml(content);
 
     try {
-      const result = await this.mailerService.sendMail({
+      await this.mailerService.sendMail({
         to: data.to,
         subject: `Booking Declined: ${data.serviceTitle}`,
         html: htmlContent,
@@ -360,9 +377,9 @@ async sendBookingCreatedContractor(data: {
       });
       
       const duration = Date.now() - startTime;
-      this.logger.log(`✅ Booking declined confirmation sent to contractor ${data.to} in ${duration}ms`);
+      this.logger.log(`Booking declined confirmation sent to contractor ${data.to} in ${duration}ms`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send booking declined confirmation to contractor ${data.to}: ${error.message}`);
+      this.logger.error(`Failed to send booking declined confirmation to contractor ${data.to}: ${error.message}`);
       throw error;
     }
   }
@@ -376,6 +393,7 @@ async sendBookingCreatedContractor(data: {
     contractorName: string;
     serviceTitle: string;
     scheduledDate: string;
+    location: string;
     reason?: string;
     cancelledBy: string;
   }): Promise<void> {
@@ -384,15 +402,16 @@ async sendBookingCreatedContractor(data: {
     const content = `
       <h1>Booking Cancelled</h1>
       <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.customerName},</p>
-      <p>You have cancelled your booking for <strong>${data.serviceTitle}</strong>.</p>
+      <p>The booking for <strong>${data.serviceTitle}</strong> has been cancelled.</p>
       
       <div class="info-box">
         <h3>Cancelled Booking Details</h3>
         <ul>
           <li><strong>Service:</strong> ${data.serviceTitle}</li>
           <li><strong>Service Provider:</strong> ${data.contractorName}</li>
-          <li><strong>Cancelled By:</strong> ${data.customerName}</li>
+          <li><strong>Cancelled By:</strong> ${data.cancelledBy === 'client' ? 'You' : data.cancelledBy}</li>
           <li><strong>Original Date:</strong> ${data.scheduledDate}</li>
+          <li><strong>Location:</strong> ${data.location}</li>
           ${data.reason ? `<li><strong>Cancellation Reason:</strong> ${data.reason}</li>` : ''}
         </ul>
       </div>
@@ -410,7 +429,7 @@ async sendBookingCreatedContractor(data: {
     const textContent = this.template.stripHtml(content);
 
     try {
-      const result = await this.mailerService.sendMail({
+      await this.mailerService.sendMail({
         to: data.to,
         subject: `Booking Cancelled: ${data.serviceTitle}`,
         html: htmlContent,
@@ -418,9 +437,9 @@ async sendBookingCreatedContractor(data: {
       });
       
       const duration = Date.now() - startTime;
-      this.logger.log(`✅ Booking cancelled email sent to customer ${data.to} in ${duration}ms`);
+      this.logger.log(`Booking cancelled email sent to customer ${data.to} in ${duration}ms`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send booking cancelled email to ${data.to}: ${error.message}`);
+      this.logger.error(`Failed to send booking cancelled email to ${data.to}: ${error.message}`);
       throw error;
     }
   }
@@ -432,8 +451,10 @@ async sendBookingCreatedContractor(data: {
     to: string;
     contractorName: string;
     customerName: string;
+    customerPhone: string;
     serviceTitle: string;
     scheduledDate: string;
+    location: string;
     reason?: string;
     cancelledBy: string;
   }): Promise<void> {
@@ -450,7 +471,9 @@ async sendBookingCreatedContractor(data: {
         <ul>
           <li><strong>Service:</strong> ${data.serviceTitle}</li>
           <li><strong>Customer:</strong> ${data.customerName}</li>
+          <li><strong>Customer Phone:</strong> ${data.customerPhone}</li>
           <li><strong>Original Date:</strong> ${data.scheduledDate}</li>
+          <li><strong>Location:</strong> ${data.location}</li>
           ${data.reason ? `<li><strong>Cancellation Reason:</strong> ${data.reason}</li>` : ''}
         </ul>
       </div>
@@ -464,7 +487,7 @@ async sendBookingCreatedContractor(data: {
     const textContent = this.template.stripHtml(content);
 
     try {
-      const result = await this.mailerService.sendMail({
+      await this.mailerService.sendMail({
         to: data.to,
         subject: `Booking Cancelled: ${data.serviceTitle}`,
         html: htmlContent,
@@ -472,119 +495,9 @@ async sendBookingCreatedContractor(data: {
       });
       
       const duration = Date.now() - startTime;
-      this.logger.log(`✅ Booking cancelled email sent to contractor ${data.to} in ${duration}ms`);
+      this.logger.log(`Booking cancelled email sent to contractor ${data.to} in ${duration}ms`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send booking cancelled email to contractor ${data.to}: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Send booking completed email to customer
-   */
-  async sendBookingCompletedCustomer(data: {
-    to: string;
-    customerName: string;
-    contractorName: string;
-    serviceTitle: string;
-    price: string;
-  }): Promise<void> {
-    const startTime = Date.now();
-
-    const content = `
-      <h1>Service Completed! ✓</h1>
-      <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.customerName},</p>
-      <p><strong>${data.contractorName}</strong> has marked your service as completed.</p>
-      
-      <div class="info-box">
-        <h3>Service Details</h3>
-        <ul>
-          <li><strong>Service:</strong> ${data.serviceTitle}</li>
-          <li><strong>Service Provider:</strong> ${data.contractorName}</li>
-          <li><strong>Amount Paid:</strong> ${data.price}</li>
-        </ul>
-      </div>
-      
-      <div class="success-box">
-        <p><strong>What's next?</strong></p>
-        <p>Please review the service and confirm completion. If everything is satisfactory, the payment will be released to the provider.</p>
-        <p>You have 48 hours to raise any issues.</p>
-      </div>
-      
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${this.template.getSocial().website}/bookings" class="button">Review Service</a>
-      </div>
-    `;
-
-    const htmlContent = this.template.render(content);
-    const textContent = this.template.stripHtml(content);
-
-    try {
-      const result = await this.mailerService.sendMail({
-        to: data.to,
-        subject: `Service Completed: ${data.serviceTitle}`,
-        html: htmlContent,
-        text: textContent,
-      });
-      
-      const duration = Date.now() - startTime;
-      this.logger.log(`✅ Booking completed email sent to customer ${data.to} in ${duration}ms`);
-    } catch (error) {
-      this.logger.error(`❌ Failed to send booking completed email to ${data.to}: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Send booking completed email to contractor
-   */
-  async sendBookingCompletedContractor(data: {
-    to: string;
-    contractorName: string;
-    customerName: string;
-    serviceTitle: string;
-    price: string;
-  }): Promise<void> {
-    const startTime = Date.now();
-
-    const content = `
-      <h1>Service Completed</h1>
-      <p style="font-size: 18px; color: ${this.template.getColors().primary};">Hello ${data.contractorName},</p>
-      <p>You have marked <strong>${data.serviceTitle}</strong> as completed for <strong>${data.customerName}</strong>.</p>
-      
-      <div class="info-box">
-        <h3>Service Summary</h3>
-        <ul>
-          <li><strong>Service:</strong> ${data.serviceTitle}</li>
-          <li><strong>Customer:</strong> ${data.customerName}</li>
-          <li><strong>Amount:</strong> ${data.price}</li>
-        </ul>
-      </div>
-      
-      <div class="success-box">
-        <p><strong>Payment Status:</strong> The customer has 48 hours to review the service. After that, the payment will be automatically released to your account.</p>
-      </div>
-      
-      <div style="text-align: center;">
-        <a href="${this.template.getSocial().website}/contractor/earnings" class="button">View Earnings</a>
-      </div>
-    `;
-
-    const htmlContent = this.template.render(content);
-    const textContent = this.template.stripHtml(content);
-
-    try {
-      const result = await this.mailerService.sendMail({
-        to: data.to,
-        subject: `Service Completed: ${data.serviceTitle}`,
-        html: htmlContent,
-        text: textContent,
-      });
-      
-      const duration = Date.now() - startTime;
-      this.logger.log(`✅ Booking completed email sent to contractor ${data.to} in ${duration}ms`);
-    } catch (error) {
-      this.logger.error(`❌ Failed to send booking completed email to contractor ${data.to}: ${error.message}`);
+      this.logger.error(`Failed to send booking cancelled email to contractor ${data.to}: ${error.message}`);
       throw error;
     }
   }
@@ -632,7 +545,7 @@ async sendBookingCreatedContractor(data: {
     const textContent = this.template.stripHtml(content);
 
     try {
-      const result = await this.mailerService.sendMail({
+      await this.mailerService.sendMail({
         to: data.to,
         subject: `Reminder: ${data.serviceTitle} in ${data.hoursRemaining} hours`,
         html: htmlContent,
@@ -640,9 +553,9 @@ async sendBookingCreatedContractor(data: {
       });
       
       const duration = Date.now() - startTime;
-      this.logger.log(`✅ Booking reminder email sent to customer ${data.to} in ${duration}ms`);
+      this.logger.log(`Booking reminder email sent to customer ${data.to} in ${duration}ms`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send booking reminder email to ${data.to}: ${error.message}`);
+      this.logger.error(`Failed to send booking reminder email to ${data.to}: ${error.message}`);
       throw error;
     }
   }
@@ -687,7 +600,7 @@ async sendBookingCreatedContractor(data: {
     const textContent = this.template.stripHtml(content);
 
     try {
-      const result = await this.mailerService.sendMail({
+      await this.mailerService.sendMail({
         to: data.to,
         subject: `Reminder: ${data.serviceTitle} in ${data.hoursRemaining} hours`,
         html: htmlContent,
@@ -695,9 +608,9 @@ async sendBookingCreatedContractor(data: {
       });
       
       const duration = Date.now() - startTime;
-      this.logger.log(`✅ Booking reminder email sent to contractor ${data.to} in ${duration}ms`);
+      this.logger.log(`Booking reminder email sent to contractor ${data.to} in ${duration}ms`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send booking reminder email to contractor ${data.to}: ${error.message}`);
+      this.logger.error(`Failed to send booking reminder email to contractor ${data.to}: ${error.message}`);
       throw error;
     }
   }
@@ -719,23 +632,31 @@ async sendBookingCreatedContractor(data: {
       clientName: string;
       serviceTitle: string;
       status: string;
+      executionStatus?: string;
       price: string;
+      totalAmount: string;
     }>;
   }): Promise<void> {
     const startTime = Date.now();
     const formattedDate = this.template.formatDate(new Date(data.date), 'MMMM do, yyyy');
 
-    const bookingsList = data.bookings.map(booking => `
+    const bookingsList = data.bookings.map(booking => {
+      const statusDisplay = booking.executionStatus && booking.executionStatus !== booking.status
+        ? `${booking.status} (Service: ${booking.executionStatus})`
+        : booking.status;
+      
+      return `
       <tr>
         <td style="padding: 8px; border-bottom: 1px solid ${this.template.getColors().borderLight};">${booking.time}</td>
         <td style="padding: 8px; border-bottom: 1px solid ${this.template.getColors().borderLight};">${booking.clientName}</td>
         <td style="padding: 8px; border-bottom: 1px solid ${this.template.getColors().borderLight};">${booking.serviceTitle}</td>
         <td style="padding: 8px; border-bottom: 1px solid ${this.template.getColors().borderLight};">
-          <span class="role-badge">${booking.status}</span>
+          <span class="role-badge">${statusDisplay}</span>
         </td>
         <td style="padding: 8px; border-bottom: 1px solid ${this.template.getColors().borderLight};">${booking.price}</td>
+        <td style="padding: 8px; border-bottom: 1px solid ${this.template.getColors().borderLight};">${booking.totalAmount}</td>
       </tr>
-    `).join('');
+    `}).join('');
 
     const content = `
       <h1>Daily Summary</h1>
@@ -763,6 +684,7 @@ async sendBookingCreatedContractor(data: {
               <th style="text-align: left; padding: 8px; background: ${this.template.getColors().neutralVariant}20;">Service</th>
               <th style="text-align: left; padding: 8px; background: ${this.template.getColors().neutralVariant}20;">Status</th>
               <th style="text-align: left; padding: 8px; background: ${this.template.getColors().neutralVariant}20;">Price</th>
+              <th style="text-align: left; padding: 8px; background: ${this.template.getColors().neutralVariant}20;">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -780,7 +702,7 @@ async sendBookingCreatedContractor(data: {
     const textContent = this.template.stripHtml(content);
 
     try {
-      const result = await this.mailerService.sendMail({
+      await this.mailerService.sendMail({
         to: data.to,
         subject: `Daily Summary - ${formattedDate}`,
         html: htmlContent,
@@ -788,9 +710,9 @@ async sendBookingCreatedContractor(data: {
       });
       
       const duration = Date.now() - startTime;
-      this.logger.log(`✅ Daily summary email sent to contractor ${data.to} in ${duration}ms`);
+      this.logger.log(`Daily summary email sent to contractor ${data.to} in ${duration}ms`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send daily summary to contractor ${data.to}: ${error.message}`);
+      this.logger.error(`Failed to send daily summary to contractor ${data.to}: ${error.message}`);
       throw error;
     }
   }
@@ -827,7 +749,7 @@ async sendBookingCreatedContractor(data: {
     const textContent = this.template.stripHtml(content);
 
     try {
-      const result = await this.mailerService.sendMail({
+      await this.mailerService.sendMail({
         to: data.to,
         subject: `Share Your Experience: ${data.serviceTitle}`,
         html: htmlContent,
@@ -835,9 +757,9 @@ async sendBookingCreatedContractor(data: {
       });
       
       const duration = Date.now() - startTime;
-      this.logger.log(`✅ Review request email sent to ${data.to} in ${duration}ms`);
+      this.logger.log(`Review request email sent to ${data.to} in ${duration}ms`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send review request email to ${data.to}: ${error.message}`);
+      this.logger.error(`Failed to send review request email to ${data.to}: ${error.message}`);
       throw error;
     }
   }

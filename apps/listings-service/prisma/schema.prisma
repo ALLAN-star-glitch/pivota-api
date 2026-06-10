@@ -255,57 +255,56 @@ model ServiceOffering {
   externalId   String   @default(uuid()) @unique
   
   // --- EXTERNAL IDENTITY ANCHORS (From Profile Service) ---
-  // The user who created this offering (from JWT)
   creatorId    String   
-  // The account (Individual or Organization) that owns this offering
   accountId    String   
-  
-  // --- DIRECT LINK TO SKILLED PROFESSIONAL PROFILE ---
-  // UUID from Profile Service's SkilledProfessionalProfile
-  // This is the PRIMARY link - all professional data comes from here
   skilledProfessionalId String  
-  // TODO: Add relation when profile service is migrated to same DB or via foreign key
-  // For now, this is a reference UUID without DB constraint
   
-  // --- DENORMALIZED FIELDS (For performance, fetched from Profile Service) ---
-  // These are snapshots at creation time, can be refreshed periodically
-  professionalName   String?   // Denormalized from profile
-  professionalAvatar String?   // Denormalized from profile
-  isVerified         Boolean   @default(false)  // Denormalized from profile
-  yearsExperience    Int?      // Denormalized from profile
-  hourlyRate         Float?    // Denormalized from profile's default rate
+  // --- DENORMALIZED FIELDS (From Profile Service) ---
+  professionalName   String?
+  professionalAvatar String?
+  isVerified         Boolean   @default(false)
+  yearsExperience    Int?
+  hourlyRate         Float?
   
-  // --- SERVICE COVERAGE (Where this service is available) ---
-  // JSON array of cities/neighborhoods where this service can be delivered
-  // Format: ["Nairobi CBD", "Westlands", "Kilimani"] or ["Nairobi", "Kiambu"]
-  // This is the PRIMARY location field for the offering
+  // --- SERVICE COVERAGE ---
   coverageAreas      Json?     
   
   // --- LISTING DETAILS ---
   title        String   
   description  String
   
-  // Categories from Listings Service
+  // Categories
   categoryId   String
   category     Category @relation("ServiceMainCategory", fields: [categoryId], references: [id])
-  
   subCategoryId String?
   subCategory   Category? @relation("ServiceSubcategory", fields: [subCategoryId], references: [id])
   
   // --- PRICING ---
   basePrice    Float
-  priceUnit    String   @default("PER_HOUR") // PER_HOUR, PER_DAY, FIXED, PER_SESSION
+  priceUnit    String   @default("PER_HOUR")
   currency     String   @default("KES")
   
+  // ========== SERVICE-LEVEL BOOKING FEE (OVERRIDE) ==========
+  // When true, use the override values below instead of profile defaults
+  useCustomBookingFee      Boolean   @default(false)
+
+  // ========== NEGOTIABLE PRICING ==========
+  isNegotiable        Boolean   @default(true)   // Can customer negotiate the price?
+  minNegotiablePrice  Float?                     // Minimum price willing to accept (if negotiable)
+  maxNegotiablePrice  Float?                     // Maximum price (if they have an upper limit)
+  
+  // Override values (only used if useCustomBookingFee = true)
+  customBookingFeeEnabled  Boolean?  // Override the enabled status
+  customBookingFeeAmount   Float?    // Specific amount for THIS service
+  customBookingFeeCurrency String?   @default("KES")
+  customBookingFeeDescription String? // Custom description for this service
+  customBookingFeeRefundable Boolean? // Custom cancellation policy
+  
   // --- AVAILABILITY & SCHEDULING ---
-  availability    String?  // JSON string for weekly schedule
-  // Example: {"monday": ["09:00-17:00"], "tuesday": ["09:00-17:00"]}
+  availability    String?
+  status     String   @default("ACTIVE")
+  expiresAt  DateTime?
   
-  // --- STATUS & LIFECYCLE ---
-  status     String   @default("ACTIVE")  // ACTIVE, PAUSED, ARCHIVED, DRAFT
-  expiresAt  DateTime?  // Auto-archive after expiration
-  
-  // --- TIMESTAMPS ---
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -319,15 +318,22 @@ model ServiceOffering {
   @@index([creatorId])
   @@index([categoryId])
   @@index([status])
+  @@index([useCustomBookingFee])
   @@index([createdAt])
 }
 
 enum BookingStatus {
   PENDING    // Booking created, waiting for contractor response
   CONFIRMED  // Contractor accepted the booking
-  COMPLETED  // Service completed successfully
   CANCELLED  // Cancelled by client or contractor (after confirmation)
   DECLINED   // Contractor declined the booking
+}
+
+// NEW: Service execution status (separate from booking)
+enum ServiceExecutionStatus {
+  NOT_STARTED   // Service not yet begun (default after booking confirmed)
+  IN_PROGRESS   // Service is actively in progress  // <-- CHANGED from STARTED
+  COMPLETED     // Service completed successfully
 }
 
 /// =====================================================================
@@ -338,27 +344,26 @@ model ServiceBooking {
   externalId    String   @default(uuid()) @unique
 
   // ======================
-  // THE WHO (External IDs)
+  // THE WHO
   // ======================
-  // The Provider (Individual or Org) from Profile DB
   contractorId  String   
-  // The User/Beneficiary from Profile DB
-  clientId      String   
+  clientId      String  
+
+  serviceExecutionStatus ServiceExecutionStatus @default(NOT_STARTED)
 
   // ======================
   // THE WHAT
   // ======================
-  // Link to a specific storefront item (Optional if booking contractor generally)
   serviceId     String?
   service       ServiceOffering? @relation(fields: [serviceId], references: [id])
 
-  // Denormalized for quick display in "My Bookings" & Notifications
-  contractorName String?   // Contractor's full name
-  contractorEmail String?  //  ADD THIS - Contractor's email for notifications
-  contractorPhone String?  //  ADD THIS - Contractor's phone for SMS (future)
-  clientName     String?   // Client's name at time of booking
-  clientPhone    String?   // Client's phone for SMS notifications
-  clientEmail    String?   // Client's email for email notifications
+  // Denormalized for quick display
+  contractorName String?
+  contractorEmail String?
+  contractorPhone String?
+  clientName     String?
+  clientPhone    String?
+  clientEmail    String?
   serviceTitle   String?  
 
   // ======================
@@ -367,19 +372,36 @@ model ServiceBooking {
   status        BookingStatus @default(PENDING)
   scheduledDate DateTime?
   locationCity  String?
+
+  reminderSent24h Boolean @default(false)
+  reminderSent12h Boolean @default(false)
+  reminderSent1h  Boolean @default(false)
   
   // ======================
-  // FINANCIALS & NOTES
+  // PRICING BREAKDOWN (Snapshot at booking time)
   // ======================
-  agreedPrice   Float?
-  currency      String    @default("KES")
-  customerNotes String?   // "Please come after 2 PM"
+  servicePrice      Float?    // Base service price (basePrice * duration)
+  servicePriceUnit  String?   // What unit was used (PER_HOUR, PER_DAY, etc.)
+  serviceDuration   Int?      // Duration in the unit (e.g., 2 hours, 3 days)
   
-  // Optional timestamps for tracking state changes
-  confirmedAt   DateTime?  // When contractor accepted
-  declinedAt    DateTime?  // When contractor declined
-  cancelledAt   DateTime?  // When cancelled by client/contractor
-  completedAt   DateTime?  // When service was completed
+  // Booking fee (snapshot of what was charged)
+  bookingFeeAmount  Float?    // Amount charged for booking fee
+  bookingFeeCurrency String?  @default("KES")
+  bookingFeeRefundable Boolean? @default(false)  // Was fee refundable per policy at booking time?
+  
+  // Total amount customer pays
+  totalAmount       Float?    // servicePrice + bookingFeeAmount
+  
+  currency          String    @default("KES")
+  customerNotes     String?
+  
+  // ======================
+  // BOOKING LIFECYCLE TIMESTAMPS
+  // ======================
+  confirmedAt   DateTime?
+  declinedAt    DateTime?
+  cancelledAt   DateTime?
+  completedAt   DateTime?
   
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

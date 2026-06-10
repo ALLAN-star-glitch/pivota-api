@@ -203,6 +203,13 @@ message SkilledProfessionalProfileData {
   optional string primaryCategoryId = 16;
   optional int32 yearsExperienceInCategory = 17;
   repeated string additionalCategoryIds = 18;
+  
+  // ========== NEW: BOOKING FEE FIELDS (Profile Level Default) ==========
+  optional bool profileBookingFeeEnabled = 19;      // Whether professional charges a booking fee by default
+  optional double profileBookingFeeAmount = 20;      // Default booking fee amount (e.g., 500)
+  optional string profileBookingFeeCurrency = 21;    // Default currency (e.g., "KES")
+  optional string profileBookingFeeDescription = 22; // Default description shown to customers
+  optional bool profileBookingFeeRefundable = 23;    // Is fee refundable on cancellation?
 }
 
 message IntermediaryAgentProfileData {
@@ -518,10 +525,17 @@ message UpdateSkilledProfessionalProfileRequest {
   repeated string portfolioImages = 15;
   repeated string certifications = 16;
   
-  // NEW: Category fields for skilled professionals
+  // Category fields for skilled professionals
   optional string primaryCategoryId = 17;
   optional int32 yearsExperienceInCategory = 18;
   repeated string additionalCategoryIds = 19;
+  
+  // ========== NEW: BOOKING FEE FIELDS (Profile Level Default) ==========
+  optional bool profileBookingFeeEnabled = 20;      // Whether professional charges a booking fee by default
+  optional double profileBookingFeeAmount = 21;      // Default booking fee amount (e.g., 500)
+  optional string profileBookingFeeCurrency = 22;    // Default currency (e.g., "KES")
+  optional string profileBookingFeeDescription = 23; // Default description shown to customers
+  optional bool profileBookingFeeRefundable = 24;    // Is fee refundable on cancellation?
 }
 
 message UpdateHousingSeekerProfileRequest {
@@ -969,9 +983,16 @@ message SkilledProfessionalData {
   int32 totalReviews = 13;
   repeated string portfolioImages = 14;
   
-  // NEW: Category fields for response
+  // Category fields for response
   optional ProfessionalCategory primaryCategory = 15;
   repeated ProfessionalCategory additionalCategories = 16;
+  
+  // ========== NEW: BOOKING FEE FIELDS (Profile Level Default) ==========
+  optional bool profileBookingFeeEnabled = 17;      // Whether professional charges a booking fee by default
+  optional double profileBookingFeeAmount = 18;      // Default booking fee amount
+  optional string profileBookingFeeCurrency = 19;    // Default currency
+  optional string profileBookingFeeDescription = 20; // Default description
+  optional bool profileBookingFeeRefundable = 21;    // Is fee refundable on cancellation?
 }
 
 // NEW: Professional category message

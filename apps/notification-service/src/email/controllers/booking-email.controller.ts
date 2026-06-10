@@ -11,10 +11,11 @@
  * - booking.confirmed.* - Booking confirmed (customer/contractor)
  * - booking.declined.* - Booking declined (customer/contractor)
  * - booking.cancelled.* - Booking cancelled (customer/contractor)
- * - booking.completed.* - Service completed (customer/contractor)
  * - booking.reminder.* - Upcoming booking reminder
  * - contractor.daily.summary - Daily summary for contractors
  * - review.request - Request for service review
+ * 
+ * Note: booking.completed has been removed - service completion is now tracked by ServiceExecutionStatus
  * 
  * @example
  * // Event payload for booking created (customer)
@@ -25,7 +26,10 @@
  *   serviceTitle: 'House Painting',
  *   scheduledDate: 'March 25, 2024 at 2:00 PM',
  *   location: 'Nairobi',
- *   price: 'KES 5,000',
+ *   servicePrice: 'KES 3,000',
+ *   bookingFee: 'KES 500',
+ *   totalPrice: 'KES 3,500',
+ *   isNegotiated: false,
  *   notes: 'Please call when you arrive'
  * }
  * 
@@ -38,7 +42,10 @@
  *   serviceTitle: 'House Painting',
  *   scheduledDate: 'March 25, 2024 at 2:00 PM',
  *   location: 'Nairobi',
- *   price: 'KES 5,000',
+ *   servicePrice: 'KES 3,000',
+ *   bookingFee: 'KES 500',
+ *   totalPrice: 'KES 3,500',
+ *   isNegotiated: false,
  *   bookingExternalId: 'booking-uuid-123',
  *   notes: 'Please call when you arrive'
  * }
@@ -69,7 +76,10 @@ export class BookingEmailController {
       serviceTitle: string;
       scheduledDate: string;
       location: string;
-      price: string;
+      servicePrice: string;
+      bookingFee: string;
+      totalPrice: string;
+      isNegotiated: boolean;
       notes?: string;
     },
     @Ctx() context: RmqContext
@@ -79,6 +89,10 @@ export class BookingEmailController {
     console.log('👤 Customer:', data.customerName);
     console.log('🔧 Contractor:', data.contractorName);
     console.log('📋 Service:', data.serviceTitle);
+    console.log('💰 Service Price:', data.servicePrice);
+    console.log('💰 Booking Fee:', data.bookingFee);
+    console.log('💰 Total:', data.totalPrice);
+    console.log('🤝 Negotiated:', data.isNegotiated);
     
     this.logger.debug(`[RMQ] Booking created event for customer: ${data.to}`);
     await this.processEvent(
@@ -101,7 +115,10 @@ export class BookingEmailController {
       serviceTitle: string;
       scheduledDate: string;
       location: string;
-      price: string;
+      servicePrice: string;
+      bookingFee: string;
+      totalPrice: string;
+      isNegotiated: boolean;
       bookingExternalId: string;
       notes?: string;
     },
@@ -112,6 +129,9 @@ export class BookingEmailController {
     console.log('👤 Contractor:', data.contractorName);
     console.log('👤 Customer:', data.customerName);
     console.log('📋 Service:', data.serviceTitle);
+    console.log('💰 Service Price:', data.servicePrice);
+    console.log('💰 Booking Fee:', data.bookingFee);
+    console.log('💰 Total:', data.totalPrice);
     console.log('🆔 Booking ID:', data.bookingExternalId);
     
     this.logger.debug(`[RMQ] Booking created event for contractor: ${data.to}`);
@@ -122,6 +142,7 @@ export class BookingEmailController {
     );
   }
 
+  
   /**
    * Handle booking confirmed - Customer email
    */
@@ -134,7 +155,7 @@ export class BookingEmailController {
       serviceTitle: string;
       scheduledDate: string;
       location: string;
-      price: string;
+      totalAmount: string;
     },
     @Ctx() context: RmqContext
   ) {
@@ -143,6 +164,7 @@ export class BookingEmailController {
     console.log('👤 Customer:', data.customerName);
     console.log('🔧 Contractor:', data.contractorName);
     console.log('📋 Service:', data.serviceTitle);
+    console.log('💰 Total Amount:', data.totalAmount);
     
     this.logger.debug(`[RMQ] Booking confirmed event for customer: ${data.to}`);
     await this.processEvent(
@@ -165,7 +187,7 @@ export class BookingEmailController {
       serviceTitle: string;
       scheduledDate: string;
       location: string;
-      price: string;
+      totalAmount: string;
     },
     @Ctx() context: RmqContext
   ) {
@@ -174,6 +196,7 @@ export class BookingEmailController {
     console.log('👤 Contractor:', data.contractorName);
     console.log('👤 Customer:', data.customerName);
     console.log('📋 Service:', data.serviceTitle);
+    console.log('💰 Total Amount:', data.totalAmount);
     
     this.logger.debug(`[RMQ] Booking confirmed event for contractor: ${data.to}`);
     await this.processEvent(
@@ -195,6 +218,7 @@ export class BookingEmailController {
       serviceTitle: string;
       scheduledDate: string;
       reason?: string;
+      declinedBy: string;
     },
     @Ctx() context: RmqContext
   ) {
@@ -203,6 +227,7 @@ export class BookingEmailController {
     console.log('👤 Customer:', data.customerName);
     console.log('🔧 Contractor:', data.contractorName);
     console.log('📋 Service:', data.serviceTitle);
+    console.log('❌ Declined by:', data.declinedBy);
     
     this.logger.debug(`[RMQ] Booking declined event for customer: ${data.to}`);
     await this.processEvent(
@@ -252,6 +277,7 @@ export class BookingEmailController {
       contractorName: string;
       serviceTitle: string;
       scheduledDate: string;
+      location: string;
       reason?: string;
       cancelledBy: string;
     },
@@ -281,8 +307,10 @@ export class BookingEmailController {
       to: string;
       contractorName: string;
       customerName: string;
+      customerPhone: string;
       serviceTitle: string;
       scheduledDate: string;
+      location: string;
       reason?: string;
       cancelledBy: string;
     },
@@ -303,61 +331,6 @@ export class BookingEmailController {
     );
   }
 
-  /**
-   * Handle booking completed - Customer email
-   */
-  @EventPattern('booking-completed-customer', Transport.RMQ)
-  async handleBookingCompletedCustomer(
-    @Payload() data: {
-      to: string;
-      customerName: string;
-      contractorName: string;
-      serviceTitle: string;
-      price: string;
-    },
-    @Ctx() context: RmqContext
-  ) {
-    console.log('🔍🔍🔍 ========== BOOKING COMPLETED (CUSTOMER) EVENT RECEIVED ==========');
-    console.log('📧 Email:', data.to);
-    console.log('👤 Customer:', data.customerName);
-    console.log('🔧 Contractor:', data.contractorName);
-    console.log('📋 Service:', data.serviceTitle);
-    
-    this.logger.debug(`[RMQ] Booking completed event for customer: ${data.to}`);
-    await this.processEvent(
-      context,
-      () => this.bookingEmailService.sendBookingCompletedCustomer(data),
-      data.to
-    );
-  }
-
-  /**
-   * Handle booking completed - Contractor email
-   */
-  @EventPattern('booking-completed-contractor', Transport.RMQ)
-  async handleBookingCompletedContractor(
-    @Payload() data: {
-      to: string;
-      contractorName: string;
-      customerName: string;
-      serviceTitle: string;
-      price: string;
-    },
-    @Ctx() context: RmqContext
-  ) {
-    console.log('🔍🔍🔍 ========== BOOKING COMPLETED (CONTRACTOR) EVENT RECEIVED ==========');
-    console.log('📧 Email:', data.to);
-    console.log('👤 Contractor:', data.contractorName);
-    console.log('👤 Customer:', data.customerName);
-    console.log('📋 Service:', data.serviceTitle);
-    
-    this.logger.debug(`[RMQ] Booking completed event for contractor: ${data.to}`);
-    await this.processEvent(
-      context,
-      () => this.bookingEmailService.sendBookingCompletedContractor(data),
-      data.to
-    );
-  }
 
   /**
    * Handle booking reminder - Customer email
@@ -440,7 +413,9 @@ export class BookingEmailController {
         clientName: string;
         serviceTitle: string;
         status: string;
+        executionStatus?: string;
         price: string;
+        totalAmount: string;
       }>;
     },
     @Ctx() context: RmqContext

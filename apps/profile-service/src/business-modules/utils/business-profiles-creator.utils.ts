@@ -143,7 +143,7 @@ export async function createBusinessProfile(
       break;
     }
 
-    case "SKILLED_PROFESSIONAL": {
+      case "SKILLED_PROFESSIONAL": {
       const profData = data as SkilledProfessionalProfileDataDto;
       
       logger.log(`👨‍🔧 Creating SKILLED_PROFESSIONAL profile for account ${accountUuid}`);
@@ -169,6 +169,13 @@ export async function createBusinessProfile(
           emergencyService: profData.emergencyService ?? false,
           portfolioImages: StringUtils.stringifyJsonField(profData.portfolioImages ?? []),
           certifications: StringUtils.stringifyJsonField(profData.certifications ?? []),
+          
+          // ========== NEW: Booking Fee Fields ==========
+          profileBookingFeeEnabled: profData.profileBookingFeeEnabled ?? false,
+          profileBookingFeeAmount: profData.profileBookingFeeAmount ?? null,
+          profileBookingFeeCurrency: profData.profileBookingFeeCurrency ?? 'KES',
+          profileBookingFeeDescription: profData.profileBookingFeeDescription ?? null,
+          profileBookingFeeRefundable: profData.profileBookingFeeRefundable ?? false,
         },
       });
       

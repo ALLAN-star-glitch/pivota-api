@@ -15,44 +15,6 @@ service ContractorsService {
   rpc UpdateServiceOffering (UpdateServiceOfferingRequest) returns (BaseServiceOfferingResponse);
   rpc DeleteServiceOffering (DeleteServiceOfferingRequest) returns (BaseResponse);
   rpc GetOfferingsByCategory (GetOfferingsByCategoryRequest) returns (ListServiceOfferingsResponse);
-  
-  // Booking Methods
-  rpc CreateBooking (CreateBookingRequest) returns (BaseBookingResponse);
-  rpc AcceptBooking (AcceptBookingRequest) returns (BookingActionResponse);
-  rpc DeclineBooking (DeclineBookingRequest) returns (BookingActionResponse);
-  rpc CancelBooking (CancelBookingRequest) returns (BookingActionResponse);
-  rpc CompleteBooking (CompleteBookingRequest) returns (BookingActionResponse);
-  rpc GetMyBookingsAsCustomer (GetCustomerBookingsRequest) returns (PaginatedBookingsResponse);
-  rpc GetMyBookingsAsProfessional (GetContractorBookingsRequest) returns (PaginatedBookingsResponse);
-  rpc GetBookingDetails (GetBookingDetailsRequest) returns (BaseBookingResponse);
-  rpc GetUpcomingBookingsForProfessional (GetUpcomingBookingsRequest) returns (ListUpcomingBookingsResponse);
-  rpc GetProfessionalBookingStats (GetProfessionalStatsRequest) returns (BaseBookingStatsResponse);
-
-  rpc GetBookingStatuses (EmptyRequest) returns (BaseBookingStatusListResponse);
-}
-
-// Add this message
-message EmptyRequest {}
-
-// Add this response
-message BaseBookingStatusListResponse {
-  bool success = 1;
-  string code = 2;
-  string message = 3;
-  BookingStatusList data = 4;
-  ErrorPayload error = 5;
-}
-
-message BookingStatusList {
-  repeated BookingStatusDto statuses = 1;
-}
-
-message BookingStatusDto {
-  string value = 1;
-  string label = 2;
-  string description = 3;
-  string badgeVariant = 4;
-  int32 order = 5;
 }
 
 // ===================================================
@@ -104,9 +66,7 @@ message ServiceOffering {
   string priceUnit = 14;
   string currency = 15;
   
-  //  REMOVED locationCity and locationNeighborhood
-  //  ADDED coverageAreas
-  repeated string coverageAreas = 16;  // Cities/neighborhoods where service is available
+  repeated string coverageAreas = 16;
   
   repeated DayAvailability availability = 17;
   
@@ -123,96 +83,19 @@ message ServiceOffering {
   string updatedAt = 25;
   
   string vertical = 26;
-}
-
-// Booking Entity (Full response - for GET and CREATE)
-message Booking {
-  string id = 1;
-  string externalId = 2;
-  string contractorId = 3;
-  string clientId = 4;
-  optional string serviceId = 5;
   
-  // Denormalized fields
-  optional string contractorName = 6;
-  optional string serviceTitle = 7;
-  string status = 8;
-  optional string scheduledDate = 9;
-  optional string locationCity = 10;
-  optional double agreedPrice = 11;
-  string currency = 12;
-  optional string customerNotes = 13;
-  string createdAt = 14;
-  string updatedAt = 15;
+  // ========== BOOKING FEE OVERRIDE FIELDS ==========
+  bool useCustomBookingFee = 27;
+  optional bool customBookingFeeEnabled = 28;
+  optional double customBookingFeeAmount = 29;
+  optional string customBookingFeeCurrency = 30;
+  optional string customBookingFeeDescription = 31;
+  optional bool customBookingFeeRefundable = 32;
   
-  // Enriched fields (for responses)
-  optional BookingServiceInfo service = 16;
-  optional BookingClientInfo client = 17;
-  optional BookingContractorInfo contractor = 18;
-  optional BookingServiceDetails serviceDetails = 19;
-}
-
-// Minimal booking action response (for accept, decline, cancel, complete)
-message BookingAction {
-  string id = 1;
-  string status = 2;
-  string updatedAt = 3;
-}
-
-message BookingServiceInfo {
-  string id = 1;
-  string title = 2;
-  double basePrice = 3;
-  string priceUnit = 4;
-  string currency = 5;
-}
-
-message BookingClientInfo {
-  string uuid = 1;
-  string name = 2;
-  string email = 3;
-  string phone = 4;
-}
-
-message BookingContractorInfo {
-  string uuid = 1;
-  string name = 2;
-  optional string profileImage = 3;
-  bool isVerified = 4;
-  double rating = 5;
-  string phone = 6;
-  string email = 7;
-}
-
-message BookingServiceDetails {
-  string id = 1;
-  string title = 2;
-  optional string description = 3;
-  double basePrice = 4;
-  string priceUnit = 5;
-  optional string category = 6;
-  //  REMOVED locationCity and locationNeighborhood - use coverageAreas from service offering
-}
-
-message BookingStatistics {
-  int32 total = 1;
-  int32 pending = 2;
-  int32 confirmed = 3;
-  int32 completed = 4;
-  int32 cancelled = 5;
-  int32 upcoming = 6;
-  int32 completedThisMonth = 7;
-}
-
-message UpcomingBooking {
-  string id = 1;
-  optional string serviceTitle = 2;
-  optional string scheduledDate = 3;
-  optional string locationCity = 4;
-  optional string clientName = 5;
-  optional string clientPhone = 6;
-  optional double agreedPrice = 7;
-  string currency = 8;
+  // ========== NEW: NEGOTIABLE PRICING FIELDS ==========
+  bool isNegotiable = 33;
+  optional double minNegotiablePrice = 34;
+  optional double maxNegotiablePrice = 35;
 }
 
 // ===================================================
@@ -228,16 +111,27 @@ message CreateServiceOfferingRequest {
   double basePrice = 7;
   string priceUnit = 8;
   string currency = 9;
-  //  REMOVED locationCity and locationNeighborhood
-  repeated string coverageAreas = 10;  // Required - cities/neighborhoods where service is available
+  repeated string coverageAreas = 10;
   optional int32 yearsExperience = 11;
   optional string additionalNotes = 12;
   repeated DayAvailability availability = 13;
+  
+  // ========== BOOKING FEE OVERRIDE FIELDS ==========
+  optional bool useCustomBookingFee = 14;
+  optional bool customBookingFeeEnabled = 15;
+  optional double customBookingFeeAmount = 16;
+  optional string customBookingFeeCurrency = 17;
+  optional string customBookingFeeDescription = 18;
+  optional bool customBookingFeeRefundable = 19;
+  
+  // ========== NEW: NEGOTIABLE PRICING FIELDS ==========
+  optional bool isNegotiable = 20;
+  optional double minNegotiablePrice = 21;
+  optional double maxNegotiablePrice = 22;
 }
 
 message GetOfferingsByVerticalRequest {
   string vertical = 1;
-  //  REMOVED city filter - use coverageAreas in response for client-side filtering
   optional string categoryId = 2;
   optional double minPrice = 3;
   optional double maxPrice = 4;
@@ -266,10 +160,17 @@ message UpdateServiceOfferingRequest {
   optional string description = 3;
   optional double basePrice = 4;
   optional string priceUnit = 5;
-  //  REMOVED locationCity and locationNeighborhood
-  repeated string coverageAreas = 6;  //  Optional - update coverage areas
+  repeated string coverageAreas = 6;
   repeated DayAvailability availability = 7;
   string userId = 8;
+  
+  // ========== NEW: BOOKING FEE OVERRIDE FIELDS ==========
+  optional bool useCustomBookingFee = 9;
+  optional bool customBookingFeeEnabled = 10;
+  optional double customBookingFeeAmount = 11;
+  optional string customBookingFeeCurrency = 12;
+  optional string customBookingFeeDescription = 13;
+  optional bool customBookingFeeRefundable = 14;
 }
 
 message DeleteServiceOfferingRequest {
@@ -281,87 +182,8 @@ message GetOfferingsByCategoryRequest {
   string categoryId = 1;
   optional int32 limit = 2;
   optional int32 offset = 3;
-  //  REMOVED city filter
   optional double minPrice = 4;
   optional double maxPrice = 5;
-}
-
-// ===================================================
-// REQUEST MESSAGES - BOOKINGS (WITH PLATFORM ADMIN SUPPORT)
-// ===================================================
-message CreateBookingRequest {
-  string serviceId = 1;
-  string contractorId = 2;
-  string clientId = 3;
-  string scheduledDate = 4;
-  optional string locationCity = 5;  //  Required for booking - where service will be delivered
-  optional string customerNotes = 6;
-  optional int32 durationHours = 7;
-  optional int32 durationDays = 8;
-  optional int32 durationWeeks = 9;
-  optional int32 durationMonths = 10;
-  bool isPlatformAdmin = 11;  //  Internal flag for platform admin bypass
-}
-
-message AcceptBookingRequest {
-  string bookingId = 1;
-  string contractorId = 2;
-  bool isPlatformAdmin = 3;  //  Internal flag for platform admin bypass
-}
-
-message DeclineBookingRequest {
-  string bookingId = 1;
-  string contractorId = 2;
-  optional string reason = 3;
-  bool isPlatformAdmin = 4;  //  Internal flag for platform admin bypass
-}
-
-message CancelBookingRequest {
-  string bookingId = 1;
-  string userId = 2;
-  optional string professionalId = 3;
-  optional string reason = 4;
-  bool isPlatformAdmin = 5;  // Internal flag for platform admin bypass
-}
-
-message CompleteBookingRequest {
-  string bookingId = 1;
-  string contractorId = 2;
-  bool isPlatformAdmin = 3;  //  Internal flag for platform admin bypass
-}
-
-message GetCustomerBookingsRequest {
-  string clientId = 1;
-  optional string status = 2;
-  optional int32 limit = 3;
-  optional int32 offset = 4;
-  bool isPlatformAdmin = 5;  //  Internal flag for platform admin bypass
-}
-
-message GetContractorBookingsRequest {
-  string contractorId = 1;
-  optional string status = 2;
-  optional int32 limit = 3;
-  optional int32 offset = 4;
-  bool isPlatformAdmin = 5;  //  Internal flag for platform admin bypass
-}
-
-message GetBookingDetailsRequest {
-  string bookingId = 1;
-  string userId = 2;
-  optional string professionalId = 3;
-  bool isPlatformAdmin = 4;  //  Internal flag for platform admin bypass
-}
-
-message GetUpcomingBookingsRequest {
-  string contractorId = 1;
-  optional int32 limit = 2;
-  bool isPlatformAdmin = 3;  //  Internal flag for platform admin bypass
-}
-
-message GetProfessionalStatsRequest {
-  string contractorId = 1;
-  bool isPlatformAdmin = 2;  //  Internal flag for platform admin bypass
 }
 
 // ===================================================
@@ -389,49 +211,4 @@ message PaginationInfo {
   int32 limit = 2;
   int32 offset = 3;
   bool hasMore = 4;
-}
-
-// ===================================================
-// RESPONSE MESSAGES - BOOKINGS
-// ===================================================
-message BaseBookingResponse {
-  bool success = 1;
-  string code = 2;
-  string message = 3;
-  Booking data = 4;
-  ErrorPayload error = 5;
-}
-
-// Minimal booking action response
-message BookingActionResponse {
-  bool success = 1;
-  string code = 2;
-  string message = 3;
-  BookingAction data = 4;
-  ErrorPayload error = 5;
-}
-
-message PaginatedBookingsResponse {
-  bool success = 1;
-  string code = 2;
-  string message = 3;
-  repeated Booking data = 4;
-  PaginationInfo pagination = 5;
-  ErrorPayload error = 6;
-}
-
-message ListUpcomingBookingsResponse {
-  bool success = 1;
-  string code = 2;
-  string message = 3;
-  repeated UpcomingBooking data = 4;
-  ErrorPayload error = 5;
-}
-
-message BaseBookingStatsResponse {
-  bool success = 1;
-  string code = 2;
-  string message = 3;
-  BookingStatistics data = 4;
-  ErrorPayload error = 5;
 }

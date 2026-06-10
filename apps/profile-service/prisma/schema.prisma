@@ -470,20 +470,24 @@ model SkilledProfessionalProfile {
   updatedAt         DateTime  @updatedAt
 
   // ========== BOOKING & ESCROW FIELDS ==========
-  currency               String?   @default("KES")  // Currency for transactions
-  serviceRadius          Int?      @default(10)      // Max distance in km
-  availabilitySchedule   Json      @default("{}")    // Weekly availability
-  responseRate           Float?    @default(95.0)    // Response rate to booking requests
-  responseTime           String?   @default("within 2 hours") // Avg response time
-  bookingAcceptanceRate  Float?    @default(80.0)    // Percentage of bookings accepted
-  preferredContactMethod String?   @default("PLATFORM") // PHONE, EMAIL, WHATSAPP, PLATFORM
+  currency               String?   @default("KES")
+  serviceRadius          Int?      @default(10)
+  availabilitySchedule   Json      @default("{}")
+  responseRate           Float?    @default(95.0)
+  responseTime           String?   @default("within 2 hours")
+  bookingAcceptanceRate  Float?    @default(80.0)
+  preferredContactMethod String?   @default("PLATFORM")
+  totalEarnings          Float?    @default(0)
   
-  // Analytics (populated by escrow service)
-  totalEarnings          Float?    @default(0)       // Lifetime earnings from escrow
+  // ========== PROFILE-LEVEL BOOKING FEE (DEFAULT) ==========
+  // These serve as defaults for ALL service offerings
+  profileBookingFeeEnabled      Boolean   @default(false)   // Master toggle at profile level
+  profileBookingFeeAmount       Float?                      // Default amount (e.g., 500)
+  profileBookingFeeCurrency     String?   @default("KES")   // Default currency
+  profileBookingFeeDescription  String?   @default("Call-out fee covers travel and consultation time")
+  profileBookingFeeRefundable   Boolean   @default(false)   // Default cancellation policy
   
   account           Account   @relation(fields: [accountUuid], references: [uuid], onDelete: Cascade)
-  
-  // Relations
   categories        SkilledProfessionalCategory[]
   
   @@index([accountUuid])
@@ -491,6 +495,7 @@ model SkilledProfessionalProfile {
   @@index([averageRating])
   @@index([responseRate])
   @@index([bookingAcceptanceRate])
+  @@index([profileBookingFeeEnabled])
   @@map("skilled_professional_profiles")
 }
 

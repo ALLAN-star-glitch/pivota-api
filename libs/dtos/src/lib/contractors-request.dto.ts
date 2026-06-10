@@ -2,11 +2,12 @@ import {
   IsString, IsNotEmpty, IsArray, IsOptional, 
   IsNumber, IsIn, Min, ArrayMinSize, ValidateNested, 
   IsUUID,
+  IsBoolean,
 } from 'class-validator';
 import { ApiHideProperty, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { DayAvailabilityDto } from './AvailabilityDto.dto';
-import { PRICE_UNITS } from '@pivota-api/constants';  // REMOVED VERTICALS import
+import { PRICE_UNITS } from '@pivota-api/constants';
 
 /* ======================================================
    CREATE SERVICE OFFERING (Base DTO)
@@ -22,8 +23,6 @@ export class CreateServiceOfferingDto {
   @IsString()
   @IsNotEmpty()
   description!: string;
-
-  // REMOVED: verticals field - use category.vertical instead
 
   @ApiProperty({ 
     description: 'The ID of the COMPLIMENTARY category this service belongs to',
@@ -48,7 +47,6 @@ export class CreateServiceOfferingDto {
   @IsString()
   currency?: string;
 
-  // ✅ NEW: Coverage areas where this service is available
   @ApiProperty({ 
     description: 'Cities/neighborhoods where this service is available',
     example: ['Nairobi CBD', 'Westlands', 'Kilimani', 'Karen'],
@@ -58,8 +56,6 @@ export class CreateServiceOfferingDto {
   @IsNotEmpty()
   @ArrayMinSize(1)
   coverageAreas!: string[];
-
-  // ❌ REMOVED locationCity and locationNeighborhood
 
   @ApiPropertyOptional({ example: 5, description: 'Years of professional experience.' })
   @IsNumber()
@@ -81,6 +77,91 @@ export class CreateServiceOfferingDto {
   @ValidateNested({ each: true })
   @Type(() => DayAvailabilityDto)
   availability?: DayAvailabilityDto[];
+
+  // ========== NEGOTIABLE PRICING FIELDS ==========
+
+  @ApiPropertyOptional({ 
+    description: 'Whether the price is negotiable (customer can propose different price)',
+    example: true,
+    default: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  isNegotiable?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Minimum price professional is willing to accept (if negotiable)',
+    example: 3000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  minNegotiablePrice?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Maximum price professional will charge (upper limit for negotiation)',
+    example: 8000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxNegotiablePrice?: number;
+
+  // ========== BOOKING FEE OVERRIDE FIELDS ==========
+
+  @ApiPropertyOptional({ 
+    description: 'Whether to use custom booking fee for this specific service (override profile default)',
+    example: true,
+    default: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  useCustomBookingFee?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Override - whether booking fee is enabled for this service',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  customBookingFeeEnabled?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Override - booking fee amount for this specific service',
+    example: 500,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  customBookingFeeAmount?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Override - currency for booking fee',
+    example: 'KES',
+    default: 'KES'
+  })
+  @IsOptional()
+  @IsString()
+  customBookingFeeCurrency?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Override - description of what booking fee covers for this service',
+    example: 'Call-out fee covers travel to your location and initial inspection'
+  })
+  @IsOptional()
+  @IsString()
+  customBookingFeeDescription?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Override - whether booking fee is refundable on cancellation for this service',
+    example: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  customBookingFeeRefundable?: boolean;
 }
 
 /* ======================================================
@@ -110,7 +191,6 @@ export class UpdateServiceOfferingDto {
   @IsIn(PRICE_UNITS)
   priceUnit?: string;
 
-  // ✅ NEW: Coverage areas for update
   @ApiPropertyOptional({ 
     description: 'Cities/neighborhoods where this service is available',
     example: ['Nairobi CBD', 'Westlands', 'Kilimani'],
@@ -126,6 +206,88 @@ export class UpdateServiceOfferingDto {
   @ValidateNested({ each: true })
   @Type(() => DayAvailabilityDto)
   availability?: DayAvailabilityDto[];
+
+  // ========== NEGOTIABLE PRICING FIELDS ==========
+
+  @ApiPropertyOptional({ 
+    description: 'Whether the price is negotiable (customer can propose different price)',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  isNegotiable?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Minimum price professional is willing to accept (if negotiable)',
+    example: 3000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  minNegotiablePrice?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Maximum price professional will charge (upper limit for negotiation)',
+    example: 8000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxNegotiablePrice?: number;
+
+  // ========== BOOKING FEE OVERRIDE FIELDS ==========
+
+  @ApiPropertyOptional({ 
+    description: 'Whether to use custom booking fee for this specific service (override profile default)',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  useCustomBookingFee?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Override - whether booking fee is enabled for this service',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  customBookingFeeEnabled?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Override - booking fee amount for this specific service',
+    example: 500,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  customBookingFeeAmount?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Override - currency for booking fee',
+    example: 'KES'
+  })
+  @IsOptional()
+  @IsString()
+  customBookingFeeCurrency?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Override - description of what booking fee covers for this service',
+    example: 'Call-out fee covers travel to your location and initial inspection'
+  })
+  @IsOptional()
+  @IsString()
+  customBookingFeeDescription?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Override - whether booking fee is refundable on cancellation for this service',
+    example: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  customBookingFeeRefundable?: boolean;
 }
 
 /* ======================================================

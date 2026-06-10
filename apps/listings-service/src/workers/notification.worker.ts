@@ -4,7 +4,7 @@ import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
 import { QueueService } from '@pivota-api/shared-redis';
 import { ClientProxy } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
-import { BookingStatus } from '../../generated/prisma/client';
+import { BookingStatus, ServiceExecutionStatus } from '../../generated/prisma/client';
 
 // Updated types to match the payload from your service
 interface BookingCreatedData {
@@ -17,24 +17,13 @@ interface BookingCreatedData {
   serviceTitle: string;
   scheduledDate: Date;
   location: string;
-  price: string;
-  notes?: string; 
+  servicePrice: string;
+  bookingFee: string;
+  totalPrice: string;
+  isNegotiated: boolean;
+  notes?: string;
   bookingExternalId: string;
 }
-
-
-interface ServiceOfferingCreatedData {
-  to: string;
-  professionalName: string;
-  serviceTitle: string;
-  serviceExternalId: string;
-  categoryName: string;
-  basePrice: number;
-  priceUnit: string;
-  currency: string;
-  createdAt: string;
-}
-
 
 interface BookingConfirmedData {
   customerEmail: string;
@@ -47,10 +36,13 @@ interface BookingConfirmedData {
   scheduledDate: Date;
   location: string;
   price: string;
+  totalAmount: string;
   bookingExternalId: string;
 }
 
 interface BookingDeclinedData {
+  bookingId: string;
+  bookingExternalId: string;
   customer: {
     name: string;
     email: string;
@@ -71,10 +63,11 @@ interface BookingDeclinedData {
     declinedBy: string;
     declinedAt: string;
   };
-  bookingExternalId: string;
 }
 
 interface BookingCancelledData {
+  bookingId: string;
+  bookingExternalId: string;
   customer: {
     name: string;
     email: string;
@@ -95,31 +88,56 @@ interface BookingCancelledData {
     cancelledBy: string;
     cancelledAt: string;
   };
-  bookingExternalId: string;
 }
 
-interface BookingCompletedData {
-  customer: {
-    name: string;
-    email: string;
-    phone: string;
-  };
-  contractor: {
-    name: string;
-    email: string;
-    phone: string;
-  };
-  service: {
-    title: string;
-    scheduledDate: Date;
-    location: string;
-    price: string;
-  };
-  completion: {
-    completedBy: string;
-    completedAt: string;
-  };
-  bookingExternalId: string;
+interface ServiceOfferingCreatedData {
+  to: string;
+  professionalName: string;
+  professionalPhone?: string;
+  serviceId?: string;
+  serviceExternalId: string;
+  serviceTitle: string;
+  serviceDescription?: string;
+  categoryId?: string;
+  categoryName: string;
+  categorySlug?: string;
+  vertical?: string;
+  basePrice: number;
+  priceUnit: string;
+  currency: string;
+  isNegotiable?: boolean;
+  minNegotiablePrice?: number | null;
+  maxNegotiablePrice?: number | null;
+  useCustomBookingFee?: boolean;
+  customBookingFeeAmount?: number | null;
+  customBookingFeeCurrency?: string | null;
+  customBookingFeeDescription?: string | null;
+  customBookingFeeRefundable?: boolean | null;
+  coverageAreas?: string[];
+  availability?: any;
+  createdAt: string;
+  serviceUrl?: string;
+  dashboardUrl?: string;
+}
+
+interface ServiceOfferingUpdatedData {
+  to: string;
+  professionalName: string;
+  serviceId: string;
+  serviceExternalId: string;
+  serviceTitle: string;
+  updatedAt: string;
+  dashboardUrl: string;
+}
+
+interface ServiceOfferingDeletedData {
+  to: string;
+  professionalName: string;
+  serviceId: string;
+  serviceExternalId: string;
+  serviceTitle: string;
+  deletedAt: string;
+  dashboardUrl: string;
 }
 
 @Injectable()
@@ -155,10 +173,8 @@ export class NotificationWorker implements OnModuleInit {
     const startTime = Date.now();
     
     try {
-      // Connect to RabbitMQ first
       await this.connectToRabbitMQ();
       
-      // Create worker to process notification jobs using Redis/BullMQ
       this.queue.createWorker('notification-queue', async (job) => {
         await this.processNotificationJob(job);
       });
@@ -203,7 +219,6 @@ export class NotificationWorker implements OnModuleInit {
     const startTime = Date.now();
     
     try {
-      // Ensure RabbitMQ is connected before emitting
       if (!this.rabbitMQConnected) {
         await this.connectToRabbitMQ();
       }
@@ -225,9 +240,7 @@ export class NotificationWorker implements OnModuleInit {
           await this.handleBookingCancelled(data);
           break;
           
-        case 'booking.completed':
-          await this.handleBookingCompleted(data);
-          break;
+        // REMOVED: case 'booking.completed' - service completion is now tracked by ServiceExecutionStatus
           
         case 'booking.reminder':
           await this.handleBookingReminder(data);
@@ -243,6 +256,14 @@ export class NotificationWorker implements OnModuleInit {
 
         case 'service-offering.created':
           await this.handleServiceOfferingCreated(data);
+          break;
+          
+        case 'service-offering.updated':
+          await this.handleServiceOfferingUpdated(data);
+          break;
+          
+        case 'service-offering.deleted':
+          await this.handleServiceOfferingDeleted(data);
           break;
           
         default:
@@ -270,29 +291,12 @@ export class NotificationWorker implements OnModuleInit {
     this.logger.log(`📧 Handling booking.created notification`);
     console.log(`📧 Handling booking.created notification`);
     
-    // Format date for display
     const scheduledDateFormatted = new Date(data.scheduledDate).toLocaleString('en-KE', {
       dateStyle: 'full',
       timeStyle: 'short',
     });
     
-    // Prepare booking data for email
-    const bookingData = {
-      bookingExternalId: data.bookingExternalId,
-      customerName: data.customerName,
-      customerEmail: data.customerEmail,
-      customerPhone: data.customerPhone,
-      contractorName: data.contractorName,
-      contractorEmail: data.contractorEmail,
-      contractorPhone: data.contractorPhone,
-      serviceTitle: data.serviceTitle,
-      scheduledDate: scheduledDateFormatted,
-      location: data.location,
-      price: data.price,
-      notes: data.notes,
-    };
-    
-    // Emit directly to RabbitMQ for customer
+    // Customer notification
     this.notificationBus.emit('booking-created-customer', {
       to: data.customerEmail,
       customerName: data.customerName,
@@ -300,11 +304,14 @@ export class NotificationWorker implements OnModuleInit {
       serviceTitle: data.serviceTitle,
       scheduledDate: scheduledDateFormatted,
       location: data.location,
-      price: data.price,
+      servicePrice: data.servicePrice,
+      bookingFee: data.bookingFee,
+      totalPrice: data.totalPrice,
+      isNegotiated: data.isNegotiated,
       notes: data.notes,
     });
     
-    // Emit directly to RabbitMQ for contractor
+    // Contractor notification
     this.notificationBus.emit('booking-created-contractor', {
       to: data.contractorEmail,
       contractorName: data.contractorName,
@@ -313,7 +320,10 @@ export class NotificationWorker implements OnModuleInit {
       serviceTitle: data.serviceTitle,
       scheduledDate: scheduledDateFormatted,
       location: data.location,
-      price: data.price,
+      servicePrice: data.servicePrice,
+      bookingFee: data.bookingFee,
+      totalPrice: data.totalPrice,
+      isNegotiated: data.isNegotiated,
       bookingExternalId: data.bookingExternalId,
       notes: data.notes,
     });
@@ -331,7 +341,6 @@ export class NotificationWorker implements OnModuleInit {
       timeStyle: 'short',
     });
     
-    // Emit directly to RabbitMQ for customer
     this.notificationBus.emit('booking-confirmed-customer', {
       to: data.customerEmail,
       customerName: data.customerName,
@@ -339,10 +348,9 @@ export class NotificationWorker implements OnModuleInit {
       serviceTitle: data.serviceTitle,
       scheduledDate: scheduledDateFormatted,
       location: data.location,
-      price: data.price,
+      totalAmount: data.totalAmount,
     });
     
-    // Emit directly to RabbitMQ for contractor
     this.notificationBus.emit('booking-confirmed-contractor', {
       to: data.contractorEmail,
       contractorName: data.contractorName,
@@ -351,7 +359,7 @@ export class NotificationWorker implements OnModuleInit {
       serviceTitle: data.serviceTitle,
       scheduledDate: scheduledDateFormatted,
       location: data.location,
-      price: data.price,
+      totalAmount: data.totalAmount,
     });
     
     this.logger.log(`✅ Booking confirmed events emitted for ${data.customerEmail} and ${data.contractorEmail}`);
@@ -367,7 +375,6 @@ export class NotificationWorker implements OnModuleInit {
       timeStyle: 'short',
     });
     
-    // Emit directly to RabbitMQ for customer
     this.notificationBus.emit('booking-declined-customer', {
       to: data.customer.email,
       customerName: data.customer.name,
@@ -379,7 +386,6 @@ export class NotificationWorker implements OnModuleInit {
       declinedBy: data.decline.declinedBy,
     });
     
-    // Emit directly to RabbitMQ for contractor
     this.notificationBus.emit('booking-declined-contractor', {
       to: data.contractor.email,
       contractorName: data.contractor.name,
@@ -402,7 +408,6 @@ export class NotificationWorker implements OnModuleInit {
       timeStyle: 'short',
     });
     
-    // Emit directly to RabbitMQ for customer
     this.notificationBus.emit('booking-cancelled-customer', {
       to: data.customer.email,
       customerName: data.customer.name,
@@ -414,7 +419,6 @@ export class NotificationWorker implements OnModuleInit {
       cancelledBy: data.cancellation.cancelledBy,
     });
     
-    // Emit directly to RabbitMQ for contractor
     this.notificationBus.emit('booking-cancelled-contractor', {
       to: data.contractor.email,
       contractorName: data.contractor.name,
@@ -429,51 +433,6 @@ export class NotificationWorker implements OnModuleInit {
     
     this.logger.log(`✅ Booking cancelled events emitted for ${data.customer.email} and ${data.contractor.email}`);
     console.log(`✅ Booking cancelled events emitted for ${data.customer.email} and ${data.contractor.email}`);
-  }
-
-  private async handleBookingCompleted(data: BookingCompletedData): Promise<void> {
-    this.logger.log(`📧 Handling booking.completed notification for ${data.bookingExternalId}`);
-    console.log(`📧 Handling booking.completed notification for ${data.bookingExternalId}`);
-    
-    const scheduledDateFormatted = new Date(data.service.scheduledDate).toLocaleString('en-KE', {
-      dateStyle: 'full',
-      timeStyle: 'short',
-    });
-    
-    // Emit directly to RabbitMQ for customer
-    this.notificationBus.emit('booking-completed-customer', {
-      to: data.customer.email,
-      customerName: data.customer.name,
-      contractorName: data.contractor.name,
-      serviceTitle: data.service.title,
-      scheduledDate: scheduledDateFormatted,
-      location: data.service.location,
-      price: data.service.price,
-    });
-    
-    // Emit directly to RabbitMQ for contractor
-    this.notificationBus.emit('booking-completed-contractor', {
-      to: data.contractor.email,
-      contractorName: data.contractor.name,
-      customerName: data.customer.name,
-      serviceTitle: data.service.title,
-      scheduledDate: scheduledDateFormatted,
-      location: data.service.location,
-      price: data.service.price,
-    });
-    
-    this.logger.log(`✅ Booking completed events emitted for ${data.customer.email} and ${data.contractor.email}`);
-    console.log(`✅ Booking completed events emitted for ${data.customer.email} and ${data.contractor.email}`);
-    
-    // Emit review request after 24 hours (delayed)
-    setTimeout(async () => {
-      this.notificationBus.emit('review-request', {
-        to: data.customer.email,
-        customerName: data.customer.name,
-        serviceTitle: data.service.title,
-        bookingId: data.bookingExternalId,
-      });
-    }, 86400000); // 24 hours
   }
 
   private async handleBookingReminder(data: { bookingExternalId: string }): Promise<void> {
@@ -499,7 +458,6 @@ export class NotificationWorker implements OnModuleInit {
         timeStyle: 'short',
       });
       
-      // Emit directly to RabbitMQ for customer
       this.notificationBus.emit('booking-reminder-customer', {
         to: booking.clientEmail,
         customerName: booking.clientName,
@@ -510,7 +468,6 @@ export class NotificationWorker implements OnModuleInit {
         hoursRemaining: hoursBefore,
       });
       
-      // Emit directly to RabbitMQ for contractor
       this.notificationBus.emit('booking-reminder-contractor', {
         to: booking.contractorEmail,
         contractorName: booking.contractorName,
@@ -527,29 +484,110 @@ export class NotificationWorker implements OnModuleInit {
     }
   }
 
+  // ==================== HANDLE SERVICE OFFERING NOTIFICATIONS ====================
+
   private async handleServiceOfferingCreated(data: ServiceOfferingCreatedData): Promise<void> {
-  this.logger.log(`📧 Sending service offering confirmation to ${data.to}`);
-  
-  const formattedPrice = `${data.basePrice.toLocaleString()} ${data.currency}`;
-  const formattedDate = new Date(data.createdAt).toLocaleString('en-KE', {
-    dateStyle: 'full',
-    timeStyle: 'short',
-  });
-  
-  // Send email to professional
-  this.notificationBus.emit('service-offering-created', {
-    to: data.to,
-    professionalName: data.professionalName,
-    serviceTitle: data.serviceTitle,
-    serviceExternalId: data.serviceExternalId,
-    categoryName: data.categoryName,
-    basePrice: formattedPrice,
-    priceUnit: data.priceUnit,
-    createdAt: formattedDate,
-  });
-  
-  this.logger.log(`✅ Service offering confirmation sent to ${data.to}`);
-}
+    this.logger.log(`📧 Sending service offering created notification to ${data.to}`);
+    
+    const formattedPrice = `${data.basePrice.toLocaleString()} ${data.currency}`;
+    const formattedDate = new Date(data.createdAt).toLocaleString('en-KE', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+    });
+    
+    // Format negotiable price range if applicable
+    let priceRangeText = '';
+    if (data.isNegotiable) {
+      if (data.minNegotiablePrice && data.maxNegotiablePrice) {
+        priceRangeText = `${data.minNegotiablePrice.toLocaleString()} - ${data.maxNegotiablePrice.toLocaleString()} ${data.currency}`;
+      } else if (data.minNegotiablePrice) {
+        priceRangeText = `From ${data.minNegotiablePrice.toLocaleString()} ${data.currency}`;
+      } else if (data.maxNegotiablePrice) {
+        priceRangeText = `Up to ${data.maxNegotiablePrice.toLocaleString()} ${data.currency}`;
+      }
+    }
+    
+    // Format booking fee info
+    let bookingFeeText = '';
+    if (data.useCustomBookingFee && data.customBookingFeeAmount) {
+      bookingFeeText = `${data.customBookingFeeAmount.toLocaleString()} ${data.customBookingFeeCurrency || data.currency}`;
+      if (data.customBookingFeeDescription) {
+        bookingFeeText += ` - ${data.customBookingFeeDescription}`;
+      }
+    }
+    
+    this.notificationBus.emit('service-offering-created', {
+      to: data.to,
+      professionalName: data.professionalName,
+      professionalPhone: data.professionalPhone,
+      serviceId: data.serviceId,
+      serviceExternalId: data.serviceExternalId,
+      serviceTitle: data.serviceTitle,
+      serviceDescription: data.serviceDescription,
+      categoryName: data.categoryName,
+      categorySlug: data.categorySlug,
+      vertical: data.vertical,
+      basePrice: formattedPrice,
+      priceUnit: data.priceUnit,
+      isNegotiable: data.isNegotiable,
+      priceRange: priceRangeText,
+      bookingFeeAmount: bookingFeeText,
+      bookingFeeRefundable: data.customBookingFeeRefundable,
+      coverageAreas: data.coverageAreas?.join(', '),
+      createdAt: formattedDate,
+      serviceUrl: data.serviceUrl,
+      dashboardUrl: data.dashboardUrl,
+    });
+    
+    this.logger.log(`✅ Service offering created notification sent to ${data.to}`);
+    console.log(`✅ Service offering created notification sent to ${data.to}`);
+  }
+
+  private async handleServiceOfferingUpdated(data: ServiceOfferingUpdatedData): Promise<void> {
+    this.logger.log(`📧 Sending service offering updated notification to ${data.to}`);
+    
+    const formattedDate = new Date(data.updatedAt).toLocaleString('en-KE', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+    });
+    
+    this.notificationBus.emit('service-offering-updated', {
+      to: data.to,
+      professionalName: data.professionalName,
+      serviceId: data.serviceId,
+      serviceExternalId: data.serviceExternalId,
+      serviceTitle: data.serviceTitle,
+      updatedAt: formattedDate,
+      dashboardUrl: data.dashboardUrl,
+    });
+    
+    this.logger.log(`✅ Service offering updated notification sent to ${data.to}`);
+    console.log(`✅ Service offering updated notification sent to ${data.to}`);
+  }
+
+  private async handleServiceOfferingDeleted(data: ServiceOfferingDeletedData): Promise<void> {
+    this.logger.log(`📧 Sending service offering deleted notification to ${data.to}`);
+    
+    const formattedDate = new Date(data.deletedAt).toLocaleString('en-KE', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+    });
+    
+    this.notificationBus.emit('service-offering-deleted', {
+      to: data.to,
+      professionalName: data.professionalName,
+      serviceId: data.serviceId,
+      serviceExternalId: data.serviceExternalId,
+      serviceTitle: data.serviceTitle,
+      deletedAt: formattedDate,
+      dashboardUrl: data.dashboardUrl,
+    });
+    
+    this.logger.log(`✅ Service offering deleted notification sent to ${data.to}`);
+    console.log(`✅ Service offering deleted notification sent to ${data.to}`);
+  }
+
+  // ==================== HANDLE OTHER NOTIFICATIONS ====================
 
   private async handleDailySummary(data: { contractorId: string; date: Date }): Promise<void> {
     this.logger.log(`📧 Handling daily summary for contractor ${data.contractorId}`);
@@ -586,18 +624,18 @@ export class NotificationWorker implements OnModuleInit {
       return;
     }
     
+    // FIX: Use serviceExecutionStatus instead of booking.status for completed count
     const totalEarnings = bookings
-      .filter(b => b.status === BookingStatus.COMPLETED)
-      .reduce((sum, b) => sum + (b.agreedPrice || 0), 0);
+      .filter(b => b.serviceExecutionStatus === ServiceExecutionStatus.COMPLETED)
+      .reduce((sum, b) => sum + (b.servicePrice || 0), 0);
     
-    // Emit directly to RabbitMQ
     this.notificationBus.emit('contractor-daily-summary', {
       to: contractorEmail,
       contractorName: bookings[0]?.contractorName,
       date: data.date.toISOString(),
       totalBookings: bookings.length,
       confirmedBookings: bookings.filter(b => b.status === BookingStatus.CONFIRMED).length,
-      completedBookings: bookings.filter(b => b.status === BookingStatus.COMPLETED).length,
+      completedBookings: bookings.filter(b => b.serviceExecutionStatus === ServiceExecutionStatus.COMPLETED).length,
       cancelledBookings: bookings.filter(b => b.status === BookingStatus.CANCELLED).length,
       totalEarnings,
       bookings: bookings.map(b => ({
@@ -605,7 +643,9 @@ export class NotificationWorker implements OnModuleInit {
         clientName: b.clientName,
         serviceTitle: b.serviceTitle,
         status: b.status,
-        price: `${b.agreedPrice} ${b.currency}`,
+        executionStatus: b.serviceExecutionStatus,
+        price: `${b.servicePrice} ${b.currency}`,
+        totalAmount: `${b.totalAmount} ${b.currency}`,
       })),
     });
     
@@ -628,7 +668,6 @@ export class NotificationWorker implements OnModuleInit {
       return;
     }
     
-    // Emit directly to RabbitMQ
     this.notificationBus.emit('review-request', {
       to: booking.clientEmail,
       customerName: booking.clientName,

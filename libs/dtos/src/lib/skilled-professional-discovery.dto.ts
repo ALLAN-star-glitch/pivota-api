@@ -183,4 +183,11 @@ export class SkilledProfessionalPublicProfileDto {
     phone: string;
     relationship: string;
   };
+
+  // ========== BOOKING FEE SETTINGS (Profile Level Default) ==========
+  profileBookingFeeEnabled?: boolean;      // Whether professional charges a booking fee by default
+  profileBookingFeeAmount?: number;        // Default booking fee amount (e.g., 500)
+  profileBookingFeeCurrency?: string;      // Currency (e.g., 'KES')
+  profileBookingFeeDescription?: string;   // Description of what booking fee covers
+  profileBookingFeeRefundable?: boolean;   // Is fee refundable on cancellation?
 }

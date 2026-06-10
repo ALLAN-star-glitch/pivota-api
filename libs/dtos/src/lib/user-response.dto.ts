@@ -326,6 +326,42 @@ export class SkilledProfessionalProfileResponseDto {
   @ApiProperty({ example: ['https://storage.pivota.com/certs/license.pdf'] })
   certifications!: string[];
 
+  // ========== NEW: BOOKING FEE FIELDS (Profile Level Default) ==========
+
+  @ApiProperty({ 
+    description: 'Whether the professional charges a booking fee by default (call-out fee)',
+    example: true,
+    default: false
+  })
+  profileBookingFeeEnabled!: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Default booking fee amount (e.g., 500 KES call-out fee)',
+    example: 500,
+    minimum: 0
+  })
+  profileBookingFeeAmount?: number;
+
+  @ApiProperty({ 
+    description: 'Currency for the booking fee',
+    example: 'KES',
+    default: 'KES'
+  })
+  profileBookingFeeCurrency!: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Description of what the booking fee covers',
+    example: 'Call-out fee covers travel to your location and initial consultation'
+  })
+  profileBookingFeeDescription?: string;
+
+  @ApiProperty({ 
+    description: 'Whether the booking fee is refundable if customer cancels',
+    example: false,
+    default: false
+  })
+  profileBookingFeeRefundable!: boolean;
+
   @ApiPropertyOptional({ type: ProfileCompletionDto })
   completion?: ProfileCompletionDto;
 }

@@ -8,7 +8,8 @@ import {
   LISTINGS_JOBS_PROTO_PATH, 
   CONTRACTORS_PRICING_PROTO_PATH, 
   CONTRACTORS_PROTO_PATH,
-  LISTINGS_REGISTRY_PROTO_PATH
+  LISTINGS_REGISTRY_PROTO_PATH,
+  BOOKING_PROTO_PATH,  // Add this import
 } from '@pivota-api/protos';
 import * as dotenv from 'dotenv';
 
@@ -38,11 +39,11 @@ async function bootstrap() {
     },
   });
 
-  // 3. Shared Listings Registry - This is the new shared service for fetching listings across all pillars  
+  // 3. Shared Listings Registry
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.GRPC,
     options: {
-      package: 'listings_registry', // Matches the package name in your proto
+      package: 'listings_registry',
       protoPath: LISTINGS_REGISTRY_PROTO_PATH,
       url: process.env.LISTINGS_SHARED_GRPC_URL || '0.0.0.0:50058', 
     },
@@ -74,15 +75,24 @@ async function bootstrap() {
     options: {
       package: 'contractors',
       protoPath: CONTRACTORS_PROTO_PATH,
-      url: process.env.PROVIDERS_GRPC_URL || '0.0.0.0:50061', // Moved to 50061
+      url: process.env.PROVIDERS_GRPC_URL || '0.0.0.0:50061',
     },
-  }); 
+  });
+
+  // 7. Booking Service - ADD THIS
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.GRPC,
+    options: {
+      package: 'contractors_booking',  // Must match the package name in your booking.proto
+      protoPath: BOOKING_PROTO_PATH,
+      url: process.env.BOOKING_GRPC_URL || '0.0.0.0:50063',  // Must match gateway port
+    },
+  });
 
   await app.startAllMicroservices();
 
   logger.log(`🚀 Listings microservice system is running`);
   
-  // Cleaned up logging for clarity
   const services = [
     { name: 'Categories', url: '50056' },
     { name: 'Jobs', url: '50057' },
@@ -90,8 +100,9 @@ async function bootstrap() {
     { name: 'Contractors Pricing', url: '50059' },
     { name: 'Housing', url: '50060' },
     { name: 'Contractors', url: '50061' },
+    { name: 'Booking', url: '50062' },  // Add this
   ];
-
+  
   services.forEach(s => {
     logger.log(`📦 ${s.name} gRPC listening on port ${s.url}`);
   });

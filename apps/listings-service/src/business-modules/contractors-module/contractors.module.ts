@@ -9,10 +9,15 @@ import { ContractorsPricingController } from './controllers/contractors-pricing.
 import { SharedRedisModule } from '@pivota-api/shared-redis';
 import { ContractorsPricingWorker } from '../../workers/contractors-pricing.worker';
 import { NotificationWorker } from '../../workers/notification.worker';
+import { BookingService } from './services/booking.service';
+import { BookingController } from './controllers/booking.controller';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ReminderWorker } from '../../workers/reminder.worker';
 
 @Module({
   imports: [
     PrismaModule,
+    ScheduleModule.forRoot(),
     SharedRedisModule.forRoot(),
     ClientsModule.register([
       {
@@ -31,23 +36,37 @@ import { NotificationWorker } from '../../workers/notification.worker';
           urls: [process.env.RABBITMQ_URL],
           queue: 'booking_notification_queue',
         },
-      },      
+      },
     ]),
   ],
-  providers: [ContractorsService, ContractorsPricingService, ContractorsPricingWorker, NotificationWorker],
-  controllers: [ContractorsController, ContractorsPricingController],
+  providers: [
+    ContractorsService,
+    ContractorsPricingService,
+    ContractorsPricingWorker,
+    NotificationWorker,
+    BookingService,
+    ReminderWorker,
+  ],
+  controllers: [
+    ContractorsController,
+    ContractorsPricingController,
+    BookingController,
+  ],
 })
 export class ContractorsModule {
   private readonly logger = new Logger(ContractorsModule.name);
 
   constructor(
     private contractorsPricingWorker: ContractorsPricingWorker,
-    private notificationWorker: NotificationWorker, // ✅ Add this
+    private notificationWorker: NotificationWorker,
+    private reminderWorker: ReminderWorker,
   ) {
     this.logger.log('🚀 ContractorsModule: Initialized');
-    this.logger.log(`📡 LISTINGS_GRPC_URL: ${process.env.LISTINGS_GRPC_URL || 'localhost:50052'}`);
-    
-    // Initialize workers in constructor
+    this.logger.log(
+      `📡 LISTINGS_GRPC_URL: ${process.env.LISTINGS_GRPC_URL || 'localhost:50052'}`,
+    );
+
+    // Initialize workers in constructor (same pattern as CategoriesModule)
     this.initializeWorkers();
   }
 
@@ -56,22 +75,40 @@ export class ContractorsModule {
     const startTime = Date.now();
 
     // Small delay to ensure all dependencies are ready
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Initialize ContractorsPricingWorker
     try {
       await this.contractorsPricingWorker.initialize();
       this.logger.log(`✅ ContractorsPricingWorker initialized successfully`);
     } catch (error) {
-      this.logger.error(`❌ ContractorsPricingWorker failed to initialize: ${error.message}`);
+      this.logger.error(
+        `❌ ContractorsPricingWorker failed to initialize: ${error.message}`,
+      );
     }
 
-    // ✅ Initialize NotificationWorker
+    // Initialize NotificationWorker
     try {
       await this.notificationWorker.initialize();
       this.logger.log(`✅ NotificationWorker initialized successfully`);
     } catch (error) {
-      this.logger.error(`❌ NotificationWorker failed to initialize: ${error.message}`);
+      this.logger.error(
+        `❌ NotificationWorker failed to initialize: ${error.message}`,
+      );
+    }
+
+    // ReminderWorker - initialize if it has the method
+    try {
+      if (this.reminderWorker && typeof this.reminderWorker.initialize === 'function') {
+        await this.reminderWorker.initialize();
+        this.logger.log(`✅ ReminderWorker initialized successfully`);
+      } else {
+        this.logger.log(`ℹ️ ReminderWorker cron jobs will run without explicit initialization`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `❌ ReminderWorker failed to initialize: ${error.message}`,
+      );
     }
 
     const elapsed = Date.now() - startTime;
