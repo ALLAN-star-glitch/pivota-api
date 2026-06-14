@@ -20,12 +20,13 @@ export class QueueService implements OnModuleInit,  OnModuleDestroy {
     const startTime = Date.now();
     
       const queueNames = [
-      'email-queue', // for auth email notifications
-      'analytics-queue', 
-      'db-sync', 
-      'cache-queue', 
-      'categories-queue',
-      'notification-queue'  //booking notifications
+      'email-queue',           // for auth email notifications
+      'analytics-queue',       // for analytics processing
+      'db-sync',               // for database synchronization
+      'cache-queue',           // for cache operations
+      'categories-queue',      // for category operations
+      'notification-queue',    // for booking and service offering notifications
+      'service-execution-queue', // for service execution notifications (started, completed, confirmed, auto-release, evidence)
     ];
     
     queueNames.forEach(queueName => {

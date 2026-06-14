@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package contractors_service_execution_media;
+
+// ===================================================
+// SERVICE DEFINITION
+// ===================================================
+service ServiceExecutionMediaService {
+  // Evidence Upload Methods
+  rpc UploadEvidenceFiles (UploadEvidenceFilesRequest) returns (BaseMultipleEvidenceUploadResponse);
+}
+
+// ===================================================
+// SHARED MESSAGES
+// ===================================================
+message ErrorPayload {
+  string code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+// ===================================================
+// ENTITIES
+// ===================================================
+
+// Upload Evidence File (for gRPC file transfer)
+message UploadEvidenceFile {
+  bytes buffer = 1;
+  string originalname = 2;
+  string mimetype = 3;
+  int64 size = 4;
+}
+
+// Single Evidence Upload Response Data
+message EvidenceUploadData {
+  string url = 1;
+  string fileName = 2;
+  int64 fileSize = 3;
+  string mimeType = 4;
+}
+
+// Multiple Upload Evidence Response Data
+message MultipleEvidenceUploadData {
+  string message = 1;
+  repeated EvidenceUploadData items = 2;
+}
+
+// ===================================================
+// REQUEST MESSAGES
+// ===================================================
+
+// Upload Evidence Files Request
+message UploadEvidenceFilesRequest {
+  string bookingExternalId = 1;
+  repeated UploadEvidenceFile files = 2;
+  
+  // Hidden fields - set by API Gateway from JWT token
+  string professionalId = 3;
+  bool isPlatformAdmin = 4;
+}
+
+// ===================================================
+// RESPONSE MESSAGES
+// ===================================================
+
+// Multiple Evidence Upload Response
+message BaseMultipleEvidenceUploadResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  MultipleEvidenceUploadData data = 4;
+  ErrorPayload error = 5;
+}

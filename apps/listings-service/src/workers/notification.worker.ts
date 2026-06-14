@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-console.log('🔥 NOTIFICATION WORKER FILE IS BEING LOADED');
+console.log('NOTIFICATION WORKER FILE IS BEING LOADED');
 import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
 import { QueueService } from '@pivota-api/shared-redis';
 import { ClientProxy } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 import { BookingStatus, ServiceExecutionStatus } from '../../generated/prisma/client';
 
-// Updated types to match the payload from your service
+// Updated types to match the enhanced payload from your service
 interface BookingCreatedData {
   customerEmail: string;
   customerName: string;
@@ -18,11 +18,92 @@ interface BookingCreatedData {
   scheduledDate: Date;
   location: string;
   servicePrice: string;
+  servicePriceFormatted: string;
+  servicePricePerUnit?: string;
   bookingFee: string;
+  bookingFeeFormatted: string;
   totalPrice: string;
+  totalPriceFormatted: string;
   isNegotiated: boolean;
+  hasBookingFee: boolean;
   notes?: string;
   bookingExternalId: string;
+
+  // NEW: Platform commission details
+  platformCommissionPercentage?: number;
+  platformCommissionAmount?: number;
+  platformCommissionFormatted?: string;
+  serviceProviderPayout?: number;
+  serviceProviderPayoutFormatted?: string;
+  
+  // Enhanced pricing type information
+  priceUnitType?: string;
+  priceUnitDisplay?: string;
+  
+  // Duration information
+  duration?: string;
+  durationUnit?: string;
+  durationDisplay?: string;
+  
+  // Enhanced negotiation fields
+  originalPrice?: number;
+  originalPriceFormatted?: string;
+  originalPricePerUnit?: string;
+  proposedPrice?: number | null;
+  proposedPriceFormatted?: string | null;
+  
+  // Calculation breakdown
+  calculationBreakdown?: {
+    baseRate: number;
+    baseRateFormatted: string;
+    duration: number | null;
+    durationLabel: string;
+    multiplier: number;
+    subtotal: number;
+    subtotalFormatted: string;
+    bookingFee: number;
+    bookingFeeFormatted: string;
+    total: number;
+    totalFormatted: string;
+  };
+  
+  // Price breakdown object
+  priceBreakdown?: {
+    basePrice: number;
+    basePriceFormatted: string;
+    priceUnit: string;
+    priceUnitLabel: string;
+    priceUnitDisplay: string;
+    duration: number | null;
+    durationUnit: string;
+    durationDisplay: string;
+    calculatedAmount: number;
+    calculatedAmountFormatted: string;
+    calculatedAmountPerUnit: string | null;
+    bookingFeeAmount: number;
+    bookingFeeFormatted: string;
+    totalAmount: number;
+    totalAmountFormatted: string;
+  };
+  
+  // Detailed negotiation info
+  negotiationDetails?: {
+    proposedAmount: number;
+    proposedAmountFormatted: string;
+    originalAmount: number;
+    originalAmountFormatted: string;
+    totalProposedAmount?: number;           // ← ADD THIS
+    totalProposedAmountFormatted?: string;  // ← ADD THIS
+    totalOriginalAmount?: number;           // ← ADD THIS (optional)
+    totalOriginalAmountFormatted?: string;  // ← ADD THIS (optional)
+    savingsAmount: number;
+    savingsAmountFormatted: string;
+    savingsPercentage: string;
+    isLower: boolean;
+    negotiationStatus: string;
+    message: string;
+    actionRequired: string;
+  } | null;
 }
 
 interface BookingConfirmedData {
@@ -38,6 +119,13 @@ interface BookingConfirmedData {
   price: string;
   totalAmount: string;
   bookingExternalId: string;
+  isNegotiated?: boolean;
+  finalPrice?: string;
+  originalPrice?: string;
+  // NEW fields for enhanced emails
+  servicePrice?: string;
+  hasBookingFee?: boolean;
+  bookingFee?: string | null;
 }
 
 interface BookingDeclinedData {
@@ -63,6 +151,9 @@ interface BookingDeclinedData {
     declinedBy: string;
     declinedAt: string;
   };
+  // NEW fields for refund info
+  hasBookingFee?: boolean;
+  bookingFee?: string | null;
 }
 
 interface BookingCancelledData {
@@ -88,6 +179,9 @@ interface BookingCancelledData {
     cancelledBy: string;
     cancelledAt: string;
   };
+  // NEW fields for refund info
+  hasBookingFee?: boolean;
+  bookingFee?: string | null;
 }
 
 interface ServiceOfferingCreatedData {
@@ -151,24 +245,24 @@ export class NotificationWorker implements OnModuleInit {
     private prisma: PrismaService,
     @Inject('NOTIFICATION_EVENT_BUS') private notificationBus: ClientProxy,
   ) {
-    console.log('🔥 NotificationWorker CONSTRUCTOR called');
+    console.log('NotificationWorker CONSTRUCTOR called');
     this.logger.log('NotificationWorker constructor called');
   }
 
   async onModuleInit() {
-    console.log('🔥 NotificationWorker.onModuleInit() STARTED');
+    console.log('NotificationWorker.onModuleInit() STARTED');
     this.logger.log('NotificationWorker.onModuleInit() STARTED');
     await this.initialize();
   }
 
   async initialize() {
     if (this.initialized) {
-      console.log('🔥 NotificationWorker already initialized, skipping');
+      console.log('NotificationWorker already initialized, skipping');
       this.logger.log('NotificationWorker already initialized, skipping');
       return;
     }
     
-    console.log('🔥 NotificationWorker.initialize() STARTED');
+    console.log('NotificationWorker.initialize() STARTED');
     this.logger.log('NotificationWorker.initialize() STARTED');
     const startTime = Date.now();
     
@@ -182,11 +276,11 @@ export class NotificationWorker implements OnModuleInit {
       this.initialized = true;
       
       const elapsed = Date.now() - startTime;
-      this.logger.log(`✅ Notification worker initialized in ${elapsed}ms`);
-      console.log(`🔥 NotificationWorker.initialize() COMPLETED SUCCESSFULLY in ${elapsed}ms`);
+      this.logger.log(`Notification worker initialized in ${elapsed}ms`);
+      console.log(`NotificationWorker.initialize() COMPLETED SUCCESSFULLY in ${elapsed}ms`);
       
     } catch (error) {
-      console.error('🔥 NotificationWorker.initialize() FAILED:', error);
+      console.error('NotificationWorker.initialize() FAILED:', error);
       this.logger.error(`Failed to initialize notification worker: ${error.message}`);
       throw error;
     }
@@ -198,13 +292,13 @@ export class NotificationWorker implements OnModuleInit {
     }
 
     try {
-      console.log('📧 Connecting NotificationWorker to RabbitMQ...');
+      console.log('Connecting NotificationWorker to RabbitMQ...');
       await this.notificationBus.connect();
       this.rabbitMQConnected = true;
-      console.log('✅✅✅ NotificationWorker connected to RabbitMQ ✅✅✅');
+      console.log('NotificationWorker connected to RabbitMQ');
       this.logger.log('RabbitMQ connection established successfully');
     } catch (err) {
-      console.error('❌❌❌ NotificationWorker RabbitMQ connection FAILED ❌❌❌');
+      console.error('NotificationWorker RabbitMQ connection FAILED');
       console.error('Error:', err.message);
       this.logger.error(`RabbitMQ connection failed: ${err.message}`);
       throw err;
@@ -214,8 +308,8 @@ export class NotificationWorker implements OnModuleInit {
   private async processNotificationJob(job: any): Promise<void> {
     const { name, data, id } = job;
     
-    this.logger.log(`📧 Processing notification job ${id}: ${name}`);
-    console.log(`📧 Processing notification job ${id}: ${name}`);
+    this.logger.log(`Processing notification job ${id}: ${name}`);
+    console.log(`Processing notification job ${id}: ${name}`);
     const startTime = Date.now();
     
     try {
@@ -239,8 +333,6 @@ export class NotificationWorker implements OnModuleInit {
         case 'booking.cancelled':
           await this.handleBookingCancelled(data);
           break;
-          
-        // REMOVED: case 'booking.completed' - service completion is now tracked by ServiceExecutionStatus
           
         case 'booking.reminder':
           await this.handleBookingReminder(data);
@@ -267,19 +359,19 @@ export class NotificationWorker implements OnModuleInit {
           break;
           
         default:
-          this.logger.warn(`⚠️ Unknown notification job type: ${name}`);
-          console.log(`⚠️ Unknown notification job type: ${name}`);
+          this.logger.warn(`Unknown notification job type: ${name}`);
+          console.log(`Unknown notification job type: ${name}`);
       }
       
       const elapsed = Date.now() - startTime;
-      this.logger.log(`✅ Notification job ${name} completed in ${elapsed}ms`);
-      console.log(`✅ Notification job ${name} completed in ${elapsed}ms`);
+      this.logger.log(`Notification job ${name} completed in ${elapsed}ms`);
+      console.log(`Notification job ${name} completed in ${elapsed}ms`);
       
     } catch (error: any) {
       const elapsed = Date.now() - startTime;
-      console.error(`❌ Notification job ${name} failed after ${elapsed}ms: ${error.message}`);
+      console.error(`Notification job ${name} failed after ${elapsed}ms: ${error.message}`);
       console.error(error.stack);
-      this.logger.error(`❌ Notification job ${name} failed after ${elapsed}ms: ${error.message}`);
+      this.logger.error(`Notification job ${name} failed after ${elapsed}ms: ${error.message}`);
       this.logger.error(error.stack);
       throw error;
     }
@@ -288,15 +380,32 @@ export class NotificationWorker implements OnModuleInit {
   // ==================== HANDLE BOOKING NOTIFICATIONS ====================
 
   private async handleBookingCreated(data: BookingCreatedData): Promise<void> {
-    this.logger.log(`📧 Handling booking.created notification`);
-    console.log(`📧 Handling booking.created notification`);
+    this.logger.log(`Handling booking.created notification`);
+    console.log(`Handling booking.created notification`);
     
     const scheduledDateFormatted = new Date(data.scheduledDate).toLocaleString('en-KE', {
       dateStyle: 'full',
       timeStyle: 'short',
     });
     
-    // Customer notification
+    // Prepare price information based on whether negotiated
+    const priceInfo = data.isNegotiated && data.negotiationDetails ? {
+      isNegotiated: true,
+      proposedPrice: data.proposedPriceFormatted,
+      originalPrice: data.originalPriceFormatted,
+      savingsAmount: data.negotiationDetails.savingsAmountFormatted,
+      savingsPercentage: data.negotiationDetails.savingsPercentage,
+      finalPrice: data.servicePriceFormatted,
+      priceBreakdown: data.priceBreakdown,
+      negotiationMessage: data.negotiationDetails.message,
+      actionRequired: data.negotiationDetails.actionRequired,
+    } : {
+      isNegotiated: false,
+      finalPrice: data.servicePriceFormatted,
+      priceBreakdown: data.priceBreakdown,
+    };
+    
+    // Customer notification with enhanced data
     this.notificationBus.emit('booking-created-customer', {
       to: data.customerEmail,
       customerName: data.customerName,
@@ -304,14 +413,28 @@ export class NotificationWorker implements OnModuleInit {
       serviceTitle: data.serviceTitle,
       scheduledDate: scheduledDateFormatted,
       location: data.location,
-      servicePrice: data.servicePrice,
-      bookingFee: data.bookingFee,
-      totalPrice: data.totalPrice,
+      servicePrice: data.servicePriceFormatted,
+      servicePricePerUnit: data.servicePricePerUnit,
+      bookingFee: data.bookingFeeFormatted,
+      totalPrice: data.totalPriceFormatted,
       isNegotiated: data.isNegotiated,
+      hasBookingFee: data.hasBookingFee,
       notes: data.notes,
+
+      // NEW: Platform commission fields
+      platformCommissionPercentage: data.platformCommissionPercentage,
+      platformCommissionFormatted: data.platformCommissionFormatted,
+      serviceProviderPayoutFormatted: data.serviceProviderPayoutFormatted,
+      
+      // Enhanced fields
+      priceUnitDisplay: data.priceUnitDisplay,
+      durationDisplay: data.durationDisplay,
+      calculationBreakdown: data.calculationBreakdown,
+      
+      ...priceInfo,
     });
     
-    // Contractor notification
+    // Contractor notification with enhanced negotiation details
     this.notificationBus.emit('booking-created-contractor', {
       to: data.contractorEmail,
       contractorName: data.contractorName,
@@ -320,21 +443,53 @@ export class NotificationWorker implements OnModuleInit {
       serviceTitle: data.serviceTitle,
       scheduledDate: scheduledDateFormatted,
       location: data.location,
-      servicePrice: data.servicePrice,
-      bookingFee: data.bookingFee,
-      totalPrice: data.totalPrice,
+      servicePrice: data.servicePriceFormatted,
+      servicePricePerUnit: data.servicePricePerUnit,
+      bookingFee: data.bookingFeeFormatted,
+      totalPrice: data.totalPriceFormatted,
       isNegotiated: data.isNegotiated,
+      hasBookingFee: data.hasBookingFee,
       bookingExternalId: data.bookingExternalId,
       notes: data.notes,
+
+      platformCommissionPercentage: data.platformCommissionPercentage,
+      platformCommissionAmount: data.platformCommissionAmount,
+      platformCommissionFormatted: data.platformCommissionFormatted,
+      serviceProviderPayout: data.serviceProviderPayout,
+      serviceProviderPayoutFormatted: data.serviceProviderPayoutFormatted,
+      
+      // Enhanced fields
+      priceUnitDisplay: data.priceUnitDisplay,
+      durationDisplay: data.durationDisplay,
+      calculationBreakdown: data.calculationBreakdown,
+      
+      // Enhanced negotiation details for contractor
+      originalPrice: data.originalPriceFormatted,
+      originalPricePerUnit: data.originalPricePerUnit,
+      proposedPrice: data.proposedPriceFormatted,
+      priceBreakdown: data.priceBreakdown,
+      negotiationDetails: data.negotiationDetails,
+      
+      // Action required messaging
+      actionRequired: data.isNegotiated && data.negotiationDetails
+        ? data.negotiationDetails.actionRequired
+        : null,
     });
     
-    this.logger.log(`✅ Booking created events emitted for ${data.customerEmail} and ${data.contractorEmail}`);
-    console.log(`✅ Booking created events emitted for ${data.customerEmail} and ${data.contractorEmail}`);
+    this.logger.log(`Booking created events emitted for ${data.customerEmail} and ${data.contractorEmail}`);
+    if (data.isNegotiated && data.negotiationDetails) {
+      this.logger.log(`Negotiated price: ${data.proposedPriceFormatted} (original: ${data.originalPriceFormatted}) - ${data.negotiationDetails.savingsPercentage}% difference`);
+      console.log(`Negotiated price: ${data.proposedPriceFormatted} (original: ${data.originalPriceFormatted}) - ${data.negotiationDetails.savingsPercentage}% difference`);
+    }
+    if (data.durationDisplay) {
+      this.logger.log(`Duration: ${data.durationDisplay} (${data.priceUnitDisplay} pricing)`);
+    }
+    console.log(`Booking created events emitted for ${data.customerEmail} and ${data.contractorEmail}`);
   }
 
   private async handleBookingConfirmed(data: BookingConfirmedData): Promise<void> {
-    this.logger.log(`📧 Handling booking.confirmed notification for ${data.bookingExternalId}`);
-    console.log(`📧 Handling booking.confirmed notification for ${data.bookingExternalId}`);
+    this.logger.log(`Handling booking.confirmed notification for ${data.bookingExternalId}`);
+    console.log(`Handling booking.confirmed notification for ${data.bookingExternalId}`);
     
     const scheduledDateFormatted = new Date(data.scheduledDate).toLocaleString('en-KE', {
       dateStyle: 'full',
@@ -349,6 +504,13 @@ export class NotificationWorker implements OnModuleInit {
       scheduledDate: scheduledDateFormatted,
       location: data.location,
       totalAmount: data.totalAmount,
+      isNegotiated: data.isNegotiated,
+      finalPrice: data.finalPrice,
+      originalPrice: data.originalPrice,
+      // NEW fields
+      servicePrice: data.servicePrice || data.price,
+      hasBookingFee: data.hasBookingFee,
+      bookingFee: data.bookingFee,
     });
     
     this.notificationBus.emit('booking-confirmed-contractor', {
@@ -360,15 +522,21 @@ export class NotificationWorker implements OnModuleInit {
       scheduledDate: scheduledDateFormatted,
       location: data.location,
       totalAmount: data.totalAmount,
+      isNegotiated: data.isNegotiated,
+      finalPrice: data.finalPrice,
+      // NEW fields
+      servicePrice: data.servicePrice || data.price,
+      hasBookingFee: data.hasBookingFee,
+      bookingFee: data.bookingFee,
     });
     
-    this.logger.log(`✅ Booking confirmed events emitted for ${data.customerEmail} and ${data.contractorEmail}`);
-    console.log(`✅ Booking confirmed events emitted for ${data.customerEmail} and ${data.contractorEmail}`);
+    this.logger.log(`Booking confirmed events emitted for ${data.customerEmail} and ${data.contractorEmail}`);
+    console.log(`Booking confirmed events emitted for ${data.customerEmail} and ${data.contractorEmail}`);
   }
 
   private async handleBookingDeclined(data: BookingDeclinedData): Promise<void> {
-    this.logger.log(`📧 Handling booking.declined notification for ${data.bookingExternalId}`);
-    console.log(`📧 Handling booking.declined notification for ${data.bookingExternalId}`);
+    this.logger.log(`Handling booking.declined notification for ${data.bookingExternalId}`);
+    console.log(`Handling booking.declined notification for ${data.bookingExternalId}`);
     
     const scheduledDateFormatted = new Date(data.service.scheduledDate).toLocaleString('en-KE', {
       dateStyle: 'full',
@@ -384,6 +552,9 @@ export class NotificationWorker implements OnModuleInit {
       location: data.service.location,
       reason: data.decline.reason,
       declinedBy: data.decline.declinedBy,
+      // NEW fields for refund info
+      hasBookingFee: data.hasBookingFee,
+      bookingFee: data.bookingFee,
     });
     
     this.notificationBus.emit('booking-declined-contractor', {
@@ -395,13 +566,13 @@ export class NotificationWorker implements OnModuleInit {
       reason: data.decline.reason,
     });
     
-    this.logger.log(`✅ Booking declined events emitted for ${data.customer.email} and ${data.contractor.email}`);
-    console.log(`✅ Booking declined events emitted for ${data.customer.email} and ${data.contractor.email}`);
+    this.logger.log(`Booking declined events emitted for ${data.customer.email} and ${data.contractor.email}`);
+    console.log(`Booking declined events emitted for ${data.customer.email} and ${data.contractor.email}`);
   }
 
   private async handleBookingCancelled(data: BookingCancelledData): Promise<void> {
-    this.logger.log(`📧 Handling booking.cancelled notification for ${data.bookingExternalId}`);
-    console.log(`📧 Handling booking.cancelled notification for ${data.bookingExternalId}`);
+    this.logger.log(`Handling booking.cancelled notification for ${data.bookingExternalId}`);
+    console.log(`Handling booking.cancelled notification for ${data.bookingExternalId}`);
     
     const scheduledDateFormatted = new Date(data.service.scheduledDate).toLocaleString('en-KE', {
       dateStyle: 'full',
@@ -417,6 +588,9 @@ export class NotificationWorker implements OnModuleInit {
       location: data.service.location,
       reason: data.cancellation.reason,
       cancelledBy: data.cancellation.cancelledBy,
+      // NEW fields for refund info
+      hasBookingFee: data.hasBookingFee,
+      bookingFee: data.bookingFee,
     });
     
     this.notificationBus.emit('booking-cancelled-contractor', {
@@ -429,15 +603,18 @@ export class NotificationWorker implements OnModuleInit {
       location: data.service.location,
       reason: data.cancellation.reason,
       cancelledBy: data.cancellation.cancelledBy,
+      // NEW fields for refund info
+      hasBookingFee: data.hasBookingFee,
+      bookingFee: data.bookingFee,
     });
     
-    this.logger.log(`✅ Booking cancelled events emitted for ${data.customer.email} and ${data.contractor.email}`);
-    console.log(`✅ Booking cancelled events emitted for ${data.customer.email} and ${data.contractor.email}`);
+    this.logger.log(`Booking cancelled events emitted for ${data.customer.email} and ${data.contractor.email}`);
+    console.log(`Booking cancelled events emitted for ${data.customer.email} and ${data.contractor.email}`);
   }
 
   private async handleBookingReminder(data: { bookingExternalId: string }): Promise<void> {
-    this.logger.log(`📧 Handling booking.reminder for ${data.bookingExternalId}`);
-    console.log(`📧 Handling booking.reminder for ${data.bookingExternalId}`);
+    this.logger.log(`Handling booking.reminder for ${data.bookingExternalId}`);
+    console.log(`Handling booking.reminder for ${data.bookingExternalId}`);
     
     const booking = await this.prisma.serviceBooking.findUnique({
       where: { externalId: data.bookingExternalId },
@@ -445,7 +622,7 @@ export class NotificationWorker implements OnModuleInit {
     
     if (!booking || booking.status !== BookingStatus.CONFIRMED) {
       this.logger.warn(`Booking ${data.bookingExternalId} not found or not confirmed for reminder`);
-      console.log(`⚠️ Booking ${data.bookingExternalId} not found or not confirmed for reminder`);
+      console.log(`Booking ${data.bookingExternalId} not found or not confirmed for reminder`);
       return;
     }
     
@@ -466,6 +643,7 @@ export class NotificationWorker implements OnModuleInit {
         scheduledDate: scheduledDateFormatted,
         location: booking.locationCity,
         hoursRemaining: hoursBefore,
+        totalAmount: `${booking.totalAmount} ${booking.currency}`,
       });
       
       this.notificationBus.emit('booking-reminder-contractor', {
@@ -477,17 +655,18 @@ export class NotificationWorker implements OnModuleInit {
         scheduledDate: scheduledDateFormatted,
         location: booking.locationCity,
         hoursRemaining: hoursBefore,
+        totalAmount: `${booking.totalAmount} ${booking.currency}`,
       });
       
-      this.logger.log(`✅ Reminder events emitted for booking ${data.bookingExternalId}`);
-      console.log(`✅ Reminder events emitted for booking ${data.bookingExternalId}`);
+      this.logger.log(`Reminder events emitted for booking ${data.bookingExternalId}`);
+      console.log(`Reminder events emitted for booking ${data.bookingExternalId}`);
     }
   }
 
   // ==================== HANDLE SERVICE OFFERING NOTIFICATIONS ====================
 
   private async handleServiceOfferingCreated(data: ServiceOfferingCreatedData): Promise<void> {
-    this.logger.log(`📧 Sending service offering created notification to ${data.to}`);
+    this.logger.log(`Sending service offering created notification to ${data.to}`);
     
     const formattedPrice = `${data.basePrice.toLocaleString()} ${data.currency}`;
     const formattedDate = new Date(data.createdAt).toLocaleString('en-KE', {
@@ -495,7 +674,6 @@ export class NotificationWorker implements OnModuleInit {
       timeStyle: 'short',
     });
     
-    // Format negotiable price range if applicable
     let priceRangeText = '';
     if (data.isNegotiable) {
       if (data.minNegotiablePrice && data.maxNegotiablePrice) {
@@ -507,7 +685,6 @@ export class NotificationWorker implements OnModuleInit {
       }
     }
     
-    // Format booking fee info
     let bookingFeeText = '';
     if (data.useCustomBookingFee && data.customBookingFeeAmount) {
       bookingFeeText = `${data.customBookingFeeAmount.toLocaleString()} ${data.customBookingFeeCurrency || data.currency}`;
@@ -539,12 +716,12 @@ export class NotificationWorker implements OnModuleInit {
       dashboardUrl: data.dashboardUrl,
     });
     
-    this.logger.log(`✅ Service offering created notification sent to ${data.to}`);
-    console.log(`✅ Service offering created notification sent to ${data.to}`);
+    this.logger.log(`Service offering created notification sent to ${data.to}`);
+    console.log(`Service offering created notification sent to ${data.to}`);
   }
 
   private async handleServiceOfferingUpdated(data: ServiceOfferingUpdatedData): Promise<void> {
-    this.logger.log(`📧 Sending service offering updated notification to ${data.to}`);
+    this.logger.log(`Sending service offering updated notification to ${data.to}`);
     
     const formattedDate = new Date(data.updatedAt).toLocaleString('en-KE', {
       dateStyle: 'full',
@@ -561,12 +738,12 @@ export class NotificationWorker implements OnModuleInit {
       dashboardUrl: data.dashboardUrl,
     });
     
-    this.logger.log(`✅ Service offering updated notification sent to ${data.to}`);
-    console.log(`✅ Service offering updated notification sent to ${data.to}`);
+    this.logger.log(`Service offering updated notification sent to ${data.to}`);
+    console.log(`Service offering updated notification sent to ${data.to}`);
   }
 
   private async handleServiceOfferingDeleted(data: ServiceOfferingDeletedData): Promise<void> {
-    this.logger.log(`📧 Sending service offering deleted notification to ${data.to}`);
+    this.logger.log(`Sending service offering deleted notification to ${data.to}`);
     
     const formattedDate = new Date(data.deletedAt).toLocaleString('en-KE', {
       dateStyle: 'full',
@@ -583,15 +760,15 @@ export class NotificationWorker implements OnModuleInit {
       dashboardUrl: data.dashboardUrl,
     });
     
-    this.logger.log(`✅ Service offering deleted notification sent to ${data.to}`);
-    console.log(`✅ Service offering deleted notification sent to ${data.to}`);
+    this.logger.log(`Service offering deleted notification sent to ${data.to}`);
+    console.log(`Service offering deleted notification sent to ${data.to}`);
   }
 
   // ==================== HANDLE OTHER NOTIFICATIONS ====================
 
   private async handleDailySummary(data: { contractorId: string; date: Date }): Promise<void> {
-    this.logger.log(`📧 Handling daily summary for contractor ${data.contractorId}`);
-    console.log(`📧 Handling daily summary for contractor ${data.contractorId}`);
+    this.logger.log(`Handling daily summary for contractor ${data.contractorId}`);
+    console.log(`Handling daily summary for contractor ${data.contractorId}`);
     
     const startOfDay = new Date(data.date);
     startOfDay.setHours(0, 0, 0, 0);
@@ -607,12 +784,21 @@ export class NotificationWorker implements OnModuleInit {
           lte: endOfDay,
         },
       },
+      include: {
+        service: {
+          select: {
+            basePrice: true,
+            priceUnit: true,
+            currency: true,
+          },
+        },
+      },
       orderBy: { scheduledDate: 'asc' },
     });
     
     if (bookings.length === 0) {
       this.logger.log(`No bookings for contractor ${data.contractorId} on ${data.date}`);
-      console.log(`📭 No bookings for contractor ${data.contractorId} on ${data.date}`);
+      console.log(`No bookings for contractor ${data.contractorId} on ${data.date}`);
       return;
     }
     
@@ -620,11 +806,10 @@ export class NotificationWorker implements OnModuleInit {
     
     if (!contractorEmail) {
       this.logger.warn(`No email found for contractor ${data.contractorId}`);
-      console.log(`⚠️ No email found for contractor ${data.contractorId}`);
+      console.log(`No email found for contractor ${data.contractorId}`);
       return;
     }
     
-    // FIX: Use serviceExecutionStatus instead of booking.status for completed count
     const totalEarnings = bookings
       .filter(b => b.serviceExecutionStatus === ServiceExecutionStatus.COMPLETED)
       .reduce((sum, b) => sum + (b.servicePrice || 0), 0);
@@ -646,25 +831,27 @@ export class NotificationWorker implements OnModuleInit {
         executionStatus: b.serviceExecutionStatus,
         price: `${b.servicePrice} ${b.currency}`,
         totalAmount: `${b.totalAmount} ${b.currency}`,
+        isNegotiated: b.service?.basePrice ? b.servicePrice !== b.service.basePrice : false,
+        originalPrice: b.service?.basePrice ? `${b.service.basePrice} ${b.currency}` : null,
       })),
     });
     
-    this.logger.log(`✅ Daily summary event emitted for contractor ${data.contractorId}`);
-    console.log(`✅ Daily summary event emitted for contractor ${data.contractorId}`);
+    this.logger.log(`Daily summary event emitted for contractor ${data.contractorId}`);
+    console.log(`Daily summary event emitted for contractor ${data.contractorId}`);
   }
 
   private async handleReviewRequest(data: { bookingId: string; clientId: string; contractorId: string; serviceTitle: string }): Promise<void> {
-    this.logger.log(`📧 Handling review.request for booking ${data.bookingId}`);
-    console.log(`📧 Handling review.request for booking ${data.bookingId}`);
+    this.logger.log(`Handling review.request for booking ${data.bookingId}`);
+    console.log(`Handling review.request for booking ${data.bookingId}`);
     
     const booking = await this.prisma.serviceBooking.findUnique({
       where: { id: data.bookingId },
-      select: { clientEmail: true, clientName: true, serviceTitle: true },
+      select: { clientEmail: true, clientName: true, serviceTitle: true, servicePrice: true, currency: true },
     });
     
     if (!booking) {
       this.logger.warn(`Booking ${data.bookingId} not found for review request`);
-      console.log(`⚠️ Booking ${data.bookingId} not found for review request`);
+      console.log(`Booking ${data.bookingId} not found for review request`);
       return;
     }
     
@@ -673,9 +860,10 @@ export class NotificationWorker implements OnModuleInit {
       customerName: booking.clientName,
       serviceTitle: booking.serviceTitle,
       bookingId: data.bookingId,
+      amountPaid: `${booking.servicePrice} ${booking.currency}`,
     });
     
-    this.logger.log(`✅ Review request event emitted for ${booking.clientEmail}`);
-    console.log(`✅ Review request event emitted for ${booking.clientEmail}`);
+    this.logger.log(`Review request event emitted for ${booking.clientEmail}`);
+    console.log(`Review request event emitted for ${booking.clientEmail}`);
   }
-}
+} 

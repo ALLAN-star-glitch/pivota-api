@@ -329,11 +329,148 @@ enum BookingStatus {
   DECLINED   // Contractor declined the booking
 }
 
-// NEW: Service execution status (separate from booking)
+// This stays the same - tracks professional's actions
 enum ServiceExecutionStatus {
-  NOT_STARTED   // Service not yet begun (default after booking confirmed)
-  IN_PROGRESS   // Service is actively in progress  // <-- CHANGED from STARTED
-  COMPLETED     // Service completed successfully
+  NOT_STARTED   // Professional hasn't started yet
+  IN_PROGRESS   // Professional is currently working
+  COMPLETED     // Professional says work is done
+}
+
+// NEW: Tracks customer's satisfaction level
+enum CustomerSatisfaction {
+  PENDING       // Customer hasn't responded yet (default)
+  SATISFIED     // Customer confirms work is good
+  DISSATISFIED  // Customer says work is bad (triggers dispute)
+}
+
+/// =====================================================================
+///                           DISPUTE MANAGEMENT
+/// =====================================================================
+
+enum DisputeStatus {
+  UNDER_REVIEW  // Dispute raised, waiting for admin action
+  RESOLVED      // Admin has made a decision
+  CLOSED        // Dispute is closed (no further action)
+}
+
+enum DisputeRaisedBy {
+  CUSTOMER
+  PROFESSIONAL
+}
+
+enum DisputeResolution {
+  FULL_REFUND        // Customer gets all money back, professional gets nothing
+  PARTIAL_REFUND     // Customer gets partial refund, professional gets rest
+  RELEASE_PAYMENT    // Professional gets full payment, customer gets nothing
+  CANCEL_BOOKING     // Booking cancelled, follow cancellation policy
+}
+
+enum DisputeDecision {
+  IN_FAVOR_OF_CUSTOMER
+  IN_FAVOR_OF_PROFESSIONAL
+  SPLIT
+}
+
+model Dispute {
+  id                String   @id @default(cuid())
+  externalId        String   @default(uuid()) @unique
+  
+  // Relationship to the booking
+  bookingId         String
+  booking           ServiceBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  // Who raised the dispute
+  raisedBy          DisputeRaisedBy
+  raisedByUserId    String        // UUID of the user who raised it
+  
+  // Dispute details
+  title             String        // Short summary: "Professional never showed up"
+  description       String?       // Detailed explanation
+  reason            String        // e.g., "NO_SHOW", "POOR_WORK", "DID_NOT_START", "OTHER"
+  
+  // Evidence
+  evidenceUrls      String[] @default([])  // Photos, screenshots, documents
+  
+  // Status tracking
+  status            DisputeStatus @default(UNDER_REVIEW)
+  
+  // Resolution (set when resolved)
+  resolution        DisputeResolution?
+  decision          DisputeDecision?
+  resolutionNotes   String?       // Admin's explanation of the decision
+  
+  // Financial outcome
+  amountRefunded    Float?        // How much was refunded to customer
+  amountReleased    Float?        // How much was released to professional
+  platformFeeKept   Float?        // Platform commission kept (if any)
+  
+  // Who resolved it
+  resolvedAt        DateTime?
+  resolvedBy        String?       // Admin user ID who resolved
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  messages          DisputeMessage[]
+  statusHistory     DisputeStatusHistory[]
+  
+  // Indexes
+  @@index([bookingId])
+  @@index([status])
+  @@index([raisedByUserId])
+  @@index([createdAt])
+  @@index([resolvedAt])
+}
+
+model DisputeMessage {
+  id                String   @id @default(cuid())
+  externalId        String   @default(uuid()) @unique
+  
+  // Relationship
+  disputeId         String
+  dispute           Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  
+  // Who sent the message
+  senderId          String        // UUID of sender
+  senderType        String        // "CUSTOMER", "PROFESSIONAL", "ADMIN"
+  senderName        String?       // Denormalized for quick display
+  
+  // Message content
+  message           String
+  attachments       String[] @default([])  // File URLs
+  
+  // Read status
+  readByCustomer    Boolean @default(false)
+  readByProfessional Boolean @default(false)
+  readByAdmin       Boolean @default(false)
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  
+  @@index([disputeId])
+  @@index([createdAt])
+  @@index([senderId])
+}
+
+model DisputeStatusHistory {
+  id                String   @id @default(cuid())
+  
+  disputeId         String
+  dispute           Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  
+  oldStatus         DisputeStatus?
+  newStatus         DisputeStatus
+  changedBy         String        // User ID who changed the status
+  changedByType     String        // "CUSTOMER", "PROFESSIONAL", "ADMIN", "SYSTEM"
+  reason            String?
+  
+  createdAt         DateTime @default(now())
+  
+  @@index([disputeId])
+  @@index([createdAt])
+  @@index([changedBy])
 }
 
 /// =====================================================================
@@ -348,8 +485,6 @@ model ServiceBooking {
   // ======================
   contractorId  String   
   clientId      String  
-
-  serviceExecutionStatus ServiceExecutionStatus @default(NOT_STARTED)
 
   // ======================
   // THE WHAT
@@ -378,20 +513,17 @@ model ServiceBooking {
   reminderSent1h  Boolean @default(false)
   
   // ======================
-  // PRICING BREAKDOWN (Snapshot at booking time)
+  // PRICING BREAKDOWN
   // ======================
-  servicePrice      Float?    // Base service price (basePrice * duration)
-  servicePriceUnit  String?   // What unit was used (PER_HOUR, PER_DAY, etc.)
-  serviceDuration   Int?      // Duration in the unit (e.g., 2 hours, 3 days)
+  servicePrice      Float?
+  servicePriceUnit  String?
+  serviceDuration   Int?
   
-  // Booking fee (snapshot of what was charged)
-  bookingFeeAmount  Float?    // Amount charged for booking fee
+  bookingFeeAmount  Float?
   bookingFeeCurrency String?  @default("KES")
-  bookingFeeRefundable Boolean? @default(false)  // Was fee refundable per policy at booking time?
+  bookingFeeRefundable Boolean? @default(false)
   
-  // Total amount customer pays
-  totalAmount       Float?    // servicePrice + bookingFeeAmount
-  
+  totalAmount       Float?
   currency          String    @default("KES")
   customerNotes     String?
   
@@ -406,10 +538,59 @@ model ServiceBooking {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // ======================
+  // PROFESSIONAL'S ACTIONS
+  // ======================
+  serviceExecutionStatus ServiceExecutionStatus @default(NOT_STARTED)
+  workStartedAt          DateTime?
+  workCompletedAt        DateTime?
+  
+  // ======================
+  // CUSTOMER'S SATISFACTION
+  // ======================
+  customerSatisfaction   CustomerSatisfaction @default(PENDING)
+  customerConfirmedAt    DateTime?
+  customerDissatisfiedAt DateTime?
+  
+  // ======================
+  // EVIDENCE OF WORK
+  // ======================
+  completionEvidence   String[] @default([])
+  
+  // ======================
+  // AUTO-RELEASE
+  // ======================
+  autoReleaseAt        DateTime?
+  autoReleaseTriggered Boolean @default(false)
+  
+  // ======================
+  // PAYMENT RELEASE TRACKING
+  // ======================
+  paymentReleasedAt    DateTime?
+  refundAmount         Float?
+  refundProcessedAt    DateTime?
+
+  // ======================
+  // RELATION TO DISPUTE
+  // ======================
+  disputes            Dispute[]  // A booking can have multiple disputes (though typically one)
+
+  activeDisputeId     String?   @map("active_dispute_id")
+
+  // ======================
+  // INDEXES
+  // ======================
+  @@index([activeDisputeId])
   @@index([contractorId])
   @@index([clientId])
   @@index([status])
   @@index([serviceId])
+  @@index([serviceExecutionStatus])
+  @@index([customerSatisfaction])
+  @@index([workCompletedAt])
+  @@index([customerConfirmedAt])
+  @@index([autoReleaseAt])
+  @@index([paymentReleasedAt])
 }
 
 /// =====================================================================

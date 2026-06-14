@@ -147,7 +147,7 @@ export async function createBusinessProfile(
       const profData = data as SkilledProfessionalProfileDataDto;
       
       logger.log(`👨‍🔧 Creating SKILLED_PROFESSIONAL profile for account ${accountUuid}`);
-      
+       
       // Use title or profession as fallback, default to 'Professional'
       const profileTitle = profData.title || profData.profession || 'Professional';
       

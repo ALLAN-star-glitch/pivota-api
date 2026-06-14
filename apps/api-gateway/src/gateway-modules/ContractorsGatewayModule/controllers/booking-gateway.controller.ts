@@ -97,7 +97,6 @@ export class BookingGatewayController {
   // ===========================================================
 
   @Post()
-  @Permissions(P.PROFESSIONAL_SERVICES_BOOK_OWN)
   @Version('1')
   @ApiOperation({ summary: 'Create a new booking' })
   @ApiResponse({ status: 201, description: 'Booking created successfully' })

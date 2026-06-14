@@ -159,6 +159,9 @@ message CreateBookingRequest {
   optional int32 durationWeeks = 9;
   optional int32 durationMonths = 10;
   bool isPlatformAdmin = 11;
+  
+  // ========== NEW: NEGOTIATION FIELD ==========
+  optional double proposedPrice = 12;  // Customer's proposed price for negotiable services
 }
 
 message AcceptBookingRequest {

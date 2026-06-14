@@ -1,7 +1,7 @@
 // apps/notification-service/src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import { AppModule } from './app/app.module';
 
@@ -56,7 +56,7 @@ async function bootstrap() {
   
   console.log('🔴 STEP 6: Housing email microservice connected');
 
-  //  NEW: RabbitMQ connection for booking-related emails
+  // RabbitMQ connection for booking-related emails
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
@@ -69,7 +69,23 @@ async function bootstrap() {
   
   console.log('🔴 STEP 7: Booking email microservice connected');
 
-  // ✅ NEW: RabbitMQ connection for general notification events
+  // RabbitMQ connection for service execution-related emails (evidence upload)
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [rmqUrl],
+      queue: 'service_execution_notification_queue',
+      noAck: false,
+      prefetchCount: 1,
+      queueOptions: { 
+        durable: true
+      },
+    }, 
+  }, { inheritAppConfig: true });
+  
+  console.log('🔴 STEP 8: Service execution email microservice connected');
+
+  // RabbitMQ connection for general notification events
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
@@ -84,19 +100,20 @@ async function bootstrap() {
     }, 
   }, { inheritAppConfig: true });
   
-  console.log('🔴 STEP 8: General notification events microservice connected');
+  console.log('🔴 STEP 9: General notification events microservice connected');
 
   await app.startAllMicroservices();
-  console.log('🔴 STEP 9: All microservices started');
+  console.log('🔴 STEP 10: All microservices started');
   
   logger.log('🚀 Notification Microservice is running');
   logger.log(`✅ RabbitMQ listening on queue: notification_email_queue`);
   logger.log(`✅ RabbitMQ listening on queue: housing_notification_queue`);
   logger.log(`✅ RabbitMQ listening on queue: booking_notification_queue`);
+  logger.log(`✅ RabbitMQ listening on queue: service_execution_notification_queue`);
   logger.log(`✅ RabbitMQ listening on queue: notification_events`);
   logger.log(`⚠️ Kafka is DISABLED (only RabbitMQ for emails)`);
   
-  console.log('🔴 STEP 10: Bootstrap complete - service is ready');
+  console.log('🔴 STEP 11: Bootstrap complete - service is ready');
 }
 
 bootstrap();

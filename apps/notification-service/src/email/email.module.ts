@@ -22,6 +22,8 @@ import { BookingEmailController } from './controllers/booking-email.controller';
 import { BookingEmailService } from './services/handlers/booking-email.service';
 import { ServiceOfferingEmailService } from './services/handlers/service-offering-email.service';
 import { ServiceOfferingEmailController } from './controllers/service-offering-email.controller';
+import { ServiceExecutionEmailController } from './controllers/service-execution-email.controller';
+import { ServiceExecutionEmailService } from './services/handlers/service-execution-email.service';
 
 @Module({
   imports: [
@@ -116,7 +118,8 @@ import { ServiceOfferingEmailController } from './controllers/service-offering-e
     PropertyEmailController,
     PaymentEmailController,
     BookingEmailController,
-    ServiceOfferingEmailController
+    ServiceOfferingEmailController,
+    ServiceExecutionEmailController
   ],
   providers: [
     EmailClientService,
@@ -127,7 +130,8 @@ import { ServiceOfferingEmailController } from './controllers/service-offering-e
     PaymentEmailService,
     SecurityEmailService,
     BookingEmailService,
-    ServiceOfferingEmailService
+    ServiceOfferingEmailService,
+    ServiceExecutionEmailService
   ],
   exports: [
     EmailClientService,
@@ -138,7 +142,9 @@ import { ServiceOfferingEmailController } from './controllers/service-offering-e
     PaymentEmailService,
     SecurityEmailService,
     BookingEmailService,
-    ServiceOfferingEmailService
+    ServiceOfferingEmailService,
+    ServiceExecutionEmailService
+    
   ],
 })
 export class EmailModule {}

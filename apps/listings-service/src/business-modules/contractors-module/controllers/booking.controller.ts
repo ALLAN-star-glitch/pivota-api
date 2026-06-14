@@ -6,7 +6,6 @@ import {
   AcceptBookingRequestDto,
   DeclineBookingRequestDto,
   CancelBookingRequestDto,
-  CompleteBookingRequestDto,
   BookingResponseDto,
   BookingStatisticsResponseDto,
   PaginatedBookingsResponseDto,
@@ -104,7 +103,7 @@ export class BookingController {
       data.offset ?? 0,
       data.isPlatformAdmin,
     );
-  }
+  }  
 
   @GrpcMethod('BookingService', 'GetMyBookingsAsProfessional')
   async getMyBookingsAsProfessional(

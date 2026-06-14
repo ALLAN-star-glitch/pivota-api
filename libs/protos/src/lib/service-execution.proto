@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package contractors_service_execution;
+
+// ===================================================
+// SERVICE DEFINITION
+// ===================================================
+service ServiceExecutionService {
+  // Service Execution Methods
+  rpc StartWork (StartWorkRequest) returns (BaseStartWorkResponse);
+  rpc CompleteWork (CompleteWorkRequest) returns (BaseCompleteWorkResponse);
+  rpc GetWorkStatus (GetWorkStatusRequest) returns (BaseWorkStatusResponse);
+  rpc CheckAutoReleaseEligible (CheckAutoReleaseEligibilityRequest) returns (BaseAutoReleaseEligibilityResponse);
+}
+
+// ===================================================
+// SHARED MESSAGES
+// ===================================================
+message EmptyRequest {}
+
+message ErrorPayload {
+  string code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+// ===================================================
+// ENTITIES
+// ===================================================
+
+// Start Work Response Data
+message StartWorkData {
+  string id = 1;
+  string externalId = 2;
+  string serviceExecutionStatus = 3;
+  optional string workStartedAt = 4;
+  string status = 5;
+}
+
+// Complete Work Response Data
+message CompleteWorkData {
+  string id = 1;
+  string externalId = 2;
+  string serviceExecutionStatus = 3;
+  optional string workCompletedAt = 4;
+  optional string autoReleaseAt = 5;
+  repeated string completionEvidence = 6;
+  string status = 7;
+}
+
+// Work Status Response Data
+message WorkStatusData {
+  string id = 1;
+  string externalId = 2;
+  string serviceExecutionStatus = 3;
+  optional string workStartedAt = 4;
+  optional string workCompletedAt = 5;
+  optional string autoReleaseAt = 6;
+  bool autoReleaseTriggered = 7;
+  repeated string completionEvidence = 8;
+  string customerSatisfaction = 9;
+  optional string customerConfirmedAt = 10;
+  optional string paymentReleasedAt = 11;
+  optional string professionalName = 12;
+  bool professionalIsVerified = 13;
+}
+
+// Auto-Release Eligibility Response Data
+message AutoReleaseEligibilityData {
+  bool isEligible = 1;
+  optional string autoReleaseAt = 2;
+}
+
+// ===================================================
+// REQUEST MESSAGES
+// ===================================================
+
+// Start Work Request
+message StartWorkRequest {
+  string bookingExternalId = 1;
+  
+  // Hidden fields - set by API Gateway from JWT token
+  string professionalId = 2;
+  bool isPlatformAdmin = 3;
+}
+
+// Complete Work Request
+message CompleteWorkRequest {
+  string bookingExternalId = 1;
+  repeated string evidenceUrls = 2;
+  
+  // Hidden fields - set by API Gateway from JWT token
+  string professionalId = 3;
+  bool isPlatformAdmin = 4;
+}
+
+// Get Work Status Request
+message GetWorkStatusRequest {
+  string bookingExternalId = 1;
+  
+  // Hidden fields - set by API Gateway from JWT token
+  string userId = 2;
+  bool isPlatformAdmin = 3;
+}
+
+// Check Auto-Release Eligibility Request
+message CheckAutoReleaseEligibilityRequest {
+  string bookingExternalId = 1;
+  
+  // Hidden fields - set by API Gateway from JWT token
+  bool isPlatformAdmin = 2;
+}
+
+// ===================================================
+// RESPONSE MESSAGES
+// ===================================================
+
+// Start Work Response
+message BaseStartWorkResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  StartWorkData data = 4;
+  ErrorPayload error = 5;
+}
+
+// Complete Work Response
+message BaseCompleteWorkResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  CompleteWorkData data = 4;
+  ErrorPayload error = 5;
+}
+
+// Get Work Status Response
+message BaseWorkStatusResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  WorkStatusData data = 4;
+  ErrorPayload error = 5;
+}
+
+// Check Auto-Release Eligibility Response
+message BaseAutoReleaseEligibilityResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  AutoReleaseEligibilityData data = 4;
+  ErrorPayload error = 5;
+}

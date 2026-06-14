@@ -384,367 +384,578 @@ export class BookingService {
 
   // ==================== CREATE BOOKING ====================
 
-  async createBooking(
-    dto: CreateBookingRequestDto & { clientId: string; isPlatformAdmin?: boolean }
-  ): Promise<BaseResponseDto<any>> {
+async createBooking(
+  dto: CreateBookingRequestDto & { clientId: string; isPlatformAdmin?: boolean }
+): Promise<BaseResponseDto<any>> {
+  try {
+    const serviceOffering = await this.prisma.serviceOffering.findUnique({
+      where: { externalId: dto.serviceId },
+      include: { 
+        category: true,
+        reviews: true,
+      },
+    }) as ServiceOfferingWithDetails | null;
+
+    if (!serviceOffering) {
+      return BaseResponseDto.fail('Service offering not found', 'NOT_FOUND');
+    }
+
+    if (serviceOffering.status !== 'ACTIVE') {
+      return BaseResponseDto.fail('Service offering is not available for booking', 'SERVICE_UNAVAILABLE');
+    }
+
+    const client = await this.getUserDetails(dto.clientId);
+    if (!client) {
+      return BaseResponseDto.fail('Client profile not found', 'CLIENT_NOT_FOUND');
+    }
+
+    const contractorProfile = await this.getSkilledProfessionalDetails(dto.contractorId);
+    if (!contractorProfile) {
+      return BaseResponseDto.fail('Contractor profile not found', 'CONTRACTOR_NOT_FOUND');
+    }
+
+    let scheduledDate: Date;
     try {
-      const serviceOffering = await this.prisma.serviceOffering.findUnique({
-        where: { externalId: dto.serviceId },
-        include: { 
-          category: true,
-          reviews: true,
-        },
-      }) as ServiceOfferingWithDetails | null;
-
-      if (!serviceOffering) {
-        return BaseResponseDto.fail('Service offering not found', 'NOT_FOUND');
-      }
-
-      if (serviceOffering.status !== 'ACTIVE') {
-        return BaseResponseDto.fail('Service offering is not available for booking', 'SERVICE_UNAVAILABLE');
-      }
-
-      const client = await this.getUserDetails(dto.clientId);
-      if (!client) {
-        return BaseResponseDto.fail('Client profile not found', 'CLIENT_NOT_FOUND');
-      }
-
-      const contractorProfile = await this.getSkilledProfessionalDetails(dto.contractorId);
-      if (!contractorProfile) {
-        return BaseResponseDto.fail('Contractor profile not found', 'CONTRACTOR_NOT_FOUND');
-      }
-
-      let scheduledDate: Date;
-      try {
-        scheduledDate = new Date(dto.scheduledDate);
-        if (isNaN(scheduledDate.getTime())) {
-          return BaseResponseDto.fail('Invalid scheduled date format', 'INVALID_DATE_FORMAT');
-        }
-        const now = new Date();
-        if (scheduledDate <= now) {
-          return BaseResponseDto.fail('Scheduled date must be in the future', 'DATE_IN_PAST');
-        }
-      } catch (error) {
+      scheduledDate = new Date(dto.scheduledDate);
+      if (isNaN(scheduledDate.getTime())) {
         return BaseResponseDto.fail('Invalid scheduled date format', 'INVALID_DATE_FORMAT');
       }
-
-      if (!dto.isPlatformAdmin) {
-        if (client.accountUuid === contractorProfile.accountUuid) {
-          return BaseResponseDto.fail('You cannot book your own service offering', 'SELF_BOOKING_NOT_ALLOWED');
-        }
-        if (serviceOffering.creatorId === dto.clientId) {
-          return BaseResponseDto.fail('You cannot book a service that you created', 'SELF_BOOKING_NOT_ALLOWED');
-        }
+      const now = new Date();
+      if (scheduledDate <= now) {
+        return BaseResponseDto.fail('Scheduled date must be in the future', 'DATE_IN_PAST');
       }
+    } catch (error) {
+      return BaseResponseDto.fail('Invalid scheduled date format', 'INVALID_DATE_FORMAT');
+    }
 
-      if (!dto.isPlatformAdmin) {
-        const coverageAreas = this.parseCoverageAreas(serviceOffering.coverageAreas) || [];
-        const bookingCity = dto.locationCity;
-        
-        if (!bookingCity) {
-          return BaseResponseDto.fail('Location city is required for booking', 'LOCATION_CITY_REQUIRED');
-        }
-        
-        if (coverageAreas.length > 0 && !coverageAreas.includes(bookingCity)) {
-          return BaseResponseDto.fail(
-            `This service is not available in ${bookingCity}. Available coverage areas: ${coverageAreas.join(', ')}`,
-            'SERVICE_AREA_NOT_COVERED'
-          );
-        }
+    if (!dto.isPlatformAdmin) {
+      if (client.accountUuid === contractorProfile.accountUuid) {
+        return BaseResponseDto.fail('You cannot book your own service offering', 'SELF_BOOKING_NOT_ALLOWED');
       }
+      if (serviceOffering.creatorId === dto.clientId) {
+        return BaseResponseDto.fail('You cannot book a service that you created', 'SELF_BOOKING_NOT_ALLOWED');
+      }
+    }
 
-      // ========== NEGOTIATION LOGIC ==========
-      let servicePrice = serviceOffering.basePrice;
-      let isNegotiated = false;
-      let proposedPrice: number | null = null;
-      const priceUnit = serviceOffering.priceUnit;
+    if (!dto.isPlatformAdmin) {
+      const coverageAreas = this.parseCoverageAreas(serviceOffering.coverageAreas) || [];
       const bookingCity = dto.locationCity;
-      let serviceDuration: number | null = null;
-
-      // Check if customer is proposing a different price
-      if (dto.proposedPrice !== undefined && dto.proposedPrice !== null && dto.proposedPrice !== serviceOffering.basePrice) {
-        proposedPrice = dto.proposedPrice;
-        
-        // Check if service is negotiable
-        if (!serviceOffering.isNegotiable) {
-          return BaseResponseDto.fail(
-            'This service is not negotiable. Please accept the standard price.',
-            'NOT_NEGOTIABLE'
-          );
-        }
-        
-        // Validate proposed price against min/max range
-        if (serviceOffering.minNegotiablePrice !== null && proposedPrice < serviceOffering.minNegotiablePrice) {
-          return BaseResponseDto.fail(
-            `Proposed price (${proposedPrice} ${serviceOffering.currency}) is below the professional's minimum acceptable price (${serviceOffering.minNegotiablePrice} ${serviceOffering.currency}).`,
-            'PRICE_BELOW_MINIMUM'
-          );
-        }
-        
-        if (serviceOffering.maxNegotiablePrice !== null && proposedPrice > serviceOffering.maxNegotiablePrice) {
-          return BaseResponseDto.fail(
-            `Proposed price (${proposedPrice} ${serviceOffering.currency}) exceeds the professional's maximum price (${serviceOffering.maxNegotiablePrice} ${serviceOffering.currency}).`,
-            'PRICE_ABOVE_MAXIMUM'
-          );
-        }
-        
-        isNegotiated = true;
-        servicePrice = proposedPrice;
-        
-        this.logger.log(`Negotiated price: Customer proposed ${proposedPrice} ${serviceOffering.currency} for service ${serviceOffering.id}`);
+      
+      if (!bookingCity) {
+        return BaseResponseDto.fail('Location city is required for booking', 'LOCATION_CITY_REQUIRED');
       }
+      
+      if (coverageAreas.length > 0 && !coverageAreas.includes(bookingCity)) {
+        return BaseResponseDto.fail(
+          `This service is not available in ${bookingCity}. Available coverage areas: ${coverageAreas.join(', ')}`,
+          'SERVICE_AREA_NOT_COVERED'
+        );
+      }
+    }
 
-      // Calculate total price based on duration
-      switch (priceUnit) {
-        case 'PER_HOUR':
-          if (dto.durationDays && dto.durationDays > 0) {
-            return BaseResponseDto.fail('This service is priced by hour. Please provide duration in hours, not days.', 'INVALID_DURATION_UNIT');
-          }
-          if (!dto.durationHours || dto.durationHours <= 0) {
-            return BaseResponseDto.fail('Duration in hours is required for hourly services', 'DURATION_REQUIRED');
+    // ========== NEGOTIATION LOGIC ==========
+    let servicePrice = serviceOffering.basePrice;
+    let isNegotiated = false;
+    let proposedPrice: number | null = null;
+    const priceUnit = serviceOffering.priceUnit;
+    const bookingCity = dto.locationCity;
+    let serviceDuration: number | null = null;
+
+    // Check if customer is proposing a different price
+    if (dto.proposedPrice !== undefined && dto.proposedPrice !== null && dto.proposedPrice !== serviceOffering.basePrice) {
+      proposedPrice = dto.proposedPrice;
+      
+      if (!serviceOffering.isNegotiable) {
+        return BaseResponseDto.fail(
+          'This service is not negotiable. Please accept the standard price.',
+          'NOT_NEGOTIABLE'
+        );
+      }
+      
+      if (serviceOffering.minNegotiablePrice !== null && proposedPrice < serviceOffering.minNegotiablePrice) {
+        return BaseResponseDto.fail(
+          `Price too low. Minimum: ${serviceOffering.minNegotiablePrice} ${serviceOffering.currency}`,
+          'PRICE_BELOW_MINIMUM'
+        );
+      }
+      
+      if (serviceOffering.maxNegotiablePrice !== null && proposedPrice > serviceOffering.maxNegotiablePrice) {
+        return BaseResponseDto.fail(
+          `Price too high. Maximum: ${serviceOffering.maxNegotiablePrice} ${serviceOffering.currency}`,
+          'PRICE_ABOVE_MAXIMUM'
+        );
+      }
+      
+      isNegotiated = true;
+      servicePrice = proposedPrice;
+      
+      this.logger.log(`Negotiated price: Customer proposed ${proposedPrice} ${serviceOffering.currency} for service ${serviceOffering.id}`);
+    }
+
+    // ========== DURATION AND PRICE CALCULATION ==========
+    switch (priceUnit) {
+      case 'PER_HOUR':
+        if (dto.durationHours !== undefined && dto.durationHours !== null) {
+          if (dto.durationHours <= 0) {
+            return BaseResponseDto.fail('Duration must be greater than 0 hours', 'INVALID_DURATION');
           }
           if (dto.durationHours > 24) {
             return BaseResponseDto.fail('Maximum duration for hourly services is 24 hours', 'DURATION_EXCEEDS_LIMIT');
           }
           serviceDuration = dto.durationHours;
           servicePrice = servicePrice * dto.durationHours;
-          break;
-          
-        case 'PER_DAY':
-          if (dto.durationHours && dto.durationHours > 0) {
-            return BaseResponseDto.fail('This service is priced by day. Please provide duration in days, not hours.', 'INVALID_DURATION_UNIT');
-          }
-          if (!dto.durationDays || dto.durationDays <= 0) {
-            return BaseResponseDto.fail('Duration in days is required for daily services', 'DURATION_REQUIRED');
+        } else {
+          return BaseResponseDto.fail('Duration in hours is required for hourly services', 'DURATION_REQUIRED');
+        }
+        break;
+        
+      case 'PER_DAY':
+        if (dto.durationDays !== undefined && dto.durationDays !== null) {
+          if (dto.durationDays <= 0) {
+            return BaseResponseDto.fail('Duration must be greater than 0 days', 'INVALID_DURATION');
           }
           if (dto.durationDays > 30) {
             return BaseResponseDto.fail('Maximum duration for daily services is 30 days', 'DURATION_EXCEEDS_LIMIT');
           }
           serviceDuration = dto.durationDays;
           servicePrice = servicePrice * dto.durationDays;
-          break;
-          
-        case 'PER_WEEK':
-          if (dto.durationHours && dto.durationHours > 0) {
-            return BaseResponseDto.fail('This service is priced by week. Please provide duration in weeks.', 'INVALID_DURATION_UNIT');
-          }
-          if (dto.durationDays && dto.durationDays > 0) {
-            const weeks = dto.durationDays / 7;
-            if (!Number.isInteger(weeks)) {
-              return BaseResponseDto.fail('For weekly services, duration in days must be a multiple of 7', 'INVALID_DURATION');
-            }
-            serviceDuration = weeks;
-            servicePrice = servicePrice * weeks;
-          } else if (dto.durationWeeks && dto.durationWeeks > 0) {
-            serviceDuration = dto.durationWeeks;
-            servicePrice = servicePrice * dto.durationWeeks;
-          } else {
-            return BaseResponseDto.fail('Duration in weeks is required for weekly services', 'DURATION_REQUIRED');
-          }
-          break;
-          
-        case 'PER_MONTH':
-          if (dto.durationHours && dto.durationHours > 0) {
-            return BaseResponseDto.fail('This service is priced by month. Duration in hours is not applicable.', 'DURATION_NOT_ALLOWED');
-          }
-          if (dto.durationDays && dto.durationDays > 0) {
-            return BaseResponseDto.fail('This service is priced by month. Duration in days is not applicable.', 'DURATION_NOT_ALLOWED');
-          }
-          if (dto.durationMonths && dto.durationMonths > 0) {
-            serviceDuration = dto.durationMonths;
-            servicePrice = servicePrice * dto.durationMonths;
-          }
-          break;
-          
-        case 'PER_SESSION':
-        case 'FIXED':
-        default:
-          if (dto.durationHours || dto.durationDays || dto.durationWeeks || dto.durationMonths) {
-            return BaseResponseDto.fail(`This service has a fixed price${priceUnit === 'PER_SESSION' ? ' per session' : ''}. Duration is not required.`, 'DURATION_NOT_ALLOWED');
-          }
-          serviceDuration = 1;
-          break;
-      }
-
-      if (!dto.isPlatformAdmin) {
-        const dayOfWeek = scheduledDate.toLocaleDateString('en-US', { weekday: 'long' });
-        const scheduledTime = scheduledDate.toTimeString().slice(0, 5);
-        
-        const availability = this.parseAvailability(serviceOffering.availability);
-        
-        if (availability && availability.length > 0) {
-          const dayAvailability = availability.find((a: any) => a.day === dayOfWeek);
-          
-          if (!dayAvailability) {
-            return BaseResponseDto.fail(`The professional is not available on ${dayOfWeek}s. Available days: ${availability.map((a: any) => a.day).join(', ')}`, 'DAY_NOT_AVAILABLE');
-          }
-          
-          if (dayAvailability.isClosed) {
-            return BaseResponseDto.fail(`The professional is closed on ${dayOfWeek}s`, 'DAY_CLOSED');
-          }
-          
-          const openTime = dayAvailability.open;
-          const closeTime = dayAvailability.close;
-          
-          if (scheduledTime < openTime || scheduledTime > closeTime) {
-            return BaseResponseDto.fail(`The scheduled start time (${scheduledTime}) is outside working hours (${openTime} - ${closeTime}) on ${dayOfWeek}`, 'TIME_OUTSIDE_HOURS');
-          }
-          
-          if (priceUnit === 'PER_HOUR' && dto.durationHours) {
-            const endDate = new Date(scheduledDate);
-            endDate.setHours(endDate.getHours() + dto.durationHours);
-            const endTime = endDate.toTimeString().slice(0, 5);
-            
-            if (endTime > closeTime) {
-              return BaseResponseDto.fail(`The service would end at ${endTime}, which is after closing time (${closeTime}). Please adjust the start time or duration.`, 'END_TIME_EXCEEDS_CLOSING');
-            }
-          }
+        } else {
+          return BaseResponseDto.fail('Duration in days is required for daily services', 'DURATION_REQUIRED');
         }
-      }
-
-      if (!dto.isPlatformAdmin) {
-        const startOfDay = new Date(scheduledDate);
-        startOfDay.setHours(0, 0, 0, 0);
+        break;
         
-        const endOfDay = new Date(scheduledDate);
-        endOfDay.setHours(23, 59, 59, 999);
-        
-        const existingBookings = await this.prisma.serviceBooking.findMany({
-          where: {
-            contractorId: dto.contractorId,
-            scheduledDate: {
-              gte: startOfDay,
-              lte: endOfDay,
-            },
-            status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
-          },
-        });
-
-        const requestedStart = scheduledDate;
-        const requestedEnd = new Date(requestedStart);
-        
-        let durationInHours = 1;
-        if (priceUnit === 'PER_HOUR' && dto.durationHours) {
-          durationInHours = dto.durationHours;
-        } else if (priceUnit === 'PER_DAY' && dto.durationDays) {
-          durationInHours = dto.durationDays * 24;
-        } else if (priceUnit === 'PER_WEEK' && (dto.durationWeeks || dto.durationDays)) {
-          const weeks = dto.durationWeeks || (dto.durationDays ? dto.durationDays / 7 : 1);
-          durationInHours = weeks * 7 * 24;
-        } else if (priceUnit === 'PER_MONTH' && dto.durationMonths) {
-          durationInHours = dto.durationMonths * 30 * 24;
-        }
-        
-        requestedEnd.setHours(requestedEnd.getHours() + durationInHours);
-
-        for (const existing of existingBookings) {
-          const existingStart = new Date(existing.scheduledDate);
-          const existingEnd = new Date(existingStart);
-          existingEnd.setHours(existingEnd.getHours() + 1);
-          
-          const hasConflict = (
-            (requestedStart >= existingStart && requestedStart < existingEnd) ||
-            (requestedEnd > existingStart && requestedEnd <= existingEnd) ||
-            (requestedStart <= existingStart && requestedEnd >= existingEnd)
-          );
-          
-          if (hasConflict) {
-            return BaseResponseDto.fail(`Contractor is already booked during the requested time slot`, 'CONFLICTING_BOOKING');
+      case 'PER_WEEK':
+        if (dto.durationWeeks !== undefined && dto.durationWeeks !== null && dto.durationWeeks > 0) {
+          if (dto.durationWeeks <= 0) {
+            return BaseResponseDto.fail('Duration must be greater than 0 weeks', 'INVALID_DURATION');
           }
+          serviceDuration = dto.durationWeeks;
+          servicePrice = servicePrice * dto.durationWeeks;
+        } else if (dto.durationDays !== undefined && dto.durationDays !== null && dto.durationDays > 0) {
+          const weeks = dto.durationDays / 7;
+          if (!Number.isInteger(weeks)) {
+            return BaseResponseDto.fail('For weekly services, duration in days must be a multiple of 7', 'INVALID_DURATION');
+          }
+          serviceDuration = weeks;
+          servicePrice = servicePrice * weeks;
+        } else {
+          return BaseResponseDto.fail('Duration in weeks is required for weekly services', 'DURATION_REQUIRED');
         }
-      }
-
-      // ========== BOOKING FEE CALCULATION ==========
-      let bookingFeeAmount = 0;
-      let bookingFeeRefundable = false;
-      let bookingFeeCurrency = serviceOffering.currency;
-
-      if (serviceOffering.useCustomBookingFee && serviceOffering.customBookingFeeEnabled) {
-        bookingFeeAmount = serviceOffering.customBookingFeeAmount || 0;
-        bookingFeeRefundable = serviceOffering.customBookingFeeRefundable || false;
-        bookingFeeCurrency = serviceOffering.customBookingFeeCurrency || serviceOffering.currency;
-      } else if (contractorProfile.profileBookingFeeEnabled) {
-        bookingFeeAmount = contractorProfile.profileBookingFeeAmount || 0;
-        bookingFeeRefundable = contractorProfile.profileBookingFeeRefundable || false;
-        bookingFeeCurrency = contractorProfile.profileBookingFeeCurrency || serviceOffering.currency;
-      }
-
-      const totalAmount = servicePrice + bookingFeeAmount;
-
-      const booking = await this.prisma.serviceBooking.create({
-        data: {
-          contractorId: dto.contractorId,
-          clientId: dto.clientId,
-          serviceId: serviceOffering.id,
-          contractorName: contractorProfile.displayName || contractorProfile.title,
-          contractorEmail: contractorProfile.email,
-          contractorPhone: contractorProfile.phone,
-          clientName: client.displayName,
-          clientEmail: client.email,
-          clientPhone: client.phone,
-          serviceTitle: serviceOffering.title,
-          status: BookingStatus.PENDING,
-          serviceExecutionStatus: ServiceExecutionStatus.NOT_STARTED,
-          scheduledDate: scheduledDate,
-          locationCity: bookingCity,
-          servicePrice: servicePrice,
-          servicePriceUnit: priceUnit,
-          serviceDuration: serviceDuration,
-          currency: serviceOffering.currency,
-          customerNotes: dto.customerNotes,
-          bookingFeeAmount: bookingFeeAmount,
-          bookingFeeCurrency: bookingFeeCurrency,
-          bookingFeeRefundable: bookingFeeRefundable,
-          totalAmount: totalAmount,
-        },
-        include: {
-          service: {
-            include: {
-              category: true,
-            },
-          },
-        },
-      });
-
-      const bookingWithDetails = booking as unknown as ServiceBookingWithDetails;
-
-      this.logger.log(`Booking created: ${bookingWithDetails.id} - Client: ${dto.clientId} - Contractor: ${dto.contractorId} - ${isNegotiated ? `Negotiated Price: ${servicePrice}` : `Standard Price: ${servicePrice}`} + Booking Fee: ${bookingFeeAmount} = Total: ${totalAmount} ${serviceOffering.currency}`);
-
-      const mappedBooking = this.mapBookingToResponseDto(bookingWithDetails);
-      await this.cacheBooking(booking.id, mappedBooking);
-      await this.cacheBookingByExternalId(booking.externalId, mappedBooking);
-
-      await this.queue.addJob('notification-queue', 'booking.created', {
-        customerEmail: bookingWithDetails.clientEmail,
-        customerName: bookingWithDetails.clientName,
-        customerPhone: bookingWithDetails.clientPhone,
-        contractorEmail: bookingWithDetails.contractorEmail,
-        contractorName: bookingWithDetails.contractorName,
-        contractorPhone: bookingWithDetails.contractorPhone,
-        serviceTitle: bookingWithDetails.serviceTitle,
-        scheduledDate: bookingWithDetails.scheduledDate,
-        location: bookingWithDetails.locationCity,
-        servicePrice: `${bookingWithDetails.servicePrice} ${bookingWithDetails.currency}`,
-        bookingFee: `${bookingWithDetails.bookingFeeAmount} ${bookingWithDetails.bookingFeeCurrency}`,
-        totalPrice: `${bookingWithDetails.totalAmount} ${bookingWithDetails.currency}`,
-        isNegotiated: isNegotiated,
-        notes: bookingWithDetails.customerNotes,
-      });
-
-      return BaseResponseDto.ok(
-        mappedBooking,
-        isNegotiated 
-          ? `Booking created with negotiated price (${servicePrice} ${serviceOffering.currency}). Waiting for contractor confirmation.`
-          : 'Booking created successfully. Waiting for contractor confirmation.',
-        'CREATED'
-      );
-
-    } catch (error) {
-      const err = error as Error;
-      this.logger.error(`Failed to create booking: ${err.message}`);
-      return BaseResponseDto.fail(err.message || 'Booking creation failed', 'INTERNAL_ERROR');
+        break;
+        
+      case 'PER_MONTH':
+        if (dto.durationMonths !== undefined && dto.durationMonths !== null && dto.durationMonths > 0) {
+          if (dto.durationMonths <= 0) {
+            return BaseResponseDto.fail('Duration must be greater than 0 months', 'INVALID_DURATION');
+          }
+          serviceDuration = dto.durationMonths;
+          servicePrice = servicePrice * dto.durationMonths;
+        } else {
+          return BaseResponseDto.fail('Duration in months is required for monthly services', 'DURATION_REQUIRED');
+        }
+        break;
+        
+      case 'PER_SESSION':
+      case 'FIXED':
+      default:
+        serviceDuration = 1;
+        this.logger.debug(`Fixed price service: ${priceUnit} - using base price ${servicePrice} without duration multiplier`);
+        break;
     }
+
+    // ========== AVAILABILITY CHECK ==========
+    if (!dto.isPlatformAdmin) {
+      const dayOfWeek = scheduledDate.toLocaleDateString('en-US', { weekday: 'long' });
+      const scheduledTime = scheduledDate.toTimeString().slice(0, 5);
+      
+      const availability = this.parseAvailability(serviceOffering.availability);
+      
+      if (availability && availability.length > 0) {
+        const dayAvailability = availability.find((a: any) => a.day === dayOfWeek);
+        
+        if (!dayAvailability) {
+          return BaseResponseDto.fail(`The professional is not available on ${dayOfWeek}s. Available days: ${availability.map((a: any) => a.day).join(', ')}`, 'DAY_NOT_AVAILABLE');
+        }
+        
+        if (dayAvailability.isClosed) {
+          return BaseResponseDto.fail(`The professional is closed on ${dayOfWeek}s`, 'DAY_CLOSED');
+        }
+        
+        const openTime = dayAvailability.open;
+        const closeTime = dayAvailability.close;
+        
+        if (scheduledTime < openTime || scheduledTime > closeTime) {
+          return BaseResponseDto.fail(`The scheduled start time (${scheduledTime}) is outside working hours (${openTime} - ${closeTime}) on ${dayOfWeek}`, 'TIME_OUTSIDE_HOURS');
+        }
+        
+        if (priceUnit === 'PER_HOUR' && dto.durationHours && dto.durationHours > 0) {
+          const endDate = new Date(scheduledDate);
+          endDate.setHours(endDate.getHours() + dto.durationHours);
+          const endTime = endDate.toTimeString().slice(0, 5);
+          
+          if (endTime > closeTime) {
+            return BaseResponseDto.fail(`The service would end at ${endTime}, which is after closing time (${closeTime}). Please adjust the start time or duration.`, 'END_TIME_EXCEEDS_CLOSING');
+          }
+        }
+      }
+    }
+
+    // ========== CONFLICT CHECK ==========
+    if (!dto.isPlatformAdmin) {
+      const startOfDay = new Date(scheduledDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(scheduledDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const existingBookings = await this.prisma.serviceBooking.findMany({
+        where: {
+          contractorId: dto.contractorId,
+          scheduledDate: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+          status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+        },
+      });
+
+      const requestedStart = scheduledDate;
+      const requestedEnd = new Date(requestedStart);
+      
+      let durationInHours = 1;
+      if (priceUnit === 'PER_HOUR' && dto.durationHours) {
+        durationInHours = dto.durationHours;
+      } else if (priceUnit === 'PER_DAY' && dto.durationDays) {
+        durationInHours = dto.durationDays * 24;
+      } else if (priceUnit === 'PER_WEEK' && (dto.durationWeeks || dto.durationDays)) {
+        const weeks = dto.durationWeeks || (dto.durationDays ? dto.durationDays / 7 : 1);
+        durationInHours = weeks * 7 * 24;
+      } else if (priceUnit === 'PER_MONTH' && dto.durationMonths) {
+        durationInHours = dto.durationMonths * 30 * 24;
+      }
+      
+      requestedEnd.setHours(requestedEnd.getHours() + durationInHours);
+
+      for (const existing of existingBookings) {
+        const existingStart = new Date(existing.scheduledDate);
+        const existingEnd = new Date(existingStart);
+        existingEnd.setHours(existingEnd.getHours() + 1);
+        
+        const hasConflict = (
+          (requestedStart >= existingStart && requestedStart < existingEnd) ||
+          (requestedEnd > existingStart && requestedEnd <= existingEnd) ||
+          (requestedStart <= existingStart && requestedEnd >= existingEnd)
+        );
+        
+        if (hasConflict) {
+          return BaseResponseDto.fail(`Contractor is already booked during the requested time slot`, 'CONFLICTING_BOOKING');
+        }
+      }
+    }
+
+    // ========== BOOKING FEE CALCULATION ==========
+    let bookingFeeAmount = 0;
+    let bookingFeeRefundable = false;
+    let bookingFeeCurrency = serviceOffering.currency;
+
+    if (serviceOffering.useCustomBookingFee && serviceOffering.customBookingFeeEnabled) {
+      bookingFeeAmount = serviceOffering.customBookingFeeAmount || 0;
+      bookingFeeRefundable = serviceOffering.customBookingFeeRefundable || false;
+      bookingFeeCurrency = serviceOffering.customBookingFeeCurrency || serviceOffering.currency;
+    } else if (contractorProfile.profileBookingFeeEnabled) {
+      bookingFeeAmount = contractorProfile.profileBookingFeeAmount || 0;
+      bookingFeeRefundable = contractorProfile.profileBookingFeeRefundable || false;
+      bookingFeeCurrency = contractorProfile.profileBookingFeeCurrency || serviceOffering.currency;
+    }
+
+    const totalAmount = servicePrice + bookingFeeAmount;
+
+    // ========== PLATFORM COMMISSION CALCULATION ==========
+    // Platform commission percentage (can be moved to config)
+    const PLATFORM_COMMISSION_PERCENTAGE = 5; // 5%
+    const platformCommissionAmount = (totalAmount * PLATFORM_COMMISSION_PERCENTAGE) / 100;
+    const platformCommissionFormatted = `${platformCommissionAmount.toLocaleString()} ${serviceOffering.currency}`;
+    
+    // Amount that goes to service provider (after platform commission)
+    const serviceProviderPayout = totalAmount - platformCommissionAmount;
+    const serviceProviderPayoutFormatted = `${serviceProviderPayout.toLocaleString()} ${serviceOffering.currency}`;
+
+    // ========== CREATE BOOKING ==========
+    const booking = await this.prisma.serviceBooking.create({
+      data: {
+        contractorId: dto.contractorId,
+        clientId: dto.clientId,
+        serviceId: serviceOffering.id,
+        contractorName: contractorProfile.displayName || contractorProfile.title,
+        contractorEmail: contractorProfile.email,
+        contractorPhone: contractorProfile.phone,
+        clientName: client.displayName,
+        clientEmail: client.email,
+        clientPhone: client.phone,
+        serviceTitle: serviceOffering.title,
+        status: BookingStatus.PENDING,
+        serviceExecutionStatus: ServiceExecutionStatus.NOT_STARTED,
+        scheduledDate: scheduledDate,
+        locationCity: bookingCity,
+        servicePrice: servicePrice,
+        servicePriceUnit: priceUnit,
+        serviceDuration: serviceDuration,
+        currency: serviceOffering.currency,
+        customerNotes: dto.customerNotes,
+        bookingFeeAmount: bookingFeeAmount,
+        bookingFeeCurrency: bookingFeeCurrency,
+        bookingFeeRefundable: bookingFeeRefundable,
+        totalAmount: totalAmount,
+      },
+      include: {
+        service: {
+          include: {
+            category: true,
+          },
+        },
+      },
+    });
+
+    const bookingWithDetails = booking as unknown as ServiceBookingWithDetails;
+
+    this.logger.log(`Booking created: ${bookingWithDetails.id} - Client: ${dto.clientId} - Contractor: ${dto.contractorId} - ${isNegotiated ? `Negotiated Price: ${servicePrice}` : `Standard Price: ${servicePrice}`} + Booking Fee: ${bookingFeeAmount} = Total: ${totalAmount} ${serviceOffering.currency}`);
+
+    const mappedBooking = this.mapBookingToResponseDto(bookingWithDetails);
+    await this.cacheBooking(booking.id, mappedBooking);
+    await this.cacheBookingByExternalId(booking.externalId, mappedBooking);
+
+    // ========== FORMAT PRICE UNIT DISPLAY ==========
+    const getPriceUnitDisplay = (unit: string): string => {
+      switch (unit) {
+        case 'PER_HOUR': return 'hourly';
+        case 'PER_DAY': return 'daily';
+        case 'PER_WEEK': return 'weekly';
+        case 'PER_MONTH': return 'monthly';
+        case 'PER_SESSION': return 'per session';
+        case 'FIXED': return 'fixed price';
+        default: return unit.toLowerCase().replace('_', ' ');
+      }
+    };
+
+    // ========== FORMAT DURATION DISPLAY ==========
+    const getDurationDisplay = (): { text: string; unit: string; displayText: string } => {
+      if (priceUnit === 'FIXED' || priceUnit === 'PER_SESSION') {
+        return { text: '', unit: '', displayText: 'One-time service' };
+      }
+      
+      if (serviceDuration) {
+        switch (priceUnit) {
+          case 'PER_HOUR':
+            return { 
+              text: `${serviceDuration}`, 
+              unit: 'hour',
+              displayText: `${serviceDuration} hour${serviceDuration !== 1 ? 's' : ''}`
+            };
+          case 'PER_DAY':
+            return { 
+              text: `${serviceDuration}`, 
+              unit: 'day',
+              displayText: `${serviceDuration} day${serviceDuration !== 1 ? 's' : ''}`
+            };
+          case 'PER_WEEK':
+            return { 
+              text: `${serviceDuration}`, 
+              unit: 'week',
+              displayText: `${serviceDuration} week${serviceDuration !== 1 ? 's' : ''}`
+            };
+          case 'PER_MONTH':
+            return { 
+              text: `${serviceDuration}`, 
+              unit: 'month',
+              displayText: `${serviceDuration} month${serviceDuration !== 1 ? 's' : ''}`
+            };
+          default:
+            return { text: '', unit: '', displayText: '' };
+        }
+      }
+      return { text: '', unit: '', displayText: '' };
+    };
+
+    const durationInfo = getDurationDisplay();
+    const priceUnitDisplay = getPriceUnitDisplay(priceUnit);
+
+    // ========== CALCULATE NEGOTIATION DETAILS ==========
+    let negotiationDetails = null;
+    if (isNegotiated && proposedPrice) {
+      const originalAmount = serviceOffering.basePrice;
+      const proposedAmount = proposedPrice;
+      const perDaySavings = originalAmount - proposedAmount;
+      const totalOriginalAmount = originalAmount * (serviceDuration || 1);
+      const totalProposedAmount = proposedAmount * (serviceDuration || 1);
+      const totalSavings = totalOriginalAmount - totalProposedAmount;
+      const savingsPercentage = ((perDaySavings / originalAmount) * 100).toFixed(1);
+      const isLower = perDaySavings > 0;
+      
+      negotiationDetails = {
+        proposedAmount: proposedAmount,
+        proposedAmountFormatted: `${proposedAmount.toLocaleString()} ${serviceOffering.currency}`,
+        originalAmount: originalAmount,
+        originalAmountFormatted: `${originalAmount.toLocaleString()} ${serviceOffering.currency}`,
+        totalProposedAmount: totalProposedAmount,
+        totalProposedAmountFormatted: `${totalProposedAmount.toLocaleString()} ${serviceOffering.currency}`,
+        totalOriginalAmount: totalOriginalAmount,
+        totalOriginalAmountFormatted: `${totalOriginalAmount.toLocaleString()} ${serviceOffering.currency}`,
+        savingsAmount: Math.abs(totalSavings),
+        savingsAmountFormatted: `${Math.abs(totalSavings).toLocaleString()} ${serviceOffering.currency}`,
+        savingsPercentage: savingsPercentage,
+        isLower: isLower,
+        negotiationStatus: 'CUSTOMER_PROPOSED',
+        message: `Customer has proposed a negotiated price of ${proposedAmount.toLocaleString()} ${serviceOffering.currency} (original: ${originalAmount.toLocaleString()} ${serviceOffering.currency})`,
+        actionRequired: `Please review the customer's proposal of ${proposedAmount.toLocaleString()} ${serviceOffering.currency}. You can accept, decline, or make a counter-offer.`
+      };
+    }
+
+    // ========== CALCULATE ORIGINAL SUBTOTAL ==========
+    const originalSubtotal = serviceOffering.basePrice * (serviceDuration || 1);
+
+    // ========== QUEUE NOTIFICATIONS WITH ENHANCED DATA ==========
+    const hasBookingFee = bookingFeeAmount > 0;
+
+    await this.queue.addJob('notification-queue', 'booking.created', {
+      // Customer details
+      customerEmail: bookingWithDetails.clientEmail,
+      customerName: bookingWithDetails.clientName,
+      customerPhone: bookingWithDetails.clientPhone,
+      
+      // Contractor details
+      contractorEmail: bookingWithDetails.contractorEmail,
+      contractorName: bookingWithDetails.contractorName,
+      contractorPhone: bookingWithDetails.contractorPhone,
+      
+      // Service details
+      serviceTitle: bookingWithDetails.serviceTitle,
+      scheduledDate: bookingWithDetails.scheduledDate,
+      location: bookingWithDetails.locationCity,
+      customerNotes: bookingWithDetails.customerNotes,
+      
+      // Pricing type information
+      priceUnitType: priceUnit,
+      priceUnitDisplay: priceUnitDisplay,
+      
+      // Duration information
+      duration: durationInfo.text,
+      durationUnit: durationInfo.unit,
+      durationDisplay: durationInfo.displayText,
+      
+      // Pricing details with negotiation info
+      originalPrice: serviceOffering.basePrice,
+      originalPriceFormatted: `${serviceOffering.basePrice.toLocaleString()} ${serviceOffering.currency}`,
+      originalPricePerUnit: `/${this.formatUnitLabel(serviceOffering.priceUnit)}`,
+      
+      servicePrice: bookingWithDetails.servicePrice,
+      servicePriceFormatted: `${bookingWithDetails.servicePrice.toLocaleString()} ${bookingWithDetails.currency}`,
+      servicePricePerUnit: priceUnit !== 'FIXED' && priceUnit !== 'PER_SESSION' 
+        ? `/${this.formatUnitLabel(priceUnit)}` 
+        : '',
+      
+      bookingFee: bookingWithDetails.bookingFeeAmount,
+      bookingFeeFormatted: `${bookingWithDetails.bookingFeeAmount.toLocaleString()} ${bookingWithDetails.bookingFeeCurrency}`,
+      
+      totalPrice: bookingWithDetails.totalAmount,
+      totalPriceFormatted: `${bookingWithDetails.totalAmount.toLocaleString()} ${bookingWithDetails.currency}`,
+      
+      hasBookingFee: hasBookingFee,
+      
+      // NEW: Platform commission details
+      platformCommissionPercentage: PLATFORM_COMMISSION_PERCENTAGE,
+      platformCommissionAmount: platformCommissionAmount,
+      platformCommissionFormatted: platformCommissionFormatted,
+      serviceProviderPayout: serviceProviderPayout,
+      serviceProviderPayoutFormatted: serviceProviderPayoutFormatted,
+      
+      // Calculation breakdown
+      calculationBreakdown: {
+        baseRate: serviceOffering.basePrice,
+        baseRateFormatted: `${serviceOffering.basePrice.toLocaleString()} ${serviceOffering.currency}`,
+        duration: serviceDuration,
+        durationLabel: durationInfo.displayText,
+        multiplier: serviceDuration || 1,
+        subtotal: originalSubtotal,
+        subtotalFormatted: `${originalSubtotal.toLocaleString()} ${serviceOffering.currency}`,
+        bookingFee: bookingFeeAmount,
+        bookingFeeFormatted: `${bookingFeeAmount.toLocaleString()} ${bookingFeeCurrency}`,
+        total: totalAmount,
+        totalFormatted: `${totalAmount.toLocaleString()} ${serviceOffering.currency}`
+      },
+      
+      // Negotiation flags
+      isNegotiated: isNegotiated,
+      proposedPrice: proposedPrice,
+      proposedPriceFormatted: proposedPrice ? `${proposedPrice.toLocaleString()} ${serviceOffering.currency}` : null,
+      
+      // Price breakdown for email template
+      priceBreakdown: {
+        basePrice: serviceOffering.basePrice,
+        basePriceFormatted: `${serviceOffering.basePrice.toLocaleString()} ${serviceOffering.currency}`,
+        priceUnit: serviceOffering.priceUnit,
+        priceUnitLabel: this.formatUnitLabel(serviceOffering.priceUnit),
+        priceUnitDisplay: priceUnitDisplay,
+        duration: serviceDuration,
+        durationUnit: priceUnit === 'PER_HOUR' ? 'hour(s)' : 
+                      priceUnit === 'PER_DAY' ? 'day(s)' :
+                      priceUnit === 'PER_WEEK' ? 'week(s)' :
+                      priceUnit === 'PER_MONTH' ? 'month(s)' : 'session',
+        durationDisplay: durationInfo.displayText,
+        calculatedAmount: servicePrice,
+        calculatedAmountFormatted: `${servicePrice.toLocaleString()} ${serviceOffering.currency}`,
+        calculatedAmountPerUnit: priceUnit !== 'FIXED' && priceUnit !== 'PER_SESSION'
+          ? `${(servicePrice / (serviceDuration || 1)).toLocaleString()} ${serviceOffering.currency}/${this.formatUnitLabel(priceUnit)}`
+          : null,
+        bookingFeeAmount: bookingFeeAmount,
+        bookingFeeFormatted: `${bookingFeeAmount.toLocaleString()} ${bookingFeeCurrency}`,
+        platformCommissionAmount: platformCommissionAmount,
+        platformCommissionFormatted: platformCommissionFormatted,
+        serviceProviderPayout: serviceProviderPayout,
+        serviceProviderPayoutFormatted: serviceProviderPayoutFormatted,
+        totalAmount: totalAmount,
+        totalAmountFormatted: `${totalAmount.toLocaleString()} ${serviceOffering.currency}`
+      },
+      
+      // Detailed negotiation info for email templates
+      negotiationDetails: negotiationDetails,
+      
+      // Booking metadata
+      bookingId: booking.id,
+      bookingExternalId: booking.externalId,
+      createdAt: booking.createdAt,
+      status: booking.status,
+      currency: serviceOffering.currency
+    });
+
+    return BaseResponseDto.ok(
+      mappedBooking,
+      isNegotiated 
+        ? `Booking created with negotiated price (${servicePrice.toLocaleString()} ${serviceOffering.currency}). Waiting for contractor confirmation.`
+        : 'Booking created successfully. Waiting for contractor confirmation.',
+      'CREATED'
+    );
+
+  } catch (error) {
+    const err = error as Error;
+    this.logger.error(`Failed to create booking: ${err.message}`);
+    return BaseResponseDto.fail(err.message || 'Booking creation failed', 'INTERNAL_ERROR');
   }
+}
+
+// ========== HELPER METHOD FOR FORMATTING UNIT LABELS ==========
+private formatUnitLabel(priceUnit: string): string {
+  switch (priceUnit) {
+    case 'PER_HOUR': return 'hour';
+    case 'PER_DAY': return 'day';
+    case 'PER_WEEK': return 'week';
+    case 'PER_MONTH': return 'month';
+    case 'PER_SESSION': return 'session';
+    case 'FIXED': return 'fixed';
+    default: return priceUnit.toLowerCase().replace('_', ' ');
+  }
+}
+
+
 
   // ==================== ACCEPT BOOKING ====================
 
@@ -784,11 +995,7 @@ export class BookingService {
           status: BookingStatus.CONFIRMED,
           confirmedAt: new Date(),
           updatedAt: new Date(),
-        },
-        select: {
-          id: true,
-          status: true,
-          updatedAt: true,
+          serviceExecutionStatus: ServiceExecutionStatus.NOT_STARTED,  // Add this line
         },
       });
 
@@ -799,29 +1006,34 @@ export class BookingService {
 
       const bookingWithDetails = booking as unknown as ServiceBookingWithDetails;
 
-      await this.queue.addJob(
-        'notification-queue',
-        'booking.confirmed',
-        {
-          customerEmail: bookingWithDetails.clientEmail,
-          customerName: bookingWithDetails.clientName,
-          customerPhone: bookingWithDetails.clientPhone,
-          contractorEmail: bookingWithDetails.contractorEmail,
-          contractorName: bookingWithDetails.contractorName,
-          contractorPhone: bookingWithDetails.contractorPhone,
-          serviceTitle: bookingWithDetails.serviceTitle,
-          scheduledDate: bookingWithDetails.scheduledDate,
-          location: bookingWithDetails.locationCity,
-          price: `${bookingWithDetails.servicePrice} ${bookingWithDetails.currency}`,
-          totalAmount: `${bookingWithDetails.totalAmount} ${bookingWithDetails.currency}`,
-          bookingExternalId: booking.externalId,
-        },
-        {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 5000 },
-          removeOnComplete: true,
-        }
-      );
+    await this.queue.addJob(
+  'notification-queue',
+  'booking.confirmed',
+  {
+    customerEmail: bookingWithDetails.clientEmail,
+    customerName: bookingWithDetails.clientName,
+    customerPhone: bookingWithDetails.clientPhone,
+    contractorEmail: bookingWithDetails.contractorEmail,
+    contractorName: bookingWithDetails.contractorName,
+    contractorPhone: bookingWithDetails.contractorPhone,
+    serviceTitle: bookingWithDetails.serviceTitle,
+    scheduledDate: bookingWithDetails.scheduledDate,
+    location: bookingWithDetails.locationCity,
+    price: `${bookingWithDetails.servicePrice} ${bookingWithDetails.currency}`,
+    totalAmount: `${bookingWithDetails.totalAmount} ${bookingWithDetails.currency}`,
+    bookingExternalId: booking.externalId,
+    // NEW fields for booking confirmed emails
+    servicePrice: `${bookingWithDetails.servicePrice} ${bookingWithDetails.currency}`,
+    hasBookingFee: (bookingWithDetails.bookingFeeAmount || 0) > 0,
+    bookingFee: bookingWithDetails.bookingFeeAmount ? `${bookingWithDetails.bookingFeeAmount} ${bookingWithDetails.bookingFeeCurrency}` : null,
+    isNegotiated: false, // You may want to track this if negotiation happens before acceptance
+  },
+  {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: true,
+  }
+);
 
       return BaseResponseDto.ok(
         {
@@ -896,38 +1108,41 @@ export class BookingService {
       await this.invalidateBothUsersBookings(booking.clientId, booking.contractorId);
 
       await this.queue.addJob(
-        'notification-queue',
-        'booking.declined',
-        {
-          bookingId: booking.id,
-          bookingExternalId: booking.externalId,
-          customer: {
-            name: booking.clientName,
-            email: booking.clientEmail,
-            phone: booking.clientPhone,
-          },
-          contractor: {
-            name: booking.contractorName,
-            email: booking.contractorEmail,
-            phone: booking.contractorPhone,
-          },
-          service: {
-            title: booking.serviceTitle,
-            scheduledDate: booking.scheduledDate,
-            location: booking.locationCity,
-          },
-          decline: {
-            reason: reason,
-            declinedBy: isPlatformAdmin ? 'platform-admin' : 'contractor',
-            declinedAt: new Date().toISOString(),
-          },
-        },
-        {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 5000 },
-          removeOnComplete: true,
-        }
-      );
+  'notification-queue',
+  'booking.declined',
+  {
+    bookingId: booking.id,
+    bookingExternalId: booking.externalId,
+    customer: {
+      name: booking.clientName,
+      email: booking.clientEmail,
+      phone: booking.clientPhone,
+    },
+    contractor: {
+      name: booking.contractorName,
+      email: booking.contractorEmail,
+      phone: booking.contractorPhone,
+    },
+    service: {
+      title: booking.serviceTitle,
+      scheduledDate: booking.scheduledDate,
+      location: booking.locationCity,
+    },
+    decline: {
+      reason: reason,
+      declinedBy: isPlatformAdmin ? 'platform-admin' : 'contractor',
+      declinedAt: new Date().toISOString(),
+    },
+    // NEW fields for refund info
+    hasBookingFee: (booking.bookingFeeAmount || 0) > 0,
+    bookingFee: booking.bookingFeeAmount ? `${booking.bookingFeeAmount} ${booking.bookingFeeCurrency}` : null,
+  },
+  {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: true,
+  }
+);
 
       return BaseResponseDto.ok(
         {
@@ -1018,39 +1233,42 @@ export class BookingService {
       await this.invalidateBooking(booking.id, booking.externalId);
       await this.invalidateBothUsersBookings(booking.clientId, booking.contractorId);
 
-      await this.queue.addJob(
-        'notification-queue',
-        'booking.cancelled',
-        {
-          bookingId: booking.id,
-          bookingExternalId: booking.externalId,
-          customer: {
-            name: booking.clientName,
-            email: booking.clientEmail,
-            phone: booking.clientPhone,
-          },
-          contractor: {
-            name: booking.contractorName,
-            email: booking.contractorEmail,
-            phone: booking.contractorPhone,
-          },
-          service: {
-            title: booking.serviceTitle,
-            scheduledDate: booking.scheduledDate,
-            location: booking.locationCity,
-          },
-          cancellation: {
-            reason: reason,
-            cancelledBy: cancelledBy,
-            cancelledAt: new Date().toISOString(),
-          },
-        },
-        {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 5000 },
-          removeOnComplete: true,
-        }
-      );
+    await this.queue.addJob(
+  'notification-queue',
+  'booking.cancelled',
+  {
+    bookingId: booking.id,
+    bookingExternalId: booking.externalId,
+    customer: {
+      name: booking.clientName,
+      email: booking.clientEmail,
+      phone: booking.clientPhone,
+    },
+    contractor: {
+      name: booking.contractorName,
+      email: booking.contractorEmail,
+      phone: booking.contractorPhone,
+    },
+    service: {
+      title: booking.serviceTitle,
+      scheduledDate: booking.scheduledDate,
+      location: booking.locationCity,
+    },
+    cancellation: {
+      reason: reason,
+      cancelledBy: cancelledBy,
+      cancelledAt: new Date().toISOString(),
+    },
+    // NEW fields for refund info
+    hasBookingFee: (booking.bookingFeeAmount || 0) > 0,
+    bookingFee: booking.bookingFeeAmount ? `${booking.bookingFeeAmount} ${booking.bookingFeeCurrency}` : null,
+  },
+  {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: true,
+  }
+);
 
       return BaseResponseDto.ok(
         {

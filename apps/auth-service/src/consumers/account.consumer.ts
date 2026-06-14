@@ -8,7 +8,7 @@ import { ExtendedPrismaClient, PrismaService } from '../prisma/prisma.service';
 @Controller()
 export class AccountConsumer implements OnModuleInit {
   private readonly logger = new Logger(AccountConsumer.name);
-  private readonly prisma: ExtendedPrismaClient;
+  private readonly prisma: ExtendedPrismaClient; 
 
   constructor(
     private readonly prismaService: PrismaService,

@@ -9,7 +9,10 @@ import {
   CONTRACTORS_PRICING_PROTO_PATH, 
   CONTRACTORS_PROTO_PATH,
   LISTINGS_REGISTRY_PROTO_PATH,
-  BOOKING_PROTO_PATH,  // Add this import
+  BOOKING_PROTO_PATH,
+  SERVICE_EXECUTION_PROTO_PATH,
+  SERVICE_EXECUTION_MEDIA_PROTO_PATH,
+  CUSTOMER_CONFIRMATION_PROTO_PATH
 } from '@pivota-api/protos';
 import * as dotenv from 'dotenv';
 
@@ -69,7 +72,7 @@ async function bootstrap() {
     }
   });
 
-  // 6. Contractors Service
+  // 6. Contractors Service (Service Offerings)
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.GRPC,
     options: {
@@ -79,32 +82,65 @@ async function bootstrap() {
     },
   });
 
-  // 7. Booking Service - ADD THIS
+  // 7. Booking Service
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.GRPC,
     options: {
-      package: 'contractors_booking',  // Must match the package name in your booking.proto
+      package: 'contractors_booking',
       protoPath: BOOKING_PROTO_PATH,
-      url: process.env.BOOKING_GRPC_URL || '0.0.0.0:50063',  // Must match gateway port
+      url: process.env.BOOKING_GRPC_URL || '0.0.0.0:50063',
     },
   });
+
+  // 8. Service Execution Service (StartWork, CompleteWork, GetWorkStatus, CheckAutoReleaseEligible)
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.GRPC,
+    options: {
+      package: 'contractors_service_execution',
+      protoPath: SERVICE_EXECUTION_PROTO_PATH,
+      url: process.env.SERVICE_EXECUTION_GRPC_URL || '0.0.0.0:50064',
+    },
+  });
+
+  // 9. Service Execution Media Service (UploadEvidenceFiles)
+  app.connectMicroservice<MicroserviceOptions>({
+  transport: Transport.GRPC,
+  options: {
+    package: 'contractors_service_execution_media',
+    protoPath: SERVICE_EXECUTION_MEDIA_PROTO_PATH,
+    url: process.env.SERVICE_EXECUTION_MEDIA_GRPC_URL || '0.0.0.0:50065',
+  },
+});
+
+// 10. Customer Confirmation Service (ConfirmSatisfaction, ReportDissatisfaction)
+app.connectMicroservice<MicroserviceOptions>({
+  transport: Transport.GRPC,
+  options: {
+    package: 'contractors_customer_confirmation',
+    protoPath: CUSTOMER_CONFIRMATION_PROTO_PATH,
+    url: process.env.CUSTOMER_CONFIRMATION_GRPC_URL || '0.0.0.0:50066',
+  },
+});
 
   await app.startAllMicroservices();
 
   logger.log(`🚀 Listings microservice system is running`);
   
   const services = [
-    { name: 'Categories', url: '50056' },
-    { name: 'Jobs', url: '50057' },
-    { name: 'Shared Registry', url: '50058' },
-    { name: 'Contractors Pricing', url: '50059' },
-    { name: 'Housing', url: '50060' },
-    { name: 'Contractors', url: '50061' },
-    { name: 'Booking', url: '50062' },  // Add this
+    { name: 'Categories', port: '50056' },
+    { name: 'Jobs', port: '50057' },
+    { name: 'Shared Registry', port: '50058' },
+    { name: 'Contractors Pricing', port: '50059' },
+    { name: 'Housing', port: '50060' },
+    { name: 'Contractors (Service Offerings)', port: '50061' },
+    { name: 'Booking', port: '50063' },
+    { name: 'Service Execution', port: '50064' },
+    { name: 'Service Execution Media', port: '50065' },
+      { name: 'Customer Confirmation', port: '50066' },
   ];
   
   services.forEach(s => {
-    logger.log(`📦 ${s.name} gRPC listening on port ${s.url}`);
+    logger.log(`📦 ${s.name} gRPC listening on port ${s.port}`);
   });
 }
 

@@ -93,3 +93,5 @@ export * from './lib/skilled-professional-discovery.dto';
 export * from './lib/pagination.dto';
 export  * from './lib/pricing-units-response.dto';
 export * from './lib/service-booking-dtos.dto';
+export * from './lib/service-execution.dto';
+export * from './lib/customer-confirmation.dto';

@@ -16,5 +16,8 @@ export const LISTINGS_HOUSING_PROTO_PATH = join(process.cwd(), 'dist/libs/protos
 export const LISTINGS_SUPPORT_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/social_support.proto');        
 export const LISTINGS_REGISTRY_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/listings_registry.proto');
 export const  HOUSING_TRAINING_DATA_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/housing-training-data.proto');
+export const SERVICE_EXECUTION_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/service-execution.proto');    
+export const SERVICE_EXECUTION_MEDIA_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/service-execution-media.proto');  
+export const CUSTOMER_CONFIRMATION_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/customer_confirmation.proto')
 
 

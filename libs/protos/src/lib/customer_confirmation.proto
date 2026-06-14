@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package contractors_customer_confirmation;
+
+// ===================================================
+// SERVICE DEFINITION
+// ===================================================
+service CustomerConfirmationService {
+  // Customer Confirmation Methods
+  rpc ConfirmSatisfaction (ConfirmSatisfactionRequest) returns (BaseConfirmSatisfactionResponse);
+  rpc ReportDissatisfaction (ReportDissatisfactionRequest) returns (BaseReportDissatisfactionResponse);
+}
+
+// ===================================================
+// SHARED MESSAGES
+// ===================================================
+message ErrorPayload {
+  string code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+// ===================================================
+// ENTITIES
+// ===================================================
+
+// Confirm Satisfaction Response Data
+message ConfirmSatisfactionData {
+  string id = 1;
+  string externalId = 2;
+  string customerSatisfaction = 3;
+  optional string customerConfirmedAt = 4;
+  optional string paymentReleasedAt = 5;
+  string amountReleased = 6;
+  string bookingStatus = 7;
+}
+
+// Report Dissatisfaction Response Data
+message ReportDissatisfactionData {
+  string id = 1;
+  string externalId = 2;
+  string customerSatisfaction = 3;
+  optional string customerDissatisfiedAt = 4;
+  string disputeId = 5;
+  string disputeStatus = 6;
+  string bookingStatus = 7;
+}
+
+// ===================================================
+// REQUEST MESSAGES
+// ===================================================
+
+// Confirm Satisfaction Request
+message ConfirmSatisfactionRequest {
+  string bookingExternalId = 1;
+  
+  // Hidden fields - set by API Gateway from JWT token
+  string customerId = 2;
+  bool isPlatformAdmin = 3;
+}
+
+// Report Dissatisfaction Request
+message ReportDissatisfactionRequest {
+  string bookingExternalId = 1;
+  string reason = 2;
+  optional string description = 3;
+  repeated string evidenceUrls = 4;
+  
+  // Hidden fields - set by API Gateway from JWT token
+  string customerId = 5;
+  bool isPlatformAdmin = 6;
+}
+
+// ===================================================
+// RESPONSE MESSAGES
+// ===================================================
+
+// Confirm Satisfaction Response
+message BaseConfirmSatisfactionResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  ConfirmSatisfactionData data = 4;
+  ErrorPayload error = 5;
+}
+
+// Report Dissatisfaction Response
+message BaseReportDissatisfactionResponse {
+  bool success = 1;
+  string code = 2;
+  string message = 3;
+  ReportDissatisfactionData data = 4;
+  ErrorPayload error = 5;
+}
