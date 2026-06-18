@@ -25,7 +25,7 @@ import {
 } from '@pivota-api/dtos';
 
 import { SharedListingsGatewayService } from './shared-listings-gateway.service';
-import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard'; 
+import { JwtAuthGuard } from '../AuthenticationGatewayModule/jwt.guard'; 
 import { JwtRequest } from '@pivota-api/interfaces';
 
 // Custom Decorators & Guards
@@ -35,7 +35,7 @@ import { SubscriptionGuard } from '../../guards/subscription.guard';
 import { SetModule } from '../../decorators/set-module.decorator';
 import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 
-@ApiTags('Registry')
+@ApiTags('General Registry')
 @ApiBearerAuth()
 @ApiExtraModels(BaseResponseDto, ListingRegistryDataDto, GetOwnListingsResponseDto, GetAdminListingsResponseDto)
 @SetModule(ModuleSlug.REGISTRY)
@@ -84,7 +84,6 @@ export class SharedListingsGatewayController {
    */
   @Get('my-portfolio')
   @Permissions(P.LISTINGS_READ)
-  @ApiTags('Registry - Portfolio')
   @ApiOperation({ 
     summary: '📋 Get all listings belonging to the authenticated account',
     description: `
@@ -242,7 +241,6 @@ export class SharedListingsGatewayController {
    */
   @Get('admin/all-listings')
   @Permissions(P.LISTINGS_READ)
-  @ApiTags('Registry - Admin')
   @ApiOperation({ 
     summary: '👑 Admin: System-wide listing lookup',
     description: `

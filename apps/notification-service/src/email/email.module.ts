@@ -119,7 +119,8 @@ import { ServiceExecutionEmailService } from './services/handlers/service-execut
     PaymentEmailController,
     BookingEmailController,
     ServiceOfferingEmailController,
-    ServiceExecutionEmailController
+    ServiceExecutionEmailController,
+    SecurityEmailController
   ],
   providers: [
     EmailClientService,

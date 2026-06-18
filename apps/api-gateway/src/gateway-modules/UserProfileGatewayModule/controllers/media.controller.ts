@@ -28,7 +28,7 @@ import {
   ApiBody,
   ApiParam,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../../AuthenticationGatewayModule/jwt.guard';
 import { JwtRequest } from '@pivota-api/interfaces';
 import { BaseResponseDto, BulkDeleteResultDto, CertificationResponseDto, MediaUploadMultipleResponseDto, MediaUploadResponseDto, PortfolioItemDto, PortfolioResponseDto } from '@pivota-api/dtos';
 import { imageFileFilter, documentFileFilter, portfolioFileFilter } from '@pivota-api/filters';

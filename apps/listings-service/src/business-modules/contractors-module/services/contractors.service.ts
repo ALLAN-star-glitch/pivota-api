@@ -363,6 +363,127 @@ export class ContractorsService {
     }
   }
 
+  // Add this to your ContractorsService class
+
+async getAllOfferings(data: {
+  limit?: number;
+  offset?: number;
+  city?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sortBy?: 'recent' | 'price_asc' | 'price_desc' | 'rating';
+  minRating?: number;
+  verifiedOnly?: boolean;
+}): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
+  try {
+    // Build the where clause
+    const where: any = {
+      status: 'ACTIVE',
+    };
+
+    // Apply filters
+    if (data.minPrice !== undefined || data.maxPrice !== undefined) {
+      where.basePrice = {};
+      if (data.minPrice !== undefined) where.basePrice.gte = data.minPrice;
+      if (data.maxPrice !== undefined) where.basePrice.lte = data.maxPrice;
+    }
+
+    if (data.verifiedOnly === true) {
+      where.isVerified = true;
+    }
+
+    // Build order by
+    let orderBy: any = {};
+    switch (data.sortBy) {
+      case 'price_asc':
+        orderBy = { basePrice: 'asc' };
+        break;
+      case 'price_desc':
+        orderBy = { basePrice: 'desc' };
+        break;
+      case 'rating':
+        // Rating sorting requires a more complex query with aggregation
+        // For now, fallback to recent
+        orderBy = { createdAt: 'desc' };
+        break;
+      case 'recent':
+      default:
+        orderBy = { createdAt: 'desc' };
+        break;
+    }
+
+    // Get total count for pagination
+    const total = await this.prisma.serviceOffering.count({ where });
+
+    // Fetch offerings with pagination
+    const offerings = await this.prisma.serviceOffering.findMany({
+      where,
+      include: {
+        category: { 
+          select: { 
+            id: true, 
+            name: true, 
+            slug: true, 
+            vertical: true,
+            type: true
+          } 
+        },
+        reviews: { select: { rating: true } } 
+      },
+      orderBy,
+      skip: data.offset || 0,
+      take: data.limit || 20,
+    });
+
+    // Get professional details for all unique professional IDs
+    const professionalIds = [...new Set(offerings.map(o => o.skilledProfessionalId).filter(Boolean))];
+    const professionalDetails = new Map<string, SkilledProfessionalPublicProfileDto>();
+    
+    await Promise.all(
+      professionalIds.map(async (id) => {
+        const details = await this.getSkilledProfessionalDetails(id);
+        if (details) {
+          professionalDetails.set(id, details);
+        }
+      })
+    );
+
+    // Map to DTOs
+    let mappedOfferings = offerings.map(offering => 
+      this.mapToResponseDto(offering as unknown as ServiceOfferingWithDetails, professionalDetails.get(offering.skilledProfessionalId))
+    );
+
+    // Apply rating filter after fetching (since rating is calculated)
+    if (data.minRating !== undefined && data.minRating > 0) {
+      mappedOfferings = mappedOfferings.filter(
+        offering => (offering.averageRating || 0) >= (data.minRating || 0)
+      );
+    }
+
+    // Apply rating sorting after filtering (if needed)
+    if (data.sortBy === 'rating') {
+      mappedOfferings = mappedOfferings.sort((a, b) => (b.averageRating || 0) - (a.averageRating || 0));
+    }
+
+    const pagination: PaginationDto = {
+      total,
+      limit: data.limit || 20,
+      offset: data.offset || 0,
+      hasMore: (data.offset || 0) + (data.limit || 20) < total,
+    };
+
+    return BaseResponseDto.okWithPagination(
+      mappedOfferings,
+      pagination,
+      `Found ${mappedOfferings.length} service offerings across all categories`,
+      'OK'
+    );
+  } catch (error) {
+    this.logger.error(`Failed to get all offerings: ${error.message}`);
+    return BaseResponseDto.fail(error.message, 'INTERNAL_ERROR');
+  }
+}
+
   async getOfferingsByProfessional(
     professionalUuid: string
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {

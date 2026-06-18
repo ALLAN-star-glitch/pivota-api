@@ -3,9 +3,11 @@ import { NestFactory } from '@nestjs/core';
 import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import { AppModule } from './app/app.module';
 import * as dotenv from 'dotenv';
-import { AUTH_PROTO_PATH } from '@pivota-api/protos';
+import { 
+  AUTHENTICATION_PROTO_PATH,
+  ONBOARDING_PROTO_PATH 
+} from '@pivota-api/protos';
 import { QueueService } from '@pivota-api/shared-redis';
-import { AuthModule } from './modules/auth/auth.module';
 
 // Load environment
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'dev'}` });
@@ -30,21 +32,33 @@ async function bootstrap() {
         clientId: 'auth-service',
       },
       consumer: {
-        groupId: 'auth-service-consumer',  // ✅ Use a consistent group ID
+        groupId: 'auth-service-consumer',
       },
       subscribe: { 
-        fromBeginning: true  // ✅ Set to true to catch events
+        fromBeginning: true
       },
     },
   });
 
   // ------------------- gRPC Microservice -------------------
+
+  // ✅ NEW: Authentication gRPC Service
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.GRPC,
     options: {
-      package: 'auth',
-      protoPath: AUTH_PROTO_PATH,
-      url: process.env.AUTH_GRPC_URL || '0.0.0.0:50051',
+      package: 'authentication',
+      protoPath: AUTHENTICATION_PROTO_PATH,
+      url: process.env.AUTH_GRPC_URL || '0.0.0.0:50099',  // ✅ Different port
+    },
+  });
+
+  // ✅ NEW: Onboarding gRPC Service
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.GRPC,
+    options: {
+      package: 'onboarding',
+      protoPath: ONBOARDING_PROTO_PATH,
+      url: process.env.ONBOARDING_GRPC_URL || '0.0.0.0:50092',  // ✅ Different port
     },
   });
 
@@ -57,7 +71,7 @@ async function bootstrap() {
       queueOptions: {
         durable: true,
       },
-      noAck: false,  // ✅ Set to false for manual acknowledgment
+      noAck: false,
     },
   });
 
@@ -68,6 +82,9 @@ async function bootstrap() {
 
   await app.startAllMicroservices();
   logger.log('🚀 Auth service is running (Kafka + gRPC + RabbitMQ)');
+  logger.log(`📦 gRPC Services:`);
+  logger.log(`   - authentication: ${process.env.AUTH_GRPC_URL || '0.0.0.0:50091'}`);
+  logger.log(`   - onboarding: ${process.env.ONBOARDING_GRPC_URL || '0.0.0.0:50092'}`);
 }
 
 bootstrap();

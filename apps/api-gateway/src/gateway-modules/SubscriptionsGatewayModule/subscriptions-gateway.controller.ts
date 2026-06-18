@@ -10,8 +10,8 @@ import {
   UseGuards,
   Version,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags, ApiQuery } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../AuthenticationGatewayModule/jwt.guard';
 import { JwtRequest } from '@pivota-api/interfaces';
 import {
   AccessDataDto,
@@ -23,10 +23,9 @@ import { SubscriptionsGatewayService } from './subscriptions-gateway.service';
 import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
 import { Permissions } from '../../decorators/permissions.decorator';
 import { SetModule } from '../../decorators/set-module.decorator';
-import { Public } from '../../decorators/public.decorator';
 import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 
-@ApiTags('Subscriptions')
+@ApiTags('Subscriptions Management')
 @ApiBearerAuth()
 @Controller('subscriptions-gateway')
 @SetModule(ModuleSlug.DASHBOARD)
@@ -53,7 +52,6 @@ export class SubscriptionsGatewayController {
   @Post('/subscription')
   @Version('1')
   @Permissions(P.SUBSCRIPTION_MANAGE)
-  @ApiTags('Subscriptions - Management')
   @ApiOperation({ 
     summary: '💳 Assign a subscription plan to a user',
     description: `
@@ -179,7 +177,6 @@ export class SubscriptionsGatewayController {
    */
   @Get('/user/:accountUuid')
   @Version('1')
-  @ApiTags('Subscriptions - Management')
   @ApiOperation({ 
     summary: '📋 Get subscription details by account UUID',
     description: `
@@ -320,7 +317,6 @@ export class SubscriptionsGatewayController {
    */
   @Get('/check-access/:moduleSlug')
   @Version('1')
-  @ApiTags('Subscriptions - Access')
   @ApiOperation({ 
     summary: '🔑 Check module access for the authenticated account',
     description: `

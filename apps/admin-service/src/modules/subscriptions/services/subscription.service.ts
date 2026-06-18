@@ -194,8 +194,6 @@ export class SubscriptionService {
   // 1. Define local interfaces for the Prisma result structure
 
 
-// ... inside SubscriptionService class
-
 async checkModuleAccess(
   accountUuid: string,
   moduleSlug: string

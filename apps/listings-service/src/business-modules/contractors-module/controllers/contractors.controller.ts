@@ -7,6 +7,7 @@ import {
   UpdateServiceOfferingDto,
   BaseResponseDto,
   ServiceOfferingResponseDto,
+  GetAllOfferingsRequestDto,  // Add this import
 } from '@pivota-api/dtos';
 import { ContractorsPricingService } from '../services/contractors-pricing.service';
 import { ContractorsService } from '../services/contractors.service';
@@ -93,5 +94,17 @@ export class ContractorsController {
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
     this.logger.log(`[gRPC] GetOfferingsByCategory called: ${data.categoryId}`);
     return this.contractorsService.getOfferingsByCategory(data);
+  }
+
+  // ========================================================================
+  // NEW: GET ALL OFFERINGS (Across all categories)
+  // ========================================================================
+
+  @GrpcMethod('ContractorsService', 'GetAllOfferings')
+  async getAllOfferings(
+    data: GetAllOfferingsRequestDto,
+  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
+    this.logger.log(`[gRPC] GetAllOfferings called: limit=${data.limit}, offset=${data.offset}, sortBy=${data.sortBy}`);
+    return this.contractorsService.getAllOfferings(data);
   }
 }

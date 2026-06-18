@@ -15,6 +15,11 @@ service ContractorsService {
   rpc UpdateServiceOffering (UpdateServiceOfferingRequest) returns (BaseServiceOfferingResponse);
   rpc DeleteServiceOffering (DeleteServiceOfferingRequest) returns (BaseResponse);
   rpc GetOfferingsByCategory (GetOfferingsByCategoryRequest) returns (ListServiceOfferingsResponse);
+  
+  // ===================================================
+  // NEW: Get all offerings across all categories
+  // ===================================================
+  rpc GetAllOfferings (GetAllOfferingsRequest) returns (ListServiceOfferingsResponse);
 }
 
 // ===================================================
@@ -184,6 +189,20 @@ message GetOfferingsByCategoryRequest {
   optional int32 offset = 3;
   optional double minPrice = 4;
   optional double maxPrice = 5;
+}
+
+// ===================================================
+// NEW: GET ALL OFFERINGS REQUEST
+// ===================================================
+message GetAllOfferingsRequest {
+  optional int32 limit = 1;           // Number of records to return (default: 20)
+  optional int32 offset = 2;          // Number of records to skip (default: 0)
+  optional string city = 3;           // Filter by city
+  optional double minPrice = 4;       // Minimum price filter
+  optional double maxPrice = 5;       // Maximum price filter
+  optional string sortBy = 6;         // Sort by: "recent", "price_asc", "price_desc", "rating"
+  optional int32 minRating = 7;       // Minimum rating filter (1-5)
+  optional bool verifiedOnly = 8;     // Show only verified professionals
 }
 
 // ===================================================

@@ -8,6 +8,7 @@ import {
   CreateServiceGrpcOfferingDto,
   CreateServiceOfferingDto,
   UpdateServiceOfferingDto,
+  GetAllOfferingsRequestDto,  // ADD THIS IMPORT
 } from '@pivota-api/dtos';
 import { UserService } from '../../UserProfileGatewayModule/services/user.service';
 
@@ -51,6 +52,13 @@ interface ContractorsServiceGrpc {
       minPrice?: number;
       maxPrice?: number;
     }
+  ): Observable<BaseResponseDto<ServiceOfferingResponseDto[]>>;
+
+  // ===================================================
+  // NEW: Get all offerings across all categories
+  // ===================================================
+  GetAllOfferings(
+    data: GetAllOfferingsRequestDto,
   ): Observable<BaseResponseDto<ServiceOfferingResponseDto[]>>;
 }
 
@@ -256,6 +264,49 @@ export class ContractorsGatewayService {
       return BaseResponseDto.fail(res?.message, res?.code);
     } catch (error) {
       this.logger.error(`gRPC Error fetching offerings by category: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch offerings', 'FETCH_ERROR');
+    }
+  }
+
+  // ===========================================================
+  // NEW: GET ALL OFFERINGS (Across all categories)
+  // ===========================================================
+
+  async getAllOfferings(
+    limit?: number,
+    offset?: number,
+    city?: string,
+    minPrice?: number,
+    maxPrice?: number,
+    sortBy?: 'recent' | 'price_asc' | 'price_desc' | 'rating',
+    minRating?: number,
+    verifiedOnly?: boolean,
+  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
+    try {
+      const request: GetAllOfferingsRequestDto = {
+        limit: limit || 20,
+        offset: offset || 0,
+        city,
+        minPrice,
+        maxPrice,
+        sortBy: sortBy || 'recent',
+        minRating,
+        verifiedOnly: verifiedOnly || false,
+      };
+
+      const res = await firstValueFrom(
+        this.grpcService.GetAllOfferings(request)
+      );
+
+      this.logger.debug(`GetAllOfferings gRPC Response: ${JSON.stringify(res)}`);
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data || [], res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching all offerings: ${error.message}`);
       return BaseResponseDto.fail('Failed to fetch offerings', 'FETCH_ERROR');
     }
   }

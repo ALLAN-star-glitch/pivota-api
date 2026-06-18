@@ -22,7 +22,7 @@ import {
   AssignRoleToUserRequestDto,
   UserRoleResponseDto,
 } from '@pivota-api/dtos';
-import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../AuthenticationGatewayModule/jwt.guard';
 import {
   ApiTags,
   ApiOperation,
@@ -35,10 +35,9 @@ import {
 import { Permissions } from '../../decorators/permissions.decorator';
 import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
 import { SetModule } from '../../decorators/set-module.decorator';
-import { Public } from '../../decorators/public.decorator';
 import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 
-@ApiTags('RBAC')
+@ApiTags('RBAC Management')
 @ApiBearerAuth()
 @ApiExtraModels(
   BaseResponseDto,
@@ -71,7 +70,6 @@ export class RbacGatewayController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(P.ROLE_CREATE)
   @Version('1')
-  @ApiTags('RBAC - Roles')
   @ApiOperation({ 
     summary: 'Create a new role',
     description: `
@@ -169,7 +167,6 @@ export class RbacGatewayController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(P.ROLE_UPDATE)
   @Version('1')
-  @ApiTags('RBAC - Roles')
   @ApiOperation({ 
     summary: 'Update a role',
     description: `
@@ -245,7 +242,6 @@ export class RbacGatewayController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(P.ROLE_VIEW)
   @Version('1')
-  @ApiTags('RBAC - Roles')
   @ApiOperation({ 
     summary: 'Get all roles',
     description: `
@@ -325,7 +321,6 @@ export class RbacGatewayController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(P.ROLE_ASSIGN)
   @Version('1')
-  @ApiTags('RBAC - Permissions')
   @ApiOperation({ 
     summary: 'Create a new permission',
     description: `
@@ -422,7 +417,6 @@ export class RbacGatewayController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(P.ROLE_ASSIGN)
   @Version('1')
-  @ApiTags('RBAC - Assignments')
   @ApiOperation({ 
     summary: 'Assign a permission to a role',
     description: `
@@ -509,7 +503,6 @@ export class RbacGatewayController {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Permissions(P.ROLE_ASSIGN)
 @Version('1')
-@ApiTags('RBAC - Assignments')
 @ApiOperation({ 
   summary: 'Assign Role to a user',
   description: `
@@ -577,7 +570,6 @@ async assignRoleToUser(
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(P.USER_VIEW)
   @Version('1')
-  @ApiTags('RBAC - Assignments')
   @ApiOperation({ 
     summary: 'Get Role for a user',
     description: `

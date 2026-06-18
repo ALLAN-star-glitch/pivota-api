@@ -2,7 +2,7 @@
 import { Controller, Get, Post, Query, Body, Req, UseGuards, Logger, Res, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
-import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../AuthenticationGatewayModule/jwt.guard';
 import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
 import { Permissions } from '../../decorators/permissions.decorator';
 import { SetModule } from '../../decorators/set-module.decorator';

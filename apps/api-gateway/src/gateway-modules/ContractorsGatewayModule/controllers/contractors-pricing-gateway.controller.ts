@@ -29,7 +29,7 @@ import {
   PricingUnitsByCategoryResponseDto,
 } from '@pivota-api/dtos';
 
-import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../../AuthenticationGatewayModule/jwt.guard';
 import { PermissionsGuard } from '../../../guards/PermissionGuard.guard';
 import { Permissions } from '../../../decorators/permissions.decorator';
 import { Public } from '../../../decorators/public.decorator';
@@ -60,7 +60,6 @@ export class ContractorsPricingGatewayController {
   @Get('metadata')
   @Public()
   @Version('1')
-  @ApiTags('Contractors - Pricing')
   @ApiOperation({ 
     summary: '📊 Fetch pricing units and validation rules grouped by vertical',
     description: `
@@ -197,7 +196,6 @@ export class ContractorsPricingGatewayController {
 @Get('units/category/:categoryId')
 @Public()
 @Version('1')
-@ApiTags('Contractors - Pricing')
 @ApiOperation({ 
   summary: 'Get allowed pricing units for a category',
   description: 'Returns allowed pricing units, price ranges, and requirements for a specific COMPLIMENTARY category. Used to populate the pricing unit dropdown when posting a service.'
@@ -233,7 +231,6 @@ async getPricingUnitsByCategory(
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(P.PROFESSIONAL_SERVICES_VERIFY)
   @Version('1')
-  @ApiTags('Contractors - Pricing Admin')
   @ApiOperation({ 
     summary: '👑 Admin: Create or update a pricing validation rule',
     description: `
@@ -370,7 +367,6 @@ async getPricingUnitsByCategory(
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(P.PROFESSIONAL_SERVICES_VERIFY)
   @Version('1')
-  @ApiTags('Contractors - Pricing Admin')
   @ApiOperation({ 
     summary: '👑 Admin: Activate or deactivate a pricing rule',
     description: `

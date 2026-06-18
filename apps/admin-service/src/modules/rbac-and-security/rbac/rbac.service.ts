@@ -58,19 +58,16 @@ export class RbacService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     @Inject('PROFILE_PACKAGE') private readonly profileGrpcClient: ClientGrpc,
-    @Inject('AUTH_PACKAGE') private readonly authGrpcClient: ClientGrpc,
   ) {
     // Initialize in constructor as well for immediate availability
     this.profileServiceGrpc = this.profileGrpcClient.getService<ProfileServiceGrpc>('ProfileService');
-    this.authServiceGrpc = this.authGrpcClient.getService<AuthServiceGrpc>('AuthService');
   }
 
   // ------------------ Module Init ------------------
   onModuleInit() {
     // Re-initialize to ensure fresh connection
     this.profileServiceGrpc = this.profileGrpcClient.getService<ProfileServiceGrpc>('ProfileService');
-    this.authServiceGrpc = this.authGrpcClient.getService<AuthServiceGrpc>('AuthService');
-    
+   
     this.logger.log('✅ ProfileService gRPC client initialized');
     this.logger.log('✅ AuthService gRPC client initialized');
     

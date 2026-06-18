@@ -51,7 +51,7 @@ import {
   DiscoverSkilledProfessionalsDto,
   SkilledProfessionalDiscoveryResponseDto,
 } from '@pivota-api/dtos';
-import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../../AuthenticationGatewayModule/jwt.guard';
 import { 
   ApiTags,
   ApiOperation,
@@ -74,7 +74,7 @@ import { JobType, ProfileType } from '@pivota-api/constants';
 import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 import { Public } from '../../../decorators/public.decorator';
 
-@ApiTags('User Profile')
+@ApiTags('User Profile Management')
 @ApiBearerAuth() 
 @ApiExtraModels(
   BaseResponseDto, 
@@ -111,7 +111,6 @@ export class UserController {
 
   @Get('me')
   @Version('1')
-  @ApiTags('Profile - My Profile')
   @ApiOperation({ 
     summary: 'Get own profile',
     description: 'Retrieves the authenticated user\'s complete profile information including all associated profiles (Job Seeker, Skilled Professional, etc.).'
@@ -166,7 +165,6 @@ export class UserController {
   @Patch('users/profile/update/me')
   @Permissions(P.ACCOUNT_UPDATE)
   @Version('1')
-  @ApiTags('Profile - My Profile')
   @ApiOperation({ 
     summary: 'Update own profile metadata',
     description: 'Updates the authenticated user\'s basic profile information (name, bio, profile image, etc.).'
@@ -202,7 +200,6 @@ export class UserController {
 
   @Post('profiles/job-seeker')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ 
     summary: 'Create job seeker profile',
     description: 'Creates a job seeker profile for finding employment opportunities.'
@@ -237,7 +234,6 @@ export class UserController {
 
   @Post('profiles/skilled-professional')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ 
     summary: 'Create skilled professional profile',
     description: `
@@ -339,7 +335,6 @@ export class UserController {
 
   @Post('profiles/intermediary-agent')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ 
     summary: 'Create intermediary agent profile',
     description: 'Creates an agent profile for representing clients in transactions (real estate, recruitment, etc.).'
@@ -374,7 +369,6 @@ export class UserController {
 
   @Post('profiles/housing-seeker')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ 
     summary: 'Create housing seeker profile',
     description: 'Creates a housing seeker profile for finding rental or purchase properties.'
@@ -409,7 +403,6 @@ export class UserController {
 
   @Post('profiles/property-owner')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ 
     summary: 'Create property owner profile',
     description: 'Creates a property owner profile for listing properties for rent or sale.'
@@ -444,7 +437,6 @@ export class UserController {
 
   @Post('profiles/support-beneficiary')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ 
     summary: 'Create support beneficiary profile',
     description: 'Creates a support beneficiary profile for receiving social support services.'
@@ -483,7 +475,6 @@ export class UserController {
 
   @Patch('profiles/skilled-professional')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ 
     summary: 'Update skilled professional profile',
     description: `
@@ -577,7 +568,6 @@ export class UserController {
 
   @Patch('profiles/housing-seeker')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ summary: 'Update housing seeker profile' })
   @ApiBody({ type: HousingSeekerProfileDataDto })
   @ApiResponse({
@@ -614,7 +604,6 @@ export class UserController {
 
   @Patch('profiles/property-owner')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ summary: 'Update property owner profile' })
   @ApiBody({ type: PropertyOwnerProfileDataDto })
   @ApiResponse({
@@ -651,7 +640,6 @@ export class UserController {
 
   @Patch('profiles/support-beneficiary')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ summary: 'Update support beneficiary profile' })
   @ApiBody({ type: SupportBeneficiaryProfileDataDto })
   @ApiResponse({
@@ -688,7 +676,6 @@ export class UserController {
 
   @Patch('profiles/intermediary-agent')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ summary: 'Update intermediary agent profile' })
   @ApiBody({ type: IntermediaryAgentProfileDataDto })
   @ApiResponse({
@@ -729,7 +716,6 @@ export class UserController {
 
   @Delete('profiles/:profileType')
   @Version('1')
-  @ApiTags('Profile - Individual')
   @ApiOperation({ 
     summary: 'Remove a profile from the user account',
     description: 'Permanently removes a specific profile type (e.g., SKILLED_PROFESSIONAL, JOB_SEEKER) from the user\'s account.'
@@ -784,7 +770,6 @@ export class UserController {
   @Get('users/code/:userCode')
   @Permissions(P.USER_VIEW)
   @Version('1')
-  @ApiTags('Profile - Admin')
   @ApiOperation({ summary: 'Admin: Get user by userCode' })
   @ApiParam({ name: 'userCode', description: 'The unique system code', example: 'PIV-000123' })
   @ApiResponse({ status: 200, description: 'User retrieved successfully' })
@@ -797,7 +782,6 @@ export class UserController {
   @Get('users/email/:email')
   @Permissions(P.USER_VIEW)
   @Version('1')
-  @ApiTags('Profile - Admin')
   @ApiOperation({ summary: 'Admin: Get user by email' })
   @ApiParam({ name: 'email', description: 'Primary email address of the user', example: 'dev@pivota.com' })
   @ApiResponse({ status: 200, description: 'User retrieved successfully' })
@@ -810,7 +794,6 @@ export class UserController {
   @Get('users')
   @Permissions(P.USER_VIEW)
   @Version('1')
-  @ApiTags('Profile - Admin')
   @ApiOperation({ summary: 'Admin: Get all system users' })
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
   async getAllUsers(): Promise<BaseResponseDto<UserResponseDto[]>> {
@@ -822,7 +805,6 @@ export class UserController {
   @Patch('admin/users/profile/:userUuid/update')
   @Permissions(P.USER_UPDATE)
   @Version('1')
-  @ApiTags('Profile - Admin')
   @ApiOperation({ summary: 'Admin: Update any user profile' })
   @ApiParam({ name: 'userUuid', description: 'The UUID of the user to update', example: 'usr_123abc' })
   @ApiBody({ type: UpdateAdminProfileRequestDto })
@@ -846,7 +828,6 @@ export class UserController {
 
   @Patch('users/profile/job-seeker/update')
   @Version('1')
-  @ApiTags('Profile - Job Seeker')
   @ApiOperation({ summary: 'Update job seeker profile' })
   @ApiBody({ type: UpdateJobSeekerRequestDto })
   @ApiResponse({
@@ -887,7 +868,6 @@ export class UserController {
 
   @Get('profiles/skilled-professional/me')
   @Version('1')
-  @ApiTags('Profile - Skilled Professional')
   @ApiOperation({ 
     summary: 'Get my skilled professional profile',
     description: 'Retrieves the authenticated user\'s own skilled professional profile.'
@@ -917,7 +897,6 @@ export class UserController {
 
   @Get('profiles/skilled-professional/account')
   @Version('1')
-  @ApiTags('Profile - Skilled Professional')
   @ApiOperation({ 
     summary: 'Get skilled professional by account UUID',
     description: 'Retrieves a skilled professional profile by account UUID. If no accountUuid provided, returns the authenticated user\'s profile.'
@@ -964,7 +943,6 @@ export class UserController {
   @Get('profiles/skilled-professional/discovery')
   @Public()
   @Version('1')
-  @ApiTags('Profile - Skilled Professional')
   @ApiOperation({ 
     summary: 'Discover skilled professionals',
     description: 'Public endpoint to search and discover skilled professionals with filters.'
@@ -996,7 +974,6 @@ export class UserController {
   @Get('profiles/skilled-professional/:uuid')
   @Public()
   @Version('1')
-  @ApiTags('Profile - Skilled Professional')
   @ApiOperation({ 
     summary: 'Get skilled professional by UUID',
     description: 'Public endpoint to view a skilled professional\'s public profile by their profile UUID.'
@@ -1022,7 +999,6 @@ export class UserController {
 @Get('accounts/:accountUuid')
 @Permissions(P.USER_VIEW)
 @Version('1')
-@ApiTags('Profile - Account')
 @ApiOperation({ 
   summary: 'Get account by UUID',
   description: 'Retrieves account details by account UUID. Requires USER_VIEW permission.'

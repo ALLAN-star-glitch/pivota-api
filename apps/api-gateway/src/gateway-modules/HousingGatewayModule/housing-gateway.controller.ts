@@ -52,7 +52,7 @@ import {
   AuthClientInfoDto,
 } from '@pivota-api/dtos';
 
-import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../AuthenticationGatewayModule/jwt.guard';
 import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
 import { SubscriptionGuard } from '../../guards/subscription.guard';
 import { JwtRequest } from '@pivota-api/interfaces';
@@ -67,7 +67,7 @@ import { ClientInfo } from '../../decorators/client-info.decorator';
 import { HOUSE_LISTING_STATUSES, HOUSE_LISTING_TYPES } from '@pivota-api/constants';
 import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 
-@ApiTags('Housing')
+@ApiTags('Housing & Real-Estate Pillar')
 @ApiExtraModels( 
   BaseResponseDto,
   HouseListingCreateResponseDto,
@@ -132,7 +132,6 @@ export class HousingGatewayController {
   @Public()
   @Version('1')
   @Get('listings/search')
-  @ApiTags('Housing - Discovery')
   @ApiOperation({ 
     summary: 'Search for available house listings with AI-powered analytics tracking',
     description: `
@@ -321,7 +320,6 @@ export class HousingGatewayController {
 
   @Version('1')
   @Get('details/:id')
-  @ApiTags('Housing - Discovery')
   @ApiOperation({ 
     summary: 'Get detailed listing information with AI-powered analytics tracking',
     description: `
@@ -417,7 +415,6 @@ export class HousingGatewayController {
       fileSize: 5 * 1024 * 1024,
     }
   }))
-  @ApiTags('Housing - Management')
   @ApiOperation({ 
     summary: 'Create a new house listing',
     description: `
@@ -534,7 +531,6 @@ export class HousingGatewayController {
   @Permissions(P.HOUSING_READ)
   @Version('1')
   @Get('my-listings')
-  @ApiTags('Housing - Management')
   @ApiOperation({ 
     summary: 'Get your own listings',
     description: `
@@ -588,7 +584,6 @@ export class HousingGatewayController {
   // ===========================================================
   @Post('listings/:id/viewing')
   @Permissions(P.HOUSING_READ)
-  @ApiTags('Housing - Management')
   @ApiOperation({ 
     summary: 'Schedule a property viewing for yourself with AI-powered analytics tracking',
     description: `
@@ -693,7 +688,6 @@ export class HousingGatewayController {
   // ===========================================================
   @Post('admin/listings/:id/viewing')
   @Permissions(P.HOUSING_CREATE_ANY)
-  @ApiTags('Housing - Admin')
   @ApiOperation({ 
     summary: 'Schedule a viewing on behalf of any user (Admin only)',
     description: `
@@ -773,7 +767,6 @@ export class HousingGatewayController {
       fileSize: 5 * 1024 * 1024,
     }
   }))
-  @ApiTags('Housing - Admin')
   @ApiOperation({ 
     summary: 'Create a house listing for any account',
     description: `
@@ -862,7 +855,6 @@ export class HousingGatewayController {
 
   @Patch('admin/listings/:id')
   @Permissions(P.HOUSING_UPDATE_ANY)
-  @ApiTags('Housing - Admin')
   @ApiOperation({ 
     summary: 'Update any house listing',
     description: `
@@ -915,7 +907,6 @@ export class HousingGatewayController {
   @Permissions(P.HOUSING_READ)
   @Version('1')
   @Get('admin/listings')
-  @ApiTags('Housing - Admin')
   @ApiOperation({ 
     summary: 'Get all listings across the system',
     description: `

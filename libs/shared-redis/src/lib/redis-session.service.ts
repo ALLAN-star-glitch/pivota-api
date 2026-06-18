@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // shared-redis/src/services/redis-session.service.ts
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Injectable, Logger } from '@nestjs/common';
 import { RedisService } from './redis.service';
 
@@ -85,7 +85,13 @@ export class RedisSessionService {
     await this.redis.delete(sessionKey);
   }
 
-  
+  /**
+   * Delete all keys matching a pattern
+   * Delegates to RedisService.deletePattern()
+   */
+  async deletePattern(pattern: string): Promise<void> {
+    await this.redis.deletePattern(pattern);
+  }
 
   async updateLastActive(tokenId: string): Promise<void> {
     const session = await this.getSession(tokenId);
@@ -107,88 +113,90 @@ export class RedisSessionService {
   }
 
   /**
- * Cache credential (ONLY non-sensitive data)
- * NEVER cache: passwordHash, failedAttempts, lockoutExpires
- */
-async cacheCredential(email: string, credential: any): Promise<void> {
-  const cacheKey = `credential:${email}`;
-  
-  //  Cache ONLY safe fields
-  const safeCredential = {
-    userUuid: credential.userUuid,
-    accountUuid: credential.accountUuid,
-    accountStatus: credential.accountStatus,
-    memberStatus: credential.memberStatus,
-    role: credential.role,
-    email: credential.email,
-    //  EXCLUDED: passwordHash, failedAttempts, lockoutExpires
-  };
-  
-  // Short TTL - 5 minutes max for credentials
-  await this.redis.setObject(cacheKey, safeCredential, 300);
-  this.logger.debug(`Credential cached for ${email}`);
-}
-
-async getCachedCredential(email: string): Promise<any | null> {
-  const cacheKey = `credential:${email}`;
-  const cached = await this.redis.getObject(cacheKey);
-  
-  if (cached) {
-    this.logger.debug(`Credential cache hit for ${email}`);
+   * Cache credential (ONLY non-sensitive data)
+   * NEVER cache: passwordHash, failedAttempts, lockoutExpires
+   */
+  async cacheCredential(email: string, credential: any): Promise<void> {
+    const cacheKey = `credential:${email}`;
+    
+    // Cache ONLY safe fields
+    const safeCredential = {
+      userUuid: credential.userUuid,
+      accountUuid: credential.accountUuid,
+      accountStatus: credential.accountStatus,
+      memberStatus: credential.memberStatus,
+      role: credential.role,
+      email: credential.email,
+      // EXCLUDED: passwordHash, failedAttempts, lockoutExpires
+    };
+    
+    // Short TTL - 5 minutes max for credentials
+    await this.redis.setObject(cacheKey, safeCredential, 300);
+    this.logger.debug(`Credential cached for ${email}`);
   }
-  
-  return cached;
-}
 
-async invalidateCredentialCache(email: string): Promise<void> {
-  const cacheKey = `credential:${email}`;
-  await this.redis.delete(cacheKey);
-  this.logger.debug(`Credential cache invalidated for ${email}`);
-}
-
-/**
- * Cache user role
- */
-async cacheUserRole(userUuid: string, roleType: string): Promise<void> {
-  const cacheKey = `user_role:${userUuid}`;
-  await this.redis.setEx(cacheKey, roleType, 300); // 5 minutes TTL
-  this.logger.debug(`User role cached for ${userUuid}: ${roleType}`);
-}
-
-/**
- * Get cached user role
- */
-async getCachedUserRole(userUuid: string): Promise<string | null> {
-  const cacheKey = `user_role:${userUuid}`;
-  const role = await this.redis.get(cacheKey);
-  
-  if (role) {
-    this.logger.debug(`User role cache HIT for ${userUuid}: ${role}`);
+  async getCachedCredential(email: string): Promise<any | null> {
+    const cacheKey = `credential:${email}`;
+    const cached = await this.redis.getObject(cacheKey);
+    
+    if (cached) {
+      this.logger.debug(`Credential cache hit for ${email}`);
+    }
+    
+    return cached;
   }
-  
-  return role;
-}
 
+  async invalidateCredentialCache(email: string): Promise<void> {
+    const cacheKey = `credential:${email}`;
+    await this.redis.delete(cacheKey);
+    this.logger.debug(`Credential cache invalidated for ${email}`);
+  }
 
-// In your RedisSessionService, add:
-async cacheProfessionalId(userUuid: string, professionalId: string): Promise<void> {
-  const key = `professional:${userUuid}`;
-  await this.redis.setEx(key, professionalId, 3600); // 1 hour cache
-}
+  /**
+   * Cache user role
+   */
+  async cacheUserRole(userUuid: string, roleType: string): Promise<void> {
+    const cacheKey = `user_role:${userUuid}`;
+    await this.redis.setEx(cacheKey, roleType, 300); // 5 minutes TTL
+    this.logger.debug(`User role cached for ${userUuid}: ${roleType}`);
+  }
 
-async getCachedProfessionalId(userUuid: string): Promise<string | null> {
-  const key = `professional:${userUuid}`;
-  return await this.redis.get(key);
-}
+  /**
+   * Get cached user role
+   */
+  async getCachedUserRole(userUuid: string): Promise<string | null> {
+    const cacheKey = `user_role:${userUuid}`;
+    const role = await this.redis.get(cacheKey);
+    
+    if (role) {
+      this.logger.debug(`User role cache HIT for ${userUuid}: ${role}`);
+    }
+    
+    return role;
+  }
 
-/**
- * Invalidate user role cache
- */
-async invalidateUserRoleCache(userUuid: string): Promise<void> {
-  const cacheKey = `user_role:${userUuid}`;
-  await this.redis.delete(cacheKey);
-  this.logger.debug(`User role cache invalidated for ${userUuid}`);
-}
+  /**
+   * Cache professional ID
+   */
+  async cacheProfessionalId(userUuid: string, professionalId: string): Promise<void> {
+    const key = `professional:${userUuid}`;
+    await this.redis.setEx(key, professionalId, 3600); // 1 hour cache
+  }
 
+  /**
+   * Get cached professional ID
+   */
+  async getCachedProfessionalId(userUuid: string): Promise<string | null> {
+    const key = `professional:${userUuid}`;
+    return await this.redis.get(key);
+  }
 
+  /**
+   * Invalidate user role cache
+   */
+  async invalidateUserRoleCache(userUuid: string): Promise<void> {
+    const cacheKey = `user_role:${userUuid}`;
+    await this.redis.delete(cacheKey);
+    this.logger.debug(`User role cache invalidated for ${userUuid}`);
+  }
 }

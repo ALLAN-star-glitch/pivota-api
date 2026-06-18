@@ -22,17 +22,15 @@ import {
   BaseResponseDto,
   StartWorkRequestDto,
   CompleteWorkRequestDto,
-  UploadEvidenceRequestDto,
   GetWorkStatusRequestDto,
   CheckAutoReleaseEligibilityRequestDto,
   StartWorkResponseDto,
   CompleteWorkResponseDto,
-  UploadEvidenceResponseDto,
   WorkStatusResponseDto,
   AutoReleaseEligibilityResponseDto,
 } from '@pivota-api/dtos';
 
-import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../../AuthenticationGatewayModule/jwt.guard';
 import { PermissionsGuard } from '../../../guards/PermissionGuard.guard';
 import { SubscriptionGuard } from '../../../guards/subscription.guard';
 import { JwtRequest } from '@pivota-api/interfaces';
@@ -43,7 +41,7 @@ import { Permissions } from '../../../decorators/permissions.decorator';
 import { SetModule } from '../../../decorators/set-module.decorator';
 import { Permissions as P, ModuleSlug, isPlatformRole, RoleType } from '@pivota-api/access-management';
 
-@ApiTags('Service Execution')
+@ApiTags('Professionals Service Execution')
 @ApiBearerAuth()
 @Controller('service-execution')
 @SetModule(ModuleSlug.PROFESSIONAL_SERVICES)

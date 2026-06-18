@@ -20,7 +20,7 @@ import {
   PlanIdDtoResponse,
 } from '@pivota-api/dtos';
 
-import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../AuthenticationGatewayModule/jwt.guard';
 import { JwtRequest } from '@pivota-api/interfaces';
 
 import {
@@ -38,7 +38,7 @@ import { SetModule } from '../../decorators/set-module.decorator';
 import { Public } from '../../decorators/public.decorator';
 import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 
-@ApiTags('Plans')
+@ApiTags('Pricing Plans Management')
 @ApiBearerAuth()
 @Controller('pricing-plans-module')
 @SetModule(ModuleSlug.DASHBOARD)
@@ -64,7 +64,6 @@ export class PlansGatewayController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(P.SUBSCRIPTION_MANAGE)
   @Version('1')
-  @ApiTags('Plans - Admin')
   @ApiOperation({ 
     summary: 'Create a new subscription plan',
     description: `
@@ -170,7 +169,6 @@ export class PlansGatewayController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(P.SUBSCRIPTION_MANAGE)
   @Version('1')
-  @ApiTags('Plans - Admin')
   @ApiOperation({ 
     summary: 'Update an existing subscription plan',
     description: `
@@ -272,7 +270,6 @@ export class PlansGatewayController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions(P.SUBSCRIPTION_MANAGE)
   @Version('1')
-  @ApiTags('Plans - Admin')
   @ApiOperation({ 
     summary: 'Delete a subscription plan',
     description: `
@@ -354,7 +351,6 @@ export class PlansGatewayController {
   @Get('/:id')
   @Public()
   @Version('1')
-  @ApiTags('Plans - Public')
   @ApiOperation({ 
     summary: 'Get plan by ID',
     description: `
@@ -431,7 +427,6 @@ export class PlansGatewayController {
   @Get()
   @Public()
   @Version('1')
-  @ApiTags('Plans - Public')
   @ApiOperation({ 
     summary: 'Get all available plans',
     description: `
@@ -529,7 +524,6 @@ export class PlansGatewayController {
   @Get('/slug/:slug')
   @Public()
   @Version('1')
-  @ApiTags('Plans - Public')
   @ApiOperation({ 
     summary: 'Get plan ID by slug',
     description: `

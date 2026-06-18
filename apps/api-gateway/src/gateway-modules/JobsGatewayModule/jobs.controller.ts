@@ -36,7 +36,7 @@ import {
 
 import { ParseCuidPipe } from '@pivota-api/pipes';
 
-import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../AuthenticationGatewayModule/jwt.guard';
 import { 
   ApiBearerAuth, 
   ApiBody, 
@@ -69,7 +69,7 @@ import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
  * All endpoints are routed through the API Gateway and communicate
  * with the Listings Microservice via gRPC.
  */
-@ApiTags('Jobs') // Main module tag
+@ApiTags('Jobs & Employment Pillar') // Main module tag
 @ApiBearerAuth()
 @ApiExtraModels(
   BaseResponseDto, 
@@ -126,7 +126,6 @@ export class JobsController {
    */
   @Post('jobs')
   @Permissions(P.EMPLOYMENT_CREATE_OWN)
-  @ApiTags('Jobs - Management')
   @ApiOperation({ 
     summary: 'Create a new job posting',
     description: `
@@ -201,7 +200,6 @@ export class JobsController {
    */
   @Patch('jobs/:id')
   @Permissions(P.EMPLOYMENT_UPDATE_OWN)
-  @ApiTags('Jobs - Management')
   @Version('1')
   @ApiOperation({ 
     summary: 'Update your own job posting',
@@ -274,7 +272,6 @@ export class JobsController {
    */
   @Get('my-listings')
   @Permissions(P.EMPLOYMENT_READ)
-  @ApiTags('Jobs - Management')
   @Version('1')
   @ApiOperation({ 
     summary: 'Get your job postings',
@@ -324,7 +321,6 @@ export class JobsController {
    */
   @Patch('jobs/:id/close')
   @Permissions(P.EMPLOYMENT_CLOSE_OWN)
-  @ApiTags('Jobs - Management')
   @ApiOperation({ 
     summary: 'Close your own job posting',
     description: `
@@ -386,7 +382,6 @@ export class JobsController {
    */
   @Post('jobs/:id/apply')
   @Permissions(P.EMPLOYMENT_READ)
-  @ApiTags('Jobs - Applications')
   @Version('1')
   @ApiOperation({ 
     summary: 'Apply for a job',
@@ -439,7 +434,6 @@ export class JobsController {
    */
   @Get('my-applications')
   @Permissions(P.EMPLOYMENT_READ)
-  @ApiTags('Jobs - Applications')
   @Version('1')
   @ApiOperation({ 
     summary: 'Get your job applications',
@@ -486,7 +480,6 @@ export class JobsController {
    */
   @Get('applications/:id')
   @Permissions(P.EMPLOYMENT_READ)
-  @ApiTags('Jobs - Applications')
   @Version('1')
   @ApiOperation({ 
     summary: 'Get application details',
@@ -547,7 +540,6 @@ export class JobsController {
    */
   @Post('admin/accounts/:accountId/jobs')
   @Permissions(P.EMPLOYMENT_CREATE_ANY)
-  @ApiTags('Jobs - Admin')
   @ApiOperation({ 
     summary: '[ADMIN] Create job posting for any account',
     description: `
@@ -617,7 +609,6 @@ export class JobsController {
    */
   @Patch('admin/jobs/:id')
   @Permissions(P.EMPLOYMENT_UPDATE_ANY)
-  @ApiTags('Jobs - Admin')
   @Version('1')
   @ApiOperation({ 
     summary: '[ADMIN] Update any job posting',
@@ -682,7 +673,6 @@ export class JobsController {
    */
   @Patch('admin/jobs/:id/close')
   @Permissions(P.EMPLOYMENT_CLOSE_ANY)
-  @ApiTags('Jobs - Admin')
   @ApiOperation({ 
     summary: '[ADMIN] Close any job posting',
     description: `
@@ -739,7 +729,6 @@ export class JobsController {
    */
   @Get('admin/listings')
   @Permissions(P.EMPLOYMENT_READ)
-  @ApiTags('Jobs - Admin')
   @Version('1')
   @ApiOperation({ 
     summary: '[ADMIN] Get all job postings',
@@ -812,7 +801,6 @@ export class JobsController {
    */
   @Get('admin/applications')
   @Permissions(P.EMPLOYMENT_READ)
-  @ApiTags('Jobs - Admin')
   @Version('1')
   @ApiOperation({ 
     summary: '[ADMIN] Get all job applications',
@@ -879,7 +867,6 @@ export class JobsController {
    */
   @Public()
   @Get('details/:id')
-  @ApiTags('Jobs - Public')
   @Version('1')
   @ApiOperation({ 
     summary: 'Get job details by ID',
@@ -925,7 +912,6 @@ export class JobsController {
    */
   @Public()
   @Get('jobs/category/:categoryId')
-  @ApiTags('Jobs - Public')
   @Version('1')
   @ApiOperation({ 
     summary: 'Get jobs by category',
@@ -966,7 +952,6 @@ export class JobsController {
    */
   @Post('jobs/validate-ids')
   @Permissions(P.EMPLOYMENT_READ)
-  @ApiTags('Jobs - Public')
   @Version('1')
   @ApiOperation({ 
     summary: 'Validate job post IDs',

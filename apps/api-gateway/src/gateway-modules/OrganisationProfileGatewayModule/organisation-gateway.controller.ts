@@ -44,7 +44,7 @@ import {
   IntermediaryAgentProfileResponseDto,
 
 } from '@pivota-api/dtos';
-import { JwtAuthGuard } from '../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../AuthenticationGatewayModule/jwt.guard';
 import {
   ApiTags,
   ApiOperation,
@@ -65,7 +65,7 @@ import { JwtRequest } from '@pivota-api/interfaces';
 import { ProfileType } from '@pivota-api/constants';
 import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
 
-@ApiTags('Organisation')
+@ApiTags('Organisation Profile Management')
 @ApiBearerAuth()
 @ApiExtraModels(
   BaseResponseDto, 
@@ -114,7 +114,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Patch('organisations/onboard-provider')
   @Permissions(P.ACCOUNT_UPDATE)
-  @ApiTags('Organisation - Provider')
   @ApiOperation({ 
     summary: 'Activate Organization Service Provider profile',
     description: `
@@ -164,7 +163,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Patch('organisations/profile')
   @Permissions(P.ACCOUNT_UPDATE)
-  @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update organization profile',
     description: `
@@ -224,7 +222,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Patch('organisations/employer-profile')
   @Permissions(P.ACCOUNT_UPDATE)
-  @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update employer profile',
     description: `
@@ -283,7 +280,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Patch('organisations/social-service-provider-profile')
   @Permissions(P.ACCOUNT_UPDATE)
-  @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update social service provider profile',
     description: `
@@ -346,7 +342,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Patch('organisations/property-owner-profile')
   @Permissions(P.ACCOUNT_UPDATE)
-  @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update property owner profile',
     description: `
@@ -403,7 +398,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Patch('organisations/skilled-professional-profile')
   @Permissions(P.ACCOUNT_UPDATE)
-  @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update skilled professional profile',
     description: `
@@ -464,7 +458,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Patch('organisations/intermediary-agent-profile')
   @Permissions(P.ACCOUNT_UPDATE)
-  @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Update intermediary agent profile',
     description: `
@@ -522,7 +515,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Delete('organisations/profiles/:profileType')
   @Permissions(P.ACCOUNT_UPDATE)
-  @ApiTags('Organisation - Profile')
   @ApiOperation({ 
     summary: 'Remove a profile from the organization',
     description: `
@@ -592,7 +584,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Post('organisations/members/invite')
   @Permissions(P.TEAM_INVITE)
-  @ApiTags('Organisation - Invitations')
   @ApiOperation({ 
     summary: 'Invite a member to join your organization',
     description: `
@@ -643,7 +634,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Get('invitations/verify')
   @Public()
-  @ApiTags('Organisation - Invitations')
   @ApiOperation({ 
     summary: 'Verify an invitation token',
     description: `
@@ -670,7 +660,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Post('invitations/accept')
   @Public()
-  @ApiTags('Organisation - Invitations')
   @ApiOperation({ 
     summary: 'Accept an organization invitation',
     description: `
@@ -697,7 +686,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Get('organisations/members/invitations')
   @Permissions(P.TEAM_VIEW)
-  @ApiTags('Organisation - Invitations')
   @ApiOperation({ 
     summary: 'Get all pending invitations',
     description: `
@@ -731,7 +719,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Post('organisations/members/invitations/:invitationId/resend')
   @Permissions(P.TEAM_INVITE)
-  @ApiTags('Organisation - Invitations')
   @ApiOperation({ 
     summary: 'Resend an invitation',
     description: `
@@ -771,7 +758,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Delete('organisations/members/invitations/:invitationId')
   @Permissions(P.TEAM_REMOVE_MEMBER)
-  @ApiTags('Organisation - Invitations')
   @ApiOperation({ 
     summary: 'Cancel a pending invitation',
     description: `
@@ -811,7 +797,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Get('invitations/check-status')
   @Permissions(P.TEAM_VIEW)
-  @ApiTags('Organisation - Invitations')
   @ApiOperation({ 
     summary: 'Check if an email has a pending invitation',
     description: `
@@ -853,7 +838,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Get('organisations/filter')
   @Permissions(P.USER_VIEW)
-  @ApiTags('Organisation - Discovery')
   @ApiOperation({ 
     summary: 'Filter organisations by their legal type slug',
     description: `
@@ -881,7 +865,6 @@ export class OrganisationGatewayController {
   @Version('1')
   @Get('organisations/:uuid')
   @Permissions(P.USER_VIEW)
-  @ApiTags('Organisation - Discovery')
   @ApiOperation({ 
     summary: 'Get detailed organisation profile by UUID',
     description: `

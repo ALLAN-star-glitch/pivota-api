@@ -26,10 +26,8 @@ import {
   CreateBookingRequestDto,
   AcceptBookingRequestDto,
   DeclineBookingRequestDto,
-  CancelBookingRequestDto,
   GetCustomerBookingsRequestDto,
   GetContractorBookingsRequestDto,
-  GetBookingDetailsRequestDto,
   GetUpcomingBookingsRequestDto,
   GetProfessionalStatsRequestDto,
   BookingResponseDto,
@@ -40,7 +38,7 @@ import {
   BookingStatusListResponseDto,
 } from '@pivota-api/dtos';
 
-import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../../AuthenticationGatewayModule/jwt.guard';
 import { PermissionsGuard } from '../../../guards/PermissionGuard.guard';
 import { SubscriptionGuard } from '../../../guards/subscription.guard';
 import { JwtRequest } from '@pivota-api/interfaces';

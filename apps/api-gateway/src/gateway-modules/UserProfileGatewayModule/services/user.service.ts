@@ -157,7 +157,6 @@ export class UserService {
 
   constructor(
     @Inject('PROFILE_PACKAGE') private readonly grpcClient: ClientGrpc,
-    @Inject('AUTH_PACKAGE') private readonly authClient: ClientGrpc,
     private readonly storage: StorageService,
   ) {
     this.grpcService = this.grpcClient.getService<ProfileServiceGrpc>('ProfileService');

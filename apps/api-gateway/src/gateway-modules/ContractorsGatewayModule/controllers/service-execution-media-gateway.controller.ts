@@ -19,7 +19,7 @@ import {
   ApiConsumes,
   ApiBody,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../AuthGatewayModule/jwt.guard';
+import { JwtAuthGuard } from '../../AuthenticationGatewayModule/jwt.guard';
 import { JwtRequest } from '@pivota-api/interfaces';
 import { BaseResponseDto, MultipleEvidenceUploadResponseDto } from '@pivota-api/dtos';
 import { ServiceExecutionMediaGatewayService } from '../services/service-execution-media-gateway.service';

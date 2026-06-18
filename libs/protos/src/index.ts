@@ -1,7 +1,6 @@
 import { join } from 'path';
 
-// Always resolve from project root → dist/libs/protos after build
-export const AUTH_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/auth.proto');
+// Always resolve from project root → dist/libs/protos after build;
 export const PROFILE_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/profile.proto');
 export const RBAC_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/rbac.proto'); 
 export const LISTINGS_CATEGORIES_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/categories.proto');
@@ -15,9 +14,13 @@ export const BOOKING_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/
 export const LISTINGS_HOUSING_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/housing.proto');    
 export const LISTINGS_SUPPORT_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/social_support.proto');        
 export const LISTINGS_REGISTRY_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/listings_registry.proto');
-export const  HOUSING_TRAINING_DATA_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/housing-training-data.proto');
+export const HOUSING_TRAINING_DATA_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/housing-training-data.proto');
 export const SERVICE_EXECUTION_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/service-execution.proto');    
 export const SERVICE_EXECUTION_MEDIA_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/service-execution-media.proto');  
-export const CUSTOMER_CONFIRMATION_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/customer_confirmation.proto')
+export const CUSTOMER_CONFIRMATION_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/customer_confirmation.proto');
 
-
+// ======================================================
+// NEW AUTH PROTO FILES
+// ======================================================
+export const AUTHENTICATION_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/authentication.proto');
+export const ONBOARDING_PROTO_PATH = join(process.cwd(), 'dist/libs/protos/src/lib/onboarding.proto');
