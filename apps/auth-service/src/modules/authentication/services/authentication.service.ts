@@ -474,9 +474,9 @@ async verifyMfaLogin(
     await Promise.all([
       this.prisma.session.create({
         data: {
-          userUuid: credential.userUuid,
-          tokenId: tokens.tokenId,
-          hashedToken,
+           userUuid: credential.userUuid,
+          tokenId: tokenId,
+          hashedToken: hashedToken,
           device: clientInfo?.device,
           ipAddress: clientInfo?.ipAddress,
           userAgent: clientInfo?.userAgent,
@@ -485,6 +485,9 @@ async verifyMfaLogin(
           osVersion: clientInfo?.osVersion,
           browser: clientInfo?.browser,
           browserVersion: clientInfo?.browserVersion,
+          isDesktop: clientInfo?.isDesktop,
+          isMobile: clientInfo?.isMobile,
+          isTablet: clientInfo?.isTablet,
           isBot: clientInfo?.isBot,
           lastActiveAt: new Date(),
           expiresAt,
@@ -618,120 +621,252 @@ async verifyMfaLogin(
   /**
    * Refresh Token
    */
-  async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>> {
-    const startTime = Date.now();
+async refreshToken(refreshToken: string): Promise<BaseResponseDto<TokenPairDto>> {
+  const startTime = Date.now();
 
-    if (!refreshToken) {
-      throw new UnauthorizedException('Refresh token is required');
-    }
-
-    try {
-      const decoded = this.jwtService.decode(refreshToken) as JwtPayload;
-      if (!decoded?.sub || !decoded?.jti) {
-        throw new UnauthorizedException('Invalid token structure');
-      }
-
-      const {
-        sub: userUuid,
-        jti: oldTokenId,
-        accountId: accountUuid,
-        email,
-        accountType: oldAccountType,
-        professionalId: oldProfessionalId
-      } = decoded;
-
-      this.logger.log(`🔄 Refreshing token for user: ${userUuid}`);
-
-      let roleType = await this.redisSession.getCachedUserRole(userUuid);
-
-      if (!roleType) {
-        const credential = await this.prisma.credential.findUnique({
-          where: { userUuid },
-          select: { role: true }
-        });
-
-        if (!credential) {
-          throw new UnauthorizedException('User not found');
-        }
-
-        roleType = credential.role || 'Individual';
-        await this.redisSession.cacheUserRole(userUuid, roleType);
-      }
-
-      const isValid = await this.sessionService.validateSession(oldTokenId, refreshToken);
-
-      if (!isValid) {
-        throw new UnauthorizedException('Invalid or expired refresh token');
-      }
-
-      const isBlacklisted = await this.redisSession.isBlacklisted(oldTokenId);
-      if (isBlacklisted) {
-        throw new UnauthorizedException('Token has been revoked');
-      }
-
-      const newTokenId = `${userUuid}-${Date.now()}`;
-      const now = Math.floor(Date.now() / 1000);
-
-      const payload: JwtPayload = {
-        sub: userUuid,
-        jti: newTokenId,
-        iat: now,
-        email: email,
-        accountId: accountUuid,
-        role: roleType,
-        accountType: oldAccountType || 'INDIVIDUAL',
-        organizationUuid: null,
-        professionalId: oldProfessionalId,
-      };
-
-      const tokens = await this.tokenService.generateTokens(payload);
-
-      const hashedNewToken = await bcrypt.hash(tokens.refreshToken, 10);
-
-      await this.redisSession.rotateToken(
-        oldTokenId,
-        newTokenId,
-        userUuid,
-        hashedNewToken,
-        null
-      );
-
-      this.queue.addJob(
-        'db-sync',
-        'session-rotation',
-        {
-          oldTokenId: oldTokenId,
-          newTokenId: newTokenId,
-          userUuid: userUuid,
-          newRefreshTokenHash: hashedNewToken,
-          timestamp: new Date().toISOString(),
-        },
-        {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 },
-          removeOnComplete: true,
-        }
-      ).catch(err => this.logger.error(`Failed to queue session rotation: ${err.message}`));
-
-      const elapsed = Date.now() - startTime;
-      this.logger.log(`✅ Token refresh completed in ${elapsed}ms for user: ${userUuid}`);
-
-      return BaseResponseDto.ok(
-        { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken },
-        'Tokens refreshed successfully',
-        'OK'
-      );
-
-    } catch (err: any) {
-      this.logger.error(`Refresh token error: ${err.message}`);
-
-      if (err instanceof UnauthorizedException) {
-        return BaseResponseDto.fail(err.message, 'UNAUTHORIZED');
-      }
-
-      return BaseResponseDto.fail('Token refresh failed', 'INTERNAL_ERROR');
-    }
+  if (!refreshToken) {
+    throw new UnauthorizedException('Refresh token is required');
   }
+
+  try {
+    // Step 1: Decode the token
+    const decoded = this.jwtService.decode(refreshToken) as JwtPayload;
+    if (!decoded?.sub || !decoded?.jti) {
+      this.logger.warn(`Invalid token structure - missing sub or jti`);
+      throw new UnauthorizedException('Invalid token structure');
+    }
+
+    const {
+      sub: userUuid,
+      jti: oldTokenId,
+      accountId: accountUuid,
+      email,
+      accountType: oldAccountType,
+      professionalId: oldProfessionalId
+    } = decoded;
+
+    this.logger.log(`🔄 Refreshing token for user: ${userUuid}, tokenId: ${oldTokenId}`);
+
+    // Step 2: Get FULL session info including client details BEFORE any changes
+    this.logger.debug(`[refreshToken] Fetching session details for ${oldTokenId}`);
+    const dbSession = await this.prisma.session.findUnique({
+      where: { tokenId: oldTokenId },
+      select: { 
+        revoked: true, 
+        expiresAt: true,
+        userUuid: true,
+        hashedToken: true,
+        // ✅ Client info fields - preserve these for the new session
+        device: true,
+        ipAddress: true,
+        userAgent: true,
+        os: true,
+        deviceType: true,
+        osVersion: true,
+        browser: true,
+        browserVersion: true,
+        isBot: true,
+      }
+    });
+
+    if (!dbSession) {
+      this.logger.warn(`[refreshToken] Session ${oldTokenId} not found in database`);
+      await this.redisSession.removeSession(oldTokenId);
+      return BaseResponseDto.fail(
+        'Session not found. Please login again.',
+        'SESSION_NOT_FOUND'
+      );
+    }
+
+    // Verify the session belongs to the user from the token
+    if (dbSession.userUuid !== userUuid) {
+      this.logger.warn(`[refreshToken] Session user mismatch: token says ${userUuid}, session says ${dbSession.userUuid}`);
+      await this.redisSession.blacklistToken(oldTokenId, 900);
+      await this.redisSession.removeSession(oldTokenId);
+      return BaseResponseDto.fail(
+        'Session validation failed. Please login again.',
+        'SESSION_MISMATCH'
+      );
+    }
+
+    // Check if session is revoked
+    if (dbSession.revoked) {
+      this.logger.warn(`[refreshToken] Session ${oldTokenId} is REVOKED for user ${userUuid}`);
+      await Promise.all([
+        this.redisSession.removeSession(oldTokenId),
+        this.redisSession.blacklistToken(oldTokenId, 900)
+      ]);
+      return BaseResponseDto.fail(
+        'Session has been revoked. Please login again.',
+        'SESSION_REVOKED'
+      );
+    }
+
+    // Check if session is expired
+    if (dbSession.expiresAt && dbSession.expiresAt <= new Date()) {
+      this.logger.warn(`[refreshToken] Session ${oldTokenId} is EXPIRED at ${dbSession.expiresAt}`);
+      await this.redisSession.removeSession(oldTokenId);
+      return BaseResponseDto.fail(
+        'Session has expired. Please login again.',
+        'SESSION_EXPIRED'
+      );
+    }
+
+    // Step 3: Check if the token is blacklisted
+    const isBlacklisted = await this.redisSession.isBlacklisted(oldTokenId);
+    if (isBlacklisted) {
+      this.logger.warn(`[refreshToken] Token ${oldTokenId} is blacklisted`);
+      return BaseResponseDto.fail(
+        'Token has been revoked. Please login again.',
+        'TOKEN_BLACKLISTED'
+      );
+    }
+
+    // Step 4: Validate the token hash
+    this.logger.debug(`[refreshToken] Validating session ${oldTokenId} with provided refresh token`);
+    const isValid = await this.sessionService.validateSession(oldTokenId, refreshToken);
+
+    if (!isValid) {
+      this.logger.warn(`[refreshToken] Session validation FAILED for ${oldTokenId}`);
+      return BaseResponseDto.fail(
+        'Invalid refresh token. Please login again.',
+        'INVALID_REFRESH_TOKEN'
+      );
+    }
+
+    // Step 5: Get user role
+    let roleType = await this.redisSession.getCachedUserRole(userUuid);
+
+    if (!roleType) {
+      this.logger.debug(`[refreshToken] Role cache miss for ${userUuid}, fetching from DB`);
+      const credential = await this.prisma.credential.findUnique({
+        where: { userUuid },
+        select: { role: true }
+      });
+
+      if (!credential) {
+        this.logger.warn(`[refreshToken] User ${userUuid} not found in credentials`);
+        throw new UnauthorizedException('User not found');
+      }
+
+      roleType = credential.role || 'Individual';
+      await this.redisSession.cacheUserRole(userUuid, roleType);
+      this.logger.debug(`[refreshToken] Role cached for ${userUuid}: ${roleType}`);
+    } else {
+      this.logger.debug(`[refreshToken] Role cache HIT for ${userUuid}: ${roleType}`);
+    }
+
+    // Step 6: Generate new tokens
+    const newTokenId = `${userUuid}-${Date.now()}`;
+    const now = Math.floor(Date.now() / 1000);
+
+    this.logger.debug(`[refreshToken] Generating new tokens for user ${userUuid}, professionalId: ${oldProfessionalId || 'none'}`);
+
+    const payload: JwtPayload = {
+      sub: userUuid,
+      jti: newTokenId,
+      iat: now,
+      email: email,
+      accountId: accountUuid,
+      role: roleType,
+      accountType: oldAccountType || 'INDIVIDUAL',
+      organizationUuid: null,
+      professionalId: oldProfessionalId,
+    };
+
+    const tokens = await this.tokenService.generateTokens(payload);
+    this.logger.debug(`[refreshToken] New tokens generated successfully`);
+
+    // Step 7: Hash the new refresh token
+    const hashedNewToken = await bcrypt.hash(tokens.refreshToken, 10);
+
+    // Step 8: Build client info from old session
+    const clientInfoForNewSession = {
+      device: dbSession.device,
+      ipAddress: dbSession.ipAddress,
+      userAgent: dbSession.userAgent,
+      os: dbSession.os,
+      deviceType: dbSession.deviceType,
+      osVersion: dbSession.osVersion,
+      browser: dbSession.browser,
+      browserVersion: dbSession.browserVersion,
+      isBot: dbSession.isBot,
+    };
+
+    this.logger.debug(`[refreshToken] Preserving client info for new session: device=${clientInfoForNewSession.device}, ip=${clientInfoForNewSession.ipAddress}`);
+
+    // Step 9: Database transaction FIRST (safer)
+    // This ensures database is updated before Redis
+    await this.prisma.$transaction(async (tx) => {
+      // Mark old session as revoked
+      await tx.session.update({
+        where: { tokenId: oldTokenId },
+        data: { 
+          revoked: true
+          // updatedAt is auto-managed by Prisma @updatedAt
+        }
+      });
+
+      // ✅ Create new session with client info using your createSession method
+      await this.sessionService.createSession(
+        userUuid,
+        newTokenId,
+        hashedNewToken,
+        clientInfoForNewSession as AuthClientInfoDto,
+        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+      );
+    });
+  
+
+    this.logger.debug(`[refreshToken] Database transaction completed: ${oldTokenId} -> ${newTokenId}`);
+
+    // Step 10: ✅ Rotate token in Redis with client info (after DB success)
+    // This handles: store new session -> blacklist old token -> remove old session
+    await this.redisSession.rotateToken(
+      oldTokenId,
+      newTokenId,
+      userUuid,
+      hashedNewToken,
+      clientInfoForNewSession // ✅ Pass client info instead of null
+    );
+    this.logger.debug(`[refreshToken] Token rotated in Redis: ${oldTokenId} -> ${newTokenId}`);
+
+    // Step 11: Update last active timestamp (async, don't block response)
+    this.redisSession.updateLastActive(newTokenId)
+      .catch(err => this.logger.debug(`Failed to update session activity: ${err.message}`));
+
+    const elapsed = Date.now() - startTime;
+    this.logger.log(`✅ Token refresh completed in ${elapsed}ms for user: ${userUuid} (new tokenId: ${newTokenId})`);
+
+    return BaseResponseDto.ok(
+      { 
+        accessToken: tokens.accessToken, 
+        refreshToken: tokens.refreshToken 
+      },
+      'Tokens refreshed successfully',
+      'OK'
+    );
+
+  } catch (err: any) {
+    this.logger.error(`Refresh token error: ${err.message}`, err.stack);
+
+    if (err instanceof UnauthorizedException) {
+      return BaseResponseDto.fail(
+        err.message,
+        'UNAUTHORIZED',
+        { code: 'AUTH_FAILURE', message: err.message }
+      );
+    }
+
+    this.logger.error(`Unexpected error in refreshToken: ${JSON.stringify(err)}`);
+    
+    return BaseResponseDto.fail(
+      'Token refresh failed. Please try again or login.',
+      'INTERNAL_ERROR',
+      { code: 'INTERNAL', message: err.message || 'Unknown error' }
+    );
+  }
+}
 
   /**
    * Sign In with Google
@@ -973,8 +1108,8 @@ async verifyMfaLogin(
         this.prisma.session.create({
           data: {
             userUuid: userUuid,
-            tokenId: tokens.tokenId,
-            hashedToken,
+            tokenId: tokenId,
+            hashedToken: hashedToken,
             device: clientInfo?.device,
             ipAddress: clientInfo?.ipAddress,
             userAgent: clientInfo?.userAgent,
@@ -983,6 +1118,9 @@ async verifyMfaLogin(
             osVersion: clientInfo?.osVersion,
             browser: clientInfo?.browser,
             browserVersion: clientInfo?.browserVersion,
+            isDesktop: clientInfo?.isDesktop,
+            isMobile: clientInfo?.isMobile,
+            isTablet: clientInfo?.isTablet,
             isBot: clientInfo?.isBot,
             lastActiveAt: new Date(),
             expiresAt,

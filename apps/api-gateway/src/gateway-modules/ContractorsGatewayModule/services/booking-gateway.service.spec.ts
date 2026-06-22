@@ -11,7 +11,6 @@ describe('BookingGatewayService', () => {
 
     service = module.get<BookingGatewayService>(BookingGatewayService);
   });
-
   it('should be defined', () => {
     expect(service).toBeDefined();
   });

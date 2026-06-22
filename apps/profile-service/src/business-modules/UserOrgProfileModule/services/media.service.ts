@@ -13,7 +13,7 @@ import {
   UpdateFullUserProfileDto, 
   UpdateJobSeekerGrpcRequestDto,
   UpdateSkilledProfessionalGrpcRequestDto,
-  ZipDownloadResponseDto,
+  ZipDownloadResponseDto, 
 } from '@pivota-api/dtos';
 import { UserService } from './user.service';
 
@@ -25,7 +25,6 @@ interface StoredPortfolioItem {
   uploadedAt: string;
   order: number;
 }
-
 interface StoredCertificationItem {
   url: string;
   fileName: string;

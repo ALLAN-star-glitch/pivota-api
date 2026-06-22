@@ -18,7 +18,7 @@ import { BaseResponseDto, TokenPairDto } from '@pivota-api/dtos';
 import { AuthenticationGatewayService } from './authentication-gateway.service';
 
 // ✅ Only ONE @ApiTags at the class level
-@ApiTags('Development Tools')
+@ApiTags('Authentication Dev')
 @ApiExtraModels(BaseResponseDto, TokenPairDto)
 @Controller('auth-dev')
 export class AuthDevController {

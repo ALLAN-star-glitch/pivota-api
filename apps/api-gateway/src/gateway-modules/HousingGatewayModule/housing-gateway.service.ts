@@ -15,32 +15,45 @@ import {
   ArchiveHouseListingsGrpcRequestDto,
   HouseListingCreateResponseDto,
   GetAdminHousingFilterDto,
-  ScheduleAdminViewingGrpcRequestDto, // Added missing import
+  ScheduleAdminViewingGrpcRequestDto,
+  GetHouseListingsByCategoryDto,
+  GetAllHouseListingsRequestDto, 
 } from '@pivota-api/dtos';
 
 import { StorageService } from '@pivota-api/shared-storage';
 
-// Updated interface to include Admin-specific gRPC calls
+// Updated interface to include all methods with cache control
 interface HousingServiceGrpc {
+  // Create
   CreateHouseListing(data: CreateHouseListingGrpcRequestDto): Observable<BaseResponseDto<HouseListingCreateResponseDto>>;
   CreateAdminHouseListing(data: CreateHouseListingGrpcRequestDto): Observable<BaseResponseDto<HouseListingCreateResponseDto>>;
 
+  // Update
   UpdateHouseListing(data: UpdateHouseListingGrpcRequestDto): Observable<BaseResponseDto<HouseListingResponseDto>>;
   UpdateAdminHouseListing(data: UpdateHouseListingGrpcRequestDto): Observable<BaseResponseDto<HouseListingResponseDto>>;
 
+  // ===================================================
+  // READ METHODS (WITH CACHE CONTROL)
+  // ===================================================
   GetHouseListingById(data: GetHouseListingByIdDto): Observable<BaseResponseDto<HouseListingResponseDto>>;
   GetListingsByOwner(data: GetListingsByOwnerDto): Observable<BaseResponseDto<HouseListingResponseDto[]>>;
   GetAdminListings(data: GetAdminHousingFilterDto): Observable<BaseResponseDto<HouseListingResponseDto[]>>;
-
   SearchListings(data: SearchHouseListingsDto): Observable<BaseResponseDto<HouseListingResponseDto[]>>;
+  
+  // ===================================================
+  // NEW: GET HOUSE LISTINGS BY CATEGORY (WITH CACHE CONTROL)
+  // ===================================================
+  GetHouseListingsByCategory(data: GetHouseListingsByCategoryDto): Observable<BaseResponseDto<HouseListingResponseDto[]>>;
+
+  // Utility
   UpdateListingStatus(data: UpdateHouseListingStatusDto): Observable<BaseResponseDto<HouseListingResponseDto>>;
   ArchiveHouseListing(data: ArchiveHouseListingsGrpcRequestDto): Observable<BaseResponseDto<null>>;
 
-  // 👤 USER viewing method - uses ScheduleViewingGrpcRequestDto
+  // Viewings
   ScheduleViewing(data: ScheduleViewingGrpcRequestDto): Observable<BaseResponseDto<HouseViewingResponseDto>>;
-  
-  // 🔐 ADMIN viewing method - uses ScheduleAdminViewingGrpcRequestDto
   ScheduleAdminViewing(data: ScheduleAdminViewingGrpcRequestDto): Observable<BaseResponseDto<HouseViewingResponseDto>>;
+
+   GetAllHouseListings(data: GetAllHouseListingsRequestDto): Observable<BaseResponseDto<HouseListingResponseDto[]>>;
 }
 
 @Injectable()
@@ -54,7 +67,6 @@ export class HousingGatewayService {
     private readonly storage: StorageService,
   ) {
     this.grpcService = this.grpcClient.getService<HousingServiceGrpc>('HousingService');
-
   }
 
   // ===========================================================
@@ -84,53 +96,66 @@ export class HousingGatewayService {
   }
 
   // ===========================================================
-  // READ METHODS
+  // READ METHODS (WITH CACHE CONTROL)
   // ===========================================================
+
   async getAdminListings(dto: GetAdminHousingFilterDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
     const res = await firstValueFrom(this.grpcService.GetAdminListings(dto));
     return this.handleGrpcResponse(res, 'GetAdminListings');
   }
 
-  // FIXED: Changed parameter type from { ownerId: string } to GetListingsByOwnerDto
   async getListingsByOwner(dto: GetListingsByOwnerDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    this.logger.debug(
+      `📤 Sending to gRPC - GetListingsByOwner: ownerId=${dto.ownerId}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+    );
     const res = await firstValueFrom(this.grpcService.GetListingsByOwner(dto));
     return this.handleGrpcResponse(res, 'GetListingsByOwner');
   }
 
-  // FIXED: Changed parameter type from { id: string } to GetHouseListingByIdDto
   async getHouseListingWithTracking(dto: GetHouseListingByIdDto): Promise<BaseResponseDto<HouseListingResponseDto>> {
+    this.logger.debug(
+      `📤 Sending to gRPC - GetHouseListingById: id=${dto.id}, ` +
+      `bypassCache=${dto.bypassCache}, refreshCache=${dto.refreshCache}`
+    );
     const res = await firstValueFrom(this.grpcService.GetHouseListingById(dto));
     return this.handleGrpcResponse(res, 'GetHouseListingById');
   }
 
   async searchListings(dto: SearchHouseListingsDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    this.logger.debug(
+      `📤 Sending to gRPC - SearchListings: city=${dto.city}, listingType=${dto.listingType}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+    );
     const res = await firstValueFrom(this.grpcService.SearchListings(dto));
     return this.handleGrpcResponse(res, 'SearchListings');
   }
 
-
+  // ===================================================
+  // NEW: GET HOUSE LISTINGS BY CATEGORY (WITH CACHE CONTROL)
+  // ===================================================
+  async getHouseListingsByCategory(dto: GetHouseListingsByCategoryDto): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    this.logger.debug(
+      `📤 Sending to gRPC - GetHouseListingsByCategory: categoryId=${dto.categoryId}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+    );
+    const res = await firstValueFrom(this.grpcService.GetHouseListingsByCategory(dto));
+    return this.handleGrpcResponse(res, 'GetHouseListingsByCategory');
+  }
 
   // ===========================================================
   // UTILITY METHODS
   // ===========================================================
-// ===========================================================
-  // ===========================================================
-  // 👤 USER VIEWING METHODS
-  // ===========================================================
+
   async scheduleViewing(dto: ScheduleViewingGrpcRequestDto): Promise<BaseResponseDto<HouseViewingResponseDto>> {
     const res = await firstValueFrom(this.grpcService.ScheduleViewing(dto));
     return this.handleGrpcResponse(res, 'ScheduleViewing');
   }
 
-  // ===========================================================
-  // 🔐 ADMIN VIEWING METHODS
-  // ===========================================================
   async scheduleAdminViewing(dto: ScheduleAdminViewingGrpcRequestDto): Promise<BaseResponseDto<HouseViewingResponseDto>> {
     const res = await firstValueFrom(this.grpcService.ScheduleAdminViewing(dto));
     return this.handleGrpcResponse(res, 'ScheduleAdminViewing');
   }
-
-
 
   async archiveHouseListing(dto: ArchiveHouseListingsGrpcRequestDto): Promise<BaseResponseDto<null>> {
     const res = await firstValueFrom(this.grpcService.ArchiveHouseListing(dto));
@@ -141,7 +166,11 @@ export class HousingGatewayService {
     const res = await firstValueFrom(this.grpcService.UpdateListingStatus(dto));
     return this.handleGrpcResponse(res, 'UpdateListingStatus');
   }
- 
+
+  // ===========================================================
+  // PRIVATE HELPERS
+  // ===========================================================
+
   /**
    * Universal handler to standardize gRPC response mapping
    */
@@ -184,12 +213,10 @@ export class HousingGatewayService {
   ): Promise<string> {
     return this.storage.uploadFile(file, folder, bucketName);
   }
-   
+
   /**
    * Cleans up files from storage.
    * Use this when a listing creation fails after images have already been uploaded.
-   * @param urls Array of full public URLs or internal paths to delete.
-   * @param bucketName Defaults to 'pivota-public'.
    */
   async deleteFromStorage(
     urls: string[], 
@@ -205,5 +232,16 @@ export class HousingGatewayService {
         `Failed to clean up orphaned files: ${error instanceof Error ? error.message : 'Unknown Error'}`
       );
     }
+  }
+
+  async getAllHouseListings(
+    dto: GetAllHouseListingsRequestDto,
+  ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    this.logger.debug(
+      `📤 Sending to gRPC - GetAllHouseListings: limit=${dto.limit}, offset=${dto.offset}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+    );
+    const res = await firstValueFrom(this.grpcService.GetAllHouseListings(dto));
+    return this.handleGrpcResponse(res, 'GetAllHouseListings');
   }
 }

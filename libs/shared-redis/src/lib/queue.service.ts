@@ -35,6 +35,12 @@ export class QueueService implements OnModuleInit,  OnModuleDestroy {
       'categories-queue',                 // for category operations
       'notification-queue',               // for booking and service offering notifications
       'service-execution-queue',          // for service execution notifications
+
+      'cache-service-offering-queue',       // for service offerings caching
+
+      'cache-jobs-queue', //For caching jobs listings
+
+      'cache-housing-queue'
     ];
     
     queueNames.forEach(queueName => {

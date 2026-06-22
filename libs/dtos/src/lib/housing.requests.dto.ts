@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
@@ -452,7 +452,7 @@ export class CreateHouseListingGrpcRequestDto extends BaseHouseListingDto {
 }
 
 /* ======================================================
-   SEARCH & FILTER DTOs
+   SEARCH & FILTER DTOs (WITH CACHE CONTROL)
 ====================================================== */
 
 export class SearchHouseListingsDto {
@@ -623,6 +623,16 @@ export class SearchHouseListingsDto {
   titleDeedAvailable?: boolean;
 
   @ApiPropertyOptional({ 
+    description: 'Sort order',
+    example: 'recent',
+    enum: ['recent', 'price_asc', 'price_desc']
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['recent', 'price_asc', 'price_desc'])
+  sortBy?: 'recent' | 'price_asc' | 'price_desc';
+
+  @ApiPropertyOptional({ 
     description: 'Maximum number of results to return (pagination)',
     example: 20,
     minimum: 1,
@@ -674,7 +684,470 @@ export class SearchHouseListingsDto {
   @ValidateNested()
   @Type(() => ListingViewContextDto)
   context?: ListingViewContextDto;
+
+  // ========== CACHE CONTROL ==========
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Bypass cache and fetch fresh data (Admin only)',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  bypassCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Skip reading from cache but still write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  skipCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Force refresh cache even if it exists',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  refreshCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: 300, 
+    description: 'Override cache TTL in seconds (default: 300, min: 10, max: 3600)',
+    default: 300
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(10)
+  @Max(3600)
+  cacheTTL?: number;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Read-only mode - don\'t write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  readOnly?: boolean;
 }
+
+/* ======================================================
+   GET HOUSE LISTING BY ID (WITH CACHE CONTROL)
+====================================================== */
+
+export class GetHouseListingByIdDto {
+  @ApiProperty({
+    description: 'The unique identifier of the house listing',
+    example: 'listing_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  id!: string;
+
+  @ApiPropertyOptional({
+    description: 'Context information for analytics tracking (device, session, etc.)',
+    type: () => ListingViewContextDto
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ListingViewContextDto)
+  context?: ListingViewContextDto;
+
+  // ========== CACHE CONTROL ==========
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Bypass cache and fetch fresh data (Admin only)',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  bypassCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Force refresh cache even if it exists',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  refreshCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: 600, 
+    description: 'Override cache TTL in seconds (default: 600, min: 10, max: 3600)',
+    default: 600
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(10)
+  @Max(3600)
+  cacheTTL?: number;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Read-only mode - don\'t write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  readOnly?: boolean;
+}
+
+/* ======================================================
+   GET LISTINGS BY OWNER (WITH CACHE CONTROL & PAGINATION)
+====================================================== */
+
+export class GetListingsByOwnerDto {
+  @ApiProperty({
+    description: 'The account ID of the owner',
+    example: 'acc_123'
+  })
+  @IsString()
+  @IsNotEmpty()
+  ownerId!: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter listings by status',
+    example: 'AVAILABLE',
+    enum: HOUSE_LISTING_STATUSES
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(HOUSE_LISTING_STATUSES)
+  status?: string;
+
+  // ========== PAGINATION ==========
+
+  @ApiPropertyOptional({ 
+    example: 20, 
+    description: 'Results per page (default: 20, max: 100)' 
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ 
+    example: 0, 
+    description: 'Pagination offset' 
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  offset?: number;
+
+  // ========== CACHE CONTROL ==========
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Bypass cache and fetch fresh data (Admin only)',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  bypassCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Skip reading from cache but still write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  skipCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Force refresh cache even if it exists',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  refreshCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: 300, 
+    description: 'Override cache TTL in seconds (default: 300, min: 10, max: 3600)',
+    default: 300
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(10)
+  @Max(3600)
+  cacheTTL?: number;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Read-only mode - don\'t write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  readOnly?: boolean;
+}
+
+/* ======================================================
+   GET HOUSE LISTINGS BY CATEGORY (WITH CACHE CONTROL)
+====================================================== */
+
+export class GetHouseListingsByCategoryDto {
+  @ApiProperty({
+    description: 'The category ID to filter house listings',
+    example: 'clm123housingid'
+  })
+  @IsString()
+  @IsNotEmpty()
+  categoryId!: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Filter listings by city name',
+    example: 'Nairobi',
+    maxLength: 100
+  })
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Filter by listing type (rental or sale)',
+    enum: HOUSE_LISTING_TYPES,
+    enumName: 'HouseListingType',
+    example: 'RENTAL'
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(HOUSE_LISTING_TYPES)
+  listingType?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Minimum price filter in KES (inclusive)',
+    example: 20000,
+    minimum: 0,
+    maximum: 100000000
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  minPrice?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Maximum price filter in KES (inclusive)',
+    example: 60000,
+    minimum: 0,
+    maximum: 100000000
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  maxPrice?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Minimum number of bedrooms required',
+    example: 2,
+    minimum: 0,
+    maximum: 100
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  @Type(() => Number)
+  bedrooms?: number;
+
+  @ApiPropertyOptional({
+    description: 'Filter by property type',
+    example: 'APARTMENT',
+    enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO']
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO'])
+  propertyType?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by furnished status',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isFurnished?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Filter by required amenities',
+    example: ['Parking', 'WiFi'],
+    type: [String]
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  amenities?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Filter by minimum lease term in months (for rental listings)',
+    example: 6,
+    minimum: 1
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  minLeaseTerm?: number;
+
+  @ApiPropertyOptional({
+    description: 'Filter by pet friendly (for rental listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isPetFriendly?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Filter by utilities included (for rental listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  utilitiesIncluded?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Filter by negotiable price (for sale listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isNegotiable?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Filter by title deed available (for sale listings)',
+    example: true
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  titleDeedAvailable?: boolean;
+
+  @ApiPropertyOptional({ 
+    description: 'Maximum number of results to return (pagination)',
+    example: 20,
+    minimum: 1,
+    maximum: 100,
+    default: 20
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @Type(() => Number)
+  limit?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Number of results to skip for pagination',
+    example: 0,
+    minimum: 0,
+    default: 0
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  offset?: number;
+
+  @ApiPropertyOptional({
+    description: 'Context information for analytics tracking',
+    type: ListingViewContextDto
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ListingViewContextDto)
+  context?: ListingViewContextDto;
+
+  // ========== CACHE CONTROL ==========
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Bypass cache and fetch fresh data (Admin only)',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  bypassCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Skip reading from cache but still write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  skipCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Force refresh cache even if it exists',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  refreshCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: 300, 
+    description: 'Override cache TTL in seconds (default: 300, min: 10, max: 3600)',
+    default: 300
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(10)
+  @Max(3600)
+  cacheTTL?: number;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Read-only mode - don\'t write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  readOnly?: boolean;
+}
+
+
+/* ======================================================
+   GET OWN HOUSING FILTER
+====================================================== */
 
 export class GetOwnHousingFilterDto {
   @ApiPropertyOptional({ example: 'AVAILABLE', enum: HOUSE_LISTING_STATUSES })
@@ -682,6 +1155,11 @@ export class GetOwnHousingFilterDto {
   @IsIn(HOUSE_LISTING_STATUSES)
   status?: string;
 }
+
+
+/* ======================================================
+   GET ADMIN HOUSING FILTER (WITH CACHE CONTROL & PAGINATION)
+====================================================== */
 
 export class GetAdminHousingFilterDto extends GetOwnHousingFilterDto {
   @ApiPropertyOptional({ 
@@ -701,7 +1179,137 @@ export class GetAdminHousingFilterDto extends GetOwnHousingFilterDto {
   @IsOptional()
   @IsString()
   creatorId?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Filter by listing type (rental or sale)',
+    enum: HOUSE_LISTING_TYPES
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(HOUSE_LISTING_TYPES)
+  listingType?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Filter by property type',
+    example: 'APARTMENT',
+    enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO']
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO'])
+  propertyType?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Minimum number of bedrooms',
+    example: 2,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  minBedrooms?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Minimum price in KES',
+    example: 20000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  minPrice?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Maximum price in KES',
+    example: 100000,
+    minimum: 0
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  maxPrice?: number;
+
+  // ========== PAGINATION ==========
+
+  @ApiPropertyOptional({ 
+    example: 20, 
+    description: 'Results per page (default: 20, max: 100)' 
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ 
+    example: 0, 
+    description: 'Pagination offset' 
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  offset?: number;
+
+  // ========== CACHE CONTROL ==========
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Bypass cache and fetch fresh data (Admin only)',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  bypassCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Skip reading from cache but still write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  skipCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Force refresh cache even if it exists',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  refreshCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: 300, 
+    description: 'Override cache TTL in seconds (default: 300, min: 10, max: 3600)',
+    default: 300
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(10)
+  @Max(3600)
+  cacheTTL?: number;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Read-only mode - don\'t write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  readOnly?: boolean;
 }
+
 
 /* ======================================================
    UPDATE DTOs
@@ -965,9 +1573,7 @@ export abstract class BaseViewingDto {
   notes?: string;
 }
 
-export class ScheduleViewingDto extends BaseViewingDto {
-  // No attendingUserId - house seeker is always the attendee
-}
+export class ScheduleViewingDto extends BaseViewingDto {}
 
 export class AdminScheduleViewingDto extends BaseViewingDto {
   @ApiProperty({ 
@@ -1047,9 +1653,7 @@ export class BaseViewingGrpcRequestDto extends BaseViewingDto {
   context?: ListingViewContextDto;
 }
 
-export class ScheduleViewingGrpcRequestDto extends BaseViewingGrpcRequestDto {
-  // No attendingUserId - house seeker is always the attendee
-}
+export class ScheduleViewingGrpcRequestDto extends BaseViewingGrpcRequestDto {}
 
 export class ScheduleAdminViewingGrpcRequestDto extends BaseViewingGrpcRequestDto {
   @ApiProperty({ 
@@ -1106,49 +1710,6 @@ export class ArchiveHouseListingsGrpcRequestDto {
   ownerId!: string;
 }
 
-/* ======================================================
-   HOUSING SERVICE API DTOs
-====================================================== */
-
-export class GetHouseListingByIdDto {
-  @ApiProperty({
-    description: 'The unique identifier of the house listing',
-    example: 'listing_123'
-  })
-  @IsString()
-  @IsNotEmpty()
-  id!: string;
-
-  @ApiPropertyOptional({
-    description: 'Context information for analytics tracking (device, session, etc.)',
-    type: () => ListingViewContextDto
-  })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => ListingViewContextDto)
-  context?: ListingViewContextDto;
-}
-
-export class GetListingsByOwnerDto {
-  @ApiProperty({
-    description: 'The account ID of the owner',
-    example: 'acc_123'
-  })
-  @IsString()
-  @IsNotEmpty()
-  ownerId!: string;
-
-  @ApiPropertyOptional({
-    description: 'Filter listings by status',
-    example: 'AVAILABLE',
-    enum: HOUSE_LISTING_STATUSES
-  })
-  @IsOptional()
-  @IsString()
-  @IsIn(HOUSE_LISTING_STATUSES)
-  status?: string;
-}
-
 export class UpdateHouseListingStatusDto {
   @ApiProperty({
     description: 'The unique identifier of the listing',
@@ -1175,4 +1736,162 @@ export class UpdateHouseListingStatusDto {
   @IsString()
   @IsNotEmpty()
   ownerId!: string;
+}
+
+/* ======================================================
+   GET ALL HOUSE LISTINGS (PUBLIC WITH CACHE CONTROL)
+====================================================== */
+
+export class GetAllHouseListingsRequestDto {
+  @ApiPropertyOptional({ 
+    example: 20, 
+    description: 'Results per page (default: 20, max: 100)' 
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ 
+    example: 0, 
+    description: 'Pagination offset' 
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  offset?: number;
+
+  @ApiPropertyOptional({ 
+    example: 'Nairobi', 
+    description: 'Filter by city' 
+  })
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @ApiPropertyOptional({ 
+    example: 'RENTAL', 
+    description: 'Filter by listing type',
+    enum: HOUSE_LISTING_TYPES
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(HOUSE_LISTING_TYPES)
+  listingType?: string;
+
+  @ApiPropertyOptional({ 
+    example: 20000, 
+    description: 'Minimum price filter' 
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  minPrice?: number;
+
+  @ApiPropertyOptional({ 
+    example: 100000, 
+    description: 'Maximum price filter' 
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  maxPrice?: number;
+
+  @ApiPropertyOptional({ 
+    example: 2, 
+    description: 'Minimum number of bedrooms' 
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  bedrooms?: number;
+
+  @ApiPropertyOptional({
+    description: 'Sort order',
+    example: 'recent',
+    enum: ['recent', 'price_asc', 'price_desc']
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['recent', 'price_asc', 'price_desc'])
+  sortBy?: 'recent' | 'price_asc' | 'price_desc';
+
+  @ApiPropertyOptional({
+    description: 'Filter by property type',
+    example: 'APARTMENT',
+    enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO']
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO'])
+  propertyType?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by furnished status',
+    example: true
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isFurnished?: boolean;
+
+  // ========== CACHE CONTROL ==========
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Bypass cache and fetch fresh data (Admin only)',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  bypassCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Skip reading from cache but still write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  skipCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Force refresh cache even if it exists',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  refreshCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: 300, 
+    description: 'Override cache TTL in seconds (default: 300, min: 10, max: 3600)',
+    default: 300
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(10)
+  @Max(3600)
+  cacheTTL?: number;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Read-only mode - don\'t write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  readOnly?: boolean;
 }

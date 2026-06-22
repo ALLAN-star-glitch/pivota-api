@@ -8,7 +8,11 @@ import {
   CreateServiceGrpcOfferingDto,
   CreateServiceOfferingDto,
   UpdateServiceOfferingDto,
-  GetAllOfferingsRequestDto,  // ADD THIS IMPORT
+  GetAllOfferingsRequestDto,
+  GetOfferingsByCategoryRequestDto,
+  GetOfferingsByProfessionalRequestDto,
+  GetOfferingsByAccountRequestDto,
+  GetOfferingByIdRequestDto,
 } from '@pivota-api/dtos';
 import { UserService } from '../../UserProfileGatewayModule/services/user.service';
 
@@ -24,15 +28,15 @@ interface ContractorsServiceGrpc {
   ): Observable<BaseResponseDto<ServiceOfferingResponseDto[]>>;
 
   GetOfferingsByAccount(
-    data: { accountId: string },
+    data: GetOfferingsByAccountRequestDto,
   ): Observable<BaseResponseDto<ServiceOfferingResponseDto[]>>;
 
   GetOfferingsByProfessional(
-    data: { professionalId: string },
+    data: GetOfferingsByProfessionalRequestDto,
   ): Observable<BaseResponseDto<ServiceOfferingResponseDto[]>>;
 
   GetOfferingById(
-    data: { id: string },
+    data: GetOfferingByIdRequestDto, 
   ): Observable<BaseResponseDto<ServiceOfferingResponseDto>>;
 
   UpdateServiceOffering(
@@ -44,18 +48,11 @@ interface ContractorsServiceGrpc {
   ): Observable<BaseResponseDto<null>>;
 
   GetOfferingsByCategory(
-    data: { 
-      categoryId: string; 
-      limit?: number; 
-      offset?: number;
-      city?: string;
-      minPrice?: number;
-      maxPrice?: number;
-    }
+    data: GetOfferingsByCategoryRequestDto,
   ): Observable<BaseResponseDto<ServiceOfferingResponseDto[]>>;
 
   // ===================================================
-  // NEW: Get all offerings across all categories
+  // GET ALL OFFERINGS (Across all categories)
   // ===================================================
   GetAllOfferings(
     data: GetAllOfferingsRequestDto,
@@ -116,13 +113,38 @@ export class ContractorsGatewayService {
     }
   }
 
+  // ===========================================================
+  // PUBLIC LISTING METHODS (WITH EXPLICIT BOOLEAN CONVERSION)
+  // ===========================================================
+
+  /**
+   * Get offerings by vertical with full cache control
+   */
   async getOfferingsByVertical(
     dto: GetOfferingByVerticalRequestDto,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
     try {
-      const res = await firstValueFrom(this.grpcService.GetOfferingsByVertical(dto));
+      // ✅ EXPLICIT BOOLEAN CONVERSION - Fixes the "false" → true issue
+      const grpcRequest: GetOfferingByVerticalRequestDto = {
+        ...dto,
+        bypassCache: dto.bypassCache === true,
+        skipCache: dto.skipCache === true,
+        refreshCache: dto.refreshCache === true,
+        readOnly: dto.readOnly === true,
+        isVerified: dto.isVerified === true,
+      };
 
-      this.logger.debug(`GetOfferingsByVertical gRPC Response: ${JSON.stringify(res)}`);
+      this.logger.debug(
+        `📤 Sending to gRPC - GetOfferingsByVertical: vertical=${grpcRequest.vertical}, ` +
+        `bypassCache=${grpcRequest.bypassCache}, skipCache=${grpcRequest.skipCache}, refreshCache=${grpcRequest.refreshCache}`
+      );
+
+      const res = await firstValueFrom(this.grpcService.GetOfferingsByVertical(grpcRequest));
+
+      this.logger.debug(
+        `GetOfferingsByVertical gRPC Response: vertical=${dto.vertical}, ` +
+        `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+      );
 
       if (res?.success) {
         return BaseResponseDto.ok(res.data || [], res.message, res.code);
@@ -130,18 +152,157 @@ export class ContractorsGatewayService {
 
       return BaseResponseDto.fail(res?.message, res?.code);
     } catch (error) {
-      this.logger.error(`gRPC Error fetching offerings: ${error.message}`);
+      this.logger.error(`gRPC Error fetching offerings by vertical: ${error.message}`);
       return BaseResponseDto.fail('Failed to fetch providers', 'FETCH_ERROR');
     }
   }
 
+  /**
+   * Get offerings by category with full cache control
+   */
+  async getOfferingsByCategory(
+    dto: GetOfferingsByCategoryRequestDto,
+  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
+    try {
+      // ✅ EXPLICIT BOOLEAN CONVERSION
+      const grpcRequest: GetOfferingsByCategoryRequestDto = {
+        ...dto,
+        bypassCache: dto.bypassCache === true,
+        skipCache: dto.skipCache === true,
+        refreshCache: dto.refreshCache === true,
+        readOnly: dto.readOnly === true,
+      };
+
+      this.logger.debug(
+        `📤 Sending to gRPC - GetOfferingsByCategory: categoryId=${grpcRequest.categoryId}, ` +
+        `bypassCache=${grpcRequest.bypassCache}, skipCache=${grpcRequest.skipCache}, refreshCache=${grpcRequest.refreshCache}`
+      );
+
+      const res = await firstValueFrom(
+        this.grpcService.GetOfferingsByCategory(grpcRequest)
+      );
+
+      this.logger.debug(
+        `GetOfferingsByCategory gRPC Response: categoryId=${dto.categoryId}, ` +
+        `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+      );
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data || [], res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching offerings by category: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch offerings', 'FETCH_ERROR');
+    }
+  }
+
+  /**
+   * Get all offerings across all categories with full cache control
+   */
+  async getAllOfferings(
+    dto: GetAllOfferingsRequestDto,
+  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
+    try {
+      // ✅ EXPLICIT BOOLEAN CONVERSION - THIS IS THE FIX!
+      const grpcRequest: GetAllOfferingsRequestDto = {
+        limit: dto.limit,
+        offset: dto.offset,
+        city: dto.city,
+        minPrice: dto.minPrice,
+        maxPrice: dto.maxPrice,
+        sortBy: dto.sortBy,
+        minRating: dto.minRating,
+        // ✅ Convert booleans explicitly
+        verifiedOnly: dto.verifiedOnly === true,
+        bypassCache: dto.bypassCache === true,
+        skipCache: dto.skipCache === true,
+        refreshCache: dto.refreshCache === true,
+        cacheTTL: dto.cacheTTL,
+        readOnly: dto.readOnly === true,
+      };
+
+      this.logger.debug(
+        `📤 Sending to gRPC - GetAllOfferings: limit=${grpcRequest.limit}, offset=${grpcRequest.offset}, ` +
+        `bypassCache=${grpcRequest.bypassCache}, skipCache=${grpcRequest.skipCache}, refreshCache=${grpcRequest.refreshCache}, ` +
+        `readOnly=${grpcRequest.readOnly}, verifiedOnly=${grpcRequest.verifiedOnly}`
+      );
+
+      const res = await firstValueFrom(
+        this.grpcService.GetAllOfferings(grpcRequest)
+      );
+
+      this.logger.debug(
+        `GetAllOfferings gRPC Response: limit=${dto.limit}, offset=${dto.offset}, sortBy=${dto.sortBy}, ` +
+        `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+      );
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data || [], res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching all offerings: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch offerings', 'FETCH_ERROR');
+    }
+  }
+
+  /**
+   * Get single offering by ID with full cache control
+   */
+  async getOfferingById(
+    dto: GetOfferingByIdRequestDto,
+  ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
+    try {
+      // ✅ EXPLICIT BOOLEAN CONVERSION
+      const grpcRequest: GetOfferingByIdRequestDto = {
+        id: dto.id,
+        bypassCache: dto.bypassCache === true,
+        refreshCache: dto.refreshCache === true,
+        cacheTTL: dto.cacheTTL,
+        readOnly: dto.readOnly === true,
+      };
+
+      this.logger.debug(
+        `📤 Sending to gRPC - GetOfferingById: id=${grpcRequest.id}, ` +
+        `bypassCache=${grpcRequest.bypassCache}, refreshCache=${grpcRequest.refreshCache}, readOnly=${grpcRequest.readOnly}`
+      );
+
+      const res = await firstValueFrom(
+        this.grpcService.GetOfferingById(grpcRequest)
+      );
+
+      this.logger.debug(
+        `GetOfferingById gRPC Response: id=${dto.id}, ` +
+        `bypassCache=${dto.bypassCache}, refreshCache=${dto.refreshCache}`
+      );
+
+      if (res?.success) {
+        return BaseResponseDto.ok(res.data, res.message, res.code);
+      }
+
+      return BaseResponseDto.fail(res?.message, res?.code);
+    } catch (error) {
+      this.logger.error(`gRPC Error fetching offering by id: ${error.message}`);
+      return BaseResponseDto.fail('Failed to fetch offering', 'FETCH_ERROR');
+    }
+  }
+
+  // ===========================================================
+  // USER-SPECIFIC METHODS (No Caching)
+  // ===========================================================
+
   async getOfferingsByAccount(
-    accountId: string,
+    dto: GetOfferingsByAccountRequestDto,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
     try {
       const res = await firstValueFrom(
-        this.grpcService.GetOfferingsByAccount({ accountId })
+        this.grpcService.GetOfferingsByAccount(dto)
       );
+
+      this.logger.debug(`GetOfferingsByAccount gRPC Response: accountId=${dto.accountId}`);
 
       if (res?.success) {
         return BaseResponseDto.ok(res.data || [], res.message, res.code);
@@ -155,12 +316,14 @@ export class ContractorsGatewayService {
   }
 
   async getOfferingsByProfessional(
-    professionalId: string,
+    dto: GetOfferingsByProfessionalRequestDto,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
     try {
       const res = await firstValueFrom(
-        this.grpcService.GetOfferingsByProfessional({ professionalId })
+        this.grpcService.GetOfferingsByProfessional(dto)
       );
+
+      this.logger.debug(`GetOfferingsByProfessional gRPC Response: professionalUuid=${dto.professionalUuid}`);
 
       if (res?.success) {
         return BaseResponseDto.ok(res.data || [], res.message, res.code);
@@ -173,24 +336,9 @@ export class ContractorsGatewayService {
     }
   }
 
-  async getOfferingById(
-    id: string,
-  ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
-    try {
-      const res = await firstValueFrom(
-        this.grpcService.GetOfferingById({ id })
-      );
-
-      if (res?.success) {
-        return BaseResponseDto.ok(res.data, res.message, res.code);
-      }
-
-      return BaseResponseDto.fail(res?.message, res?.code);
-    } catch (error) {
-      this.logger.error(`gRPC Error fetching offering by id: ${error.message}`);
-      return BaseResponseDto.fail('Failed to fetch offering', 'FETCH_ERROR');
-    }
-  }
+  // ===========================================================
+  // CRUD OPERATIONS
+  // ===========================================================
 
   async updateServiceOffering(
     id: string,
@@ -205,6 +353,8 @@ export class ContractorsGatewayService {
           ...dto,
         })
       );
+
+      this.logger.debug(`UpdateServiceOffering gRPC Response: id=${id}`);
 
       if (res?.success) {
         return BaseResponseDto.ok(res.data, res.message, res.code);
@@ -226,6 +376,8 @@ export class ContractorsGatewayService {
         this.grpcService.DeleteServiceOffering({ id, userId })
       );
 
+      this.logger.debug(`DeleteServiceOffering gRPC Response: id=${id}`);
+
       if (res?.success) {
         return BaseResponseDto.ok(null, res.message, res.code);
       }
@@ -234,80 +386,6 @@ export class ContractorsGatewayService {
     } catch (error) {
       this.logger.error(`gRPC Error deleting offering: ${error.message}`);
       return BaseResponseDto.fail('Failed to delete offering', 'DELETE_ERROR');
-    }
-  }
-
-  async getOfferingsByCategory(
-    categoryId: string,
-    limit?: number,
-    offset?: number,
-    city?: string,
-    minPrice?: number,
-    maxPrice?: number,
-  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    try {
-      const res = await firstValueFrom(
-        this.grpcService.GetOfferingsByCategory({ 
-          categoryId, 
-          limit: limit || 20, 
-          offset: offset || 0,
-          city,
-          minPrice,
-          maxPrice,
-        })
-      );
-
-      if (res?.success) {
-        return BaseResponseDto.ok(res.data || [], res.message, res.code);
-      }
-
-      return BaseResponseDto.fail(res?.message, res?.code);
-    } catch (error) {
-      this.logger.error(`gRPC Error fetching offerings by category: ${error.message}`);
-      return BaseResponseDto.fail('Failed to fetch offerings', 'FETCH_ERROR');
-    }
-  }
-
-  // ===========================================================
-  // NEW: GET ALL OFFERINGS (Across all categories)
-  // ===========================================================
-
-  async getAllOfferings(
-    limit?: number,
-    offset?: number,
-    city?: string,
-    minPrice?: number,
-    maxPrice?: number,
-    sortBy?: 'recent' | 'price_asc' | 'price_desc' | 'rating',
-    minRating?: number,
-    verifiedOnly?: boolean,
-  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    try {
-      const request: GetAllOfferingsRequestDto = {
-        limit: limit || 20,
-        offset: offset || 0,
-        city,
-        minPrice,
-        maxPrice,
-        sortBy: sortBy || 'recent',
-        minRating,
-        verifiedOnly: verifiedOnly || false,
-      };
-
-      const res = await firstValueFrom(
-        this.grpcService.GetAllOfferings(request)
-      );
-
-      this.logger.debug(`GetAllOfferings gRPC Response: ${JSON.stringify(res)}`);
-
-      if (res?.success) {
-        return BaseResponseDto.ok(res.data || [], res.message, res.code);
-      }
-
-      return BaseResponseDto.fail(res?.message, res?.code);
-    } catch (error) {
-      this.logger.error(`gRPC Error fetching all offerings: ${error.message}`);
-      return BaseResponseDto.fail('Failed to fetch offerings', 'FETCH_ERROR');
     }
   }
 }

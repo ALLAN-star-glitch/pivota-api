@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+"use strict";
+
 import {
   Body,
   Controller,
@@ -32,6 +35,11 @@ import {
   UpdateAdminJobPostRequestHttpDto,
   UpdateJobGrpcRequestDto,
   UpdateOwnJobPostRequestHttpDto,
+  GetAllJobsRequestDto,
+  GetJobsByCategoryRequestDto,
+  GetJobByIdRequestDto,
+  GetJobListingsByOwnerDto,
+  PaginationDto,
 } from '@pivota-api/dtos';
 
 import { ParseCuidPipe } from '@pivota-api/pipes';
@@ -56,27 +64,29 @@ import { PermissionsGuard } from '../../guards/PermissionGuard.guard';
 import { SubscriptionGuard } from '../../guards/subscription.guard';
 import { SetModule } from '../../decorators/set-module.decorator';
 import { Permissions as P, ModuleSlug } from '@pivota-api/access-management';
- 
-/**
- * Jobs Controller
- * 
- * Handles all job-related operations including:
- * - Job post creation, updates, and closure
- * - Job applications and tracking
- * - Public job discovery
- * - Administrative job management
- * 
- * All endpoints are routed through the API Gateway and communicate
- * with the Listings Microservice via gRPC.
- */
-@ApiTags('Jobs & Employment Pillar') // Main module tag
+
+// Import constants for Swagger enum display
+import { 
+  EMPLOYMENT_TYPES,
+  PAYMENT_TYPES,
+  WORK_ARRANGEMENTS,
+  COMMITMENT_LEVELS,
+  WORK_SCHEDULES,
+  DOCUMENTATION_LEVELS,
+  SKILL_LEVELS,
+  EXPERIENCE_LEVELS,
+  EDUCATION_LEVELS,
+} from '@pivota-api/constants';
+
+@ApiTags('Jobs & Employment Pillar')
 @ApiBearerAuth()
 @ApiExtraModels(
   BaseResponseDto, 
   JobPostCreateResponseDto, 
   JobPostResponseDto, 
   CloseJobPostResponseDto, 
-  JobApplicationResponseDto
+  JobApplicationResponseDto,
+  PaginationDto
 )
 @SetModule(ModuleSlug.EMPLOYMENT)
 @Controller('jobs-module')
@@ -86,13 +96,40 @@ export class JobsController {
 
   constructor(private readonly jobsService: JobsService) {}
 
+  /**
+   * Helper to parse boolean from query params
+   * This fixes the "false" → true issue
+   */
+  private parseBoolean(value: any): boolean {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return !!value;
+  }
+
+  /**
+   * Helper to parse number from query params
+   */
+  private parseNumber(value: any): number | undefined {
+    if (value === undefined || value === null) return undefined;
+    const num = Number(value);
+    return isNaN(num) ? undefined : num;
+  }
+
+  /**
+   * Helper to parse date from query params
+   */
+  private parseDate(value: any): string | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'string') return value;
+    return undefined;
+  }
+
   // -----------------------------
   // Core Job Creation Logic
   // -----------------------------
-  /**
-   * Core execution logic for job creation
-   * Routes between regular user and admin flows
-   */
   private async executeJobCreation(
     dto: (CreateJobPostDto & { creatorId: string; accountId: string; creatorName?: string; accountName?: string }) | AdminCreateJobPostDto,
     actorUuid: string
@@ -117,63 +154,27 @@ export class JobsController {
   // 💼 JOBS - USER OPERATIONS
   // ===========================================================
 
-  /**
-   * Create a new job posting for the authenticated user
-   * 
-   * @param dto - Job post details
-   * @param req - JWT request containing user information
-   * @returns Created job post details
-   */
   @Post('jobs')
   @Permissions(P.EMPLOYMENT_CREATE_OWN)
   @ApiOperation({ 
     summary: 'Create a new job posting',
-    description: `
-      Creates a new job posting for the authenticated user.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_CREATE_OWN}
-      
-      **Process:**
-      1. Validates user permissions
-      2. Creates job post in the listings microservice
-      3. Returns created job details with status
-      
-      **Notes:**
-      • Creator and account information are automatically extracted from JWT
-      • Job is created with default status (typically ACTIVE)
-    `
+    description: 'Creates a new job posting for the authenticated user with all job characteristics and timeline fields.'
   })
   @ApiBody({ type: CreateJobPostDto })
   @ApiResponse({ 
     status: 201, 
     description: 'Job post created successfully',
-    type: JobPostCreateResponseDto,
-    schema: {
-      example: {
-        success: true,
-        message: 'Job posted successfully',
-        code: 'CREATED',
-        data: {
-          id: 'job_123abc',
-          status: 'ACTIVE',
-          createdAt: '2026-03-05T10:30:00.000Z'
-        }
-      }
-    }
+    type: JobPostCreateResponseDto
   })
   @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
   async createOwn(
     @Body() dto: CreateJobPostDto,
     @Req() req: JwtRequest
   ): Promise<BaseResponseDto<JobPostCreateResponseDto>> {
     const requesterUuid = req.user.sub;
     const accountId = req.user.accountId;
-  
 
     const sanitizedDto = {
       ...dto,
@@ -190,36 +191,12 @@ export class JobsController {
     return response;
   }
 
-  /**
-   * Update an existing job posting owned by the user
-   * 
-   * @param id - Job post ID
-   * @param dto - Fields to update
-   * @param req - JWT request
-   * @returns Updated job post
-   */
   @Patch('jobs/:id')
   @Permissions(P.EMPLOYMENT_UPDATE_OWN)
   @Version('1')
   @ApiOperation({ 
     summary: 'Update your own job posting',
-    description: `
-      Updates one or more fields of an existing job posting.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_UPDATE_OWN}
-      
-      **Important Rules:**
-      • You can only update jobs where you are the creator
-      • All fields are optional - partial updates supported
-      • Status changes affect job visibility
-      
-      **What You Cannot Change:**
-      • Account ownership (accountId is protected)
-      • Creator ID (for security reasons)
-      • Job ID
-    `
+    description: 'Updates one or more fields of an existing job posting.'
   })
   @ApiParam({ 
     name: 'id', 
@@ -227,13 +204,7 @@ export class JobsController {
     description: 'CUID of the job posting',
     example: 'job_123abc'
   })
-  @ApiBody({ 
-    type: UpdateOwnJobPostRequestHttpDto,
-    examples: {
-      'Update Title': { value: { title: 'Senior Developer Needed' } },
-      'Update Status': { value: { status: 'CLOSED' } }
-    }
-  })
+  @ApiBody({ type: UpdateOwnJobPostRequestHttpDto })
   @ApiResponse({ 
     status: 200, 
     description: 'Job post updated successfully',
@@ -263,78 +234,136 @@ export class JobsController {
     return resp;
   }
 
-  /**
-   * Get all job postings created by the authenticated user
-   * 
-   * @param req - JWT request
-   * @param query - Filter parameters
-   * @returns List of user's job postings
-   */
   @Get('my-listings')
-  @Permissions(P.EMPLOYMENT_READ)
-  @Version('1')
-  @ApiOperation({ 
-    summary: 'Get your job postings',
-    description: `
-      Retrieves all job postings created by the authenticated user.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_READ}
-      
-      **Features:**
-      • Returns jobs created by the authenticated user
-      • Supports filtering by status
-      • Sorted by creation date (newest first)
-    `
-  })
-  @ApiQuery({ 
-    name: 'status', 
-    required: false,
-    description: 'Filter by job status',
-    enum: ['ACTIVE', 'CLOSED', 'DRAFT'],
-    example: 'ACTIVE'
-  })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Jobs retrieved successfully',
-    type: [JobPostResponseDto]
-  })
-  async getOwnJobs(
-    @Req() req: JwtRequest,
-    @Query() query: GetOwnJobsFilterDto,
-  ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
-    const userId = req.user.sub;
-    const { status } = query;
+@Permissions(P.EMPLOYMENT_READ)
+@Version('1')
+@ApiOperation({ 
+  summary: 'Get your job postings',
+  description: 'Retrieves all job postings created by the authenticated user with pagination and job characteristics filters.'
+})
+@ApiQuery({ 
+  name: 'status', 
+  required: false,
+  description: 'Filter by job status',
+  enum: ['ACTIVE', 'CLOSED', 'DRAFT', 'EXPIRED'],
+  example: 'ACTIVE'
+})
+// Job Characteristics Filters
+@ApiQuery({ 
+  name: 'employmentType', 
+  required: false,
+  description: 'Filter by employment type',
+  enum: EMPLOYMENT_TYPES,
+  example: 'PERMANENT'
+})
+@ApiQuery({ 
+  name: 'paymentType', 
+  required: false,
+  description: 'Filter by payment type',
+  enum: PAYMENT_TYPES,
+  example: 'SALARY'
+})
+@ApiQuery({ 
+  name: 'workArrangement', 
+  required: false,
+  description: 'Filter by work arrangement',
+  enum: WORK_ARRANGEMENTS,
+  example: 'REMOTE'
+})
+@ApiQuery({ 
+  name: 'commitment', 
+  required: false,
+  description: 'Filter by commitment level',
+  enum: COMMITMENT_LEVELS,
+  example: 'FULL_TIME'
+})
+@ApiQuery({ 
+  name: 'experienceLevel', 
+  required: false,
+  description: 'Filter by experience level',
+  enum: EXPERIENCE_LEVELS,
+  example: 'MID_LEVEL'
+})
+@ApiQuery({ 
+  name: 'educationLevel', 
+  required: false,
+  description: 'Filter by education level',
+  enum: EDUCATION_LEVELS,
+  example: 'BACHELORS'
+})
+// ============================================================
+// NEW FILTERS - ADD THESE
+// ============================================================
+@ApiQuery({ 
+  name: 'isAnonymous', 
+  required: false,
+  type: Boolean,
+  description: 'Filter by anonymous status',
+  example: false
+})
+@ApiQuery({ 
+  name: 'hoursPerWeekMin', 
+  required: false,
+  type: Number,
+  description: 'Minimum hours per week',
+  example: 20
+})
+@ApiQuery({ 
+  name: 'hoursPerWeekMax', 
+  required: false,
+  type: Number,
+  description: 'Maximum hours per week',
+  example: 40
+})
+@ApiQuery({ 
+  name: 'limit', 
+  required: false,
+  type: Number,
+  description: 'Results per page (default: 20, max: 100)',
+  example: 20
+})
+@ApiQuery({ 
+  name: 'offset', 
+  required: false,
+  type: Number,
+  description: 'Pagination offset',
+  example: 0
+})
+@ApiQuery({ 
+  name: 'sortBy', 
+  required: false,
+  enum: ['recent', 'pay_asc', 'pay_desc'],
+  description: 'Sort order',
+  example: 'recent'
+})
+@ApiResponse({ 
+  status: 200, 
+  description: 'Jobs retrieved successfully',
+  type: [JobPostResponseDto]
+})
+async getOwnJobs(
+  @Req() req: JwtRequest,
+  @Query() query: GetOwnJobsFilterDto,
+): Promise<BaseResponseDto<JobPostResponseDto[]>> {
+  const userId = req.user.sub;
 
-    this.logger.log(`👤 User ${userId} fetching listings. Filter: ${status ?? 'ALL'}`);
-    
-    return this.jobsService.getOwnJobs(userId, status);
-  }
+  this.logger.log(
+    `👤 User ${userId} fetching listings. Filter: ${query.status ?? 'ALL'}, ` +
+    `employmentType=${query.employmentType}, paymentType=${query.paymentType}, ` +
+    `workArrangement=${query.workArrangement}, commitment=${query.commitment}, ` +
+    `experienceLevel=${query.experienceLevel}, educationLevel=${query.educationLevel}, ` +
+    `isAnonymous=${query.isAnonymous}, hoursPerWeekMin=${query.hoursPerWeekMin}, ` +
+    `hoursPerWeekMax=${query.hoursPerWeekMax}, ` +
+    `limit=${query.limit}, offset=${query.offset}, sortBy=${query.sortBy}`
+  );
+  return this.jobsService.getOwnJobs(userId, query);
+}
 
-  /**
-   * Close (archive) a job posting owned by the user
-   * 
-   * @param id - Job post ID
-   * @param req - JWT request
-   * @returns Closure confirmation
-   */
   @Patch('jobs/:id/close')
   @Permissions(P.EMPLOYMENT_CLOSE_OWN)
   @ApiOperation({ 
     summary: 'Close your own job posting',
-    description: `
-      Marks a job posting as closed/archived.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_CLOSE_OWN}
-      
-      **Effects:**
-      • Job will no longer appear in search results
-      • Existing applications remain accessible
-      • Can be reopened if needed
-    `
+    description: 'Marks a job posting as closed/archived.'
   })
   @ApiParam({ 
     name: 'id', 
@@ -372,36 +401,12 @@ export class JobsController {
   // 📝 JOBS - APPLICATIONS
   // ===========================================================
 
-  /**
-   * Apply for a job posting
-   * 
-   * @param id - Job post ID
-   * @param dto - Application details
-   * @param req - JWT request
-   * @returns Application confirmation
-   */
   @Post('jobs/:id/apply')
   @Permissions(P.EMPLOYMENT_READ)
   @Version('1')
   @ApiOperation({ 
     summary: 'Apply for a job',
-    description: `
-      Submit an application for a specific job posting.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_READ}
-      
-      **Process:**
-      1. Validates job exists and is active
-      2. Creates application record
-      3. Notifies job poster (via notification service)
-      4. Returns application details
-      
-      **Notes:**
-      • Users can only apply once per job
-      • Application status tracks progress (PENDING, REVIEWED, REJECTED, HIRED)
-    `
+    description: 'Submit an application for a specific job posting.'
   })
   @ApiParam({ 
     name: 'id', 
@@ -425,30 +430,12 @@ export class JobsController {
     return this.jobsService.applyToJobPost(id, userId, dto);
   }
 
-  /**
-   * Get all applications submitted by the authenticated user
-   * 
-   * @param req - JWT request
-   * @param query - Filter parameters
-   * @returns List of user's applications
-   */
   @Get('my-applications')
   @Permissions(P.EMPLOYMENT_READ)
   @Version('1')
   @ApiOperation({ 
     summary: 'Get your job applications',
-    description: `
-      Retrieves all job applications submitted by the authenticated user.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_READ}
-      
-      **Features:**
-      • Returns applications across all jobs
-      • Supports filtering by status
-      • Includes job details for each application
-    `
+    description: 'Retrieves all job applications submitted by the authenticated user.'
   })
   @ApiQuery({ 
     name: 'status', 
@@ -471,30 +458,12 @@ export class JobsController {
     return this.jobsService.getOwnApplications(userId, query.status);
   }
 
-  /**
-   * Get detailed information about a specific application
-   * 
-   * @param id - Application ID
-   * @param req - JWT request
-   * @returns Full application details
-   */
   @Get('applications/:id')
   @Permissions(P.EMPLOYMENT_READ)
   @Version('1')
   @ApiOperation({ 
     summary: 'Get application details',
-    description: `
-      Retrieves complete details of a specific job application.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_READ}
-      
-      **Access Rules:**
-      • Applicants can view their own applications
-      • Job posters can view applications for their jobs
-      • Admins can view all applications
-    `
+    description: 'Retrieves complete details of a specific job application.'
   })
   @ApiParam({ 
     name: 'id', 
@@ -530,105 +499,48 @@ export class JobsController {
   // 👑 JOBS - ADMIN OPERATIONS
   // ===========================================================
 
-  /**
-   * Create a job posting for any account (Admin only)
-   * 
-   * @param accountId - Target account ID
-   * @param dto - Job details
-   * @param req - JWT request
-   * @returns Created job details
-   */
   @Post('admin/accounts/:accountId/jobs')
   @Permissions(P.EMPLOYMENT_CREATE_ANY)
   @ApiOperation({ 
     summary: '[ADMIN] Create job posting for any account',
-    description: `
-      **Admin-only endpoint**: Creates a job posting on behalf of any account.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_CREATE_ANY}
-      
-      **Admin Privileges:**
-      • Can specify any account ID via URL parameter
-      • Can override creator ID (optional)
-      • Bypasses normal ownership validation
-      
-      **Use Cases:**
-      • Support team creating jobs for customers
-      • Bulk job creation by admin staff
-      • Manual job entry for phone-in customers
-    `
+    description: 'Admin-only endpoint: Creates a job posting on behalf of any account.'
   })
   @ApiParam({ 
     name: 'accountId', 
     description: 'UUID of the organization owning this listing',
     example: 'eb02ea40-4f17-4040-8885-0029105d9fb2' 
   })
-  @ApiBody({ 
-    type: AdminCreateJobPostDto,
-    description: 'Job details. "creatorId" is optional for organization-level posts.' 
-  })
+  @ApiBody({ type: AdminCreateJobPostDto })
   @ApiResponse({ 
     status: 201, 
     description: 'Job created successfully',
     type: JobPostCreateResponseDto
   })
-  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
-  @ApiResponse({ status: 404, description: 'Account or Creator not found' })
   async createAny(
     @Param('accountId') accountId: string, 
     @Body() dto: AdminCreateJobPostDto,
     @Req() req: JwtRequest
   ): Promise<BaseResponseDto<JobPostCreateResponseDto>> {
-    
     const finalData = { 
       ...dto, 
       accountId,
       creatorId: dto.creatorId || null 
     };
 
-    this.logger.log(`👮 Admin ${req.user.sub} creating job for Account ${accountId} (Creator: ${dto.creatorId ?? 'Organization'})`);
-    
+    this.logger.log(`👮 Admin ${req.user.sub} creating job for Account ${accountId}`);
     const response = await this.executeJobCreation(finalData, req.user.sub);
-
     if (!response.success) {
       throw response; 
     }
-
     return response;
   }
 
-  /**
-   * Update any job posting (Admin only)
-   * 
-   * @param id - Job ID
-   * @param dto - Update details
-   * @param req - JWT request
-   * @returns Updated job
-   */
   @Patch('admin/jobs/:id')
   @Permissions(P.EMPLOYMENT_UPDATE_ANY)
   @Version('1')
   @ApiOperation({ 
     summary: '[ADMIN] Update any job posting',
-    description: `
-      **Admin-only endpoint**: Updates any job posting in the system.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_UPDATE_ANY}
-      
-      **Admin Capabilities:**
-      • Modify job details for any account
-      • Change ownership (accountId, creatorId)
-      • Update job status
-      
-      **Use Cases:**
-      • Correcting job errors reported by users
-      • Updating job details for offline customers
-      • Content moderation
-    `
+    description: 'Admin-only endpoint: Updates any job posting in the system.'
   })
   @ApiParam({ 
     name: 'id', 
@@ -663,30 +575,11 @@ export class JobsController {
     return resp;
   }
 
-  /**
-   * Close any job posting (Admin only)
-   * 
-   * @param id - Job ID
-   * @param dto - Closure details
-   * @param req - JWT request
-   * @returns Closure confirmation
-   */
   @Patch('admin/jobs/:id/close')
   @Permissions(P.EMPLOYMENT_CLOSE_ANY)
   @ApiOperation({ 
     summary: '[ADMIN] Close any job posting',
-    description: `
-      **Admin-only endpoint**: Closes any job posting in the system.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_CLOSE_ANY}
-      
-      **Use Cases:**
-      • Removing inappropriate job posts
-      • Closing jobs for users who request assistance
-      • Bulk job management
-    `
+    description: 'Admin-only endpoint: Closes any job posting in the system.'
   })
   @ApiParam({ 
     name: 'id', 
@@ -712,7 +605,7 @@ export class JobsController {
       id,
     };
 
-    this.logger.log(`👮 Admin ${requesterUuid} closing job ${id} for User ${dto.creatorId}`);
+    this.logger.log(`👮 Admin ${requesterUuid} closing job ${id}`);
     const response = await this.executeJobClose(sanitizedDto, requesterUuid, true);
     if (!response.success) {
       throw response;
@@ -720,102 +613,314 @@ export class JobsController {
     return response;
   }
 
-  /**
-   * Get all job postings with filters (Admin only)
-   * 
-   * @param req - JWT request
-   * @param query - Filter parameters
-   * @returns List of jobs
-   */
-  @Get('admin/listings')
-  @Permissions(P.EMPLOYMENT_READ)
+@Get('admin/listings')
+@Permissions(P.EMPLOYMENT_READ)
+@Version('1')
+@ApiOperation({ 
+  summary: '[ADMIN] Get all job postings',
+  description: 'Admin-only endpoint: View all job postings with filters and pagination.'
+})
+@ApiQuery({ 
+  name: 'status', 
+  required: false,
+  description: 'Filter by job status',
+  enum: ['ACTIVE', 'CLOSED', 'DRAFT', 'EXPIRED']
+})
+@ApiQuery({ 
+  name: 'accountId', 
+  required: false,
+  description: 'Filter by owning account ID',
+  type: String
+})
+@ApiQuery({ 
+  name: 'creatorId', 
+  required: false,
+  description: 'Filter by creator ID',
+  type: String
+})
+// Job Characteristics Filters
+@ApiQuery({ 
+  name: 'employmentType', 
+  required: false,
+  description: 'Filter by employment type',
+  enum: EMPLOYMENT_TYPES,
+  example: 'PERMANENT'
+})
+@ApiQuery({ 
+  name: 'paymentType', 
+  required: false,
+  description: 'Filter by payment type',
+  enum: PAYMENT_TYPES,
+  example: 'SALARY'
+})
+@ApiQuery({ 
+  name: 'workArrangement', 
+  required: false,
+  description: 'Filter by work arrangement',
+  enum: WORK_ARRANGEMENTS,
+  example: 'REMOTE'
+})
+@ApiQuery({ 
+  name: 'commitment', 
+  required: false,
+  description: 'Filter by commitment level',
+  enum: COMMITMENT_LEVELS,
+  example: 'FULL_TIME'
+})
+@ApiQuery({ 
+  name: 'experienceLevel', 
+  required: false,
+  description: 'Filter by experience level',
+  enum: EXPERIENCE_LEVELS,
+  example: 'MID_LEVEL'
+})
+@ApiQuery({ 
+  name: 'educationLevel', 
+  required: false,
+  description: 'Filter by education level',
+  enum: EDUCATION_LEVELS,
+  example: 'BACHELORS'
+})
+@ApiQuery({ 
+  name: 'isRemote', 
+  required: false,
+  description: 'Filter by remote status',
+  type: Boolean,
+  example: true
+})
+// ============================================================
+// NEW ADMIN FILTERS - ADD THESE
+// ============================================================
+@ApiQuery({ 
+  name: 'isAnonymous', 
+  required: false,
+  description: 'Filter by anonymous status',
+  type: Boolean,
+  example: false
+})
+@ApiQuery({ 
+  name: 'applicationDeadlineAfter', 
+  required: false,
+  description: 'Filter jobs with application deadline after this date (ISO 8601)',
+  type: String,
+  example: '2025-12-01T00:00:00Z'
+})
+@ApiQuery({ 
+  name: 'applicationDeadlineBefore', 
+  required: false,
+  description: 'Filter jobs with application deadline before this date (ISO 8601)',
+  type: String,
+  example: '2025-12-31T23:59:59Z'
+})
+@ApiQuery({ 
+  name: 'startDateAfter', 
+  required: false,
+  description: 'Filter jobs with start date after this date (ISO 8601)',
+  type: String,
+  example: '2026-01-01T00:00:00Z'
+})
+@ApiQuery({ 
+  name: 'startDateBefore', 
+  required: false,
+  description: 'Filter jobs with start date before this date (ISO 8601)',
+  type: String,
+  example: '2026-01-15T00:00:00Z'
+})
+@ApiQuery({ 
+  name: 'hoursPerWeekMin', 
+  required: false,
+  description: 'Minimum hours per week',
+  type: Number,
+  example: 20
+})
+@ApiQuery({ 
+  name: 'hoursPerWeekMax', 
+  required: false,
+  description: 'Maximum hours per week',
+  type: Number,
+  example: 40
+})
+@ApiQuery({ 
+  name: 'limit', 
+  required: false,
+  type: Number,
+  description: 'Results per page (default: 20, max: 100)',
+  example: 20
+})
+@ApiQuery({ 
+  name: 'offset', 
+  required: false,
+  type: Number,
+  description: 'Pagination offset',
+  example: 0
+})
+@ApiQuery({ 
+  name: 'sortBy', 
+  required: false,
+  enum: ['recent', 'pay_asc', 'pay_desc'],
+  description: 'Sort order',
+  example: 'recent'
+})
+@ApiResponse({ 
+  status: 200, 
+  description: 'Jobs retrieved successfully',
+  type: [JobPostResponseDto]
+})
+async getAdminJobs(
+  @Req() req: JwtRequest,
+  @Query() query: GetAdminJobsFilterDto,
+): Promise<BaseResponseDto<JobPostResponseDto[]>> {
+  const adminId = req.user.sub;
+  const actorRole = req.user.role;
+
+  if (actorRole === 'Individual' || actorRole === 'Member') {
+    this.logger.warn(`🛑 Unauthorized admin access attempt by ${adminId}`);
+    return BaseResponseDto.fail('Unauthorized access to administrative listings.', 'FORBIDDEN');
+  }
+
+  this.logger.log(
+    `👮 Admin ${adminId} (${actorRole}) searching system-wide listings. ` +
+    `Filters: creatorId=${query.creatorId}, accountId=${query.accountId}, status=${query.status}, ` +
+    `employmentType=${query.employmentType}, paymentType=${query.paymentType}, ` +
+    `workArrangement=${query.workArrangement}, commitment=${query.commitment}, ` +
+    `experienceLevel=${query.experienceLevel}, educationLevel=${query.educationLevel}, ` +
+    `isRemote=${query.isRemote}, isAnonymous=${query.isAnonymous}, ` +
+    `applicationDeadlineAfter=${query.applicationDeadlineAfter}, ` +
+    `applicationDeadlineBefore=${query.applicationDeadlineBefore}, ` +
+    `startDateAfter=${query.startDateAfter}, startDateBefore=${query.startDateBefore}, ` +
+    `hoursPerWeekMin=${query.hoursPerWeekMin}, hoursPerWeekMax=${query.hoursPerWeekMax}, ` +
+    `limit=${query.limit}, offset=${query.offset}, sortBy=${query.sortBy}`
+  );
+  const response = await this.jobsService.getAdminJobs(query);
+  if (!response.success) {
+    this.logger.error(`Failed to fetch admin job listings: ${response.message}`);
+    throw response;
+  }
+  return response;  
+}
+
+  // ===========================================================
+  // GET JOB LISTINGS BY OWNER (PUBLIC WITH CACHE CONTROL)
+  // ===========================================================
+
+  @Public()
+  @Get('jobs/owner/:accountId')
   @Version('1')
   @ApiOperation({ 
-    summary: '[ADMIN] Get all job postings',
-    description: `
-      **Admin-only endpoint**: View all job postings with filters.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_READ}
-      
-      **Admin Capabilities:**
-      • View jobs from any account or creator
-      • Filter by status, account ID, or creator ID
-      • Access to all jobs for management and oversight
-    `
+    summary: 'Get job listings by owner (account)',
+    description: 'Public endpoint to retrieve all job listings for a specific account/owner with pagination and cache control.'
+  })
+  @ApiParam({ 
+    name: 'accountId', 
+    type: String,
+    description: 'Account ID of the owner',
+    example: 'acc_123456'
   })
   @ApiQuery({ 
     name: 'status', 
     required: false,
     description: 'Filter by job status',
-    enum: ['ACTIVE', 'CLOSED', 'DRAFT']
+    enum: ['ACTIVE', 'CLOSED', 'DRAFT', 'EXPIRED'],
+    example: 'ACTIVE'
   })
   @ApiQuery({ 
-    name: 'accountId', 
+    name: 'limit', 
     required: false,
-    description: 'Filter by owning account ID',
-    type: String
+    type: Number,
+    description: 'Results per page (default: 20, max: 100)',
+    example: 20
   })
   @ApiQuery({ 
-    name: 'creatorId', 
+    name: 'offset', 
     required: false,
-    description: 'Filter by creator ID',
-    type: String
+    type: Number,
+    description: 'Pagination offset',
+    example: 0
+  })
+  @ApiQuery({ 
+    name: 'sortBy', 
+    required: false,
+    enum: ['recent', 'pay_asc', 'pay_desc'],
+    description: 'Sort order',
+    example: 'recent'
+  })
+  @ApiQuery({ 
+    name: 'bypassCache', 
+    required: false, 
+    type: Boolean, 
+    description: 'Bypass cache (Admin only)', 
+    example: false 
+  })
+  @ApiQuery({ 
+    name: 'skipCache', 
+    required: false, 
+    type: Boolean, 
+    description: 'Skip reading cache, still write', 
+    example: false 
+  })
+  @ApiQuery({ 
+    name: 'refreshCache', 
+    required: false, 
+    type: Boolean, 
+    description: 'Force refresh cache', 
+    example: false 
+  })
+  @ApiQuery({ 
+    name: 'cacheTTL', 
+    required: false, 
+    type: Number, 
+    description: 'Override cache TTL (seconds)', 
+    example: 300 
+  })
+  @ApiQuery({ 
+    name: 'readOnly', 
+    required: false, 
+    type: Boolean, 
+    description: 'Don\'t write to cache', 
+    example: false 
   })
   @ApiResponse({ 
     status: 200, 
     description: 'Jobs retrieved successfully',
     type: [JobPostResponseDto]
   })
-  async getAdminJobs(
-    @Req() req: JwtRequest,
-    @Query() query: GetAdminJobsFilterDto,
+  async getJobListingsByOwner(
+    @Param('accountId') accountId: string,
+    @Query() query: any,
   ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
-    const adminId = req.user.sub;
-    const actorRole = req.user.role;
+    const dto: GetJobListingsByOwnerDto = {
+      accountId: accountId,
+      status: query.status,
+      limit: this.parseNumber(query.limit) || 20,
+      offset: this.parseNumber(query.offset) || 0,
+      sortBy: query.sortBy as any || 'recent',
+      bypassCache: this.parseBoolean(query.bypassCache),
+      skipCache: this.parseBoolean(query.skipCache),
+      refreshCache: this.parseBoolean(query.refreshCache),
+      cacheTTL: this.parseNumber(query.cacheTTL) || 300,
+      readOnly: this.parseBoolean(query.readOnly),
+    };
 
-    // Updated role check - Individual and Member cannot access admin endpoints
-    if (actorRole === 'Individual' || actorRole === 'Member') {
-      this.logger.warn(`🛑 Unauthorized admin access attempt by ${adminId}`);
-      return BaseResponseDto.fail('Unauthorized access to administrative listings.', 'FORBIDDEN');
-    }
-
-    this.logger.log(`👮 Admin ${adminId} (${actorRole}) searching system-wide listings`);
-
-    const response = await this.jobsService.getAdminJobs(query);
+    this.logger.log(
+      `📥 Incoming request: accountId=${accountId}, status=${dto.status}, ` +
+      `limit=${dto.limit}, offset=${dto.offset}, sortBy=${dto.sortBy}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+    );
+    
+    const response = await this.jobsService.getJobListingsByOwner(dto);
     if (!response.success) {
-      this.logger.error(`Failed to fetch admin job listings: ${response.message}`);
+      this.logger.warn(`Job listings by owner failed for account ${accountId}: ${response.message}`);
       throw response;
     }
-
-    return response;  
+    return response;
   }
 
-  /**
-   * Get all applications with filters (Admin only)
-   * 
-   * @param req - JWT request
-   * @param query - Filter parameters
-   * @returns List of applications
-   */
   @Get('admin/applications')
   @Permissions(P.EMPLOYMENT_READ)
   @Version('1')
   @ApiOperation({ 
     summary: '[ADMIN] Get all job applications',
-    description: `
-      **Admin-only endpoint**: View all job applications with filters.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_READ}
-      
-      **Admin Capabilities:**
-      • View applications across all jobs
-      • Filter by status, job, or applicant
-      • Access for reporting and management
-    `
+    description: 'Admin-only endpoint: View all job applications with filters.'
   })
   @ApiQuery({ 
     name: 'status', 
@@ -846,7 +951,6 @@ export class JobsController {
   ): Promise<BaseResponseDto<JobApplicationResponseDto[]>> {
     const adminId = req.user.sub;
     
-    // Updated role check - Individual, Member, ContentManagerAdmin cannot access admin endpoints
     if (req.user.role === 'Individual' || req.user.role === 'Member' || req.user.role === 'ContentManagerAdmin') {
       return BaseResponseDto.fail('Unauthorized access to administrative applications.', 'FORBIDDEN');
     }
@@ -856,31 +960,207 @@ export class JobsController {
   }
 
   // ===========================================================
-  // 🌐 JOBS - PUBLIC OPERATIONS
+  // 🌐 JOBS - PUBLIC OPERATIONS (WITH CACHE CONTROL)
   // ===========================================================
 
-  /**
-   * Get job details by ID (Public)
-   * 
-   * @param id - Job ID
-   * @returns Job details
-   */
+  @Public()
+  @Get('jobs')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Get all job postings',
+    description: 'Public endpoint to retrieve all job postings with pagination and job characteristics filtering.'
+  })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page (default: 20, max: 100)', example: 20 })
+  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset', example: 0 })
+  @ApiQuery({ name: 'city', required: false, type: String, description: 'Filter by city', example: 'Nairobi' })
+  @ApiQuery({ name: 'minPay', required: false, type: Number, description: 'Minimum pay filter', example: 50000 })
+  @ApiQuery({ name: 'maxPay', required: false, type: Number, description: 'Maximum pay filter', example: 200000 })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['recent', 'pay_asc', 'pay_desc'], description: 'Sort by option', example: 'recent' })
+  // Job Characteristics Filters
+  @ApiQuery({ name: 'employmentType', required: false, enum: EMPLOYMENT_TYPES, description: 'Filter by employment type', example: 'PERMANENT' })
+  @ApiQuery({ name: 'paymentType', required: false, enum: PAYMENT_TYPES, description: 'Filter by payment type', example: 'SALARY' })
+  @ApiQuery({ name: 'workArrangement', required: false, enum: WORK_ARRANGEMENTS, description: 'Filter by work arrangement', example: 'REMOTE' })
+  @ApiQuery({ name: 'commitment', required: false, enum: COMMITMENT_LEVELS, description: 'Filter by commitment level', example: 'FULL_TIME' })
+  @ApiQuery({ name: 'workSchedule', required: false, enum: WORK_SCHEDULES, description: 'Filter by work schedule', example: 'DAY_SHIFT' })
+  @ApiQuery({ name: 'documentationLevel', required: false, enum: DOCUMENTATION_LEVELS, description: 'Filter by documentation level', example: 'FORMAL_CONTRACT' })
+  @ApiQuery({ name: 'skillLevel', required: false, enum: SKILL_LEVELS, description: 'Filter by skill level', example: 'SKILLED' })
+  @ApiQuery({ name: 'experienceLevel', required: false, enum: EXPERIENCE_LEVELS, description: 'Filter by experience level', example: 'MID_LEVEL' })
+  @ApiQuery({ name: 'educationLevel', required: false, enum: EDUCATION_LEVELS, description: 'Filter by education level', example: 'BACHELORS' })
+  @ApiQuery({ name: 'isRemote', required: false, type: Boolean, description: 'Filter by remote status' })
+  // New timeline filters
+  @ApiQuery({ name: 'applicationDeadlineBefore', required: false, type: String, description: 'Filter jobs with application deadline before this date (ISO 8601)', example: '2025-12-31T23:59:59Z' })
+  @ApiQuery({ name: 'applicationDeadlineAfter', required: false, type: String, description: 'Filter jobs with application deadline after this date (ISO 8601)', example: '2025-12-01T00:00:00Z' })
+  @ApiQuery({ name: 'startDateBefore', required: false, type: String, description: 'Filter jobs with start date before this date (ISO 8601)', example: '2026-01-15T00:00:00Z' })
+  @ApiQuery({ name: 'startDateAfter', required: false, type: String, description: 'Filter jobs with start date after this date (ISO 8601)', example: '2026-01-01T00:00:00Z' })
+  @ApiQuery({ name: 'isAnonymous', required: false, type: Boolean, description: 'Filter by anonymous status', example: false })
+  @ApiQuery({ name: 'hoursPerWeekMin', required: false, type: Number, description: 'Minimum hours per week', example: 20 })
+  @ApiQuery({ name: 'hoursPerWeekMax', required: false, type: Number, description: 'Maximum hours per week', example: 40 })
+  @ApiQuery({ name: 'bypassCache', required: false, type: Boolean, description: 'Bypass cache (Admin only)', example: false })
+  @ApiQuery({ name: 'skipCache', required: false, type: Boolean, description: 'Skip reading cache, still write', example: false })
+  @ApiQuery({ name: 'refreshCache', required: false, type: Boolean, description: 'Force refresh cache', example: false })
+  @ApiQuery({ name: 'cacheTTL', required: false, type: Number, description: 'Override cache TTL (seconds)', example: 300 })
+  @ApiQuery({ name: 'readOnly', required: false, type: Boolean, description: 'Don\'t write to cache', example: false })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Jobs retrieved successfully',
+    type: [JobPostResponseDto]
+  })
+  async getAllJobs(
+    @Query() query: any,
+  ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
+    const dto: GetAllJobsRequestDto = {
+      limit: this.parseNumber(query.limit) || 20,
+      offset: this.parseNumber(query.offset) || 0,
+      city: query.city,
+      minPay: this.parseNumber(query.minPay),
+      maxPay: this.parseNumber(query.maxPay),
+      sortBy: query.sortBy as any || 'recent',
+      // Job Characteristics
+      employmentType: query.employmentType,
+      paymentType: query.paymentType,
+      workArrangement: query.workArrangement,
+      commitment: query.commitment,
+      workSchedule: query.workSchedule,
+      documentationLevel: query.documentationLevel,
+      skillLevel: query.skillLevel,
+      experienceLevel: query.experienceLevel,
+      educationLevel: query.educationLevel,
+      isRemote: this.parseBoolean(query.isRemote),
+      // New timeline filters
+      applicationDeadlineBefore: this.parseDate(query.applicationDeadlineBefore),
+      applicationDeadlineAfter: this.parseDate(query.applicationDeadlineAfter),
+      startDateBefore: this.parseDate(query.startDateBefore),
+      startDateAfter: this.parseDate(query.startDateAfter),
+      isAnonymous: this.parseBoolean(query.isAnonymous),
+      hoursPerWeekMin: this.parseNumber(query.hoursPerWeekMin),
+      hoursPerWeekMax: this.parseNumber(query.hoursPerWeekMax),
+      bypassCache: this.parseBoolean(query.bypassCache),
+      skipCache: this.parseBoolean(query.skipCache),
+      refreshCache: this.parseBoolean(query.refreshCache),
+      cacheTTL: this.parseNumber(query.cacheTTL) || 300,
+      readOnly: this.parseBoolean(query.readOnly),
+    };
+
+    this.logger.log(
+      `📥 Incoming request: limit=${dto.limit}, offset=${dto.offset}, ` +
+      `employmentType=${dto.employmentType}, paymentType=${dto.paymentType}, ` +
+      `workArrangement=${dto.workArrangement}, commitment=${dto.commitment}, ` +
+      `workSchedule=${dto.workSchedule}, documentationLevel=${dto.documentationLevel}, ` +
+      `skillLevel=${dto.skillLevel}, experienceLevel=${dto.experienceLevel}, ` +
+      `educationLevel=${dto.educationLevel}, isRemote=${dto.isRemote}, ` +
+      `isAnonymous=${dto.isAnonymous}, hoursPerWeekMin=${dto.hoursPerWeekMin}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+    );
+    const response = await this.jobsService.getAllJobs(dto);
+    if (!response.success) {
+      throw response;
+    }
+    return response;
+  }
+
+  @Public()
+  @Get('jobs/category')
+  @Version('1')
+  @ApiOperation({ 
+    summary: 'Get jobs by category',
+    description: 'Public endpoint to retrieve job postings in a specific category with job characteristics filtering and cache control.'
+  })
+  @ApiQuery({ name: 'categoryId', required: false, type: String, description: 'Category ID to filter by', example: 'cat_123abc' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page (default: 20, max: 100)', example: 20 })
+  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset', example: 0 })
+  @ApiQuery({ name: 'city', required: false, type: String, description: 'Filter by city', example: 'Nairobi' })
+  @ApiQuery({ name: 'minPay', required: false, type: Number, description: 'Minimum pay filter', example: 50000 })
+  @ApiQuery({ name: 'maxPay', required: false, type: Number, description: 'Maximum pay filter', example: 200000 })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['recent', 'pay_asc', 'pay_desc'], description: 'Sort by option', example: 'recent' })
+  // Job Characteristics Filters
+  @ApiQuery({ name: 'employmentType', required: false, enum: EMPLOYMENT_TYPES, description: 'Filter by employment type', example: 'PERMANENT' })
+  @ApiQuery({ name: 'paymentType', required: false, enum: PAYMENT_TYPES, description: 'Filter by payment type', example: 'SALARY' })
+  @ApiQuery({ name: 'workArrangement', required: false, enum: WORK_ARRANGEMENTS, description: 'Filter by work arrangement', example: 'REMOTE' })
+  @ApiQuery({ name: 'commitment', required: false, enum: COMMITMENT_LEVELS, description: 'Filter by commitment level', example: 'FULL_TIME' })
+  @ApiQuery({ name: 'workSchedule', required: false, enum: WORK_SCHEDULES, description: 'Filter by work schedule', example: 'DAY_SHIFT' })
+  @ApiQuery({ name: 'documentationLevel', required: false, enum: DOCUMENTATION_LEVELS, description: 'Filter by documentation level', example: 'FORMAL_CONTRACT' })
+  @ApiQuery({ name: 'skillLevel', required: false, enum: SKILL_LEVELS, description: 'Filter by skill level', example: 'SKILLED' })
+  @ApiQuery({ name: 'experienceLevel', required: false, enum: EXPERIENCE_LEVELS, description: 'Filter by experience level', example: 'MID_LEVEL' })
+  @ApiQuery({ name: 'educationLevel', required: false, enum: EDUCATION_LEVELS, description: 'Filter by education level', example: 'BACHELORS' })
+  @ApiQuery({ name: 'isRemote', required: false, type: Boolean, description: 'Filter by remote status' })
+  // New timeline filters
+  @ApiQuery({ name: 'applicationDeadlineBefore', required: false, type: String, description: 'Filter jobs with application deadline before this date (ISO 8601)', example: '2025-12-31T23:59:59Z' })
+  @ApiQuery({ name: 'applicationDeadlineAfter', required: false, type: String, description: 'Filter jobs with application deadline after this date (ISO 8601)', example: '2025-12-01T00:00:00Z' })
+  @ApiQuery({ name: 'startDateBefore', required: false, type: String, description: 'Filter jobs with start date before this date (ISO 8601)', example: '2026-01-15T00:00:00Z' })
+  @ApiQuery({ name: 'startDateAfter', required: false, type: String, description: 'Filter jobs with start date after this date (ISO 8601)', example: '2026-01-01T00:00:00Z' })
+  @ApiQuery({ name: 'isAnonymous', required: false, type: Boolean, description: 'Filter by anonymous status', example: false })
+  @ApiQuery({ name: 'hoursPerWeekMin', required: false, type: Number, description: 'Minimum hours per week', example: 20 })
+  @ApiQuery({ name: 'hoursPerWeekMax', required: false, type: Number, description: 'Maximum hours per week', example: 40 })
+  @ApiQuery({ name: 'bypassCache', required: false, type: Boolean, description: 'Bypass cache (Admin only)', example: false })
+  @ApiQuery({ name: 'skipCache', required: false, type: Boolean, description: 'Skip reading cache, still write', example: false })
+  @ApiQuery({ name: 'refreshCache', required: false, type: Boolean, description: 'Force refresh cache', example: false })
+  @ApiQuery({ name: 'cacheTTL', required: false, type: Number, description: 'Override cache TTL (seconds)', example: 300 })
+  @ApiQuery({ name: 'readOnly', required: false, type: Boolean, description: 'Don\'t write to cache', example: false })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Jobs retrieved successfully',
+    type: [JobPostResponseDto]
+  })
+  async getJobsByCategory(
+    @Query() query: any,
+  ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
+    const dto: GetJobsByCategoryRequestDto = {
+      categoryId: query.categoryId,
+      limit: this.parseNumber(query.limit) || 20,
+      offset: this.parseNumber(query.offset) || 0,
+      city: query.city,
+      minPay: this.parseNumber(query.minPay),
+      maxPay: this.parseNumber(query.maxPay),
+      sortBy: query.sortBy as any || 'recent',
+      // Job Characteristics
+      employmentType: query.employmentType,
+      paymentType: query.paymentType,
+      workArrangement: query.workArrangement,
+      commitment: query.commitment,
+      workSchedule: query.workSchedule,
+      documentationLevel: query.documentationLevel,
+      skillLevel: query.skillLevel,
+      experienceLevel: query.experienceLevel,
+      educationLevel: query.educationLevel,
+      isRemote: this.parseBoolean(query.isRemote),
+      // New timeline filters
+      applicationDeadlineBefore: this.parseDate(query.applicationDeadlineBefore),
+      applicationDeadlineAfter: this.parseDate(query.applicationDeadlineAfter),
+      startDateBefore: this.parseDate(query.startDateBefore),
+      startDateAfter: this.parseDate(query.startDateAfter),
+      isAnonymous: this.parseBoolean(query.isAnonymous),
+      hoursPerWeekMin: this.parseNumber(query.hoursPerWeekMin),
+      hoursPerWeekMax: this.parseNumber(query.hoursPerWeekMax),
+      bypassCache: this.parseBoolean(query.bypassCache),
+      skipCache: this.parseBoolean(query.skipCache),
+      refreshCache: this.parseBoolean(query.refreshCache),
+      cacheTTL: this.parseNumber(query.cacheTTL) || 300,
+      readOnly: this.parseBoolean(query.readOnly),
+    };
+
+    this.logger.log(
+      `📥 Incoming request: categoryId=${dto.categoryId}, limit=${dto.limit}, offset=${dto.offset}, ` +
+      `employmentType=${dto.employmentType}, paymentType=${dto.paymentType}, ` +
+      `workArrangement=${dto.workArrangement}, commitment=${dto.commitment}, ` +
+      `workSchedule=${dto.workSchedule}, documentationLevel=${dto.documentationLevel}, ` +
+      `skillLevel=${dto.skillLevel}, experienceLevel=${dto.experienceLevel}, ` +
+      `educationLevel=${dto.educationLevel}, isRemote=${dto.isRemote}, ` +
+      `isAnonymous=${dto.isAnonymous}, hoursPerWeekMin=${dto.hoursPerWeekMin}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+    );
+    const response = await this.jobsService.getJobsByCategory(dto);
+    if (!response.success) {
+      throw response;
+    }
+    return response;
+  }
+
   @Public()
   @Get('details/:id')
   @Version('1')
   @ApiOperation({ 
     summary: 'Get job details by ID',
-    description: `
-      Public endpoint to retrieve complete job posting details.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Not required
-      
-      **Returns:**
-      • Full job details including description and requirements
-      • Does not require authentication
-      • Used for job detail pages and sharing
-    `
+    description: 'Public endpoint to retrieve complete job posting details with cache control.'
   })
   @ApiParam({ 
     name: 'id', 
@@ -888,6 +1168,10 @@ export class JobsController {
     description: 'CUID of the job posting',
     example: 'job_123abc'
   })
+  @ApiQuery({ name: 'bypassCache', required: false, type: Boolean, description: 'Bypass cache (Admin only)', example: false })
+  @ApiQuery({ name: 'refreshCache', required: false, type: Boolean, description: 'Force refresh cache', example: false })
+  @ApiQuery({ name: 'cacheTTL', required: false, type: Number, description: 'Override cache TTL (seconds)', example: 600 })
+  @ApiQuery({ name: 'readOnly', required: false, type: Boolean, description: 'Don\'t write to cache', example: false })
   @ApiResponse({ 
     status: 200, 
     description: 'Job details retrieved',
@@ -895,8 +1179,22 @@ export class JobsController {
   })
   async getJobPostById(
     @Param('id') id: string,
+    @Query() query: any,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
-    const resp = await this.jobsService.getJobPostById(id);
+    const dto: GetJobByIdRequestDto = {
+      id: id,
+      bypassCache: this.parseBoolean(query.bypassCache),
+      refreshCache: this.parseBoolean(query.refreshCache),
+      cacheTTL: this.parseNumber(query.cacheTTL) || 600,
+      readOnly: this.parseBoolean(query.readOnly),
+    };
+
+    this.logger.log(
+      `📥 Incoming request: id=${id}, ` +
+      `bypassCache=${dto.bypassCache}, refreshCache=${dto.refreshCache}`
+    );
+    
+    const resp = await this.jobsService.getJobPostById(dto);
     if (!resp.success) {
       this.logger.warn(`Job post with ID ${id} not found.`);
       throw resp;
@@ -904,83 +1202,17 @@ export class JobsController {
     return resp;
   }
 
-  /**
-   * Get jobs by category (Public)
-   * 
-   * @param categoryId - Category ID
-   * @returns List of jobs in category
-   */
-  @Public()
-  @Get('jobs/category/:categoryId')
-  @Version('1')
-  @ApiOperation({ 
-    summary: 'Get jobs by category',
-    description: `
-      Public endpoint to retrieve all job postings in a specific category.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Not required
-      
-      **Features:**
-      • Returns all active jobs in the category
-      • Sorted by creation date (newest first)
-      • Used for category browsing
-    `
-  })
-  @ApiParam({ 
-    name: 'categoryId', 
-    type: String,
-    description: 'ID of the job category',
-    example: 'cat_123abc'
-  })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Jobs retrieved successfully',
-    type: [JobPostResponseDto]
-  })
-  async getJobsByCategory(
-    @Param('categoryId') categoryId: string,
-  ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
-    return this.jobsService.getJobsByCategory(categoryId);
-  }
-
-  /**
-   * Validate job post IDs (Public)
-   * 
-   * @param dto - IDs to validate
-   * @returns Validation results
-   */
   @Post('jobs/validate-ids')
   @Permissions(P.EMPLOYMENT_READ)
   @Version('1')
   @ApiOperation({ 
     summary: 'Validate job post IDs',
-    description: `
-      Validates whether given job post IDs exist and are active.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.EMPLOYMENT_READ}
-      
-      **Use Cases:**
-      • Checking job availability before applying
-      • Validating job references in other systems
-      • Bulk validation for external integrations
-    `
+    description: 'Validates whether given job post IDs exist and are active.'
   })
   @ApiBody({ type: ValidateJobPostIdsRequestDto })
   @ApiResponse({ 
     status: 200, 
-    description: 'Validation results',
-    schema: {
-      example: {
-        success: true,
-        data: {
-          valid: ['job_123abc'],
-          invalid: ['job_456def']
-        }
-      }
-    }
+    description: 'Validation results'
   })
   async validateJobIds(
     @Body() dto: ValidateJobPostIdsRequestDto,
@@ -992,10 +1224,6 @@ export class JobsController {
   // ⚙️ CORE EXECUTION METHODS
   // ===========================================================
 
-  /**
-   * Core execution logic for job updates
-   * Routes between regular user and admin flows
-   */
   private async executeJobUpdate(
     dto: UpdateJobGrpcRequestDto,
     actorUuid: string,
@@ -1020,10 +1248,6 @@ export class JobsController {
     }
   }
 
-  /**
-   * Core execution logic for job closure
-   * Routes between regular user and admin flows
-   */
   private async executeJobClose(
     dto: CloseJobGrpcRequestDto,
     actorUuid: string,

@@ -1,4 +1,4 @@
-import exp = require('constants');
+
 
 export * from './lib/shared-dtos.module';
 export * from './lib/LoginResponseDto.dto';
@@ -76,8 +76,6 @@ export * from './lib/SendOtpEventDto.dto';
 export * from './lib/ResetPasswordDto.dto';
 export * from './lib/RevokeSessionDto.dto';
 export * from './lib/check-module-access.dto';
-export * from './lib/GetOwnJobFiltersDto.dto';
-export * from './lib/GetJobsAdminFilterDto.dto';
 export * from './lib/GetAdminApplicationsDto.dto';
 export * from './lib/GetOwnApplicationsFilterDto.dto';
 export * from './lib/listing-registry.dto';
@@ -96,3 +94,7 @@ export * from './lib/service-booking-dtos.dto';
 export * from './lib/service-execution.dto';
 export * from './lib/customer-confirmation.dto';
 export * from './lib/GetAllOfferingsRequestDto.dto';
+export * from './lib/get-offering-by-id.dto';
+export * from './lib/get-offerings-by-account.dto';
+export * from './lib/get-offerings-by-category.dto';
+export * from './lib/get-offerings-by-professional.dto';

@@ -1,8 +1,11 @@
+/* eslint-disable @nx/enforce-module-boundaries */
 import 'dotenv/config';
 import { PrismaClient } from '../generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { ROOT_CATEGORIES, SUB_CATEGORIES } from './categories.constants';
-import { PRICE_UNIT_RULES } from './price-unit-rules.constants';
+import { ROOT_CATEGORIES, SUB_CATEGORIES } from '../../../libs/constants/src/lib/categories.constants';
+import { PRICE_UNIT_RULES } from '../../../libs/constants/src/lib/price-unit-rules.constants';
+
+
 
 const adapter = new PrismaPg({
   connectionString: process.env.LISTINGS_SERVICE_DATABASE_URL!,

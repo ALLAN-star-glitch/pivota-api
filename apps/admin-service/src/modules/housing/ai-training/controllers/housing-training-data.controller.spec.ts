@@ -11,7 +11,7 @@ describe('HousingTrainingDataController', () => {
 
     controller = module.get<HousingTrainingDataController>(
       HousingTrainingDataController
-    );
+    ); 
   });
   
   it('should be defined', () => {

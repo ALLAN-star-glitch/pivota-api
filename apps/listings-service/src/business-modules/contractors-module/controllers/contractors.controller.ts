@@ -7,7 +7,11 @@ import {
   UpdateServiceOfferingDto,
   BaseResponseDto,
   ServiceOfferingResponseDto,
-  GetAllOfferingsRequestDto,  // Add this import
+  GetAllOfferingsRequestDto,
+  GetOfferingsByCategoryRequestDto,
+  GetOfferingsByProfessionalRequestDto,
+  GetOfferingsByAccountRequestDto,
+  GetOfferingByIdRequestDto,
 } from '@pivota-api/dtos';
 import { ContractorsPricingService } from '../services/contractors-pricing.service';
 import { ContractorsService } from '../services/contractors.service';
@@ -22,7 +26,7 @@ export class ContractorsController {
   ) {}
 
   // ========================================================================
-  // SERVICE OFFERING METHODS
+  // SERVICE OFFERING CRUD METHODS
   // ========================================================================
 
   @GrpcMethod('ContractorsService', 'CreateServiceOffering')
@@ -31,38 +35,6 @@ export class ContractorsController {
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
     this.logger.log(`[gRPC] CreateServiceOffering called for professional: ${data.skilledProfessionalId}`);
     return this.contractorsService.createServiceOffering(data);
-  }
-
-  @GrpcMethod('ContractorsService', 'GetOfferingsByVertical')
-  async getOfferingsByVertical(
-    data: GetOfferingByVerticalRequestDto,
-  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    this.logger.log(`[gRPC] GetOfferingsByVertical called: ${data.vertical}`);
-    return this.contractorsService.getOfferingsByVertical(data);
-  }
-
-  @GrpcMethod('ContractorsService', 'GetOfferingsByAccount')
-  async getOfferingsByAccount(
-    data: { accountId: string },
-  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    this.logger.log(`[gRPC] GetOfferingsByAccount called: ${data.accountId}`);
-    return this.contractorsService.getOfferingsByAccount(data.accountId);
-  }
-
-  @GrpcMethod('ContractorsService', 'GetOfferingsByProfessional')
-  async getOfferingsByProfessional(
-    data: { professionalId: string },
-  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    this.logger.log(`[gRPC] GetOfferingsByProfessional called: ${data.professionalId}`);
-    return this.contractorsService.getOfferingsByProfessional(data.professionalId);
-  }
-
-  @GrpcMethod('ContractorsService', 'GetOfferingById')
-  async getOfferingById(
-    data: { id: string },
-  ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
-    this.logger.log(`[gRPC] GetOfferingById called: ${data.id}`);
-    return this.contractorsService.getOfferingById(data.id);
   }
 
   @GrpcMethod('ContractorsService', 'UpdateServiceOffering')
@@ -81,30 +53,91 @@ export class ContractorsController {
     return this.contractorsService.deleteServiceOffering(data.id, data.userId);
   }
 
-  @GrpcMethod('ContractorsService', 'GetOfferingsByCategory')
-  async getOfferingsByCategory(
-    data: { 
-      categoryId: string; 
-      limit?: number; 
-      offset?: number;
-      city?: string;
-      minPrice?: number;
-      maxPrice?: number;
-    }
-  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    this.logger.log(`[gRPC] GetOfferingsByCategory called: ${data.categoryId}`);
-    return this.contractorsService.getOfferingsByCategory(data);
-  }
-
   // ========================================================================
-  // NEW: GET ALL OFFERINGS (Across all categories)
+  // PUBLIC LISTING METHODS (WITH FULL CACHE CONTROL)
   // ========================================================================
 
+  /**
+   * Get all offerings across all categories with full cache control
+   * 
+   * Cache Control Options via DTO:
+   * - bypassCache: boolean - Skip cache entirely (admin only)
+   * - skipCache: boolean - Don't read cache, still write (cache warming)
+   * - refreshCache: boolean - Force refresh cache
+   * - cacheTTL: number - Override TTL in seconds
+   * - readOnly: boolean - Don't write to cache (analytics)
+   */
   @GrpcMethod('ContractorsService', 'GetAllOfferings')
   async getAllOfferings(
     data: GetAllOfferingsRequestDto,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    this.logger.log(`[gRPC] GetAllOfferings called: limit=${data.limit}, offset=${data.offset}, sortBy=${data.sortBy}`);
+    this.logger.log(
+      `[gRPC] GetAllOfferings called: limit=${data.limit}, offset=${data.offset}, sortBy=${data.sortBy}, ` +
+      `bypassCache=${data.bypassCache}, skipCache=${data.skipCache}, refreshCache=${data.refreshCache}`
+    );
     return this.contractorsService.getAllOfferings(data);
   }
+
+  /**
+   * Get offerings by vertical with full cache control
+   */
+  @GrpcMethod('ContractorsService', 'GetOfferingsByVertical')
+  async getOfferingsByVertical(
+    data: GetOfferingByVerticalRequestDto,
+  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
+    this.logger.log(
+      `[gRPC] GetOfferingsByVertical called: vertical=${data.vertical}, ` +
+      `bypassCache=${data.bypassCache}, skipCache=${data.skipCache}, refreshCache=${data.refreshCache}`
+    );
+    return this.contractorsService.getOfferingsByVertical(data);
+  }
+
+  /**
+   * Get offerings by category with full cache control
+   */
+  @GrpcMethod('ContractorsService', 'GetOfferingsByCategory')
+  async getOfferingsByCategory(
+    data: GetOfferingsByCategoryRequestDto,
+  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
+    this.logger.log(
+      `[gRPC] GetOfferingsByCategory called: categoryId=${data.categoryId}, ` +
+      `bypassCache=${data.bypassCache}, skipCache=${data.skipCache}, refreshCache=${data.refreshCache}`
+    );
+    return this.contractorsService.getOfferingsByCategory(data);
+  }
+
+  /**
+   * Get single offering by ID with full cache control
+   */
+  @GrpcMethod('ContractorsService', 'GetOfferingById')
+  async getOfferingById(
+    data: GetOfferingByIdRequestDto,
+  ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
+    this.logger.log(
+      `[gRPC] GetOfferingById called: id=${data.id}, ` +
+      `bypassCache=${data.bypassCache}, refreshCache=${data.refreshCache}`
+    );
+    return this.contractorsService.getOfferingById(data);
+  }
+
+  // ========================================================================
+  // USER-SPECIFIC METHODS (No Caching)
+  // ========================================================================
+
+  @GrpcMethod('ContractorsService', 'GetOfferingsByAccount')
+  async getOfferingsByAccount(
+    data: GetOfferingsByAccountRequestDto,
+  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
+    this.logger.log(`[gRPC] GetOfferingsByAccount called: accountId=${data.accountId}`);
+    return this.contractorsService.getOfferingsByAccount(data);
+  }
+
+  @GrpcMethod('ContractorsService', 'GetOfferingsByProfessional')
+  async getOfferingsByProfessional(
+    data: GetOfferingsByProfessionalRequestDto,
+  ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
+    this.logger.log(`[gRPC] GetOfferingsByProfessional called: professionalUuid=${data.professionalUuid}`);
+    return this.contractorsService.getOfferingsByProfessional(data);
+  }
+
 }

@@ -59,9 +59,101 @@ model Category {
 }
 
 
-/// =====================================================================
-///                            JOB POSTS
-/// =====================================================================
+// ======================================================
+// JOB CHARACTERISTICS ENUMS
+// ======================================================
+
+// 1. EMPLOYMENT TYPE - How is the worker engaged?
+enum EmploymentType {
+  PERMANENT
+  CONTRACT
+  CASUAL
+  GIG
+  FREELANCE
+  INTERNSHIP
+  APPRENTICESHIP
+  VOLUNTEER
+}
+
+// 2. PAYMENT TYPE - How is the worker paid?
+enum PaymentType {
+  SALARY
+  WAGE
+  PER_TASK
+  COMMISSION
+  PROJECT_BASED
+  STIPEND
+  IN_KIND
+}
+
+// 3. WORK ARRANGEMENT - Where does the work happen?
+enum WorkArrangement {
+  ONSITE
+  REMOTE
+  HYBRID
+  FIELD
+  SHIFT
+  FLEXIBLE
+}
+
+// 4. COMMITMENT LEVEL - Time commitment required
+enum CommitmentLevel {
+  FULL_TIME
+  PART_TIME
+  PROJECT_BASED
+  ON_CALL
+}
+
+// 5. WORK SCHEDULE - When does the work happen?
+enum WorkSchedule {
+  DAY_SHIFT
+  NIGHT_SHIFT
+  ROTATING_SHIFT
+  FLEXIBLE
+  FIXED
+}
+
+// 6. DOCUMENTATION LEVEL - Level of formality/documentation
+enum DocumentationLevel {
+  NONE
+  VERBAL_AGREEMENT
+  SIMPLE_CONTRACT
+  FORMAL_CONTRACT
+  GOVERNMENT_REG
+}
+
+// 7. SKILL LEVEL - Required skill level for the job
+enum SkillLevel {
+  UNSKILLED
+  SEMI_SKILLED
+  SKILLED
+  PROFESSIONAL
+}
+
+// 8. EXPERIENCE LEVEL - Required years of experience
+enum ExperienceLevel {
+  ENTRY
+  JUNIOR
+  MID_LEVEL
+  SENIOR
+  LEAD
+  PRINCIPAL
+}
+
+// 9. EDUCATION LEVEL - Required education qualification
+enum EducationLevel {
+  NONE
+  CERTIFICATE
+  DIPLOMA
+  BACHELORS
+  MASTERS
+  PHD
+}
+
+// ======================================================
+// JOB POST MODEL WITH ENUMS
+// ======================================================
+
 model JobPost {
   id          String   @id @default(cuid())
   externalId  String   @default(uuid())
@@ -75,43 +167,134 @@ model JobPost {
 
   creatorName   String?
   accountName   String?
-  creatorId   String   // The individual user who clicked "Post"
-  accountId   String   // The Org or Individual Account owning the post
-  jobType     String
+  creatorId   String
+  accountId   String
+  
+  // ======================================================
+  // JOB CHARACTERISTICS (Using Enums)
+  // ======================================================
+  
+  // 1. EMPLOYMENT TYPE - How is the worker engaged?
+  employmentType  EmploymentType
+  
+  // 2. PAYMENT TYPE - How is the worker paid?
+  paymentType     PaymentType
+  
+  // 3. WORK ARRANGEMENT - Where does the work happen?
+  workArrangement WorkArrangement
+  
+  // 4. COMMITMENT LEVEL - Time commitment required
+  commitment      CommitmentLevel
+  
+  // 5. WORK SCHEDULE - When does the work happen?
+  workSchedule    WorkSchedule
+  
+  // 6. DOCUMENTATION LEVEL - Level of formality/documentation
+  documentationLevel DocumentationLevel
+  
+  // 7. SKILL LEVEL - Required skill level for the job
+  skillLevel      SkillLevel
+  
+  // 8. EXPERIENCE LEVEL - Required years of experience
+  experienceLevel ExperienceLevel
+  
+  // 9. EDUCATION LEVEL - Required education qualification
+  educationLevel  EducationLevel
+  
+  // ======================================================
+  // LOCATION
+  // ======================================================
   locationCity String
   locationNeighborhood String?
   isRemote   Boolean @default(false)
 
+  // ======================================================
+  // COMPENSATION
+  // ======================================================
+  payAmount Float?
+  payRate   String?   // e.g., "PER_HOUR", "PER_DAY", "PER_MONTH", "PER_PROJECT"
+  isNegotiable Boolean @default(false)
+  
+  // ======================================================
+  // REQUIREMENTS
+  // ======================================================
+  skills String[] @default([])
   requiresDocuments Boolean @default(false)
   requiresEquipment Boolean @default(false)
-
-  allowReferrals    Boolean @default(true) 
-  referralBonus     Float?  // If the employer is offering money for a successful referral
-
-  // NEW SOURCE OF TRUTH
-  isNegotiable    Boolean @default(false)
-
-  payAmount Float?
-  payRate   String?
-  skills    String[] @default([])
-  experienceLevel String?
-  employmentType String?
   documentsNeeded String[] @default([])
   equipmentRequired String[] @default([])
   additionalNotes String?
-  status String @default("ACTIVE")
+
+  // ======================================================
+  // REFERRALS
+  // ======================================================
+  allowReferrals    Boolean @default(true) 
+  referralBonus     Float?
+
+  // ======================================================
+  // STATUS & TIMESTAMPS
+  // ======================================================
+  status String @default("ACTIVE") // ACTIVE, CLOSED, DRAFT, EXPIRED
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // ======================================================
+  // RELATIONS
+  // ======================================================
   applications JobPostApplication[]
   ratings     Rating[]
 
+  // ======================================================
+  // APPLICATION & START TIMELINE
+  // ======================================================
+  applicationDeadline  DateTime?   // When applications close (job seekers need this)
+  startDate            DateTime?   // When the job actually starts
+  startDateFlexible    Boolean @default(false)  // Is the start date flexible?
+  maxApplications      Int?        // Maximum applications to accept
+  
+  // ======================================================
+  // PRIVACY & VISIBILITY
+  // ======================================================
+  isAnonymous          Boolean @default(false)   // Hide employer name
+  displayName          String?                  // Alternative name to display
+  contactEmail         String?                  // Specific email for applications
+  
+  // ======================================================
+  // WORK DETAILS
+  // ======================================================
+  hoursPerWeek         Int?        // Expected hours per week
+  contractDuration     Int?        // Duration in months (for contract roles)
+  
+  // ======================================================
+  // ANALYTICS (Tracked automatically or manually)
+  // ======================================================
+  viewCount            Int @default(0)          // Total views
+  shareCount           Int @default(0)          // Total shares
 
+  // ======================================================
+  // INDEXES
+  // ======================================================
   @@index([locationCity])
   @@index([status])
-  @@index([creatorId]) // Good for "My Posts" dashboard
+  @@index([creatorId])
   @@index([accountId])
   @@index([categoryId])
+  
+  // Job Characteristics Indexes
+  @@index([employmentType])
+  @@index([paymentType])
+  @@index([workArrangement])
+  @@index([commitment])
+  @@index([workSchedule])
+  @@index([documentationLevel])
+  @@index([skillLevel])
+  @@index([experienceLevel])
+  @@index([educationLevel])
+  
+  // Combined indexes for common filters
+  @@index([employmentType, experienceLevel])
+  @@index([workArrangement, isRemote])
+  @@index([paymentType, payAmount])
 }
 
 

@@ -13,7 +13,7 @@ import {
   GetBookingDetailsRequestDto,
   GetContractorBookingsRequestDto,
   GetCustomerBookingsRequestDto,
-  GetProfessionalStatsRequestDto,
+  GetProfessionalStatsRequestDto,  
   GetUpcomingBookingsRequestDto,
   BookingActionResponseDto,
   BookingStatusListResponseDto,

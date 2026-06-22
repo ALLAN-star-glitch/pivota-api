@@ -11,12 +11,14 @@ import {
   GetAdminHousingFilterDto,
   UpdateHouseListingGrpcRequestDto,
   ScheduleViewingGrpcRequestDto,
-  ScheduleAdminViewingGrpcRequestDto, // Add this import
+  ScheduleAdminViewingGrpcRequestDto,
   CreateHouseListingGrpcRequestDto,
   ArchiveHouseListingsGrpcRequestDto,
-  HouseListingCreateResponseDto,   
+  HouseListingCreateResponseDto,
+  GetHouseListingsByCategoryDto,
+  GetAllHouseListingsRequestDto,  // ← ADD THIS
 } from '@pivota-api/dtos';
-import { HousingService } from '../services/housing.service'; 
+import { HousingService } from '../services/housing.service';
 
 @Controller('housing')
 export class HousingController {
@@ -42,18 +44,20 @@ export class HousingController {
   ): Promise<BaseResponseDto<HouseListingCreateResponseDto>> {
     this.logger.debug(`CreateAdminHouseListing Request by admin`);
     return this.housingService.createAdminHouseListing(data);
-  } 
-   
+  }
 
   // ===========================================================
-  // READ METHODS
+  // READ METHODS (WITH CACHE CONTROL)
   // ===========================================================
 
   @GrpcMethod('HousingService', 'GetHouseListingById')
   async getHouseListingWithTracking(
     data: GetHouseListingByIdDto,
   ): Promise<BaseResponseDto<HouseListingResponseDto>> {
-    this.logger.debug(`GetHouseListingWithTracking Request: ${data.id}`);
+    this.logger.debug(
+      `GetHouseListingWithTracking Request: ${data.id}, ` +
+      `bypassCache=${data.bypassCache}, refreshCache=${data.refreshCache}`
+    );
     return this.housingService.getHouseListingWithTracking(data);
   }
 
@@ -61,7 +65,10 @@ export class HousingController {
   async searchListings(
     data: SearchHouseListingsDto,
   ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
-    this.logger.debug(`SearchListings Request: ${JSON.stringify(data)}`);
+    this.logger.debug(
+      `SearchListings Request: city=${data.city}, listingType=${data.listingType}, ` +
+      `bypassCache=${data.bypassCache}, skipCache=${data.skipCache}, refreshCache=${data.refreshCache}`
+    );
     return this.housingService.searchListings(data);
   }
 
@@ -69,10 +76,28 @@ export class HousingController {
   async getListingsByOwner(
     data: GetListingsByOwnerDto,
   ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
-    this.logger.debug(`GetListingsByOwner Request for Account: ${data.ownerId}`);
+    this.logger.debug(
+      `GetListingsByOwner Request for Account: ${data.ownerId}, ` +
+      `bypassCache=${data.bypassCache}, skipCache=${data.skipCache}, refreshCache=${data.refreshCache}`
+    );
     return this.housingService.getListingsByOwner(data);
   }
-  
+
+  // ===========================================================
+  // NEW: GET HOUSE LISTINGS BY CATEGORY (WITH CACHE CONTROL)
+  // ===========================================================
+
+  @GrpcMethod('HousingService', 'GetHouseListingsByCategory')
+  async getHouseListingsByCategory(
+    data: GetHouseListingsByCategoryDto,
+  ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    this.logger.debug(
+      `GetHouseListingsByCategory Request: categoryId=${data.categoryId}, ` +
+      `bypassCache=${data.bypassCache}, skipCache=${data.skipCache}, refreshCache=${data.refreshCache}`
+    );
+    return this.housingService.getHouseListingsByCategory(data);
+  }
+
   @GrpcMethod('HousingService', 'GetAdminListings')
   async getAdminListings(
     data: GetAdminHousingFilterDto,
@@ -82,7 +107,7 @@ export class HousingController {
   }
 
   // ===========================================================
-  // UPDATE METHODS
+  // UPDATE METHODS (WITH CACHE INVALIDATION)
   // ===========================================================
 
   @GrpcMethod('HousingService', 'UpdateHouseListing')
@@ -133,7 +158,6 @@ export class HousingController {
   ): Promise<BaseResponseDto<HouseViewingResponseDto>> {
     this.logger.log(`👑 ScheduleAdminViewing Request - Admin: ${data.callerId}, For User: ${data.targetViewerId}, House: ${data.houseId}`);
     
-    // Log admin metadata if present
     if (data.adminMetadata) {
       this.logger.debug(`Admin Metadata: ${JSON.stringify(data.adminMetadata)}`);
     }
@@ -152,4 +176,15 @@ export class HousingController {
     this.logger.debug(`ArchiveHouseListing Request: ${data.id}`);
     return this.housingService.archiveHouseListing(data);
   }
+
+  @GrpcMethod('HousingService', 'GetAllHouseListings')
+async getAllHouseListings(
+  data: GetAllHouseListingsRequestDto,
+): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+  this.logger.debug(
+    `GetAllHouseListings Request: limit=${data.limit}, offset=${data.offset}, ` +
+    `bypassCache=${data.bypassCache}, skipCache=${data.skipCache}, refreshCache=${data.refreshCache}`
+  );
+  return this.housingService.getAllHouseListings(data);
+}
 }

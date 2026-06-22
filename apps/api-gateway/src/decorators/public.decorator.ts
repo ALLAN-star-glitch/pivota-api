@@ -7,7 +7,7 @@ export const IS_PUBLIC_KEY = 'isPublic';
 /**
  * Decorator to mark an endpoint as publicly accessible.
  * When applied, the PermissionsGuard will bypass all authentication and permission checks.
- * 
+ *   
  * @example
  * @Public()
  * @Get('public-endpoint')

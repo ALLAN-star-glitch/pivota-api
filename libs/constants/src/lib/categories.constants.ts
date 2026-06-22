@@ -14,7 +14,7 @@ export const ROOT_CATEGORIES = [
   { vertical: 'HOUSING', type: 'MAIN', name: 'Commercial Spaces', slug: 'commercial-spaces', description: 'Retail shops, offices, and business premises' },
   { vertical: 'HOUSING', type: 'MAIN', name: 'Warehouses', slug: 'warehouses', description: 'Industrial storage and logistics spaces' },
   { vertical: 'HOUSING', type: 'MAIN', name: 'Hostels', slug: 'hostels', description: 'Budget accommodation with shared facilities' },
-  { vertical: 'HOUSING', type: 'MAIN', name: 'Guest Houses', slug: 'guest-houses', description: 'Small-scale accommodation for visitors' },
+  { vertical: 'HOUSING', type: 'MAITN', name: 'Guest Houses', slug: 'guest-houses', description: 'Small-scale accommodation for visitors' },
   { vertical: 'HOUSING', type: 'MAIN', name: 'Serviced Apartments', slug: 'serviced-apartments', description: 'Fully furnished apartments with hotel-like services' },
   { vertical: 'HOUSING', type: 'MAIN', name: 'Airbnbs', slug: 'airbnbs', description: 'Short-term rental properties' },
   { vertical: 'HOUSING', type: 'MAIN', name: 'Co-living Spaces', slug: 'co-living-spaces', description: 'Shared living spaces with private bedrooms and common areas' },
@@ -57,10 +57,13 @@ export const ROOT_CATEGORIES = [
   { vertical: 'HOUSING', type: 'COMPLIMENTARY', name: 'Event Planning Services', slug: 'event-planning', description: 'Weddings, conferences, parties at venues' },
   { vertical: 'HOUSING', type: 'COMPLIMENTARY', name: 'Automotive Services', slug: 'automotive', description: 'Car repair, towing, and detailing' },
 
-  // ======================================================================
+   // ======================================================================
   // JOBS PILLAR - MAIN Categories (Employment Opportunities)
   // ======================================================================
-  // Technology & IT
+  
+  // ============================================================
+  // TECHNOLOGY & IT
+  // ============================================================
   { vertical: 'JOBS', type: 'MAIN', name: 'Software Development', slug: 'software-development', description: 'Programming, coding, and software engineering roles' },
   { vertical: 'JOBS', type: 'MAIN', name: 'IT & Networking', slug: 'it-networking', description: 'Network administration, IT support, and infrastructure' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Data Science & Analytics', slug: 'data-science-analytics', description: 'Data analysis, machine learning, and business intelligence' },
@@ -68,82 +71,315 @@ export const ROOT_CATEGORIES = [
   { vertical: 'JOBS', type: 'MAIN', name: 'DevOps & Cloud', slug: 'devops-cloud', description: 'Cloud computing, infrastructure automation' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Product Management', slug: 'product-management', description: 'Product strategy, roadmap, and delivery' },
   { vertical: 'JOBS', type: 'MAIN', name: 'UX/UI Design', slug: 'ux-ui-design', description: 'User experience and interface design' },
-  
-  // Finance & Accounting
+  { vertical: 'JOBS', type: 'MAIN', name: 'IT Support & Helpdesk', slug: 'it-support-helpdesk', description: 'Technical support and help desk roles' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Database Administration', slug: 'database-administration', description: 'Database management and optimization' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Systems Administration', slug: 'systems-administration', description: 'Server and systems management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Quality Assurance & Testing', slug: 'quality-assurance-testing', description: 'Software testing and QA roles' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Artificial Intelligence & ML', slug: 'ai-ml', description: 'AI and machine learning engineering roles' },
+
+  // ============================================================
+  // FINANCE & ACCOUNTING
+  // ============================================================
   { vertical: 'JOBS', type: 'MAIN', name: 'Accounting', slug: 'accounting', description: 'Bookkeeping, auditing, and financial reporting' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Finance', slug: 'finance', description: 'Financial analysis, planning, and management' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Banking', slug: 'banking', description: 'Retail banking, corporate banking, and investment banking' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Insurance', slug: 'insurance', description: 'Underwriting, claims, and insurance sales' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Investment', slug: 'investment', description: 'Portfolio management, trading, and wealth management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Auditing', slug: 'auditing', description: 'Internal and external audit roles' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Tax Services', slug: 'tax-services', description: 'Tax accounting and compliance' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Financial Analysis', slug: 'financial-analysis', description: 'Financial modeling and analysis' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Credit Management', slug: 'credit-management', description: 'Credit assessment and management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Risk Management', slug: 'risk-management', description: 'Financial risk assessment and mitigation' },
 
-  // General & Informal
+  // ============================================================
+  // GENERAL & INFORMAL (Expanded)
+  // ============================================================
   { vertical: 'JOBS', type: 'MAIN', name: 'House Help', slug: 'house-help', description: 'Domestic work, housekeeping, and home assistance' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Transport & Delivery', slug: 'transport-delivery', description: 'Drivers, couriers, and delivery services' },
-  { vertical: 'JOBS', type: 'MAIN', name: 'Engineering & Technical', slug: 'engineering-technical', description: 'All engineering and technical roles' },
-  { vertical: 'JOBS', type: 'MAIN', name: 'Healthcare & Medical', slug: 'healthcare-medical', description: 'Medical and healthcare positions' },
-  { vertical: 'JOBS', type: 'MAIN', name: 'Finance & Accounting', slug: 'finance-accounting', description: 'Finance, accounting, and auditing roles' },
-  
-  // Marketing & Sales
-  { vertical: 'JOBS', type: 'MAIN', name: 'Digital Marketing', slug: 'digital-marketing', description: 'SEO, SEM, social media, and email marketing' },
-  { vertical: 'JOBS', type: 'MAIN', name: 'Content Creation', slug: 'content-creation', description: 'Writing, video production, and content strategy' },
-  { vertical: 'JOBS', type: 'MAIN', name: 'Public Relations', slug: 'public-relations', description: 'Media relations, crisis communications' },
-  { vertical: 'JOBS', type: 'MAIN', name: 'Brand Management', slug: 'brand-management', description: 'Brand strategy and development' },
-  { vertical: 'JOBS', type: 'MAIN', name: 'Sales', slug: 'sales', description: 'B2B and B2C sales positions' },
-  { vertical: 'JOBS', type: 'MAIN', name: 'Business Development', slug: 'business-development', description: 'Partnerships, market expansion' },
-  
-  // Engineering & Technical
+  { vertical: 'JOBS', type: 'MAIN', name: 'Security Guards', slug: 'security-guards', description: 'Security personnel and guarding services' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Cleaning Services', slug: 'cleaning-services-jobs', description: 'Commercial and residential cleaning roles' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Laundry & Dry Cleaning', slug: 'laundry-dry-cleaning', description: 'Laundry and dry cleaning services' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Childcare & Nanny Services', slug: 'childcare-nanny', description: 'Child minders and nannies' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Elder Care', slug: 'elder-care-jobs', description: 'Care for the elderly and seniors' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Personal Assistants', slug: 'personal-assistants', description: 'Personal aides and executive assistants' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Gardening & Landscaping', slug: 'gardening-landscaping', description: 'Gardeners and landscape maintenance' },
+
+  // ============================================================
+  // ENGINEERING & TECHNICAL
+  // ============================================================
   { vertical: 'JOBS', type: 'MAIN', name: 'Civil Engineering', slug: 'civil-engineering', description: 'Infrastructure, construction, and structural engineering' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Mechanical Engineering', slug: 'mechanical-engineering', description: 'Machinery, HVAC, and mechanical systems' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Electrical Engineering', slug: 'electrical-engineering', description: 'Power systems, electronics, and controls' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Chemical Engineering', slug: 'chemical-engineering', description: 'Process engineering, pharmaceuticals' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Industrial Engineering', slug: 'industrial-engineering', description: 'Process optimization, manufacturing' },
-  
-  // Healthcare & Medical
+  { vertical: 'JOBS', type: 'MAIN', name: 'Structural Engineering', slug: 'structural-engineering', description: 'Building and structure design' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Environmental Engineering', slug: 'environmental-engineering', description: 'Environmental systems and solutions' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Mining Engineering', slug: 'mining-engineering', description: 'Mining and mineral extraction' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Petroleum Engineering', slug: 'petroleum-engineering', description: 'Oil and gas engineering' },
+
+  // ============================================================
+  // HEALTHCARE & MEDICAL
+  // ============================================================
   { vertical: 'JOBS', type: 'MAIN', name: 'Medical Doctors', slug: 'medical-doctors', description: 'Physicians, surgeons, and specialists' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Nursing', slug: 'nursing', description: 'Registered nurses, nurse practitioners' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Pharmacy', slug: 'pharmacy', description: 'Pharmacists and pharmaceutical roles' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Dentistry', slug: 'dentistry', description: 'Dentists, orthodontists, and dental hygienists' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Allied Health', slug: 'allied-health', description: 'Physiotherapy, occupational therapy, radiology' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Laboratory Services', slug: 'laboratory-services', description: 'Medical lab scientists and technicians' },
-  
-  // Education & Training
+  { vertical: 'JOBS', type: 'MAIN', name: 'Radiology & Imaging', slug: 'radiology-imaging', description: 'Radiologists and imaging technicians' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Optometry', slug: 'optometry', description: 'Eye care and optical services' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Nutrition & Dietetics', slug: 'nutrition-dietetics', description: 'Dietitians and nutritionists' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Public Health', slug: 'public-health', description: 'Community and public health roles' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Clinical Psychology', slug: 'clinical-psychology', description: 'Psychologists and mental health professionals' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Emergency Medical Services', slug: 'emergency-medical-services', description: 'Paramedics and emergency responders' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Veterinary Medicine', slug: 'veterinary-medicine', description: 'Veterinarians and animal health' },
+
+  // ============================================================
+  // MARKETING, SALES & COMMUNICATIONS
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Digital Marketing', slug: 'digital-marketing', description: 'SEO, SEM, social media, and email marketing' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Content Creation', slug: 'content-creation', description: 'Writing, video production, and content strategy' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Public Relations', slug: 'public-relations', description: 'Media relations, crisis communications' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Brand Management', slug: 'brand-management', description: 'Brand strategy and development' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Sales', slug: 'sales', description: 'B2B and B2C sales positions' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Business Development', slug: 'business-development', description: 'Partnerships, market expansion' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Market Research', slug: 'market-research', description: 'Market analysis and research roles' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Advertising', slug: 'advertising', description: 'Advertising and campaign management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Corporate Communications', slug: 'corporate-communications', description: 'Internal and external communications' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Social Media Management', slug: 'social-media-management', description: 'Social media strategy and management' },
+
+  // ============================================================
+  // EDUCATION & TRAINING
+  // ============================================================
   { vertical: 'JOBS', type: 'MAIN', name: 'Teaching', slug: 'teaching', description: 'Primary, secondary, and high school teachers' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Lecturing', slug: 'lecturing', description: 'University and college lecturers' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Training & Development', slug: 'training-development', description: 'Corporate trainers and facilitators' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Educational Administration', slug: 'educational-administration', description: 'School principals, administrators' },
-  
-  // Hospitality & Tourism
+  { vertical: 'JOBS', type: 'MAIN', name: 'Special Education', slug: 'special-education', description: 'Special needs education teachers' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Early Childhood Education', slug: 'early-childhood-education', description: 'ECD teachers and caregivers' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Tutoring & Academic Support', slug: 'tutoring-academic-support', description: 'Home tutors and academic coaches' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Vocational Training', slug: 'vocational-training-jobs', description: 'Vocational and technical instructors' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Sports Coaching', slug: 'sports-coaching', description: 'Sports coaches and trainers' },
+
+  // ============================================================
+  // HOSPITALITY & TOURISM
+  // ============================================================
   { vertical: 'JOBS', type: 'MAIN', name: 'Hotel Management', slug: 'hotel-management', description: 'Hotel operations and management' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Food & Beverage', slug: 'food-beverage', description: 'Restaurant, catering, and bar services' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Tourism & Travel', slug: 'tourism-travel', description: 'Tour guides, travel agents, tour operations' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Chefs & Cooks', slug: 'chefs-cooks', description: 'Culinary professionals' },
-  
-  // Skilled Trades (These are job SEEKERS, not services)
+  { vertical: 'JOBS', type: 'MAIN', name: 'Restaurant Management', slug: 'restaurant-management', description: 'Restaurant operations and management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Housekeeping', slug: 'housekeeping', description: 'Hotel and hospitality housekeeping' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Front Office & Reception', slug: 'front-office-reception', description: 'Hotel front desk and guest services' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Event Planning & Management', slug: 'event-planning-management', description: 'Event planning and coordination' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Tour Guiding', slug: 'tour-guiding', description: 'Professional tour guides' },
+
+  // ============================================================
+  // SKILLED TRADES
+  // ============================================================
   { vertical: 'JOBS', type: 'MAIN', name: 'Electricians', slug: 'electricians-jobs', description: 'Electrical installation and maintenance' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Plumbers', slug: 'plumbers-jobs', description: 'Plumbing installation and repair' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Carpenters', slug: 'carpenters-jobs', description: 'Woodwork and construction' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Welders', slug: 'welders', description: 'Metal fabrication and welding' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Mechanics', slug: 'mechanics', description: 'Vehicle and machinery repair' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Masons', slug: 'masons', description: 'Bricklaying and stonework' },
-  
-  // Administrative & Support
+  { vertical: 'JOBS', type: 'MAIN', name: 'Painters', slug: 'painters', description: 'Painting and decorating' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Roofing Specialists', slug: 'roofing-specialists', description: 'Roof installation and repair' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Tiling & Flooring Specialists', slug: 'tiling-flooring', description: 'Tile and flooring installation' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Glaziers', slug: 'glaziers', description: 'Glass work and window installation' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Locksmiths', slug: 'locksmiths', description: 'Lock and security installation' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Refrigeration & AC Technicians', slug: 'refrigeration-ac', description: 'Cooling and air conditioning systems' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Heavy Equipment Operators', slug: 'heavy-equipment-operators', description: 'Excavator, crane, and forklift operators' },
+
+  // ============================================================
+  // ADMINISTRATIVE & SUPPORT
+  // ============================================================
   { vertical: 'JOBS', type: 'MAIN', name: 'Administration', slug: 'administration', description: 'Office administration and clerical roles' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Human Resources', slug: 'human-resources', description: 'HR management, recruitment, training' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Customer Service', slug: 'customer-service', description: 'Call centers, support, client relations' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Receptionists', slug: 'receptionists', description: 'Front desk and reception roles' },
-  
-  // Legal
+  { vertical: 'JOBS', type: 'MAIN', name: 'Office Management', slug: 'office-management', description: 'Office operations and management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Data Entry', slug: 'data-entry', description: 'Data processing and entry roles' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Records Management', slug: 'records-management', description: 'Document and records management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Executive Assistants', slug: 'executive-assistants', description: 'Senior executive support roles' },
+
+  // ============================================================
+  // LEGAL
+  // ============================================================
   { vertical: 'JOBS', type: 'MAIN', name: 'Lawyers', slug: 'lawyers', description: 'Legal practice and advocacy' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Paralegals', slug: 'paralegals', description: 'Legal support and assistance' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Legal Secretaries', slug: 'legal-secretaries', description: 'Legal administrative support' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Corporate Counsel', slug: 'corporate-counsel', description: 'In-house legal advisors' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Prosecutors', slug: 'prosecutors', description: 'State prosecution roles' },
 
-  // Creative
+  // ============================================================
+  // CREATIVE & DESIGN
+  // ============================================================
   { vertical: 'JOBS', type: 'MAIN', name: 'Graphic Design', slug: 'graphic-design', description: 'Visual communication and design' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Photography', slug: 'photography', description: 'Professional photography services' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Videography', slug: 'videography', description: 'Video production and editing' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Translation', slug: 'translation', description: 'Language translation services' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Research', slug: 'research', description: 'Academic and market research' },
   { vertical: 'JOBS', type: 'MAIN', name: 'Architecture', slug: 'architecture', description: 'Architectural design and planning' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Interior Design', slug: 'interior-design', description: 'Interior spaces and decoration' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Fashion Design', slug: 'fashion-design', description: 'Fashion and clothing design' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Animation & Multimedia', slug: 'animation-multimedia', description: '2D, 3D animation and multimedia' },
+
+  // ============================================================
+  // AGRICULTURE & ENVIRONMENT
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Agriculture & Farming', slug: 'agriculture-farming', description: 'Crop farming, livestock, agribusiness' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Environmental Conservation', slug: 'environmental-conservation', description: 'Environmental management and protection' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Horticulture', slug: 'horticulture', description: 'Flower and plant cultivation' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Fisheries & Aquaculture', slug: 'fisheries-aquaculture', description: 'Fish farming and fishing' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Forestry', slug: 'forestry', description: 'Forest management and conservation' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Agro-processing', slug: 'agro-processing', description: 'Agricultural product processing' },
+
+  // ============================================================
+  // SOCIAL SERVICES & NON-PROFIT
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Social Work', slug: 'social-work', description: 'Professional social work and case management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Counseling & Therapy', slug: 'counseling-therapy', description: 'Professional counselors and therapists' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Community Development', slug: 'community-development', description: 'Community organizing and development' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Non-Profit Management', slug: 'non-profit-management', description: 'NGO and non-profit leadership' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Fundraising & Grant Writing', slug: 'fundraising-grant-writing', description: 'Fundraising and grant writing professionals' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Youth Work', slug: 'youth-work', description: 'Youth development and programs' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'International Development', slug: 'international-development', description: 'Global development programs' },
+
+  // ============================================================
+  // CONSTRUCTION & REAL ESTATE
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Construction Management', slug: 'construction-management', description: 'Construction project management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Site Supervision', slug: 'site-supervision', description: 'Construction site supervisors' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Project Management', slug: 'project-management', description: 'Project managers and coordinators' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Quantity Surveying', slug: 'quantity-surveying', description: 'Quantity surveyors and estimators' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Property Management', slug: 'property-management', description: 'Property and facility management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Real Estate Agency', slug: 'real-estate-agency', description: 'Real estate sales and leasing' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Valuation & Appraisal', slug: 'valuation-appraisal', description: 'Property valuation services' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Urban Planning', slug: 'urban-planning', description: 'Town and urban planning' },
+
+  // ============================================================
+  // TRANSPORT & LOGISTICS
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Logistics & Supply Chain', slug: 'logistics-supply-chain', description: 'Supply chain management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Warehouse Management', slug: 'warehouse-management', description: 'Warehouse operations management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Procurement', slug: 'procurement', description: 'Procurement and purchasing roles' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Shipping & Freight', slug: 'shipping-freight', description: 'Shipping and freight forwarding' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Fleet Management', slug: 'fleet-management', description: 'Vehicle fleet management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Driving & Courier', slug: 'driving-courier', description: 'Drivers, boda, and courier services' },
+
+  // ============================================================
+  // MEDIA & ENTERTAINMENT
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Journalism', slug: 'journalism', description: 'Reporters, editors, and journalists' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Broadcast Media', slug: 'broadcast-media', description: 'Radio and TV presenters' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Film Production', slug: 'film-production', description: 'Film directors and producers' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Acting & Performing Arts', slug: 'acting-performing-arts', description: 'Actors, dancers, and performers' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Music & Entertainment', slug: 'music-entertainment', description: 'Musicians and entertainment professionals' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Talent Management', slug: 'talent-management', description: 'Talent agencies and management' },
+
+  // ============================================================
+  // GOVERNMENT & PUBLIC SERVICE
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Public Administration', slug: 'public-administration', description: 'Government administration roles' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Policy Analysis', slug: 'policy-analysis', description: 'Policy development and analysis' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Diplomatic Service', slug: 'diplomatic-service', description: 'Foreign service and diplomacy' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Civil Service', slug: 'civil-service', description: 'Government civil service positions' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Local Government', slug: 'local-government', description: 'County and municipal government roles' },
+
+  // ============================================================
+  // RETAIL & CONSUMER SERVICES
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Retail Management', slug: 'retail-management', description: 'Retail store management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Sales Associates', slug: 'sales-associates', description: 'Shop assistants and sales staff' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Merchandising', slug: 'merchandising', description: 'Visual merchandising and display' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Inventory Management', slug: 'inventory-management', description: 'Stock control and inventory' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'E-commerce Management', slug: 'e-commerce-management', description: 'Online retail management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Cashiers', slug: 'cashiers', description: 'Cash handling and POS operations' },
+
+  // ============================================================
+  // MANUFACTURING & PRODUCTION
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Production Management', slug: 'production-management', description: 'Manufacturing production management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Quality Control', slug: 'quality-control', description: 'Quality assurance and control' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Plant Operations', slug: 'plant-operations', description: 'Factory and plant operations' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Assembly Line Work', slug: 'assembly-line', description: 'Assembly line and production work' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Textile & Garment Production', slug: 'textile-garment', description: 'Textile and clothing manufacturing' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'CNC Operations', slug: 'cnc-operations', description: 'CNC machine operation' },
+
+  // ============================================================
+  // TELECOMMUNICATIONS
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Telecom Engineering', slug: 'telecom-engineering', description: 'Telecommunications engineering' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Field Technicians', slug: 'field-technicians', description: 'Telecom field installation' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Network Planning', slug: 'network-planning', description: 'Network design and planning' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Fiber Optic Installation', slug: 'fiber-optic-installation', description: 'Fiber optic cable installation' },
+
+  // ============================================================
+  // ENERGY & UTILITIES
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Energy Management', slug: 'energy-management', description: 'Energy efficiency and management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Solar Installation', slug: 'solar-installation', description: 'Solar panel installation and maintenance' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Power Generation', slug: 'power-generation', description: 'Power plant operations' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Water & Sanitation', slug: 'water-sanitation', description: 'Water supply and sanitation' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Waste Management', slug: 'waste-management', description: 'Waste collection and management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Oil & Gas', slug: 'oil-gas', description: 'Oil and gas industry roles' },
+
+  // ============================================================
+  // AVIATION & TRAVEL
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Pilots', slug: 'pilots', description: 'Commercial and private pilots' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Cabin Crew', slug: 'cabin-crew', description: 'Flight attendants' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Air Traffic Control', slug: 'air-traffic-control', description: 'Air traffic controllers' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Aircraft Maintenance', slug: 'aircraft-maintenance', description: 'Aircraft technicians and engineers' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Travel Agency', slug: 'travel-agency', description: 'Travel consultants and agents' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Ground Handling', slug: 'ground-handling', description: 'Airport ground services' },
+
+  // ============================================================
+  // MARINE
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Marine Engineering', slug: 'marine-engineering', description: 'Ship and marine engineering' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Merchant Navy', slug: 'merchant-navy', description: 'Commercial shipping roles' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Port Operations', slug: 'port-operations', description: 'Port and harbor management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Maritime Law', slug: 'maritime-law', description: 'Maritime legal professionals' },
+
+  // ============================================================
+  // SPORTS & RECREATION
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Professional Sports', slug: 'professional-sports', description: 'Professional athletes' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Sports Management', slug: 'sports-management', description: 'Sports team and event management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Fitness Training', slug: 'fitness-training', description: 'Personal trainers and fitness instructors' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Recreation Management', slug: 'recreation-management', description: 'Recreation facility management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Gym Instruction', slug: 'gym-instruction', description: 'Gym and fitness instructors' },
+
+  // ============================================================
+  // DIGITAL & GIG ECONOMY
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Freelance Writing', slug: 'freelance-writing', description: 'Freelance content and copywriting' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Virtual Assistance', slug: 'virtual-assistance', description: 'Remote administrative support' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Online Tutoring', slug: 'online-tutoring', description: 'Online teaching and tutoring' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'E-commerce Selling', slug: 'e-commerce-selling', description: 'Online store operations' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Affiliate Marketing', slug: 'affiliate-marketing', description: 'Affiliate and performance marketing' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Social Media Influencing', slug: 'social-media-influencing', description: 'Social media influencers' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Digital Art', slug: 'digital-art', description: 'Digital illustrators and artists' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'App Development', slug: 'app-development', description: 'Mobile app developers' },
+
+  // ============================================================
+  // EMERGENCY & SECURITY SERVICES
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Police Services', slug: 'police-services', description: 'Police officers and law enforcement' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Fire Safety & Rescue', slug: 'fire-safety-rescue', description: 'Firefighters and rescue services' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Private Security', slug: 'private-security', description: 'Private security companies' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Military', slug: 'military', description: 'Armed forces positions' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Intelligence Services', slug: 'intelligence-services', description: 'Intelligence and security agencies' },
+
+  // ============================================================
+  // SPECIALIZED PROFESSIONAL SERVICES
+  // ============================================================
+  { vertical: 'JOBS', type: 'MAIN', name: 'Consulting', slug: 'consulting', description: 'Business and strategy consulting' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Management Consulting', slug: 'management-consulting', description: 'Management and organizational consulting' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Change Management', slug: 'change-management', description: 'Organizational change management' },
+  { vertical: 'JOBS', type: 'MAIN', name: 'Organizational Development', slug: 'organizational-development', description: 'OD and transformation roles' },
 
   // JOBS - COMPLIMENTARY Categories (Career Support Services)
   { vertical: 'JOBS', type: 'COMPLIMENTARY', name: 'Career Coaching Services', slug: 'career-coaching', description: 'Professional career guidance and planning' },
@@ -340,6 +576,420 @@ export const SUB_CATEGORIES = (rootIds: Record<string, string>) => [
   { vertical: 'HOUSING', type: 'MAIN', name: 'University Dorms', slug: 'university-dorms', description: 'On-campus student housing', parentId: rootIds['HOUSING:student-housing'] },
   { vertical: 'HOUSING', type: 'MAIN', name: 'Off-campus Student Apartments', slug: 'off-campus-student-apartments', description: 'Off-campus student accommodation', parentId: rootIds['HOUSING:student-housing'] },
   { vertical: 'HOUSING', type: 'MAIN', name: 'Student Hostels', slug: 'student-hostels', description: 'Budget student accommodation', parentId: rootIds['HOUSING:student-housing'] },
+
+
+  // ======================================================================
+// JOBS - MAIN Subcategories (Professional Specializations)
+// ======================================================================
+
+// ============================================================
+// TECHNOLOGY & IT SUBCATEGORIES
+// ============================================================
+
+// Software Development
+{ vertical: 'JOBS', type: 'MAIN', name: 'Frontend Development', slug: 'frontend-development', description: 'Frontend developers specializing in React, Angular, Vue, etc.', parentId: rootIds['JOBS:software-development'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Backend Development', slug: 'backend-development', description: 'Backend developers specializing in Node.js, Python, Java, etc.', parentId: rootIds['JOBS:software-development'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Full Stack Development', slug: 'full-stack-development', description: 'Developers who work on both frontend and backend', parentId: rootIds['JOBS:software-development'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Mobile Development', slug: 'mobile-development', description: 'iOS and Android app developers', parentId: rootIds['JOBS:software-development'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Game Development', slug: 'game-development', description: 'Game developers and designers', parentId: rootIds['JOBS:software-development'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Embedded Systems', slug: 'embedded-systems', description: 'Firmware and hardware-software integration', parentId: rootIds['JOBS:software-development'] },
+
+// IT & Networking
+{ vertical: 'JOBS', type: 'MAIN', name: 'Network Administration', slug: 'network-administration', description: 'Network setup, maintenance, and security', parentId: rootIds['JOBS:it-networking'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'System Administration', slug: 'system-administration', description: 'Server management and infrastructure', parentId: rootIds['JOBS:it-networking'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'IT Support', slug: 'it-support', description: 'Help desk and technical support roles', parentId: rootIds['JOBS:it-networking'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Database Administration', slug: 'database-administration', description: 'Database management and optimization', parentId: rootIds['JOBS:it-networking'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Cloud Architecture', slug: 'cloud-architecture', description: 'AWS, Azure, GCP cloud specialists', parentId: rootIds['JOBS:it-networking'] },
+
+// Data Science & Analytics
+{ vertical: 'JOBS', type: 'MAIN', name: 'Data Analysis', slug: 'data-analysis', description: 'Data analysts and business intelligence', parentId: rootIds['JOBS:data-science-analytics'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Machine Learning Engineering', slug: 'machine-learning-engineering', description: 'ML model development and deployment', parentId: rootIds['JOBS:data-science-analytics'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Data Engineering', slug: 'data-engineering', description: 'Data pipeline and ETL specialists', parentId: rootIds['JOBS:data-science-analytics'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Business Intelligence', slug: 'business-intelligence', description: 'Reporting and dashboard development', parentId: rootIds['JOBS:data-science-analytics'] },
+
+// Cybersecurity
+{ vertical: 'JOBS', type: 'MAIN', name: 'Security Analysis', slug: 'security-analysis', description: 'Security assessment and monitoring', parentId: rootIds['JOBS:cybersecurity'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Penetration Testing', slug: 'penetration-testing', description: 'Ethical hacking and vulnerability assessment', parentId: rootIds['JOBS:cybersecurity'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Security Engineering', slug: 'security-engineering', description: 'Security architecture and implementation', parentId: rootIds['JOBS:cybersecurity'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Incident Response', slug: 'incident-response', description: 'Security breach response and management', parentId: rootIds['JOBS:cybersecurity'] },
+
+// DevOps & Cloud
+{ vertical: 'JOBS', type: 'MAIN', name: 'DevOps Engineering', slug: 'devops-engineering', description: 'CI/CD, infrastructure automation', parentId: rootIds['JOBS:devops-cloud'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Site Reliability Engineering', slug: 'site-reliability-engineering', description: 'System reliability and performance', parentId: rootIds['JOBS:devops-cloud'] },
+
+// Product Management
+{ vertical: 'JOBS', type: 'MAIN', name: 'Product Strategy', slug: 'product-strategy', description: 'Product vision and roadmap planning', parentId: rootIds['JOBS:product-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Product Analytics', slug: 'product-analytics', description: 'Product metrics and data-driven decisions', parentId: rootIds['JOBS:product-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Technical Product Management', slug: 'technical-product-management', description: 'API and developer-focused products', parentId: rootIds['JOBS:product-management'] },
+
+// UX/UI Design
+{ vertical: 'JOBS', type: 'MAIN', name: 'UX Research', slug: 'ux-research', description: 'User research and usability testing', parentId: rootIds['JOBS:ux-ui-design'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'UI Design', slug: 'ui-design', description: 'Visual design and interface development', parentId: rootIds['JOBS:ux-ui-design'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Interaction Design', slug: 'interaction-design', description: 'User interaction and motion design', parentId: rootIds['JOBS:ux-ui-design'] },
+
+// ============================================================
+// FINANCE & ACCOUNTING SUBCATEGORIES
+// ============================================================
+
+// Accounting
+{ vertical: 'JOBS', type: 'MAIN', name: 'Financial Accounting', slug: 'financial-accounting', description: 'Financial reporting and compliance', parentId: rootIds['JOBS:accounting'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Management Accounting', slug: 'management-accounting', description: 'Internal reporting and cost analysis', parentId: rootIds['JOBS:accounting'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Auditing', slug: 'auditing-sub', description: 'Internal and external auditing', parentId: rootIds['JOBS:accounting'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Taxation', slug: 'taxation-sub', description: 'Tax accounting and compliance', parentId: rootIds['JOBS:accounting'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Bookkeeping', slug: 'bookkeeping-sub', description: 'Daily financial record keeping', parentId: rootIds['JOBS:accounting'] },
+
+// Finance
+{ vertical: 'JOBS', type: 'MAIN', name: 'Corporate Finance', slug: 'corporate-finance', description: 'Financial planning and analysis', parentId: rootIds['JOBS:finance'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Investment Banking', slug: 'investment-banking', description: 'Capital raising and M&A', parentId: rootIds['JOBS:finance'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Asset Management', slug: 'asset-management', description: 'Investment portfolio management', parentId: rootIds['JOBS:finance'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Financial Planning', slug: 'financial-planning', description: 'Personal and corporate financial planning', parentId: rootIds['JOBS:finance'] },
+
+// Banking
+{ vertical: 'JOBS', type: 'MAIN', name: 'Retail Banking', slug: 'retail-banking', description: 'Consumer banking services', parentId: rootIds['JOBS:banking'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Corporate Banking', slug: 'corporate-banking', description: 'Business banking and lending', parentId: rootIds['JOBS:banking'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Investment Banking', slug: 'investment-banking-sub', description: 'Capital markets and securities', parentId: rootIds['JOBS:banking'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Treasury', slug: 'treasury', description: 'Cash management and liquidity', parentId: rootIds['JOBS:banking'] },
+
+// Insurance
+{ vertical: 'JOBS', type: 'MAIN', name: 'Underwriting', slug: 'underwriting', description: 'Risk assessment and policy creation', parentId: rootIds['JOBS:insurance'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Claims Management', slug: 'claims-management', description: 'Claims processing and settlement', parentId: rootIds['JOBS:insurance'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Insurance Sales', slug: 'insurance-sales', description: 'Policy sales and client acquisition', parentId: rootIds['JOBS:insurance'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Actuarial Services', slug: 'actuarial-services', description: 'Risk modeling and pricing', parentId: rootIds['JOBS:insurance'] },
+
+// Investment
+{ vertical: 'JOBS', type: 'MAIN', name: 'Portfolio Management', slug: 'portfolio-management', description: 'Investment portfolio management', parentId: rootIds['JOBS:investment'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Equity Research', slug: 'equity-research', description: 'Stock and market analysis', parentId: rootIds['JOBS:investment'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Wealth Management', slug: 'wealth-management', description: 'High-net-worth client services', parentId: rootIds['JOBS:investment'] },
+
+// ============================================================
+// ENGINEERING & TECHNICAL SUBCATEGORIES
+// ============================================================
+
+// Civil Engineering
+{ vertical: 'JOBS', type: 'MAIN', name: 'Structural Engineering', slug: 'structural-engineering-sub', description: 'Building and structure design', parentId: rootIds['JOBS:civil-engineering'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Transportation Engineering', slug: 'transportation-engineering', description: 'Road and transport infrastructure', parentId: rootIds['JOBS:civil-engineering'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Water Resources Engineering', slug: 'water-resources-engineering', description: 'Water systems and management', parentId: rootIds['JOBS:civil-engineering'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Geotechnical Engineering', slug: 'geotechnical-engineering-sub', description: 'Soil and foundation engineering', parentId: rootIds['JOBS:civil-engineering'] },
+
+// Mechanical Engineering
+{ vertical: 'JOBS', type: 'MAIN', name: 'HVAC Engineering', slug: 'hvac-engineering', description: 'Heating, ventilation, and AC systems', parentId: rootIds['JOBS:mechanical-engineering'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Automotive Engineering', slug: 'automotive-engineering', description: 'Vehicle design and engineering', parentId: rootIds['JOBS:mechanical-engineering'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Manufacturing Engineering', slug: 'manufacturing-engineering', description: 'Manufacturing processes', parentId: rootIds['JOBS:mechanical-engineering'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Robotics Engineering', slug: 'robotics-engineering', description: 'Robot design and automation', parentId: rootIds['JOBS:mechanical-engineering'] },
+
+// Electrical Engineering
+{ vertical: 'JOBS', type: 'MAIN', name: 'Power Systems Engineering', slug: 'power-systems-engineering', description: 'Power generation and distribution', parentId: rootIds['JOBS:electrical-engineering'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Control Systems Engineering', slug: 'control-systems-engineering', description: 'Automation and control systems', parentId: rootIds['JOBS:electrical-engineering'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Telecommunications Engineering', slug: 'telecommunications-engineering', description: 'Communication systems', parentId: rootIds['JOBS:electrical-engineering'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Electronics Engineering', slug: 'electronics-engineering', description: 'Electronic circuit design', parentId: rootIds['JOBS:electrical-engineering'] },
+
+// ============================================================
+// HEALTHCARE & MEDICAL SUBCATEGORIES
+// ============================================================
+
+// Medical Doctors
+{ vertical: 'JOBS', type: 'MAIN', name: 'Cardiology', slug: 'cardiology', description: 'Heart and cardiovascular specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Neurology', slug: 'neurology', description: 'Brain and nervous system specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Pediatrics', slug: 'pediatrics', description: 'Child healthcare specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Obstetrics & Gynecology', slug: 'obstetrics-gynecology', description: "Women's health specialists", parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Dermatology', slug: 'dermatology', description: 'Skin health specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Ophthalmology', slug: 'ophthalmology', description: 'Eye care specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Psychiatry', slug: 'psychiatry', description: 'Mental health specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Radiology', slug: 'radiology', description: 'Diagnostic imaging specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Anesthesiology', slug: 'anesthesiology', description: 'Anesthesia specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Orthopedics', slug: 'orthopedics', description: 'Bone and joint specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'General Surgery', slug: 'general-surgery', description: 'Surgical specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Urology', slug: 'urology', description: 'Urinary tract specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Emergency Medicine', slug: 'emergency-medicine', description: 'Emergency department specialists', parentId: rootIds['JOBS:medical-doctors'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Internal Medicine', slug: 'internal-medicine', description: 'Internal medicine specialists', parentId: rootIds['JOBS:medical-doctors'] },
+
+// Nursing
+{ vertical: 'JOBS', type: 'MAIN', name: 'Registered Nurse', slug: 'registered-nurse', description: 'Registered nursing professionals', parentId: rootIds['JOBS:nursing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Enrolled Nurse', slug: 'enrolled-nurse', description: 'Enrolled nursing professionals', parentId: rootIds['JOBS:nursing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Community Health Nurse', slug: 'community-health-nurse', description: 'Community healthcare nurses', parentId: rootIds['JOBS:nursing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Critical Care Nurse', slug: 'critical-care-nurse', description: 'ICU and emergency nurses', parentId: rootIds['JOBS:nursing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Pediatric Nurse', slug: 'pediatric-nurse', description: "Children's healthcare nurses", parentId: rootIds['JOBS:nursing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Mental Health Nurse', slug: 'mental-health-nurse', description: 'Psychiatric and mental health nurses', parentId: rootIds['JOBS:nursing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Nurse Anesthetist', slug: 'nurse-anesthetist', description: 'Nurse anesthesia specialists', parentId: rootIds['JOBS:nursing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Nurse Midwife', slug: 'nurse-midwife', description: 'Midwifery nursing professionals', parentId: rootIds['JOBS:nursing'] },
+
+// Pharmacy
+{ vertical: 'JOBS', type: 'MAIN', name: 'Community Pharmacy', slug: 'community-pharmacy', description: 'Retail and community pharmacists', parentId: rootIds['JOBS:pharmacy'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Hospital Pharmacy', slug: 'hospital-pharmacy', description: 'Hospital and clinical pharmacists', parentId: rootIds['JOBS:pharmacy'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Clinical Pharmacy', slug: 'clinical-pharmacy', description: 'Clinical pharmaceutical services', parentId: rootIds['JOBS:pharmacy'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Pharmaceutical Industry', slug: 'pharmaceutical-industry', description: 'Drug manufacturing and R&D', parentId: rootIds['JOBS:pharmacy'] },
+
+// Dentistry
+{ vertical: 'JOBS', type: 'MAIN', name: 'General Dentistry', slug: 'general-dentistry', description: 'General dental practitioners', parentId: rootIds['JOBS:dentistry'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Orthodontics', slug: 'orthodontics', description: 'Braces and alignment specialists', parentId: rootIds['JOBS:dentistry'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Oral Surgery', slug: 'oral-surgery', description: 'Oral and maxillofacial surgeons', parentId: rootIds['JOBS:dentistry'] },
+
+// Allied Health
+{ vertical: 'JOBS', type: 'MAIN', name: 'Physiotherapy', slug: 'physiotherapy', description: 'Physical rehabilitation specialists', parentId: rootIds['JOBS:allied-health'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Occupational Therapy', slug: 'occupational-therapy', description: 'Daily living skills specialists', parentId: rootIds['JOBS:allied-health'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Speech Therapy', slug: 'speech-therapy', description: 'Communication disorder specialists', parentId: rootIds['JOBS:allied-health'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Radiography', slug: 'radiography', description: 'Medical imaging technologists', parentId: rootIds['JOBS:allied-health'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Medical Laboratory Science', slug: 'medical-laboratory-science', description: 'Medical lab scientists', parentId: rootIds['JOBS:allied-health'] },
+
+// ============================================================
+// EDUCATION & TRAINING SUBCATEGORIES
+// ============================================================
+
+// Teaching
+{ vertical: 'JOBS', type: 'MAIN', name: 'Primary School Teaching', slug: 'primary-school-teaching', description: 'Primary school teachers', parentId: rootIds['JOBS:teaching'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Secondary School Teaching', slug: 'secondary-school-teaching', description: 'Secondary school teachers', parentId: rootIds['JOBS:teaching'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Special Education', slug: 'special-education-sub', description: 'Special needs teachers', parentId: rootIds['JOBS:teaching'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Subject Specialist', slug: 'subject-specialist', description: 'Subject-specific teaching', parentId: rootIds['JOBS:teaching'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Language Teaching', slug: 'language-teaching', description: 'English and other language teaching', parentId: rootIds['JOBS:teaching'] },
+
+// Lecturing
+{ vertical: 'JOBS', type: 'MAIN', name: 'University Lecturing', slug: 'university-lecturing', description: 'University and college lecturers', parentId: rootIds['JOBS:lecturing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Research & Academic', slug: 'research-academic', description: 'Academic research positions', parentId: rootIds['JOBS:lecturing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Vocational Training', slug: 'vocational-training-sub', description: 'Vocational education instructors', parentId: rootIds['JOBS:lecturing'] },
+
+// Training & Development
+{ vertical: 'JOBS', type: 'MAIN', name: 'Corporate Training', slug: 'corporate-training', description: 'Corporate trainers and facilitators', parentId: rootIds['JOBS:training-development'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Leadership Development', slug: 'leadership-development', description: 'Leadership training specialists', parentId: rootIds['JOBS:training-development'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Skills Training', slug: 'skills-training-sub', description: 'Technical and professional skills training', parentId: rootIds['JOBS:training-development'] },
+
+// ============================================================
+// MARKETING & SALES SUBCATEGORIES
+// ============================================================
+
+// Digital Marketing
+{ vertical: 'JOBS', type: 'MAIN', name: 'SEO Specialist', slug: 'seo-specialist', description: 'Search engine optimization', parentId: rootIds['JOBS:digital-marketing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'SEM Specialist', slug: 'sem-specialist', description: 'Search engine marketing and PPC', parentId: rootIds['JOBS:digital-marketing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Social Media Marketing', slug: 'social-media-marketing', description: 'Social media strategy and management', parentId: rootIds['JOBS:digital-marketing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Email Marketing', slug: 'email-marketing', description: 'Email campaign management', parentId: rootIds['JOBS:digital-marketing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Content Marketing', slug: 'content-marketing', description: 'Content strategy and distribution', parentId: rootIds['JOBS:digital-marketing'] },
+
+// Content Creation
+{ vertical: 'JOBS', type: 'MAIN', name: 'Copywriting', slug: 'copywriting', description: 'Marketing and advertising copy', parentId: rootIds['JOBS:content-creation'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Blog Writing', slug: 'blog-writing', description: 'Blog and article writing', parentId: rootIds['JOBS:content-creation'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Video Production', slug: 'video-production-sub', description: 'Video content creation and editing', parentId: rootIds['JOBS:content-creation'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Script Writing', slug: 'script-writing', description: 'Video and radio script writing', parentId: rootIds['JOBS:content-creation'] },
+
+// Sales
+{ vertical: 'JOBS', type: 'MAIN', name: 'B2B Sales', slug: 'b2b-sales', description: 'Business-to-business sales', parentId: rootIds['JOBS:sales'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'B2C Sales', slug: 'b2c-sales', description: 'Business-to-consumer sales', parentId: rootIds['JOBS:sales'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Account Management', slug: 'account-management', description: 'Client relationship management', parentId: rootIds['JOBS:sales'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Sales Engineering', slug: 'sales-engineering', description: 'Technical sales and demos', parentId: rootIds['JOBS:sales'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Tele-Sales', slug: 'tele-sales', description: 'Phone and remote sales', parentId: rootIds['JOBS:sales'] },
+
+// Public Relations
+{ vertical: 'JOBS', type: 'MAIN', name: 'Corporate PR', slug: 'corporate-pr', description: 'Corporate public relations', parentId: rootIds['JOBS:public-relations'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Crisis Communications', slug: 'crisis-communications', description: 'Crisis management and PR', parentId: rootIds['JOBS:public-relations'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Media Relations', slug: 'media-relations', description: 'Media relations and outreach', parentId: rootIds['JOBS:public-relations'] },
+
+// Brand Management
+{ vertical: 'JOBS', type: 'MAIN', name: 'Brand Strategy', slug: 'brand-strategy', description: 'Brand development and strategy', parentId: rootIds['JOBS:brand-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Brand Marketing', slug: 'brand-marketing', description: 'Brand marketing campaigns', parentId: rootIds['JOBS:brand-management'] },
+
+// ============================================================
+// HOSPITALITY & TOURISM SUBCATEGORIES
+// ============================================================
+
+// Hotel Management
+{ vertical: 'JOBS', type: 'MAIN', name: 'Front Office Management', slug: 'front-office-management', description: 'Hotel front desk and guest services', parentId: rootIds['JOBS:hotel-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Housekeeping Management', slug: 'housekeeping-management', description: 'Hotel housekeeping and maintenance', parentId: rootIds['JOBS:hotel-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Food & Beverage Management', slug: 'food-beverage-management', description: 'Restaurant and bar management', parentId: rootIds['JOBS:hotel-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Resort Management', slug: 'resort-management', description: 'Resort and leisure management', parentId: rootIds['JOBS:hotel-management'] },
+
+// Food & Beverage
+{ vertical: 'JOBS', type: 'MAIN', name: 'Restaurant Management', slug: 'restaurant-management-sub', description: 'Restaurant operations management', parentId: rootIds['JOBS:food-beverage'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Bartending', slug: 'bartending', description: 'Professional bartending', parentId: rootIds['JOBS:food-beverage'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Wait Staff', slug: 'wait-staff', description: 'Restaurant and event waiting', parentId: rootIds['JOBS:food-beverage'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Catering Management', slug: 'catering-management', description: 'Catering service management', parentId: rootIds['JOBS:food-beverage'] },
+
+// Tourism & Travel
+{ vertical: 'JOBS', type: 'MAIN', name: 'Tour Guiding', slug: 'tour-guiding-sub', description: 'Professional tour guiding', parentId: rootIds['JOBS:tourism-travel'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Travel Agency', slug: 'travel-agency-sub', description: 'Travel consulting and booking', parentId: rootIds['JOBS:tourism-travel'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Tour Operations', slug: 'tour-operations', description: 'Tour package development', parentId: rootIds['JOBS:tourism-travel'] },
+
+// Chefs & Cooks
+{ vertical: 'JOBS', type: 'MAIN', name: 'Pastry Chef', slug: 'pastry-chef', description: 'Pastry and dessert specialists', parentId: rootIds['JOBS:chefs-cooks'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Sous Chef', slug: 'sous-chef', description: 'Second-in-command kitchen roles', parentId: rootIds['JOBS:chefs-cooks'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Executive Chef', slug: 'executive-chef', description: 'Head chef and kitchen management', parentId: rootIds['JOBS:chefs-cooks'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Line Cook', slug: 'line-cook', description: 'Station cooks and prep chefs', parentId: rootIds['JOBS:chefs-cooks'] },
+
+// ============================================================
+// SKILLED TRADES SUBCATEGORIES
+// ============================================================
+
+// Electricians
+{ vertical: 'JOBS', type: 'MAIN', name: 'Residential Electrician', slug: 'residential-electrician', description: 'Home electrical installation', parentId: rootIds['JOBS:electricians-jobs'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Commercial Electrician', slug: 'commercial-electrician', description: 'Commercial electrical systems', parentId: rootIds['JOBS:electricians-jobs'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Industrial Electrician', slug: 'industrial-electrician', description: 'Factory and industrial wiring', parentId: rootIds['JOBS:electricians-jobs'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Solar Electrician', slug: 'solar-electrician', description: 'Solar panel installation', parentId: rootIds['JOBS:electricians-jobs'] },
+
+// Plumbers
+{ vertical: 'JOBS', type: 'MAIN', name: 'Residential Plumber', slug: 'residential-plumber', description: 'Home plumbing installation', parentId: rootIds['JOBS:plumbers-jobs'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Commercial Plumber', slug: 'commercial-plumber', description: 'Commercial plumbing systems', parentId: rootIds['JOBS:plumbers-jobs'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Industrial Plumber', slug: 'industrial-plumber', description: 'Industrial plumbing systems', parentId: rootIds['JOBS:plumbers-jobs'] },
+
+// Carpenters
+{ vertical: 'JOBS', type: 'MAIN', name: 'Furniture Carpenter', slug: 'furniture-carpenter', description: 'Furniture making and repair', parentId: rootIds['JOBS:carpenters-jobs'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Construction Carpenter', slug: 'construction-carpenter', description: 'Building construction carpentry', parentId: rootIds['JOBS:carpenters-jobs'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Cabinet Maker', slug: 'cabinet-maker', description: 'Kitchen and cabinet making', parentId: rootIds['JOBS:carpenters-jobs'] },
+
+// Mechanics
+{ vertical: 'JOBS', type: 'MAIN', name: 'Auto Mechanic', slug: 'auto-mechanic', description: 'Car and vehicle mechanics', parentId: rootIds['JOBS:mechanics'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Heavy Equipment Mechanic', slug: 'heavy-equipment-mechanic', description: 'Construction equipment repair', parentId: rootIds['JOBS:mechanics'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Diesel Mechanic', slug: 'diesel-mechanic', description: 'Diesel engine specialists', parentId: rootIds['JOBS:mechanics'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Motorcycle Mechanic', slug: 'motorcycle-mechanic', description: 'Boda boda and motorcycle repair', parentId: rootIds['JOBS:mechanics'] },
+
+// ============================================================
+// LEGAL SUBCATEGORIES
+// ============================================================
+
+// Lawyers
+{ vertical: 'JOBS', type: 'MAIN', name: 'Corporate Law', slug: 'corporate-law', description: 'Corporate and commercial law', parentId: rootIds['JOBS:lawyers'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Criminal Law', slug: 'criminal-law', description: 'Criminal defense and prosecution', parentId: rootIds['JOBS:lawyers'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Family Law', slug: 'family-law', description: 'Family and matrimonial law', parentId: rootIds['JOBS:lawyers'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Property Law', slug: 'property-law', description: 'Real estate and property law', parentId: rootIds['JOBS:lawyers'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Constitutional Law', slug: 'constitutional-law', description: 'Constitutional and human rights law', parentId: rootIds['JOBS:lawyers'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Immigration Law', slug: 'immigration-law', description: 'Immigration and refugee law', parentId: rootIds['JOBS:lawyers'] },
+
+// ============================================================
+// CREATIVE & DESIGN SUBCATEGORIES
+// ============================================================
+
+// Graphic Design
+{ vertical: 'JOBS', type: 'MAIN', name: 'Branding Design', slug: 'branding-design', description: 'Brand identity and logo design', parentId: rootIds['JOBS:graphic-design'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Print Design', slug: 'print-design', description: 'Print materials design', parentId: rootIds['JOBS:graphic-design'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'UI Design', slug: 'ui-design-sub', description: 'User interface design', parentId: rootIds['JOBS:graphic-design'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Illustration', slug: 'illustration', description: 'Digital and traditional illustration', parentId: rootIds['JOBS:graphic-design'] },
+
+// Photography
+{ vertical: 'JOBS', type: 'MAIN', name: 'Event Photography', slug: 'event-photography', description: 'Wedding and event photography', parentId: rootIds['JOBS:photography'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Portrait Photography', slug: 'portrait-photography', description: 'Studio and outdoor portraits', parentId: rootIds['JOBS:photography'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Commercial Photography', slug: 'commercial-photography', description: 'Product and advertising photography', parentId: rootIds['JOBS:photography'] },
+
+// Videography
+{ vertical: 'JOBS', type: 'MAIN', name: 'Corporate Videography', slug: 'corporate-videography', description: 'Corporate video production', parentId: rootIds['JOBS:videography'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Event Videography', slug: 'event-videography', description: 'Wedding and event videos', parentId: rootIds['JOBS:videography'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Documentary Videography', slug: 'documentary-videography', description: 'Documentary filmmaking', parentId: rootIds['JOBS:videography'] },
+
+// ============================================================
+// AGRICULTURE & ENVIRONMENT SUBCATEGORIES
+// ============================================================
+
+// Agriculture & Farming
+{ vertical: 'JOBS', type: 'MAIN', name: 'Crop Farming', slug: 'crop-farming', description: 'Crop cultivation and management', parentId: rootIds['JOBS:agriculture-farming'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Livestock Farming', slug: 'livestock-farming', description: 'Animal husbandry and livestock', parentId: rootIds['JOBS:agriculture-farming'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Poultry Farming', slug: 'poultry-farming', description: 'Chicken and poultry production', parentId: rootIds['JOBS:agriculture-farming'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Agribusiness', slug: 'agribusiness', description: 'Agricultural business management', parentId: rootIds['JOBS:agriculture-farming'] },
+
+// ============================================================
+// SOCIAL SERVICES SUBCATEGORIES
+// ============================================================
+
+// Social Work
+{ vertical: 'JOBS', type: 'MAIN', name: 'Case Management', slug: 'case-management', description: 'Coordinated care planning', parentId: rootIds['JOBS:social-work'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Child Welfare', slug: 'child-welfare', description: 'Child protection services', parentId: rootIds['JOBS:social-work'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Community Development', slug: 'community-development-sub', description: 'Community organizing and development', parentId: rootIds['JOBS:social-work'] },
+
+// Counseling & Therapy
+{ vertical: 'JOBS', type: 'MAIN', name: 'Individual Counseling', slug: 'individual-counseling', description: 'One-on-one therapy services', parentId: rootIds['JOBS:counseling-therapy'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Group Counseling', slug: 'group-counseling', description: 'Therapy groups and workshops', parentId: rootIds['JOBS:counseling-therapy'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Crisis Counseling', slug: 'crisis-counseling-sub', description: 'Emergency mental health support', parentId: rootIds['JOBS:counseling-therapy'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Cognitive Behavioral Therapy', slug: 'cbt-therapy', description: 'CBT treatment services', parentId: rootIds['JOBS:counseling-therapy'] },
+
+// ============================================================
+// CONSTRUCTION & REAL ESTATE SUBCATEGORIES
+// ============================================================
+
+// Construction Management
+{ vertical: 'JOBS', type: 'MAIN', name: 'Residential Construction', slug: 'residential-construction', description: 'Home and housing construction', parentId: rootIds['JOBS:construction-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Commercial Construction', slug: 'commercial-construction', description: 'Commercial building projects', parentId: rootIds['JOBS:construction-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Infrastructure Construction', slug: 'infrastructure-construction', description: 'Road, bridge, and utility projects', parentId: rootIds['JOBS:construction-management'] },
+
+// Quantity Surveying
+{ vertical: 'JOBS', type: 'MAIN', name: 'Cost Estimation', slug: 'cost-estimation', description: 'Construction cost estimating', parentId: rootIds['JOBS:quantity-surveying'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Contract Management', slug: 'contract-management', description: 'Construction contract administration', parentId: rootIds['JOBS:quantity-surveying'] },
+
+// Property Management
+{ vertical: 'JOBS', type: 'MAIN', name: 'Residential Property Management', slug: 'residential-property-management', description: 'Apartment and housing management', parentId: rootIds['JOBS:property-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Commercial Property Management', slug: 'commercial-property-management', description: 'Office and retail property management', parentId: rootIds['JOBS:property-management'] },
+
+// Real Estate Agency
+{ vertical: 'JOBS', type: 'MAIN', name: 'Residential Sales', slug: 'residential-sales', description: 'Home buying and selling', parentId: rootIds['JOBS:real-estate-agency'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Rental Agency', slug: 'rental-agency', description: 'Property rental services', parentId: rootIds['JOBS:real-estate-agency'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Commercial Agency', slug: 'commercial-agency', description: 'Commercial property sales', parentId: rootIds['JOBS:real-estate-agency'] },
+
+// ============================================================
+// TRANSPORT & LOGISTICS SUBCATEGORIES
+// ============================================================
+
+// Logistics & Supply Chain
+{ vertical: 'JOBS', type: 'MAIN', name: 'Supply Chain Management', slug: 'supply-chain-management', description: 'Supply chain planning and management', parentId: rootIds['JOBS:logistics-supply-chain'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Procurement', slug: 'procurement-sub', description: 'Strategic procurement and purchasing', parentId: rootIds['JOBS:logistics-supply-chain'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Warehouse Management', slug: 'warehouse-management-sub', description: 'Warehouse operations and logistics', parentId: rootIds['JOBS:logistics-supply-chain'] },
+
+// ============================================================
+// MEDIA & ENTERTAINMENT SUBCATEGORIES
+// ============================================================
+
+// Journalism
+{ vertical: 'JOBS', type: 'MAIN', name: 'Print Journalism', slug: 'print-journalism', description: 'Newspaper and magazine journalism', parentId: rootIds['JOBS:journalism'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Broadcast Journalism', slug: 'broadcast-journalism', description: 'TV and radio journalism', parentId: rootIds['JOBS:journalism'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Digital Journalism', slug: 'digital-journalism', description: 'Online and new media journalism', parentId: rootIds['JOBS:journalism'] },
+
+// ============================================================
+// RETAIL SUBCATEGORIES
+// ============================================================
+
+// Retail Management
+{ vertical: 'JOBS', type: 'MAIN', name: 'Store Management', slug: 'store-management', description: 'Retail store operations management', parentId: rootIds['JOBS:retail-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Merchandising', slug: 'merchandising-sub', description: 'Visual merchandising and product display', parentId: rootIds['JOBS:retail-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Inventory Management', slug: 'inventory-management-sub', description: 'Stock control and inventory management', parentId: rootIds['JOBS:retail-management'] },
+
+// ============================================================
+// MANUFACTURING & PRODUCTION SUBCATEGORIES
+// ============================================================
+
+// Production Management
+{ vertical: 'JOBS', type: 'MAIN', name: 'Production Planning', slug: 'production-planning', description: 'Production scheduling and planning', parentId: rootIds['JOBS:production-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Quality Control', slug: 'quality-control-sub', description: 'Quality assurance and inspection', parentId: rootIds['JOBS:production-management'] },
+
+// ============================================================
+// TELECOMMUNICATIONS SUBCATEGORIES
+// ============================================================
+
+// Telecom Engineering
+{ vertical: 'JOBS', type: 'MAIN', name: 'Radio Frequency Engineering', slug: 'radio-frequency-engineering', description: 'RF and wireless systems', parentId: rootIds['JOBS:telecom-engineering'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Network Planning', slug: 'network-planning-sub', description: 'Telecom network design and planning', parentId: rootIds['JOBS:telecom-engineering'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Fiber Optic Engineering', slug: 'fiber-optic-engineering', description: 'Fiber optic network design', parentId: rootIds['JOBS:telecom-engineering'] },
+
+// ============================================================
+// GOVERNMENT & PUBLIC SERVICE SUBCATEGORIES
+// ============================================================
+
+// Policy Analysis
+{ vertical: 'JOBS', type: 'MAIN', name: 'Economic Policy', slug: 'economic-policy', description: 'Economic policy development', parentId: rootIds['JOBS:policy-analysis'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Social Policy', slug: 'social-policy', description: 'Social policy and welfare', parentId: rootIds['JOBS:policy-analysis'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Environmental Policy', slug: 'environmental-policy', description: 'Environmental policy analysis', parentId: rootIds['JOBS:policy-analysis'] },
+
+// ============================================================
+// ENERGY & UTILITIES SUBCATEGORIES
+// ============================================================
+
+// Energy Management
+{ vertical: 'JOBS', type: 'MAIN', name: 'Energy Efficiency', slug: 'energy-efficiency', description: 'Energy conservation and efficiency', parentId: rootIds['JOBS:energy-management'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Renewable Energy', slug: 'renewable-energy', description: 'Renewable energy management', parentId: rootIds['JOBS:energy-management'] },
+
+// ============================================================
+// DIGITAL & GIG ECONOMY SUBCATEGORIES
+// ============================================================
+
+// Freelance Writing
+{ vertical: 'JOBS', type: 'MAIN', name: 'Content Writing', slug: 'content-writing', description: 'Content writing services', parentId: rootIds['JOBS:freelance-writing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Copywriting', slug: 'copywriting-sub', description: 'Marketing and advertising copy', parentId: rootIds['JOBS:freelance-writing'] },
+{ vertical: 'JOBS', type: 'MAIN', name: 'Technical Writing', slug: 'technical-writing', description: 'Technical documentation writing', parentId: rootIds['JOBS:freelance-writing'] },
+
+
+
+
 
   // ======================================================================
   // HOUSING - COMPLIMENTARY Subcategories (Service Providers)
@@ -727,3 +1377,111 @@ export const SUB_CATEGORIES = (rootIds: Record<string, string>) => [
  
   
 ];
+
+
+// ======================================================
+// HELPER FUNCTIONS FOR CATEGORIES
+// ======================================================
+
+/**
+ * Get all MAIN category names
+ */
+export const MAIN_CATEGORY_NAMES = ROOT_CATEGORIES
+  .filter(c => c.type === 'MAIN')
+  .map(c => c.name);
+
+/**
+ * Get all MAIN category slugs
+ */
+export const MAIN_CATEGORY_SLUGS = ROOT_CATEGORIES
+  .filter(c => c.type === 'MAIN')
+  .map(c => c.slug);
+
+/**
+ * Get all COMPLIMENTARY category names
+ */
+export const COMPLIMENTARY_CATEGORY_NAMES = ROOT_CATEGORIES
+  .filter(c => c.type === 'COMPLIMENTARY')
+  .map(c => c.name);
+
+/**
+ * Get all verticals
+ */
+export const VERTICALS = [...new Set(ROOT_CATEGORIES.map(c => c.vertical))] as const;
+
+/**
+ * Get job categories (MAIN categories from JOBS vertical)
+ */
+export const JOB_CATEGORIES = ROOT_CATEGORIES
+  .filter(c => c.vertical === 'JOBS' && c.type === 'MAIN')
+  .map(c => c.name);
+
+/**
+ * Get housing categories (MAIN categories from HOUSING vertical)
+ */
+export const HOUSING_CATEGORIES = ROOT_CATEGORIES
+  .filter(c => c.vertical === 'HOUSING' && c.type === 'MAIN')
+  .map(c => c.name);
+
+/**
+ * Get social support categories (MAIN categories from SOCIAL_SUPPORT vertical)
+ */
+export const SOCIAL_SUPPORT_CATEGORIES = ROOT_CATEGORIES
+  .filter(c => c.vertical === 'SOCIAL_SUPPORT' && c.type === 'MAIN')
+  .map(c => c.name);
+
+/**
+ * Get categories by vertical
+ */
+export const getCategoriesByVertical = (vertical: string) => {
+  return ROOT_CATEGORIES.filter(c => c.vertical === vertical);
+};
+
+/**
+ * Get MAIN categories by vertical
+ */
+export const getMainCategoriesByVertical = (vertical: string) => {
+  return ROOT_CATEGORIES.filter(c => c.vertical === vertical && c.type === 'MAIN');
+};
+
+/**
+ * Get COMPLIMENTARY categories by vertical
+ */
+export const getComplimentaryCategoriesByVertical = (vertical: string) => {
+  return ROOT_CATEGORIES.filter(c => c.vertical === vertical && c.type === 'COMPLIMENTARY');
+};
+
+/**
+ * Check if a category exists (for validation)
+ */
+export const isValidCategory = (categoryName: string): boolean => {
+  return ROOT_CATEGORIES.some(c => c.name === categoryName);
+};
+
+/**
+ * Check if a category is MAIN type
+ */
+export const isMainCategory = (categoryName: string): boolean => {
+  return ROOT_CATEGORIES.some(c => c.name === categoryName && c.type === 'MAIN');
+};
+
+/**
+ * Check if a category is COMPLIMENTARY type
+ */
+export const isComplimentaryCategory = (categoryName: string): boolean => {
+  return ROOT_CATEGORIES.some(c => c.name === categoryName && c.type === 'COMPLIMENTARY');
+};
+
+/**
+ * Get category by name
+ */
+export const getCategoryByName = (categoryName: string) => {
+  return ROOT_CATEGORIES.find(c => c.name === categoryName);
+};
+
+/**
+ * Get category by slug
+ */
+export const getCategoryBySlug = (categorySlug: string) => {
+  return ROOT_CATEGORIES.find(c => c.slug === categorySlug);
+};

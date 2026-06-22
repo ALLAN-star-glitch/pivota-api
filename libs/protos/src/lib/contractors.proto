@@ -17,7 +17,7 @@ service ContractorsService {
   rpc GetOfferingsByCategory (GetOfferingsByCategoryRequest) returns (ListServiceOfferingsResponse);
   
   // ===================================================
-  // NEW: Get all offerings across all categories
+  // GET ALL OFFERINGS (Across all categories)
   // ===================================================
   rpc GetAllOfferings (GetAllOfferingsRequest) returns (ListServiceOfferingsResponse);
 }
@@ -135,6 +135,9 @@ message CreateServiceOfferingRequest {
   optional double maxNegotiablePrice = 22;
 }
 
+// ===================================================
+// GET OFFERINGS BY VERTICAL (With Cache Control)
+// ===================================================
 message GetOfferingsByVerticalRequest {
   string vertical = 1;
   optional string categoryId = 2;
@@ -145,20 +148,46 @@ message GetOfferingsByVerticalRequest {
   optional string sortBy = 7;
   optional int32 limit = 8;
   optional int32 offset = 9;
+  optional string city = 10;
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 11;    // Skip cache entirely (admin only)
+  optional bool skipCache = 12;      // Don't read cache, still write
+  optional bool refreshCache = 13;   // Force refresh cache
+  optional int32 cacheTTL = 14;      // Override TTL (seconds)
+  optional bool readOnly = 15;       // Don't write to cache
 }
 
+// ===================================================
+// GET OFFERINGS BY ACCOUNT (No Cache - User Specific)
+// ===================================================
 message GetOfferingsByAccountRequest {
   string accountId = 1;
 }
 
+// ===================================================
+// GET OFFERINGS BY PROFESSIONAL (No Cache - User Specific)
+// ===================================================
 message GetOfferingsByProfessionalRequest {
   string professionalId = 1;
 }
 
+// ===================================================
+// GET OFFERING BY ID (With Cache Control)
+// ===================================================
 message GetOfferingByIdRequest {
   string id = 1;
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 2;     // Skip cache entirely (admin only)
+  optional bool refreshCache = 3;    // Force refresh cache
+  optional int32 cacheTTL = 4;       // Override TTL (seconds)
+  optional bool readOnly = 5;        // Don't write to cache
 }
 
+// ===================================================
+// UPDATE SERVICE OFFERING
+// ===================================================
 message UpdateServiceOfferingRequest {
   string id = 1;
   optional string title = 2;
@@ -169,7 +198,7 @@ message UpdateServiceOfferingRequest {
   repeated DayAvailability availability = 7;
   string userId = 8;
   
-  // ========== NEW: BOOKING FEE OVERRIDE FIELDS ==========
+  // ========== BOOKING FEE OVERRIDE FIELDS ==========
   optional bool useCustomBookingFee = 9;
   optional bool customBookingFeeEnabled = 10;
   optional double customBookingFeeAmount = 11;
@@ -178,21 +207,35 @@ message UpdateServiceOfferingRequest {
   optional bool customBookingFeeRefundable = 14;
 }
 
+// ===================================================
+// DELETE SERVICE OFFERING
+// ===================================================
 message DeleteServiceOfferingRequest {
   string id = 1;
   string userId = 2;
 }
 
+// ===================================================
+// GET OFFERINGS BY CATEGORY (With Cache Control)
+// ===================================================
 message GetOfferingsByCategoryRequest {
   string categoryId = 1;
   optional int32 limit = 2;
   optional int32 offset = 3;
   optional double minPrice = 4;
   optional double maxPrice = 5;
+  optional string city = 6;
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 7;     // Skip cache entirely (admin only)
+  optional bool skipCache = 8;       // Don't read cache, still write
+  optional bool refreshCache = 9;    // Force refresh cache
+  optional int32 cacheTTL = 10;      // Override TTL (seconds)
+  optional bool readOnly = 11;       // Don't write to cache
 }
 
 // ===================================================
-// NEW: GET ALL OFFERINGS REQUEST
+// GET ALL OFFERINGS (With Cache Control)
 // ===================================================
 message GetAllOfferingsRequest {
   optional int32 limit = 1;           // Number of records to return (default: 20)
@@ -203,6 +246,13 @@ message GetAllOfferingsRequest {
   optional string sortBy = 6;         // Sort by: "recent", "price_asc", "price_desc", "rating"
   optional int32 minRating = 7;       // Minimum rating filter (1-5)
   optional bool verifiedOnly = 8;     // Show only verified professionals
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 9;      // Skip cache entirely (admin only)
+  optional bool skipCache = 10;       // Don't read cache, still write
+  optional bool refreshCache = 11;    // Force refresh cache
+  optional int32 cacheTTL = 12;       // Override TTL (seconds)
+  optional bool readOnly = 13;        // Don't write to cache
 }
 
 // ===================================================

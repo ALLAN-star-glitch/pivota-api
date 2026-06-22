@@ -24,6 +24,8 @@ import { ServiceOfferingEmailService } from './services/handlers/service-offerin
 import { ServiceOfferingEmailController } from './controllers/service-offering-email.controller';
 import { ServiceExecutionEmailController } from './controllers/service-execution-email.controller';
 import { ServiceExecutionEmailService } from './services/handlers/service-execution-email.service';
+import { JobsEmailService } from './services/handlers/jobs-email.service';
+import { JobsEmailController } from './controllers/jobs-email.controller';
 
 @Module({
   imports: [
@@ -120,7 +122,8 @@ import { ServiceExecutionEmailService } from './services/handlers/service-execut
     BookingEmailController,
     ServiceOfferingEmailController,
     ServiceExecutionEmailController,
-    SecurityEmailController
+    SecurityEmailController,
+    JobsEmailController
   ],
   providers: [
     EmailClientService,
@@ -132,7 +135,8 @@ import { ServiceExecutionEmailService } from './services/handlers/service-execut
     SecurityEmailService,
     BookingEmailService,
     ServiceOfferingEmailService,
-    ServiceExecutionEmailService
+    ServiceExecutionEmailService,
+    JobsEmailService
   ],
   exports: [
     EmailClientService,

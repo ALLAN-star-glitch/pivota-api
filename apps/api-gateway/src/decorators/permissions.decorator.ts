@@ -6,9 +6,12 @@ import { Permission } from '@pivota-api/access-management';
 // This must match the key used in your PermissionsGuard
 export const PERMISSIONS_KEY = 'permissions'; 
 
+
 /**
  * Decorator to set required permissions for a route handler or controller.
  * Uses permission constants from the shared access-management library.
+ * 
+ * 
  * 
  * @example
  * @Permissions(Permissions.HOUSING_CREATE_OWN)

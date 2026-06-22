@@ -46,7 +46,7 @@ import { AuthDevController } from './auth.dev.controller';
     JwtStrategy,
     AuthDevController
   ],
-  controllers: [AuthenticationGatewayController],
+  controllers: [AuthenticationGatewayController, AuthDevController],
   exports: [
     AuthenticationGatewayService,
     PassportModule,

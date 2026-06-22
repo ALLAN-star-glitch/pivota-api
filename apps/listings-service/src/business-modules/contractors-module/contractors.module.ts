@@ -7,7 +7,7 @@ import { PROFILE_PROTO_PATH } from '@pivota-api/protos';
 import { ContractorsPricingService } from './services/contractors-pricing.service';
 import { ContractorsPricingController } from './controllers/contractors-pricing.controller';
 import { SharedRedisModule } from '@pivota-api/shared-redis';
-import { SharedStorageModule } from '@pivota-api/shared-storage';  // Add this import
+import { SharedStorageModule } from '@pivota-api/shared-storage';
 import { ContractorsPricingWorker } from '../../workers/contractors-pricing.worker';
 import { NotificationWorker } from '../../workers/notification.worker';
 import { BookingService } from './services/booking.service';
@@ -21,13 +21,15 @@ import { ServiceExecutionService } from './services/service-execution.service';
 import { ServiceExecutionNotificationWorker } from '../../workers/ServiceExecutionNotificationWorker.worker';
 import { ServiceExecutionMediaService } from './services/service-execution-media.service';
 import { ServiceExecutionMediaController } from './controllers/service-execution-media.controller';
+import { ContractorsListingsCacheWorker } from '../../workers/contractors-listings-cache.worker';
+
 
 @Module({
   imports: [
     PrismaModule,
     ScheduleModule.forRoot(),
     SharedRedisModule.forRoot(),
-    SharedStorageModule,  // Add this - provides StorageService
+    SharedStorageModule,
     ClientsModule.register([
       {
         name: 'PROFILE_GRPC',
@@ -67,6 +69,10 @@ import { ServiceExecutionMediaController } from './controllers/service-execution
     ServiceExecutionService,
     ServiceExecutionNotificationWorker,
     ServiceExecutionMediaService,
+    // ===================================================
+    // NEW: Add the Listings Cache Worker
+    // ===================================================
+    ContractorsListingsCacheWorker,
   ],
   controllers: [
     ContractorsController,
@@ -85,13 +91,17 @@ export class ContractorsModule {
     private notificationWorker: NotificationWorker,
     private reminderWorker: ReminderWorker,
     private serviceExecutionNotificationWorker: ServiceExecutionNotificationWorker,
+    // ===================================================
+    // NEW: Inject the Listings Cache Worker
+    // ===================================================
+    private listingsCacheWorker: ContractorsListingsCacheWorker,
   ) {
     this.logger.log('🚀 ContractorsModule: Initialized');
     this.logger.log(
       `📡 LISTINGS_GRPC_URL: ${process.env.LISTINGS_GRPC_URL || 'localhost:50052'}`,
     );
 
-    // Initialize workers in constructor (same pattern as CategoriesModule)
+    // Initialize workers in constructor
     this.initializeWorkers();
   }
 
@@ -104,7 +114,21 @@ export class ContractorsModule {
     // Small delay to ensure all dependencies are ready
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // Initialize ContractorsPricingWorker
+    // ===================================================
+    // 1. Initialize ContractorsListingsCacheWorker
+    // ===================================================
+    try {
+      await this.listingsCacheWorker.initialize();
+      this.logger.log(`✅ ContractorsListingsCacheWorker initialized successfully`);
+    } catch (error) {
+      this.logger.error(
+        `❌ ContractorsListingsCacheWorker failed to initialize: ${error.message}`,
+      );
+    }
+
+    // ===================================================
+    // 2. Initialize ContractorsPricingWorker
+    // ===================================================
     try {
       await this.contractorsPricingWorker.initialize();
       this.logger.log(`✅ ContractorsPricingWorker initialized successfully`);
@@ -114,7 +138,9 @@ export class ContractorsModule {
       );
     }
 
-    // Initialize NotificationWorker
+    // ===================================================
+    // 3. Initialize NotificationWorker
+    // ===================================================
     try {
       await this.notificationWorker.initialize();
       this.logger.log(`✅ NotificationWorker initialized successfully`);
@@ -124,7 +150,9 @@ export class ContractorsModule {
       );
     }
 
-    // ReminderWorker - initialize if it has the method
+    // ===================================================
+    // 4. Initialize ReminderWorker
+    // ===================================================
     try {
       if (
         this.reminderWorker &&
@@ -143,7 +171,9 @@ export class ContractorsModule {
       );
     }
 
-    // Initialize ServiceExecutionNotificationWorker
+    // ===================================================
+    // 5. Initialize ServiceExecutionNotificationWorker
+    // ===================================================
     try {
       await this.serviceExecutionNotificationWorker.initialize();
       this.logger.log(`✅ ServiceExecutionNotificationWorker initialized successfully`);

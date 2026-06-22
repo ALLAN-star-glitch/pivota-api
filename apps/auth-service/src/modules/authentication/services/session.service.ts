@@ -4,6 +4,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ExtendedPrismaClient, PrismaService } from '../../../prisma/prisma.service';
 import { RedisSessionService } from '@pivota-api/shared-redis';
 import * as bcrypt from 'bcrypt';
+import { AuthClientInfoDto } from '@pivota-api/dtos';
 
 @Injectable()
 export class SessionService {
@@ -24,7 +25,7 @@ export class SessionService {
     userUuid: string,
     tokenId: string,
     hashedToken: string,
-    clientInfo: any,
+    clientInfo: AuthClientInfoDto,
     expiresAt: Date,
   ): Promise<void> {
     await this.prisma.session.create({
@@ -40,6 +41,9 @@ export class SessionService {
         osVersion: clientInfo?.osVersion,
         browser: clientInfo?.browser,
         browserVersion: clientInfo?.browserVersion,
+        isDesktop: clientInfo?.isDesktop,
+        isMobile: clientInfo?.isMobile,
+        isTablet: clientInfo?.isTablet,
         isBot: clientInfo?.isBot,
         lastActiveAt: new Date(),
         expiresAt,
@@ -60,42 +64,73 @@ export class SessionService {
   /**
    * Validate a session
    */
-  async validateSession(tokenId: string, refreshToken: string): Promise<boolean> {
-    // 1. Try Redis first
-    const session = await this.redisSession.getSession(tokenId);
+ async validateSession(tokenId: string, refreshToken: string): Promise<boolean> {
+  // 1. Try Redis first
+  this.logger.debug(`[validateSession] Looking up session ${tokenId} in Redis`);
+  const session = await this.redisSession.getSession(tokenId);
 
-    if (session) {
+  if (session) {
+    this.logger.debug(`[validateSession] Redis session found for ${tokenId}, hash exists: ${!!session.refreshTokenHash}`);
+    
+    try {
       const isValid = await bcrypt.compare(refreshToken, session.refreshTokenHash);
+      this.logger.debug(`[validateSession] Redis bcrypt comparison result: ${isValid}`);
       if (isValid) {
         this.logger.debug(`Redis validation successful for ${tokenId}`);
         return true;
       }
+    } catch (err) {
+      this.logger.error(`[validateSession] Redis bcrypt comparison error: ${err.message}`);
     }
+  } else {
+    this.logger.warn(`[validateSession] Session ${tokenId} not found in Redis`);
+  }
 
-    // 2. Fallback to Database
-    this.logger.debug(`Redis validation failed, checking database...`);
-    const dbSession = await this.prisma.session.findUnique({
-      where: { tokenId: tokenId },
-      select: { hashedToken: true, revoked: true, expiresAt: true, userUuid: true }
-    });
+  // 2. Fallback to Database
+  this.logger.debug(`Redis validation failed, checking database for token ${tokenId}...`);
+  const dbSession = await this.prisma.session.findUnique({
+    where: { tokenId: tokenId },
+    select: { hashedToken: true, revoked: true, expiresAt: true, userUuid: true }
+  });
 
-    if (dbSession && !dbSession.revoked && dbSession.expiresAt > new Date()) {
-      const isValid = await bcrypt.compare(refreshToken, dbSession.hashedToken);
-
-      if (isValid) {
-        await this.redisSession.storeSession(
-          tokenId,
-          dbSession.userUuid,
-          dbSession.hashedToken,
-          null
-        );
-        this.logger.debug(`Session restored to Redis from database`);
-        return true;
-      }
-    }
-
+  if (!dbSession) {
+    this.logger.warn(`[validateSession] Session ${tokenId} not found in database`);
     return false;
   }
+
+  if (dbSession.revoked) {
+    this.logger.warn(`[validateSession] Session ${tokenId} is revoked`);
+    return false;
+  }
+
+  if (dbSession.expiresAt <= new Date()) {
+    this.logger.warn(`[validateSession] Session ${tokenId} is expired at ${dbSession.expiresAt}`);
+    return false;
+  }
+
+  this.logger.debug(`[validateSession] Database session found, hash exists: ${!!dbSession.hashedToken}`);
+  
+  try {
+    const isValid = await bcrypt.compare(refreshToken, dbSession.hashedToken);
+    this.logger.debug(`[validateSession] Database bcrypt comparison result: ${isValid}`);
+    
+    if (isValid) {
+      // Restore to Redis
+      await this.redisSession.storeSession(
+        tokenId,
+        dbSession.userUuid,
+        dbSession.hashedToken,
+        null
+      );
+      this.logger.debug(`Session restored to Redis from database`);
+      return true;
+    }
+  } catch (err) {
+    this.logger.error(`[validateSession] Database bcrypt comparison error: ${err.message}`);
+  }
+
+  return false;
+}
 
   /**
    * Get session by token ID

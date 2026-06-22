@@ -54,21 +54,28 @@ export class RedisSessionService {
     return await bcrypt.compare(refreshToken, session.refreshTokenHash);
   }
 
-  async rotateToken(
-    oldTokenId: string, 
-    newTokenId: string, 
-    userUuid: string, 
-    newRefreshTokenHash: string, 
-    clientInfo: any
-  ): Promise<void> {
-    await this.storeSession(newTokenId, userUuid, newRefreshTokenHash, clientInfo);
-    await this.blacklistToken(oldTokenId, 900); // 15 minutes TTL for blacklist
-    await this.removeSession(oldTokenId);
-    
-    const userSessionsKey = `${this.USER_SESSIONS_PREFIX}${userUuid}`;
-    await this.redis.delete(`${userSessionsKey}:${oldTokenId}`);
-    await this.redis.set(`${userSessionsKey}:${newTokenId}`, Date.now().toString(), this.REFRESH_TOKEN_TTL);
-  }
+ // keep this for other use cases, but don't use it in refreshToken
+async rotateToken(
+  oldTokenId: string, 
+  newTokenId: string, 
+  userUuid: string, 
+  newRefreshTokenHash: string, 
+  clientInfo: any
+): Promise<void> {
+  // Store new session first
+  await this.storeSession(newTokenId, userUuid, newRefreshTokenHash, clientInfo);
+  
+  // Then blacklist old token (with short TTL)
+  await this.blacklistToken(oldTokenId, 900); // 15 minutes TTL for blacklist
+  
+  // Remove old session from Redis
+  await this.removeSession(oldTokenId);
+  
+  // Update user sessions index
+  const userSessionsKey = `${this.USER_SESSIONS_PREFIX}${userUuid}`;
+  await this.redis.delete(`${userSessionsKey}:${oldTokenId}`);
+  await this.redis.set(`${userSessionsKey}:${newTokenId}`, Date.now().toString(), this.REFRESH_TOKEN_TTL);
+}
 
   async blacklistToken(tokenId: string, ttlSeconds = 900): Promise<void> {
     const blacklistKey = `${this.BLACKLIST_PREFIX}${tokenId}`;

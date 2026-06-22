@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+"use strict";
+
 import {
   Body,
   Controller,
@@ -50,6 +53,8 @@ import {
   AdminScheduleViewingDto,
   ScheduleAdminViewingGrpcRequestDto,
   AuthClientInfoDto,
+  GetHouseListingsByCategoryDto,
+  GetAllHouseListingsRequestDto,
 } from '@pivota-api/dtos';
 
 import { JwtAuthGuard } from '../AuthenticationGatewayModule/jwt.guard';
@@ -83,6 +88,30 @@ export class HousingGatewayController {
   private readonly logger = new Logger(HousingGatewayController.name);
 
   constructor(private readonly housingService: HousingGatewayService) {}
+
+  /**
+   * Helper to parse boolean from query params
+   * This fixes the "false" → true issue
+   */
+  private parseBoolean(value: any): boolean {
+    if (value === undefined || value === null) return undefined; 
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return !!value;
+  }
+
+
+
+  /**
+   * Helper to parse number from query params
+   */
+  private parseNumber(value: any): number | undefined {
+    if (value === undefined || value === null) return undefined;
+    const num = Number(value);
+    return isNaN(num) ? undefined : num;
+  }
 
   // -----------------------------------------------------------
   // Core Housing Creation Logic
@@ -134,59 +163,7 @@ export class HousingGatewayController {
   @Get('listings/search')
   @ApiOperation({ 
     summary: 'Search for available house listings with AI-powered analytics tracking',
-    description: `
-      Public endpoint to search and filter available house listings.
-      No authentication required.
-      
-      **Microservice:** Listings Service
-      
-      **AI Analytics & Tracking System**
-      
-      This endpoint captures search behavior that is critical for training recommendation models and improving search relevance.
-      
-      **Event Type: SEARCH**
-      Search events reveal user intent and preferences, forming the foundation of the recommendation system.
-      
-      **Data Collected for AI Training:**
-      
-      | Category | Fields | AI Use Case |
-      |----------|--------|-------------|
-      | **Search Intent** | Search query, filters applied, results count | Query understanding, intent classification |
-      | **User Context** | Session ID, platform, referrer | Personalization, user profiling |
-      | **Filter Preferences** | City, price range, bedrooms, property type, lease term, pet policy, utilities | Preference learning, feature importance |
-      | **Pagination Data** | Limit, offset, total results | User patience, scroll behavior |
-      
-      **AI Training Applications:**
-      
-      1. **Search Relevance Optimization**
-         - Analyze which search parameters yield the most clicks
-         - Learn which filters users apply most frequently
-         - Optimize ranking algorithms based on search patterns
-         - Track zero-result searches to improve inventory
-      
-      2. **Query Understanding**
-         - Map search patterns to structured filters
-         - Learn popular search terms and locations
-         - Understand intent behind searches
-         - Improve autocomplete and suggestions
-      
-      3. **User Preference Profiling**
-         - Build anonymous session-based preference profiles
-         - Learn preferred locations and price ranges
-         - Track search patterns over time
-         - Personalize future search results
-      
-      4. **Market Demand Analysis**
-         - Identify high-demand areas and property types
-         - Track seasonal search patterns
-         - Analyze price sensitivity across markets
-         - Detect emerging neighborhood trends
-      
-      **Context Headers (for analytics):**
-      - **x-session-id** - Session identifier for tracking search journey
-      - **x-platform** - Platform identifier (web/mobile/api)
-      - **referer** - Source URL where the search originated
-    `
+    description: 'Public endpoint to search and filter available house listings with cache control.'
   })
   @ApiHeader({
     name: 'x-session-id',
@@ -196,107 +173,73 @@ export class HousingGatewayController {
   })
   @ApiHeader({
     name: 'x-platform',
-    description: 'Platform identifier (web/mobile/api) - used for platform-specific behavior analysis',
+    description: 'Platform identifier (web/mobile/api)',
     required: false,
     enum: ['web', 'mobile', 'api']
   })
   @ApiHeader({
     name: 'referer',
-    description: 'Source URL - identifies where the search originated (homepage, direct, external)',
+    description: 'Source URL - identifies where the search originated',
     required: false
   })
-  @ApiQuery({ 
-    name: 'city', 
-    required: false,
-    description: 'Filter listings by city - used for location preference learning',
-    example: 'Nairobi',
-    type: String
-  })
-  @ApiQuery({ 
-    name: 'listingType', 
-    required: false,
-    description: 'Filter by listing type (rental/sale) - captures user intent',
-    enum: HOUSE_LISTING_TYPES,
-    example: 'RENTAL'
-  })
-  @ApiQuery({ 
-    name: 'minPrice', 
-    required: false,
-    description: 'Minimum price filter - establishes lower bound of user budget range',
-    example: 20000,
-    type: Number
-  })
-  @ApiQuery({ 
-    name: 'maxPrice', 
-    required: false,
-    description: 'Maximum price filter - establishes upper bound of user budget range',
-    example: 100000,
-    type: Number
-  })
-  @ApiQuery({ 
-    name: 'bedrooms', 
-    required: false,
-    description: 'Minimum number of bedrooms - captures space requirements',
-    example: 2,
-    type: Number
-  })
-  @ApiQuery({ 
-    name: 'propertyType', 
-    required: false,
-    description: 'Filter by property type - captures style preference',
-    example: 'APARTMENT',
-    enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO']
-  })
-  @ApiQuery({ 
-    name: 'minLeaseTerm', 
-    required: false,
-    description: 'Minimum lease term in months (for rental listings)',
-    example: 6,
-    type: Number
-  })
-  @ApiQuery({ 
-    name: 'isPetFriendly', 
-    required: false,
-    description: 'Filter by pet friendly status (for rental listings)',
-    example: true,
-    type: Boolean
-  })
-  @ApiQuery({ 
-    name: 'utilitiesIncluded', 
-    required: false,
-    description: 'Filter by utilities included status (for rental listings)',
-    example: true,
-    type: Boolean
-  })
-  @ApiQuery({ 
-    name: 'isNegotiable', 
-    required: false,
-    description: 'Filter by negotiable price status (for sale listings)',
-    example: true,
-    type: Boolean
-  })
-  @ApiQuery({ 
-    name: 'titleDeedAvailable', 
-    required: false,
-    description: 'Filter by title deed availability (for sale listings)',
-    example: true,
-    type: Boolean
-  })
+  @ApiQuery({ name: 'city', required: false, description: 'Filter listings by city', example: 'Nairobi' })
+  @ApiQuery({ name: 'listingType', required: false, description: 'Filter by listing type', enum: HOUSE_LISTING_TYPES })
+  @ApiQuery({ name: 'minPrice', required: false, description: 'Minimum price filter', example: 20000, type: Number })
+  @ApiQuery({ name: 'maxPrice', required: false, description: 'Maximum price filter', example: 100000, type: Number })
+  @ApiQuery({ name: 'bedrooms', required: false, description: 'Minimum number of bedrooms', example: 2, type: Number })
+  @ApiQuery({ name: 'propertyType', required: false, description: 'Filter by property type', enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO'] })
+  @ApiQuery({ name: 'minLeaseTerm', required: false, description: 'Minimum lease term in months', example: 6, type: Number })
+  @ApiQuery({ name: 'isPetFriendly', required: false, description: 'Filter by pet friendly status', example: true, type: Boolean })
+  @ApiQuery({ name: 'utilitiesIncluded', required: false, description: 'Filter by utilities included status', example: true, type: Boolean })
+  @ApiQuery({ name: 'isNegotiable', required: false, description: 'Filter by negotiable price status', example: true, type: Boolean })
+  @ApiQuery({ name: 'titleDeedAvailable', required: false, description: 'Filter by title deed availability', example: true, type: Boolean })
+  @ApiQuery({ name: 'sortBy', required: false, description: 'Sort order', enum: ['recent', 'price_asc', 'price_desc'], example: 'recent' })
+  @ApiQuery({ name: 'bypassCache', required: false, type: Boolean, description: 'Bypass cache (Admin only)', example: false })
+  @ApiQuery({ name: 'skipCache', required: false, type: Boolean, description: 'Skip reading cache, still write', example: false })
+  @ApiQuery({ name: 'refreshCache', required: false, type: Boolean, description: 'Force refresh cache', example: false })
+  @ApiQuery({ name: 'cacheTTL', required: false, type: Number, description: 'Override cache TTL (seconds)', example: 300 })
+  @ApiQuery({ name: 'readOnly', required: false, type: Boolean, description: 'Don\'t write to cache', example: false })
   @ApiResponse({ 
     status: 200, 
-    description: 'Search results retrieved successfully with analytics tracking',
+    description: 'Search results retrieved successfully',
     type: [HouseListingResponseDto]
   })
   async searchListings(
-    @Query() dto: SearchHouseListingsDto,
+    @Query() query: any,  // ✅ Use 'any' and manually parse
     @ClientInfo() clientInfo: AuthClientInfoDto,
     @Headers('x-session-id') sessionId?: string,
     @Headers('x-platform') platform?: 'web' | 'mobile' | 'api',
     @Headers('referer') referer?: string,
   ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
-    this.logger.log(`Public search executed with filters: ${JSON.stringify(dto)}`);
-    
-    this.logger.debug(`Search from Device: ${clientInfo.device} (${clientInfo.deviceType})`);
+    // ✅ MANUALLY PARSE ALL VALUES
+    const dto: SearchHouseListingsDto = {
+      city: query.city,
+      listingType: query.listingType,
+      minPrice: this.parseNumber(query.minPrice),
+      maxPrice: this.parseNumber(query.maxPrice),
+      bedrooms: this.parseNumber(query.bedrooms),
+      propertyType: query.propertyType,
+      minLeaseTerm: this.parseNumber(query.minLeaseTerm),
+      isPetFriendly: this.parseBoolean(query.isPetFriendly),
+      utilitiesIncluded: this.parseBoolean(query.utilitiesIncluded),
+      isNegotiable: this.parseBoolean(query.isNegotiable),
+      titleDeedAvailable: this.parseBoolean(query.titleDeedAvailable),
+      sortBy: query.sortBy || 'recent',
+      limit: this.parseNumber(query.limit) || 20,
+      offset: this.parseNumber(query.offset) || 0,
+      categoryId: query.categoryId,
+      subCategoryId: query.subCategoryId,
+      bypassCache: this.parseBoolean(query.bypassCache),
+      skipCache: this.parseBoolean(query.skipCache),
+      refreshCache: this.parseBoolean(query.refreshCache),
+      cacheTTL: this.parseNumber(query.cacheTTL) || 300,
+      readOnly: this.parseBoolean(query.readOnly),
+    };
+
+    this.logger.log(
+      `Public search executed with filters: ${JSON.stringify(dto)}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+    );
     
     const context: Partial<ListingViewContextDto> = {
       sessionId: sessionId || this.generateAnonymousId(clientInfo),
@@ -318,88 +261,140 @@ export class HousingGatewayController {
     return resp;
   }
 
+  // ===========================================================
+  // GET HOUSE LISTINGS BY CATEGORY (PUBLIC WITH CACHE CONTROL)
+  // ===========================================================
+
+  @Public()
   @Version('1')
-  @Get('details/:id')
+  @Get('listings/category')
   @ApiOperation({ 
-    summary: 'Get detailed listing information with AI-powered analytics tracking',
-    description: `
-      Retrieves complete details of a specific house listing by its ID with comprehensive analytics tracking.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      
-      **AI Analytics & Tracking System**
-      
-      This endpoint captures rich user interaction data for training recommendation models.
-      
-      **Event Type: VIEW**
-      Primary event when users view listing details - forms the foundation of the recommendation system.
-      
-      **Data Collected:**
-      - User Context - User ID, Session ID
-      - Device Info - Platform, Device Type, OS, Browser
-      - Search Context - Search ID, Position, Query
-      - Interaction Metrics - Time Spent, Scroll Depth
-      - Listing Features - Price, Location, Amenities, Lease Terms, Pet Policy, Utilities, Negotiability, Title Deed
-    `
+    summary: 'Get house listings by category with cache control',
+    description: 'Public endpoint to retrieve house listings by category with pagination and cache control.'
   })
-  @ApiParam({ 
-    name: 'id', 
-    type: String,
-    description: 'CUID of the listing',
-    example: 'cmlqzy0zt000mdl7nx18c66bu',
-    required: true
-  })
+  @ApiQuery({ name: 'categoryId', required: true, type: String, description: 'Category ID to filter by', example: 'cat_apartments' })
+  @ApiQuery({ name: 'city', required: false, type: String, description: 'Filter by city', example: 'Nairobi' })
+  @ApiQuery({ name: 'listingType', required: false, enum: HOUSE_LISTING_TYPES, description: 'Filter by listing type' })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number, description: 'Minimum price filter', example: 20000 })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number, description: 'Maximum price filter', example: 100000 })
+  @ApiQuery({ name: 'bedrooms', required: false, type: Number, description: 'Minimum number of bedrooms', example: 2 })
+  @ApiQuery({ name: 'propertyType', required: false, enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO'], description: 'Filter by property type' })
+  @ApiQuery({ name: 'isFurnished', required: false, type: Boolean, description: 'Filter by furnished status' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page (default: 20, max: 100)', example: 20 })
+  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset', example: 0 })
+  @ApiQuery({ name: 'bypassCache', required: false, type: Boolean, description: 'Bypass cache (Admin only)', example: false })
+  @ApiQuery({ name: 'skipCache', required: false, type: Boolean, description: 'Skip reading cache, still write', example: false })
+  @ApiQuery({ name: 'refreshCache', required: false, type: Boolean, description: 'Force refresh cache', example: false })
+  @ApiQuery({ name: 'cacheTTL', required: false, type: Number, description: 'Override cache TTL (seconds)', example: 300 })
+  @ApiQuery({ name: 'readOnly', required: false, type: Boolean, description: 'Don\'t write to cache', example: false })
   @ApiResponse({ 
     status: 200, 
-    description: 'House listing retrieved successfully with analytics tracking',
-    type: HouseListingResponseDto
+    description: 'Listings retrieved successfully',
+    type: [HouseListingResponseDto]
   })
-  async viewHouseListing(
-    @Param('id', ParseCuidPipe) id: string,
-    @Req() req: JwtRequest,
-    @ClientInfo() clientInfo: AuthClientInfoDto,
-    @Headers() headers: GetListingHeadersDto,
-    @Query() query: GetListingQueryDto,
-  ): Promise<BaseResponseDto<HouseListingResponseDto>> {
-    
-    const sessionId = req.user?.jti;
-    const seekerId = req.user?.sub;
-    
-    this.logger.debug(`Device: ${clientInfo.device} (${clientInfo.deviceType})`);
-    this.logger.debug(`OS: ${clientInfo.os} ${clientInfo.osVersion || ''}`);
-    this.logger.debug(`Browser: ${clientInfo.browser} ${clientInfo.browserVersion || ''}`);
-    this.logger.debug(`Classification: ${clientInfo.isBot ? 'Bot' : 'User'}`);
-    this.logger.debug(`Listing view - Seeker: ${seekerId}, Listing: ${id}`);
+  async getHouseListingsByCategory(
+    @Query() query: any,  // ✅ Use 'any' and manually parse
+  ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    // ✅ MANUALLY PARSE ALL VALUES
+    const dto: GetHouseListingsByCategoryDto = {
+      categoryId: query.categoryId,
+      city: query.city,
+      listingType: query.listingType,
+      minPrice: this.parseNumber(query.minPrice),
+      maxPrice: this.parseNumber(query.maxPrice),
+      bedrooms: this.parseNumber(query.bedrooms),
+      propertyType: query.propertyType,
+      isFurnished: this.parseBoolean(query.isFurnished),
+      limit: this.parseNumber(query.limit) || 20,
+      offset: this.parseNumber(query.offset) || 0,
+      bypassCache: this.parseBoolean(query.bypassCache),
+      skipCache: this.parseBoolean(query.skipCache),
+      refreshCache: this.parseBoolean(query.refreshCache),
+      cacheTTL: this.parseNumber(query.cacheTTL) || 300,
+      readOnly: this.parseBoolean(query.readOnly),
+    };
 
-    const context = new ListingViewContextDto();
+    this.logger.log(
+      `GetHouseListingsByCategory: categoryId=${dto.categoryId}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+    );
     
-    context.seekerId = seekerId;
-    context.sessionId = sessionId;
-    context.client = clientInfo;
-    context.platform = (headers['x-platform'] as 'WEB' | 'MOBILE' | 'API' | 'CLI') || 
-                       this.determinePlatform(clientInfo);
-    context.referrer = headers.referer || 'DIRECT';
-    context.timeSpent = query.timeSpent ? parseInt(query.timeSpent) : undefined;
-    context.interactionType = query.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined;
-    context.viewDuration = query.timeSpent ? parseInt(query.timeSpent) : undefined;
-    context.scrollDepth = query.scrollDepth ? parseInt(query.scrollDepth) : undefined;
+    const resp = await this.housingService.getHouseListingsByCategory(dto);
     
-    if (query.searchId || query.q || query.pos) {
-      const searchContext = new SearchContextDto();
-      searchContext.searchId = query.searchId;
-      searchContext.query = query.q;
-      searchContext.position = query.pos ? parseInt(query.pos) : undefined;
-      context.search = searchContext;
+    if (!resp.success) {
+      this.logger.warn(`GetHouseListingsByCategory failed: ${resp.message}`);
+      throw resp;
     }
- 
-    const dto = new GetHouseListingByIdDto();
-    dto.id = id;
-    dto.context = context;
 
-    const resp = await this.housingService.getHouseListingWithTracking(dto);
-    if (!resp.success) throw resp;
+    return resp;
+  }
+
+  // ===========================================================
+  // GET ALL HOUSE LISTINGS (PUBLIC WITH CACHE CONTROL)
+  // ===========================================================
+
+  @Public()
+  @Version('1')
+  @Get('listings')
+  @ApiOperation({ 
+    summary: 'Get all house listings with pagination and cache control',
+    description: 'Public endpoint to retrieve all available house listings with pagination and filtering options.'
+  })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page (default: 20, max: 100)', example: 20 })
+  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset', example: 0 })
+  @ApiQuery({ name: 'city', required: false, type: String, description: 'Filter by city', example: 'Nairobi' })
+  @ApiQuery({ name: 'listingType', required: false, enum: HOUSE_LISTING_TYPES, description: 'Filter by listing type' })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number, description: 'Minimum price filter', example: 20000 })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number, description: 'Maximum price filter', example: 100000 })
+  @ApiQuery({ name: 'bedrooms', required: false, type: Number, description: 'Minimum number of bedrooms', example: 2 })
+  @ApiQuery({ name: 'propertyType', required: false, enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO'], description: 'Filter by property type' })
+  @ApiQuery({ name: 'isFurnished', required: false, type: Boolean, description: 'Filter by furnished status' })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['recent', 'price_asc', 'price_desc'], description: 'Sort order', example: 'recent' })
+  @ApiQuery({ name: 'bypassCache', required: false, type: Boolean, description: 'Bypass cache (Admin only)', example: false })
+  @ApiQuery({ name: 'skipCache', required: false, type: Boolean, description: 'Skip reading cache, still write', example: false })
+  @ApiQuery({ name: 'refreshCache', required: false, type: Boolean, description: 'Force refresh cache', example: false })
+  @ApiQuery({ name: 'cacheTTL', required: false, type: Number, description: 'Override cache TTL (seconds)', example: 300 })
+  @ApiQuery({ name: 'readOnly', required: false, type: Boolean, description: 'Don\'t write to cache', example: false })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Listings retrieved successfully',
+    type: [HouseListingResponseDto]
+  })
+  async getAllHouseListings(
+    @Query() query: any,  //  Use 'any' and manually parse
+  ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
+    // MANUALLY PARSE ALL VALUES
+    const dto: GetAllHouseListingsRequestDto = {
+      limit: this.parseNumber(query.limit) || 20,
+      offset: this.parseNumber(query.offset) || 0,
+      city: query.city,
+      listingType: query.listingType,
+      minPrice: this.parseNumber(query.minPrice),
+      maxPrice: this.parseNumber(query.maxPrice),
+      bedrooms: this.parseNumber(query.bedrooms),
+      propertyType: query.propertyType,
+      isFurnished: this.parseBoolean(query.isFurnished),
+      sortBy: query.sortBy || 'recent',
+      bypassCache: this.parseBoolean(query.bypassCache),
+      skipCache: this.parseBoolean(query.skipCache),
+      refreshCache: this.parseBoolean(query.refreshCache),
+      cacheTTL: this.parseNumber(query.cacheTTL) || 300,
+      readOnly: this.parseBoolean(query.readOnly),
+    };
+
     
+    this.logger.log(
+      `GetAllHouseListings: limit=${dto.limit}, offset=${dto.offset}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+    );
+    
+    const resp = await this.housingService.getAllHouseListings(dto);
+    
+    if (!resp.success) {
+      this.logger.warn(`GetAllHouseListings failed: ${resp.message}`);
+      throw resp;
+    }
+
     return resp;
   }
 
@@ -408,7 +403,7 @@ export class HousingGatewayController {
   // ===========================================================
  
   @Post('listings')
-  //@Permissions(P.HOUSING_CREATE_OWN)
+  @Permissions(P.HOUSING_CREATE_OWN)
   @UseInterceptors(FilesInterceptor('images', 10, {
     fileFilter: imageFileFilter,
     limits: {
@@ -417,32 +412,7 @@ export class HousingGatewayController {
   }))
   @ApiOperation({ 
     summary: 'Create a new house listing',
-    description: `
-      Creates a new house listing with images.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.HOUSING_CREATE_OWN}
-      
-      **Supported Fields by Listing Type:**
-      
-      **For Rental Listings (listingType: "RENT"):**
-      - minimumLeaseTerm - Minimum lease term in months
-      - maximumLeaseTerm - Maximum lease term in months  
-      - depositAmount - Security deposit amount
-      - isPetFriendly - Whether pets are allowed
-      - utilitiesIncluded - Whether utilities are included
-      - utilitiesDetails - Details about included utilities
-      
-      **For Sale Listings (listingType: "SALE"):**
-      - isNegotiable - Whether price is negotiable
-      - titleDeedAvailable - Whether title deed is available
-      
-      **For Both Types:**
-      - title, description, price, bedrooms, bathrooms
-      - amenities, isFurnished, location details
-      - images (up to 10)
-    `
+    description: 'Creates a new house listing with images.'
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -479,19 +449,6 @@ export class HousingGatewayController {
     const storagePath = `houses/${req.user.accountId}`;
     
     this.logger.log(`Creating new house listing for user ${requesterUuid}`);
-    this.logger.debug(`Listing Type: ${dto.listingType}`);
-    if (dto.listingType === 'RENT') {
-      this.logger.debug(`Rental details - Lease Term: ${dto.minimumLeaseTerm}-${dto.maximumLeaseTerm} months, Pet Friendly: ${dto.isPetFriendly}, Utilities: ${dto.utilitiesIncluded}`);
-    } else if (dto.listingType === 'SALE') {
-      this.logger.debug(`Sale details - Negotiable: ${dto.isNegotiable}, Title Deed: ${dto.titleDeedAvailable}`);
-    }
-    this.logger.debug(`Client info: ${JSON.stringify({
-      device: clientInfo?.device,
-      deviceType: clientInfo?.deviceType,
-      os: clientInfo?.os,
-      browser: clientInfo?.browser,
-      ipAddress: clientInfo?.ipAddress
-    })}`);
 
     const imageUrls = await this.housingService.uploadMultipleToStorage(
       files, 
@@ -533,20 +490,13 @@ export class HousingGatewayController {
   @Get('my-listings')
   @ApiOperation({ 
     summary: 'Get your own listings',
-    description: `
-      Retrieves all house listings owned by the authenticated account.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.HOUSING_READ}
-    `
+    description: 'Retrieves all house listings owned by the authenticated account.'
   })
   @ApiQuery({ 
     name: 'status', 
     required: false,
     description: 'Filter by listing status',
-    enum: HOUSE_LISTING_STATUSES,
-    example: 'ACTIVE'
+    enum: HOUSE_LISTING_STATUSES
   })
   @ApiResponse({
     status: 200,
@@ -585,27 +535,8 @@ export class HousingGatewayController {
   @Post('listings/:id/viewing')
   @Permissions(P.HOUSING_READ)
   @ApiOperation({ 
-    summary: 'Schedule a property viewing for yourself with AI-powered analytics tracking',
-    description: `
-      Schedules an appointment to view a property with comprehensive AI tracking for recommendation systems.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.HOUSING_READ}
-      
-      **AI Analytics & Tracking**
-      
-      This endpoint captures high-intent user signals that are critical for training recommendation models.
-      
-      **Event Type: SCHEDULE_VIEWING**
-      This is a strong positive signal in the AI model - users who schedule viewings are highly likely to convert.
-      
-      **AI Training Applications:**
-      - Conversion Prediction - Identify users likely to rent/buy
-      - Recommendation Weighting - Boost similar properties in results
-      - Price Sensitivity - Analyze price vs. viewing patterns
-      - Location Affinity - Build neighborhood preference profiles
-    `
+    summary: 'Schedule a property viewing for yourself',
+    description: 'Schedules an appointment to view a property.'
   })
   @ApiParam({ 
     name: 'id', 
@@ -630,28 +561,12 @@ export class HousingGatewayController {
     @Headers('x-platform') platform?: string,
     @Headers('referer') referer?: string,
   ): Promise<BaseResponseDto<HouseViewingResponseDto>> {
-    
-    if (!req.user) {
-      this.logger.error('No user object found in request');
-      throw BaseResponseDto.fail('Unauthorized. Please login.', 'UNAUTHORIZED');
-    }
-    
     const seekerId = req.user.sub;
-    const sessionId = req.user.jti; // JWT ID as session identifier
+    const sessionId = req.user.jti;
     const userEmail = req.user.email;
     const userRole = req.user.role;
     
-    if (!seekerId) {
-      this.logger.error(`No userUuid found in req.user. Available fields: ${Object.keys(req.user).join(', ')}`);
-      throw BaseResponseDto.fail('User identification missing.', 'UNAUTHORIZED');
-    }
-    
-    if (!sessionId) {
-      this.logger.warn(`No tokenId found for user ${seekerId}, using generated session ID`);
-    }
-    
     this.logger.log(`User ${seekerId} scheduling viewing for listing ${listingId}`);
-    this.logger.debug(`Scheduling from Device: ${clientInfo.device} (${clientInfo.deviceType})`);
 
     const context = new ListingViewContextDto();
     context.seekerId = seekerId;
@@ -669,8 +584,6 @@ export class HousingGatewayController {
       callerEmail: userEmail,
       context: context
     };
-    
-    this.logger.debug(`gRPC Request - callerId: ${grpcDto.callerId}`);
     
     const resp = await this.housingService.scheduleViewing(grpcDto);
     
@@ -690,19 +603,7 @@ export class HousingGatewayController {
   @Permissions(P.HOUSING_CREATE_ANY)
   @ApiOperation({ 
     summary: 'Schedule a viewing on behalf of any user (Admin only)',
-    description: `
-      Admin-only endpoint: Schedules a viewing appointment for any user with bypass capabilities.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.HOUSING_CREATE_ANY}
-      
-      **Admin Bypass Capabilities:**
-      - Can book for any user (targetViewerId required)
-      - Can book non-AVAILABLE houses
-      - Can book past dates
-      - No double-booking checks
-    `
+    description: 'Admin-only endpoint: Schedules a viewing appointment for any user with bypass capabilities.'
   })
   @ApiParam({ 
     name: 'id', 
@@ -769,13 +670,7 @@ export class HousingGatewayController {
   }))
   @ApiOperation({ 
     summary: 'Create a house listing for any account',
-    description: `
-      Admin-only endpoint: Creates listings on behalf of any account.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.HOUSING_CREATE_ANY}
-    `
+    description: 'Admin-only endpoint: Creates listings on behalf of any account.'
   })
   @ApiParam({ 
     name: 'accountId', 
@@ -857,13 +752,7 @@ export class HousingGatewayController {
   @Permissions(P.HOUSING_UPDATE_ANY)
   @ApiOperation({ 
     summary: 'Update any house listing',
-    description: `
-      Admin-only endpoint: Updates any house listing in the system.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.HOUSING_UPDATE_ANY}
-    `
+    description: 'Admin-only endpoint: Updates any house listing in the system.'
   })
   @ApiParam({ 
     name: 'id', 
@@ -909,13 +798,7 @@ export class HousingGatewayController {
   @Get('admin/listings')
   @ApiOperation({ 
     summary: 'Get all listings across the system',
-    description: `
-      Admin-only endpoint: View all house listings with filters.
-      
-      **Microservice:** Listings Service
-      **Authentication:** Required (JWT cookie)
-      **Permission:** ${P.HOUSING_READ}
-    `
+    description: 'Admin-only endpoint: View all house listings with filters.'
   })
   @ApiQuery({ 
     name: 'status', 
@@ -935,40 +818,6 @@ export class HousingGatewayController {
     description: 'Filter by creator ID',
     type: String
   })
-  @ApiQuery({ 
-    name: 'listingType', 
-    required: false,
-    description: 'Filter by listing type (rent or sale)',
-    enum: ['RENT', 'SALE'],
-    example: 'RENT'
-  })
-  @ApiQuery({ 
-    name: 'propertyType', 
-    required: false,
-    description: 'Filter by property type',
-    enum: ['APARTMENT', 'HOUSE', 'CONDO', 'TOWNHOUSE', 'VILLA', 'STUDIO']
-  })
-  @ApiQuery({ 
-    name: 'minBedrooms', 
-    required: false,
-    description: 'Minimum number of bedrooms',
-    type: Number,
-    example: 2
-  })
-  @ApiQuery({ 
-    name: 'minPrice', 
-    required: false,
-    description: 'Minimum price in KES',
-    type: Number,
-    example: 20000
-  })
-  @ApiQuery({ 
-    name: 'maxPrice', 
-    required: false,
-    description: 'Maximum price in KES',
-    type: Number,
-    example: 100000
-  })
   @ApiResponse({ 
     status: 200, 
     description: 'Admin listings retrieved successfully',
@@ -978,7 +827,6 @@ export class HousingGatewayController {
     @Query() query: GetAdminHousingFilterDto,
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<HouseListingResponseDto[]>> {
-    // Check if user has admin role (Individual and Member cannot access admin endpoints)
     if (req.user.role === 'Individual' || req.user.role === 'Member') {
       this.logger.warn(`Unauthorized admin access attempt by ${req.user.role} ${req.user.sub}`);
       throw BaseResponseDto.fail('Unauthorized access to admin listings.', 'FORBIDDEN');
@@ -994,17 +842,98 @@ export class HousingGatewayController {
     }
 
     return resp;
-  } 
+  }
 
-  // Helper method to determine platform from AuthClientInfoDto
+  // ===========================================================
+  // GET LISTING DETAILS (WITH CACHE CONTROL)
+  // ===========================================================
+
+  @Version('1')
+  @Get('details/:id')
+  @ApiOperation({ 
+    summary: 'Get detailed listing information with AI-powered analytics tracking',
+    description: 'Retrieves complete details of a specific house listing by its ID with cache control.'
+  })
+  @ApiParam({ 
+    name: 'id', 
+    type: String,
+    description: 'CUID of the listing',
+    example: 'cmlqzy0zt000mdl7nx18c66bu',
+    required: true
+  })
+  @ApiQuery({ name: 'bypassCache', required: false, type: Boolean, description: 'Bypass cache (Admin only)', example: false })
+  @ApiQuery({ name: 'refreshCache', required: false, type: Boolean, description: 'Force refresh cache', example: false })
+  @ApiQuery({ name: 'cacheTTL', required: false, type: Number, description: 'Override cache TTL (seconds)', example: 600 })
+  @ApiQuery({ name: 'readOnly', required: false, type: Boolean, description: 'Don\'t write to cache', example: false })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'House listing retrieved successfully',
+    type: HouseListingResponseDto
+  })
+  async viewHouseListing(
+    @Param('id', ParseCuidPipe) id: string,
+    @Req() req: JwtRequest,
+    @ClientInfo() clientInfo: AuthClientInfoDto,
+    @Headers() headers: GetListingHeadersDto,
+    @Query() query: any,  // ✅ Use 'any' and manually parse
+  ): Promise<BaseResponseDto<HouseListingResponseDto>> {
+    const sessionId = req.user?.jti;
+    const seekerId = req.user?.sub;
+    
+    this.logger.debug(`Listing view - Seeker: ${seekerId}, Listing: ${id}`);
+
+    const context = new ListingViewContextDto();
+    context.seekerId = seekerId;
+    context.sessionId = sessionId;
+    context.client = clientInfo;
+    context.platform = (headers['x-platform'] as 'WEB' | 'MOBILE' | 'API' | 'CLI') || 
+                       this.determinePlatform(clientInfo);
+    context.referrer = headers.referer || 'DIRECT';
+    context.timeSpent = query.timeSpent ? parseInt(query.timeSpent) : undefined;
+    context.interactionType = query.interactionType as 'CLICK' | 'SCROLL' | 'DWELL' | undefined;
+    context.viewDuration = query.timeSpent ? parseInt(query.timeSpent) : undefined;
+    context.scrollDepth = query.scrollDepth ? parseInt(query.scrollDepth) : undefined;
+    
+    if (query.searchId || query.q || query.pos) {
+      const searchContext = new SearchContextDto();
+      searchContext.searchId = query.searchId;
+      searchContext.query = query.q;
+      searchContext.position = query.pos ? parseInt(query.pos) : undefined;
+      context.search = searchContext;
+    }
+ 
+    // ✅ MANUALLY PARSE ALL VALUES
+    const dto: GetHouseListingByIdDto = {
+      id: id,
+      context: context,
+      bypassCache: this.parseBoolean(query.bypassCache),
+      refreshCache: this.parseBoolean(query.refreshCache),
+      cacheTTL: this.parseNumber(query.cacheTTL) || 600,
+      readOnly: this.parseBoolean(query.readOnly),
+    };
+
+    this.logger.log(
+      `GetHouseListingById: id=${id}, ` +
+      `bypassCache=${dto.bypassCache}, refreshCache=${dto.refreshCache}, readOnly=${dto.readOnly}`
+    );
+
+    const resp = await this.housingService.getHouseListingWithTracking(dto);
+    if (!resp.success) throw resp;
+    
+    return resp;
+  }
+
+  // ===========================================================
+  // PRIVATE HELPERS
+  // ===========================================================
+
   private determinePlatform(clientInfo: AuthClientInfoDto): 'WEB' | 'MOBILE' | 'API' | 'CLI' {
     if (clientInfo.isBot) return 'API';
     if (clientInfo.deviceType === 'MOBILE' || clientInfo.deviceType === 'TABLET') return 'MOBILE';
     if (clientInfo.deviceType === 'DESKTOP') return 'WEB';
     return 'WEB';
   }
- 
-  // Helper method to generate anonymous ID using AuthClientInfoDto
+
   private generateAnonymousId(clientInfo: AuthClientInfoDto): string {
     const deviceFingerprint = `${clientInfo.device}_${clientInfo.os}_${clientInfo.osVersion || ''}_${clientInfo.browser || ''}_${clientInfo.ipAddress}`
       .replace(/\s+/g, '')
@@ -1014,5 +943,5 @@ export class HousingGatewayController {
     const hash = buffer.toString('base64').substring(0, 20).replace(/[^a-zA-Z0-9]/g, '');
     
     return `anon_${hash}`;
-  }   
+  }
 }

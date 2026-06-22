@@ -9,7 +9,7 @@ import { PrismaService } from '../../../../prisma/prisma.service';
 @Injectable()
 export class HousingTrainingDataService {
   private readonly logger = new Logger(HousingTrainingDataService.name);
-
+  
   constructor(private readonly prisma: PrismaService) {}
 
   /**

@@ -388,7 +388,7 @@ export class IndividualOnboardingService {
         data: {
           userUuid: userData.uuid,
           tokenId: tokenId,
-          hashedToken,
+          hashedToken: hashedToken,
           device: clientInfo?.device,
           ipAddress: clientInfo?.ipAddress,
           userAgent: clientInfo?.userAgent,
@@ -397,6 +397,9 @@ export class IndividualOnboardingService {
           osVersion: clientInfo?.osVersion,
           browser: clientInfo?.browser,
           browserVersion: clientInfo?.browserVersion,
+          isDesktop: clientInfo?.isDesktop,
+          isMobile: clientInfo?.isMobile,
+          isTablet: clientInfo?.isTablet,
           isBot: clientInfo?.isBot,
           lastActiveAt: new Date(),
           expiresAt,

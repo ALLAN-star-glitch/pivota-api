@@ -1,5 +1,4 @@
-export const VERTICALS = ['JOBS', 'HOUSING', 'SOCIAL_SUPPORT'] as const;
-export type Vertical = typeof VERTICALS[number];
+
 
 export const PRICE_UNITS = [
   'FIXED', 'PER_HOUR', 'PER_DAY', 'PER_VISIT', 'PER_SQFT', 

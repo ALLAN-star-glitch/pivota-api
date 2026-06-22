@@ -10,12 +10,13 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
-import { 
+import {  
   UserOnboardedEventDto, 
   UserLoginEmailDto,
   SendOtpEventDto 
 } from '@pivota-api/dtos';
 import { EmailTemplateService } from '../templates/email-template.service';
+
 
 @Injectable()
 export class AuthEmailService {

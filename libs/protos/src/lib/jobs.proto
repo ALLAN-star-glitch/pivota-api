@@ -10,10 +10,14 @@ service JobsService {
   rpc CreateJobPost (CreateJobPostRequest) returns (BaseJobPostCreateResponse);
   rpc CreateAdminJobPost (CreateJobPostRequest) returns (BaseJobPostCreateResponse);
   
-  // --- Discovery Flows ---
+  // --- Discovery Flows (WITH CACHE CONTROL) ---
   rpc GetJobPostById (GetJobPostByIdRequest) returns (BaseJobPostResponse);
   rpc GetJobsByCategory (GetJobsByCategoryRequest) returns (ListJobPostsResponse);
+  rpc GetAllJobs (GetAllJobsRequest) returns (ListJobPostsResponse);
   rpc ValidateJobPostIds(ValidateJobPostIdsRequest) returns (BaseValidateJobPostIdsResponse);
+  
+  // --- NEW: Get Job Listings by Owner ---
+  rpc GetJobListingsByOwner (GetJobListingsByOwnerRequest) returns (ListJobPostsResponse);
   
   // --- Update Flows ---
   rpc UpdateJobPost (UpdateJobPostRequest) returns (BaseJobPostResponse);
@@ -60,6 +64,16 @@ message CategoryBasic {
 }
 
 // ===================================================
+// PAGINATION
+// ===================================================
+message PaginationInfo {
+  int32 total = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  bool hasMore = 4;
+}
+
+// ===================================================
 // JOB APPLICATION ENTITIES
 // ===================================================
 message Attachment {
@@ -99,11 +113,11 @@ message JobApplication {
   optional string reviewedAt = 16;
   repeated Attachment attachments = 17;
   repeated StatusHistory statusHistory = 18;
-  optional string lastStatusChangeReason = 19; // For lightweight UI support
+  optional string lastStatusChangeReason = 19;
 }
 
 // ===================================================
-// JOB POST ENTITY
+// JOB POST ENTITY (With all fields)
 // ===================================================
 message JobPost {
   string id = 1;
@@ -112,32 +126,90 @@ message JobPost {
   CategoryBasic category = 4;
   CategoryBasic subCategory = 5;
   UserBasic creator = 6;
-  AccountBasic account = 7; 
-  string jobType = 8;
-  string locationCity = 9;
-  string locationNeighborhood = 10;
-  bool isRemote = 11;
-  bool requiresDocuments = 12;
-  bool requiresEquipment = 13;
-  double payAmount = 14;
-  string payRate = 15;
-  bool isNegotiable = 16;
-  repeated string skills = 17;
-  string experienceLevel = 18;
-  string employmentType = 19;
-  repeated string documentsNeeded = 20;
-  repeated string equipmentRequired = 21;
-  string additionalNotes = 22;
-  string status = 23;
-  int32 applicationsCount = 24;
-  string createdAt = 25;
-  string updatedAt = 26;
+  AccountBasic account = 7;
+  
+  // ============================================================
+  // JOB CHARACTERISTICS (All 9 fields)
+  // ============================================================
+  string employmentType = 8;
+  string paymentType = 9;
+  string workArrangement = 10;
+  string commitment = 11;
+  string workSchedule = 12;
+  string documentationLevel = 13;
+  string skillLevel = 14;
+  string experienceLevel = 15;
+  string educationLevel = 16;
+  
+  // ============================================================
+  // LOCATION
+  // ============================================================
+  string locationCity = 17;
+  string locationNeighborhood = 18;
+  bool isRemote = 19;
+  
+  // ============================================================
+  // COMPENSATION
+  // ============================================================
+  double payAmount = 20;
+  string payRate = 21;
+  bool isNegotiable = 22;
+  
+  // ============================================================
+  // REQUIREMENTS
+  // ============================================================
+  repeated string skills = 23;
+  bool requiresDocuments = 24;
+  bool requiresEquipment = 25;
+  repeated string documentsNeeded = 26;
+  repeated string equipmentRequired = 27;
+  string additionalNotes = 28;
+  
+  // ============================================================
+  // REFERRALS
+  // ============================================================
+  bool allowReferrals = 29;
+  double referralBonus = 30;
+  
+  // ============================================================
+  // STATUS & TIMESTAMPS
+  // ============================================================
+  string status = 31;
+  int32 applicationsCount = 32;
+  string createdAt = 33;
+  string updatedAt = 34;
+  
+  // ============================================================
+  // APPLICATION & START TIMELINE
+  // ============================================================
+  optional string applicationDeadline = 35;
+  optional string startDate = 36;
+  bool startDateFlexible = 37;
+  optional int32 maxApplications = 38;
+  
+  // ============================================================
+  // PRIVACY & VISIBILITY
+  // ============================================================
+  bool isAnonymous = 39;
+  optional string displayName = 40;
+  optional string contactEmail = 41;
+  
+  // ============================================================
+  // WORK DETAILS
+  // ============================================================
+  optional int32 hoursPerWeek = 42;
+  optional int32 contractDuration = 43;
+  
+  // ============================================================
+  // ANALYTICS
+  // ============================================================
+  int32 viewCount = 44;
+  int32 shareCount = 45;
 }
 
 // ===================================================
-// REQUEST MESSAGES
+// REQUEST MESSAGES - APPLICATIONS
 // ===================================================
-
 message GetOwnApplicationsRequest {
   string applicantId = 1;
   optional string status = 2;
@@ -151,55 +223,162 @@ message GetAdminApplicationsRequest {
 
 message GetApplicationByIdRequest {
   string id = 1;
-  string requesterId = 2; // Required for security/ownership check
-  optional string requesterRole = 3; // Optional for more nuanced access control (e.g., admin vs. employer) 
+  string requesterId = 2;
+  optional string requesterRole = 3;
 }
 
+// ===================================================
+// REQUEST MESSAGES - JOB POSTS (WITH CACHE CONTROL)
+// ===================================================
+
 message CreateJobPostRequest {
+  // Core fields
   string title = 1;
   string description = 2;
   string categoryId = 3;
   string subCategoryId = 4;
-  string jobType = 5;
-  string locationCity = 6;
-  string locationNeighborhood = 7;
-  bool isRemote = 8;
-  double payAmount = 9;
-  string payRate = 10;
-  bool isNegotiable = 11;
-  bool requiresDocuments = 12;
-  bool requiresEquipment = 13;
-  repeated string skills = 14;
-  string experienceLevel = 15;
-  string employmentType = 16;
-  repeated string documentsNeeded = 17;
-  repeated string equipmentRequired = 18;
-  string additionalNotes = 19;
-  string status = 20;
-
-  // Identity Pillars
-  string accountId = 21;
-  string creatorId = 22;
   
-  // Optional for Denormalization (Shared Nav support)
-  optional string creatorName = 23;
-  optional string accountName = 24;
+  // ============================================================
+  // JOB CHARACTERISTICS (All 9 fields)
+  // ============================================================
+  string employmentType = 5;
+  string paymentType = 6;
+  string workArrangement = 7;
+  string commitment = 8;
+  string workSchedule = 9;
+  string documentationLevel = 10;
+  string skillLevel = 11;
+  string experienceLevel = 12;
+  string educationLevel = 13;
+  
+  // ============================================================
+  // LOCATION
+  // ============================================================
+  string locationCity = 14;
+  string locationNeighborhood = 15;
+  bool isRemote = 16;
+  
+  // ============================================================
+  // COMPENSATION
+  // ============================================================
+  double payAmount = 17;
+  string payRate = 18;
+  bool isNegotiable = 19;
+  
+  // ============================================================
+  // REQUIREMENTS
+  // ============================================================
+  repeated string skills = 20;
+  bool requiresDocuments = 21;
+  bool requiresEquipment = 22;
+  repeated string documentsNeeded = 23;
+  repeated string equipmentRequired = 24;
+  string additionalNotes = 25;
+  
+  // ============================================================
+  // REFERRALS
+  // ============================================================
+  bool allowReferrals = 26;
+  double referralBonus = 27;
+  
+  // ============================================================
+  // IDENTITY & STATUS
+  // ============================================================
+  string status = 28;
+  string accountId = 29;
+  string creatorId = 30;
+  optional string creatorName = 31;
+  optional string accountName = 32;
+  
+  // ============================================================
+  // APPLICATION & START TIMELINE
+  // ============================================================
+  optional string applicationDeadline = 33;
+  optional string startDate = 34;
+  bool startDateFlexible = 35;
+  optional int32 maxApplications = 36;
+  
+  // ============================================================
+  // PRIVACY & VISIBILITY
+  // ============================================================
+  bool isAnonymous = 37;
+  optional string displayName = 38;
+  optional string contactEmail = 39;
+  
+  // ============================================================
+  // WORK DETAILS
+  // ============================================================
+  optional int32 hoursPerWeek = 40;
+  optional int32 contractDuration = 41;
 }
 
 message UpdateJobPostRequest {
   string id = 1;
   string creatorId = 2;
-
   optional string accountId = 3;
+  
+  // Optional fields to update
   optional string title = 4;
   optional string description = 5;
   optional string status = 6;
-  optional double payAmount = 7;
-  optional bool isNegotiable = 8;
-  optional string locationCity = 9;
-  optional string locationNeighborhood = 10;
-  optional string creatorName = 11;
-  optional string accountName = 12;
+  
+  // Job Characteristics
+  optional string employmentType = 7;
+  optional string paymentType = 8;
+  optional string workArrangement = 9;
+  optional string commitment = 10;
+  optional string workSchedule = 11;
+  optional string documentationLevel = 12;
+  optional string skillLevel = 13;
+  optional string experienceLevel = 14;
+  optional string educationLevel = 15;
+  
+  // Location
+  optional string locationCity = 16;
+  optional string locationNeighborhood = 17;
+  optional bool isRemote = 18;
+  
+  // Compensation
+  optional double payAmount = 19;
+  optional string payRate = 20;
+  optional bool isNegotiable = 21;
+  
+  // Requirements
+  repeated string skills = 22;
+  optional bool requiresDocuments = 23;
+  optional bool requiresEquipment = 24;
+  repeated string documentsNeeded = 25;
+  repeated string equipmentRequired = 26;
+  optional string additionalNotes = 27;
+  
+  // Referrals
+  optional bool allowReferrals = 28;
+  optional double referralBonus = 29;
+  
+  // Identity
+  optional string creatorName = 30;
+  optional string accountName = 31;
+  
+  // ============================================================
+  // APPLICATION & START TIMELINE
+  // ============================================================
+  optional string applicationDeadline = 32;
+  optional string startDate = 33;
+  optional bool startDateFlexible = 34;
+  optional int32 maxApplications = 35;
+  
+  // ============================================================
+  // PRIVACY & VISIBILITY
+  // ============================================================
+  optional bool isAnonymous = 36;
+  optional string displayName = 37;
+  optional string contactEmail = 38;
+  
+  // ============================================================
+  // WORK DETAILS
+  // ============================================================
+  optional int32 hoursPerWeek = 39;
+  optional int32 contractDuration = 40;
 }
 
 message CloseJobPostRequest {
@@ -223,14 +402,206 @@ message CreateJobApplicationRequest {
   repeated Attachment attachments = 11;
 }
 
-message GetJobPostByIdRequest { string id = 1; }
-message GetJobsByCategoryRequest { string categoryId = 1; }
-message ValidateJobPostIdsRequest { repeated string ids = 1; }
+// ===================================================
+// GET JOB BY ID (WITH CACHE CONTROL)
+// ===================================================
+message GetJobPostByIdRequest {
+  string id = 1;
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 2;
+  optional bool refreshCache = 3;
+  optional int32 cacheTTL = 4;
+  optional bool readOnly = 5;
+}
+
+// ===================================================
+// GET JOBS BY CATEGORY (WITH CACHE CONTROL)
+// ===================================================
+message GetJobsByCategoryRequest {
+  optional string categoryId = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+  optional string city = 4;
+  optional double minPay = 5;
+  optional double maxPay = 6;
+  optional string sortBy = 7;
+  
+  // ============================================================
+  // JOB CHARACTERISTICS FILTERS
+  // ============================================================
+  optional string employmentType = 8;
+  optional string paymentType = 9;
+  optional string workArrangement = 10;
+  optional string commitment = 11;
+  optional string workSchedule = 12;
+  optional string documentationLevel = 13;
+  optional string skillLevel = 14;
+  optional string experienceLevel = 15;
+  optional string educationLevel = 16;
+  
+  optional bool isRemote = 17;
+  
+  // ============================================================
+  // NEW FILTERS
+  // ============================================================
+  optional bool isAnonymous = 18;
+  optional string applicationDeadlineAfter = 19;
+  optional string applicationDeadlineBefore = 20;
+  optional string startDateAfter = 21;
+  optional string startDateBefore = 22;
+  optional int32 hoursPerWeekMin = 23;
+  optional int32 hoursPerWeekMax = 24;
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 25;
+  optional bool skipCache = 26;
+  optional bool refreshCache = 27;
+  optional int32 cacheTTL = 28;
+  optional bool readOnly = 29;
+}
+
+// ===================================================
+// GET ALL JOBS (WITH CACHE CONTROL)
+// ===================================================
+message GetAllJobsRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+  optional string city = 3;
+  optional double minPay = 4;
+  optional double maxPay = 5;
+  optional string sortBy = 6;
+  
+  // ============================================================
+  // JOB CHARACTERISTICS FILTERS
+  // ============================================================
+  optional string employmentType = 7;
+  optional string paymentType = 8;
+  optional string workArrangement = 9;
+  optional string commitment = 10;
+  optional string workSchedule = 11;
+  optional string documentationLevel = 12;
+  optional string skillLevel = 13;
+  optional string experienceLevel = 14;
+  optional string educationLevel = 15;
+  
+  optional bool isRemote = 16;
+  
+  // ============================================================
+  // NEW FILTERS
+  // ============================================================
+  optional bool isAnonymous = 17;
+  optional string applicationDeadlineAfter = 18;
+  optional string applicationDeadlineBefore = 19;
+  optional string startDateAfter = 20;
+  optional string startDateBefore = 21;
+  optional int32 hoursPerWeekMin = 22;
+  optional int32 hoursPerWeekMax = 23;
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 24;
+  optional bool skipCache = 25;
+  optional bool refreshCache = 26;
+  optional int32 cacheTTL = 27;
+  optional bool readOnly = 28;
+}
+
+// ===================================================
+// GET JOB LISTINGS BY OWNER (WITH CACHE CONTROL)
+// ===================================================
+message GetJobListingsByOwnerRequest {
+  string accountId = 1;
+  optional string status = 2;
+  
+  // ========== PAGINATION ==========
+  optional int32 limit = 3;
+  optional int32 offset = 4;
+  optional string sortBy = 5;
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 6;
+  optional bool skipCache = 7;
+  optional bool refreshCache = 8;
+  optional int32 cacheTTL = 9;
+  optional bool readOnly = 10;
+}
+
+// ===================================================
+// GET OWN JOBS (WITH PAGINATION - NO CACHING)
+// ===================================================
+message GetOwnJobsRequest {
+  string creatorId = 1;
+  optional string status = 2;
+  
+  // ============================================================
+  // JOB CHARACTERISTICS FILTERS
+  // ============================================================
+  optional string employmentType = 3;
+  optional string paymentType = 4;
+  optional string workArrangement = 5;
+  optional string commitment = 6;
+  optional string experienceLevel = 7;
+  optional string educationLevel = 8;
+  
+  // ============================================================
+  // NEW FILTERS - ADD THESE
+  // ============================================================
+  optional bool isAnonymous = 9;
+  optional int32 hoursPerWeekMin = 10;
+  optional int32 hoursPerWeekMax = 11;
+  
+  // ========== PAGINATION ==========
+  optional int32 limit = 12;
+  optional int32 offset = 13;
+  optional string sortBy = 14;
+}
+
+// ===================================================
+// GET ADMIN JOBS (WITH PAGINATION - NO CACHING)
+// ===================================================
+message GetAdminJobsRequest {
+  optional string creatorId = 1;
+  optional string accountId = 2;
+  optional string status = 3;
+  
+  // ============================================================
+  // JOB CHARACTERISTICS FILTERS
+  // ============================================================
+  optional string employmentType = 4;
+  optional string paymentType = 5;
+  optional string workArrangement = 6;
+  optional string commitment = 7;
+  optional string experienceLevel = 8;
+  optional string educationLevel = 9;
+  optional bool isRemote = 10;
+  
+  // ============================================================
+  // NEW FILTERS - ADD THESE
+  // ============================================================
+  optional bool isAnonymous = 11;
+  optional string applicationDeadlineAfter = 12;
+  optional string applicationDeadlineBefore = 13;
+  optional string startDateAfter = 14;
+  optional string startDateBefore = 15;
+  optional int32 hoursPerWeekMin = 16;
+  optional int32 hoursPerWeekMax = 17;
+  
+  // ========== PAGINATION ==========
+  optional int32 limit = 18;
+  optional int32 offset = 19;
+  optional string sortBy = 20;
+}
+
+// ===================================================
+// VALIDATE JOB POST IDS
+// ===================================================
+message ValidateJobPostIdsRequest {
+  repeated string ids = 1;
+}
 
 // ===================================================
 // RESPONSE MESSAGES
 // ===================================================
-
 message ListJobApplicationsResponse {
   bool success = 1;
   string code = 2;
@@ -266,7 +637,8 @@ message ListJobPostsResponse {
   string code = 2;
   string message = 3;
   repeated JobPost data = 4;
-  ErrorPayload error = 5;
+  PaginationInfo pagination = 5;
+  ErrorPayload error = 6;
 }
 
 message CloseJobPostData {
@@ -303,15 +675,4 @@ message BaseValidateJobPostIdsResponse {
   string message = 3;
   ValidateJobIdsData data = 4;
   ErrorPayload error = 5;
-}
-
-message GetOwnJobsRequest {
-  string creatorId = 1;
-  optional string status = 2;
-}
-
-message GetAdminJobsRequest {
-  optional string creatorId = 1;
-  optional string accountId = 2;
-  optional string status = 3;
 }

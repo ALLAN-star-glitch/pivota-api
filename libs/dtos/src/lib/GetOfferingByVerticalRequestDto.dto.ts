@@ -1,6 +1,6 @@
 import { IsString, IsNotEmpty, IsOptional, IsIn, IsNumber, Min, Max, IsBoolean, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { VERTICALS, PRICE_UNITS } from '@pivota-api/constants';
+import { VERTICALS } from '@pivota-api/constants';
 import { Type } from 'class-transformer';
 
 export class GetOfferingByVerticalRequestDto {
@@ -100,4 +100,58 @@ export class GetOfferingByVerticalRequestDto {
   @IsNumber()
   @Min(0)
   offset?: number;
+
+  // ========== CACHE CONTROL ==========
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Bypass cache and fetch fresh data from database (Admin only)',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  bypassCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Skip reading from cache but still write to cache (Cache warming)',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  skipCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Force refresh cache even if it exists',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  refreshCache?: boolean;
+
+  @ApiPropertyOptional({ 
+    example: 300, 
+    description: 'Override cache TTL in seconds (default: 300)',
+    default: 300
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(10)
+  @Max(3600)
+  cacheTTL?: number;
+
+  @ApiPropertyOptional({ 
+    example: false, 
+    description: 'Read-only mode - don\'t write to cache',
+    default: false
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  readOnly?: boolean;
 }

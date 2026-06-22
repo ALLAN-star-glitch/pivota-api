@@ -67,7 +67,6 @@ import { StorageService } from '@pivota-api/shared-storage';
 import { CategoryService } from './category.service';
 import { BusinessProfileType, createBusinessProfile } from '../../utils/business-profiles-creator.utils';
 
-
 // ==================== Type Definitions ====================
 
 type AccountWithIndividualProfiles = Account & {

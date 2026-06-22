@@ -1,10 +1,18 @@
-// get-all-offerings.dto.ts
+// get-offerings-by-category.dto.ts
 
-import { IsOptional, IsIn, IsNumber, Min, Max, IsBoolean, IsString } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsNumber, Min, Max, IsBoolean, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
-export class GetAllOfferingsRequestDto {
+export class GetOfferingsByCategoryRequestDto {
+@ApiPropertyOptional({ 
+    example: 'cmnboid7w006sarihf05x9txr', 
+    description: 'Category ID to filter by' 
+  })
+  @IsOptional()  // ← ADD THIS
+  @IsString()    // ← Keep this
+  categoryId?: string;  // ← Make optional
+
   @ApiPropertyOptional({ 
     example: 20, 
     description: 'Results per page (default: 20, max: 100)' 
@@ -53,36 +61,6 @@ export class GetAllOfferingsRequestDto {
   @IsNumber()
   @Min(0)
   maxPrice?: number;
-
-  @ApiPropertyOptional({ 
-    example: 'recent', 
-    description: 'Sort order',
-    enum: ['recent', 'price_asc', 'price_desc', 'rating']
-  })
-  @IsOptional()
-  @IsString()
-  @IsIn(['recent', 'price_asc', 'price_desc', 'rating'])
-  sortBy?: 'recent' | 'price_asc' | 'price_desc' | 'rating';
-
-  @ApiPropertyOptional({ 
-    example: 4, 
-    description: 'Minimum rating (1-5)' 
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
-  @Max(5)
-  minRating?: number;
-
-  @ApiPropertyOptional({ 
-    example: true, 
-    description: 'Filter by verification status' 
-  })
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  verifiedOnly?: boolean;
 
   // ========== CACHE CONTROL ==========
 

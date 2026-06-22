@@ -388,6 +388,7 @@ async createBooking(
   dto: CreateBookingRequestDto & { clientId: string; isPlatformAdmin?: boolean }
 ): Promise<BaseResponseDto<any>> {
   try {
+    // ========== FETCH SERVICE OFFERING ==========
     const serviceOffering = await this.prisma.serviceOffering.findUnique({
       where: { externalId: dto.serviceId },
       include: { 
@@ -404,16 +405,19 @@ async createBooking(
       return BaseResponseDto.fail('Service offering is not available for booking', 'SERVICE_UNAVAILABLE');
     }
 
+    // ========== FETCH CLIENT DETAILS ==========
     const client = await this.getUserDetails(dto.clientId);
     if (!client) {
       return BaseResponseDto.fail('Client profile not found', 'CLIENT_NOT_FOUND');
     }
 
+    // ========== FETCH CONTRACTOR DETAILS ==========
     const contractorProfile = await this.getSkilledProfessionalDetails(dto.contractorId);
     if (!contractorProfile) {
       return BaseResponseDto.fail('Contractor profile not found', 'CONTRACTOR_NOT_FOUND');
     }
 
+    // ========== VALIDATE SCHEDULED DATE ==========
     let scheduledDate: Date;
     try {
       scheduledDate = new Date(dto.scheduledDate);
@@ -428,15 +432,47 @@ async createBooking(
       return BaseResponseDto.fail('Invalid scheduled date format', 'INVALID_DATE_FORMAT');
     }
 
-    if (!dto.isPlatformAdmin) {
-      if (client.accountUuid === contractorProfile.accountUuid) {
-        return BaseResponseDto.fail('You cannot book your own service offering', 'SELF_BOOKING_NOT_ALLOWED');
-      }
-      if (serviceOffering.creatorId === dto.clientId) {
-        return BaseResponseDto.fail('You cannot book a service that you created', 'SELF_BOOKING_NOT_ALLOWED');
-      }
+    // ================================================================
+    // ========== SELF-BOOKING VALIDATION - APPLIES TO EVERYONE ==========
+    // ================================================================
+    // These checks apply to ALL users including platform admins
+    
+    // Check 1: Client cannot book their own service (by account UUID)
+    if (client.accountUuid === contractorProfile.accountUuid) {
+      this.logger.warn(`⚠️ SELF-BOOKING ATTEMPT: Client ${dto.clientId} tried to book their own service (contractor ${dto.contractorId})`);
+      return BaseResponseDto.fail('You cannot book your own service offering', 'SELF_BOOKING_NOT_ALLOWED');
+    }
+    
+    // Check 2: Client cannot book a service they created
+    if (serviceOffering.creatorId === dto.clientId) {
+      this.logger.warn(`⚠️ SELF-BOOKING ATTEMPT: Client ${dto.clientId} tried to book service they created (${serviceOffering.id})`);
+      return BaseResponseDto.fail('You cannot book a service that you created', 'SELF_BOOKING_NOT_ALLOWED');
+    }
+    
+    // Check 3: Client ID cannot equal contractor ID (direct match)
+    if (dto.clientId === dto.contractorId) {
+      this.logger.warn(`⚠️ SELF-BOOKING ATTEMPT: Client ${dto.clientId} tried to book themselves as contractor`);
+      return BaseResponseDto.fail('You cannot book a service from yourself', 'SELF_BOOKING_NOT_ALLOWED');
+    }
+    
+    // Check 4: Client's account UUID cannot match the service offering's creator account UUID
+    const serviceCreatorDetails = await this.getUserDetails(serviceOffering.creatorId);
+    if (serviceCreatorDetails && client.accountUuid === serviceCreatorDetails.accountUuid) {
+      this.logger.warn(`⚠️ SELF-BOOKING ATTEMPT: Client ${dto.clientId} tried to book service owned by their account`);
+      return BaseResponseDto.fail('You cannot book a service that you own', 'SELF_BOOKING_NOT_ALLOWED');
+    }
+    
+    // Check 5: Ensure the service offering belongs to the contractor being booked
+    if (serviceOffering.skilledProfessionalId !== dto.contractorId) {
+      this.logger.warn(`⚠️ MISMATCH: Service ${serviceOffering.id} belongs to ${serviceOffering.skilledProfessionalId} but booking targets ${dto.contractorId}`);
+      return BaseResponseDto.fail('The service offering does not belong to the selected contractor', 'INVALID_SERVICE_CONTRACTOR');
     }
 
+    // ================================================================
+    // ========== COVERAGE AREA VALIDATION ==========
+    // ================================================================
+    // If you want admins to bypass coverage checks, keep the !dto.isPlatformAdmin condition
+    // If admins should also respect coverage, remove the condition entirely
     if (!dto.isPlatformAdmin) {
       const coverageAreas = this.parseCoverageAreas(serviceOffering.coverageAreas) || [];
       const bookingCity = dto.locationCity;
@@ -453,7 +489,9 @@ async createBooking(
       }
     }
 
+    // ================================================================
     // ========== NEGOTIATION LOGIC ==========
+    // ================================================================
     let servicePrice = serviceOffering.basePrice;
     let isNegotiated = false;
     let proposedPrice: number | null = null;
@@ -492,7 +530,9 @@ async createBooking(
       this.logger.log(`Negotiated price: Customer proposed ${proposedPrice} ${serviceOffering.currency} for service ${serviceOffering.id}`);
     }
 
+    // ================================================================
     // ========== DURATION AND PRICE CALCULATION ==========
+    // ================================================================
     switch (priceUnit) {
       case 'PER_HOUR':
         if (dto.durationHours !== undefined && dto.durationHours !== null) {
@@ -563,7 +603,9 @@ async createBooking(
         break;
     }
 
+    // ================================================================
     // ========== AVAILABILITY CHECK ==========
+    // ================================================================
     if (!dto.isPlatformAdmin) {
       const dayOfWeek = scheduledDate.toLocaleDateString('en-US', { weekday: 'long' });
       const scheduledTime = scheduledDate.toTimeString().slice(0, 5);
@@ -600,7 +642,9 @@ async createBooking(
       }
     }
 
+    // ================================================================
     // ========== CONFLICT CHECK ==========
+    // ================================================================
     if (!dto.isPlatformAdmin) {
       const startOfDay = new Date(scheduledDate);
       startOfDay.setHours(0, 0, 0, 0);
@@ -653,7 +697,9 @@ async createBooking(
       }
     }
 
+    // ================================================================
     // ========== BOOKING FEE CALCULATION ==========
+    // ================================================================
     let bookingFeeAmount = 0;
     let bookingFeeRefundable = false;
     let bookingFeeCurrency = serviceOffering.currency;
@@ -670,17 +716,18 @@ async createBooking(
 
     const totalAmount = servicePrice + bookingFeeAmount;
 
+    // ================================================================
     // ========== PLATFORM COMMISSION CALCULATION ==========
-    // Platform commission percentage (can be moved to config)
+    // ================================================================
     const PLATFORM_COMMISSION_PERCENTAGE = 5; // 5%
     const platformCommissionAmount = (totalAmount * PLATFORM_COMMISSION_PERCENTAGE) / 100;
     const platformCommissionFormatted = `${platformCommissionAmount.toLocaleString()} ${serviceOffering.currency}`;
-    
-    // Amount that goes to service provider (after platform commission)
     const serviceProviderPayout = totalAmount - platformCommissionAmount;
     const serviceProviderPayoutFormatted = `${serviceProviderPayout.toLocaleString()} ${serviceOffering.currency}`;
 
+    // ================================================================
     // ========== CREATE BOOKING ==========
+    // ================================================================
     const booking = await this.prisma.serviceBooking.create({
       data: {
         contractorId: dto.contractorId,
@@ -718,13 +765,20 @@ async createBooking(
 
     const bookingWithDetails = booking as unknown as ServiceBookingWithDetails;
 
+    // ========== LOG ADMIN ACTIONS ==========
+    if (dto.isPlatformAdmin) {
+      this.logger.warn(`⚠️ ADMIN ACTION: Platform admin created booking ${bookingWithDetails.id} for client ${dto.clientId} with contractor ${dto.contractorId}`);
+    }
+
     this.logger.log(`Booking created: ${bookingWithDetails.id} - Client: ${dto.clientId} - Contractor: ${dto.contractorId} - ${isNegotiated ? `Negotiated Price: ${servicePrice}` : `Standard Price: ${servicePrice}`} + Booking Fee: ${bookingFeeAmount} = Total: ${totalAmount} ${serviceOffering.currency}`);
 
     const mappedBooking = this.mapBookingToResponseDto(bookingWithDetails);
     await this.cacheBooking(booking.id, mappedBooking);
     await this.cacheBookingByExternalId(booking.externalId, mappedBooking);
 
+    // ================================================================
     // ========== FORMAT PRICE UNIT DISPLAY ==========
+    // ================================================================
     const getPriceUnitDisplay = (unit: string): string => {
       switch (unit) {
         case 'PER_HOUR': return 'hourly';
@@ -737,7 +791,6 @@ async createBooking(
       }
     };
 
-    // ========== FORMAT DURATION DISPLAY ==========
     const getDurationDisplay = (): { text: string; unit: string; displayText: string } => {
       if (priceUnit === 'FIXED' || priceUnit === 'PER_SESSION') {
         return { text: '', unit: '', displayText: 'One-time service' };
@@ -779,7 +832,9 @@ async createBooking(
     const durationInfo = getDurationDisplay();
     const priceUnitDisplay = getPriceUnitDisplay(priceUnit);
 
+    // ================================================================
     // ========== CALCULATE NEGOTIATION DETAILS ==========
+    // ================================================================
     let negotiationDetails = null;
     if (isNegotiated && proposedPrice) {
       const originalAmount = serviceOffering.basePrice;
@@ -810,12 +865,12 @@ async createBooking(
       };
     }
 
-    // ========== CALCULATE ORIGINAL SUBTOTAL ==========
     const originalSubtotal = serviceOffering.basePrice * (serviceDuration || 1);
-
-    // ========== QUEUE NOTIFICATIONS WITH ENHANCED DATA ==========
     const hasBookingFee = bookingFeeAmount > 0;
 
+    // ================================================================
+    // ========== QUEUE NOTIFICATIONS ==========
+    // ================================================================
     await this.queue.addJob('notification-queue', 'booking.created', {
       // Customer details
       customerEmail: bookingWithDetails.clientEmail,
@@ -861,7 +916,7 @@ async createBooking(
       
       hasBookingFee: hasBookingFee,
       
-      // NEW: Platform commission details
+      // Platform commission details
       platformCommissionPercentage: PLATFORM_COMMISSION_PERCENTAGE,
       platformCommissionAmount: platformCommissionAmount,
       platformCommissionFormatted: platformCommissionFormatted,
@@ -924,9 +979,15 @@ async createBooking(
       bookingExternalId: booking.externalId,
       createdAt: booking.createdAt,
       status: booking.status,
-      currency: serviceOffering.currency
-    });
+      currency: serviceOffering.currency,
+      
+      // Admin action flag for audit
+      createdByAdmin: dto.isPlatformAdmin || false
+    }); 
 
+    // ================================================================
+    // ========== RETURN RESPONSE ==========
+    // ================================================================
     return BaseResponseDto.ok(
       mappedBooking,
       isNegotiated 

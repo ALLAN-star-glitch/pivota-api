@@ -14,8 +14,15 @@ import {
   JobApplicationDetailResponseDto,
   CloseJobGrpcRequestDto,
   UpdateJobGrpcRequestDto,
+  GetAllJobsRequestDto,
+  GetJobsByCategoryRequestDto,
+  GetJobByIdRequestDto,
+  GetJobListingsByOwnerDto,
+  GetAdminJobsFilterDto,
+  GetOwnJobsFilterDto,
 } from '@pivota-api/dtos';
 import { JobsService } from './jobs.service';
+
 @Controller('jobs')
 export class JobsController {
   private readonly logger = new Logger(JobsController.name);
@@ -48,38 +55,92 @@ export class JobsController {
   }
 
   // ======================================================
-  // 2. READ FLOWS (Discovery & Listings)
+  // 2. READ FLOWS (Discovery & Listings WITH CACHING)
   // ======================================================
 
+  /**
+   * Get all jobs with pagination and caching
+   */
+  @GrpcMethod('JobsService', 'GetAllJobs')
+  async getAllJobs(
+    data: GetAllJobsRequestDto,
+  ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
+    this.logger.debug(
+      `[gRPC] GetAllJobs: limit=${data.limit}, offset=${data.offset}, sortBy=${data.sortBy}, ` +
+      `bypassCache=${data.bypassCache}, skipCache=${data.skipCache}, refreshCache=${data.refreshCache}`
+    );
+    return this.jobsService.getAllJobs(data);
+  }
+
+  /**
+   * Get job by ID with caching
+   */
   @GrpcMethod('JobsService', 'GetJobPostById')
   async getJobPostById(
-    data: { id: string },
+    data: GetJobByIdRequestDto,
   ): Promise<BaseResponseDto<JobPostResponseDto>> {
-    this.logger.debug(`[gRPC] GetJobPostById: ${data.id}`);
-    return this.jobsService.getJobPostById(data.id);
+    this.logger.debug(
+      `[gRPC] GetJobPostById: ${data.id}, ` +
+      `bypassCache=${data.bypassCache}, refreshCache=${data.refreshCache}`
+    );
+    return this.jobsService.getJobPostById(data);
   }
 
+  /**
+   * Get jobs by category with caching
+   */
   @GrpcMethod('JobsService', 'GetJobsByCategory')
   async getJobsByCategory(
-    data: { categoryId: string },
+    data: GetJobsByCategoryRequestDto,
   ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
-    this.logger.debug(`[gRPC] GetJobsByCategory: ${data.categoryId}`);
-    return this.jobsService.getJobsByCategory(data.categoryId);
+    this.logger.debug(
+      `[gRPC] GetJobsByCategory: categoryId=${data.categoryId}, ` +
+      `bypassCache=${data.bypassCache}, skipCache=${data.skipCache}, refreshCache=${data.refreshCache}`
+    );
+    return this.jobsService.getJobsByCategory(data);
   }
 
+  /**
+   * Get job listings by owner (account) with pagination and caching
+   */
+  @GrpcMethod('JobsService', 'GetJobListingsByOwner')
+  async getJobListingsByOwner(
+    data: GetJobListingsByOwnerDto,
+  ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
+    this.logger.debug(
+      `[gRPC] GetJobListingsByOwner: accountId=${data.accountId}, ` +
+      `limit=${data.limit}, offset=${data.offset}, sortBy=${data.sortBy}, ` +
+      `bypassCache=${data.bypassCache}, skipCache=${data.skipCache}, refreshCache=${data.refreshCache}`
+    );
+    return this.jobsService.getJobListingsByOwner(data);
+  }
+
+  /**
+   * Get own jobs (No caching - user-specific)
+   */
   @GrpcMethod('JobsService', 'GetOwnJobs')
   async getOwnJobs(
-    data: { creatorId: string; status?: string },
+    data: GetOwnJobsFilterDto & { creatorId: string },
   ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
-    this.logger.debug(`[gRPC] GetOwnJobs for User: ${data.creatorId} | Status: ${data.status || 'ALL'}`);
-    return this.jobsService.getOwnJobs(data.creatorId, data.status);
+    const { creatorId, ...filter } = data;
+    this.logger.debug(
+      `[gRPC] GetOwnJobs for User: ${creatorId} | Status: ${filter.status || 'ALL'} | ` +
+      `limit=${filter.limit}, offset=${filter.offset}, sortBy=${filter.sortBy}`
+    );
+    return this.jobsService.getOwnJobs(creatorId, filter);
   }
 
+  /**
+   * Get admin jobs with pagination (No caching - admin specific)
+   */
   @GrpcMethod('JobsService', 'GetAdminJobs')
   async getAdminJobs(
-    data: { creatorId?: string; accountId?: string; status?: string },
+    data: GetAdminJobsFilterDto,
   ): Promise<BaseResponseDto<JobPostResponseDto[]>> {
-    this.logger.debug(`[gRPC] GetAdminJobs filters: ${JSON.stringify(data)}`);
+    this.logger.debug(
+      `[gRPC] GetAdminJobs filters: creatorId=${data.creatorId}, accountId=${data.accountId}, ` +
+      `status=${data.status}, limit=${data.limit}, offset=${data.offset}, sortBy=${data.sortBy}`
+    );
     return this.jobsService.getAdminJobs(data);
   }
 
@@ -94,8 +155,6 @@ export class JobsController {
     this.logger.debug(
       `[gRPC] UpdateJobPost | Job: ${data.id} | Actor: ${data.creatorId} | Acc: ${data.accountId}`
     );
-    
-    // Pass the unified DTO to the service
     return this.jobsService.updateJobPost(data);
   }
 
@@ -106,8 +165,6 @@ export class JobsController {
     this.logger.debug(
       `[gRPC] UpdateAdminJobPost | Job: ${data.id} | Target: ${data.creatorId}`
     );
-    
-    // Admin flow uses the same DTO but different service logic for identity validation
     return this.jobsService.updateAdminJobPost(data);
   }
 
@@ -160,7 +217,7 @@ export class JobsController {
     this.logger.debug(`[gRPC] GetOwnApplications for Applicant: ${data.applicantId}`);
     return this.jobsService.getOwnApplications(data.applicantId, data.status);
   }
-
+ 
   @GrpcMethod('JobsService', 'GetAdminApplications')
   async getAdminApplications(
     data: { applicantId?: string; employerId?: string; status?: string },
@@ -175,6 +232,5 @@ export class JobsController {
   ): Promise<BaseResponseDto<JobApplicationDetailResponseDto>> {
     this.logger.debug(`[gRPC] GetApplicationById: ${data.id} requested by ${data.requesterId}`);
     return this.jobsService.getApplicationById(data.id, data.requesterId, data.requesterRole);
-  }
-
+  } 
 }

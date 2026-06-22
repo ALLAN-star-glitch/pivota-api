@@ -10,10 +10,18 @@ service HousingService {
   rpc CreateHouseListing (CreateHouseListingRequest) returns (BaseHouseListingCreateResponse);
   rpc CreateAdminHouseListing (CreateHouseListingRequest) returns (BaseHouseListingCreateResponse);
   
+  // ===================================================
+  // READ METHODS (WITH CACHE CONTROL)
+  // ===================================================
   rpc GetHouseListingById (GetHouseListingByIdRequest) returns (BaseHouseListingResponse);
   rpc GetListingsByOwner (GetListingsByOwnerRequest) returns (ListHouseListingsResponse);
   rpc GetAdminListings (GetAdminListingsRequest) returns (ListHouseListingsResponse);
   rpc SearchListings (SearchHouseListingsRequest) returns (ListHouseListingsResponse);
+  
+  // ===================================================
+  // NEW: GET HOUSE LISTINGS BY CATEGORY (WITH CACHE CONTROL)
+  // ===================================================
+  rpc GetHouseListingsByCategory (GetHouseListingsByCategoryRequest) returns (ListHouseListingsResponse);
 
   // Lifecycle & Management
   rpc UpdateHouseListing (UpdateHouseListingRequest) returns (BaseHouseListingResponse);
@@ -26,6 +34,28 @@ service HousingService {
   
   // Admin Viewings
   rpc ScheduleAdminViewing (ScheduleAdminViewingRequest) returns (BaseHouseViewingResponse);
+
+  rpc GetAllHouseListings (GetAllHouseListingsRequest) returns (ListHouseListingsResponse);
+}
+
+message GetAllHouseListingsRequest {
+  optional int32 limit = 1;
+  optional int32 offset = 2;
+  optional string city = 3;
+  optional string listingType = 4;
+  optional double minPrice = 5;
+  optional double maxPrice = 6;
+  optional int32 bedrooms = 7;
+  optional string propertyType = 8;
+  optional bool isFurnished = 9;
+  optional string sortBy = 10;
+  
+  // ========== CACHE CONTROL ==========
+  optional bool bypassCache = 11;
+  optional bool skipCache = 12;
+  optional bool refreshCache = 13;
+  optional int32 cacheTTL = 14;
+  optional bool readOnly = 15;
 }
 
 // ===================================================
@@ -64,6 +94,16 @@ message HouseImage {
 }
 
 // ===================================================
+// PAGINATION
+// ===================================================
+message PaginationInfo {
+  int32 total = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  bool hasMore = 4;
+}
+
+// ===================================================
 // ANALYTICS CONTEXT MESSAGES
 // ===================================================
 
@@ -71,7 +111,7 @@ message ClientInfo {
   string ipAddress = 1;
   string userAgent = 2;
   string device = 3;
-  string deviceType = 4;      // "MOBILE", "TABLET", "DESKTOP", "BOT", "UNKNOWN"
+  string deviceType = 4;
   string os = 5;
   string osVersion = 6;
   string browser = 7;
@@ -86,20 +126,20 @@ message SearchContext {
   optional string searchId = 1;
   optional string query = 2;
   optional int32 position = 3;
-  optional string filters = 4; // JSON string of filters
+  optional string filters = 4;
 }
 
 message ListingViewContext {
-  optional string seekerId = 1;  // The person looking for housing
+  optional string seekerId = 1;
   string sessionId = 2;
   ClientInfo client = 3;
   string platform = 4;
   string referrer = 5;
   optional SearchContext search = 6;
-  optional int32 timeSpent = 7;        // Time spent viewing in seconds
-  optional string interactionType = 8;  // "CLICK", "SCROLL", "DWELL"
-  optional int32 viewDuration = 9;      // How long they viewed
-  optional int32 scrollDepth = 10;       // How far they scrolled (0-100)
+  optional int32 timeSpent = 7;
+  optional string interactionType = 8;
+  optional int32 viewDuration = 9;
+  optional int32 scrollDepth = 10;
 }
 
 // ===================================================
@@ -141,47 +181,36 @@ message HouseListing {
   string accountName = 23;
   optional double latitude = 24;
   optional double longitude = 25;
-  string ownerEmail = 26;  // Email of the property owner/agent
-  string listingCreatorId = 27;  // ID of the user who created/owns the listing
+  string ownerEmail = 26;
+  string listingCreatorId = 27;
   
-  // ===================================================
-  // NEW RENTAL FIELDS
-  // ===================================================
-  optional int32 minimumLeaseTerm = 28;   // Minimum lease term in months
-  optional int32 maximumLeaseTerm = 29;   // Maximum lease term in months
-  optional double depositAmount = 30;      // Security deposit amount in KES
-  optional bool isPetFriendly = 31;        // Whether pets are allowed
-  optional bool utilitiesIncluded = 32;    // Whether utilities are included in rent
-  optional string utilitiesDetails = 33;   // Details about which utilities are included
-  
-  // ===================================================
-  // NEW SALE FIELDS
-  // ===================================================
-  optional bool isNegotiable = 34;         // Whether price is negotiable
-  optional bool titleDeedAvailable = 35;   // Whether title deed is available
-  
-  // ===================================================
-  // AI TRAINING FIELDS
-  // ===================================================
-  optional int32 squareFootage = 36;        // Total square footage of the property
-  optional int32 yearBuilt = 37;            // Year the property was built
-  optional string propertyType = 38;        // APARTMENT, HOUSE, CONDO, TOWNHOUSE, VILLA, STUDIO
+  optional int32 minimumLeaseTerm = 28;
+  optional int32 maximumLeaseTerm = 29;
+  optional double depositAmount = 30;
+  optional bool isPetFriendly = 31;
+  optional bool utilitiesIncluded = 32;
+  optional string utilitiesDetails = 33;
+  optional bool isNegotiable = 34;
+  optional bool titleDeedAvailable = 35;
+  optional int32 squareFootage = 36;
+  optional int32 yearBuilt = 37;
+  optional string propertyType = 38;
 }
 
 message HouseViewing {
   string id = 1;
   string houseId = 2;
-  string seekerId = 3;           // The person looking for housing who will attend
-  string seekerEmail = 4;        // Email of the seeker
-  string seekerName = 5;         // Name of the seeker
+  string seekerId = 3;
+  string seekerEmail = 4;
+  string seekerName = 5;
   string viewingDate = 6;
   string status = 7;
   string notes = 8;
   string createdAt = 9;
   string updatedAt = 10;
-  string schedulerId = 11;        // Who made the booking (same as seekerId for user flow)
-  string schedulerEmail = 12;     // Email of the scheduler
-  string schedulerName = 13;      // Name of the scheduler
+  string schedulerId = 11;
+  string schedulerEmail = 12;
+  string schedulerName = 13;
 }
 
 // ===================================================
@@ -211,31 +240,22 @@ message CreateHouseListingRequest {
   optional double longitude = 20;
   string ownerEmail = 21;
   optional ClientInfo clientInfo = 22;
-  
-  // ===================================================
-  // NEW RENTAL FIELDS
-  // ===================================================
   optional int32 minimumLeaseTerm = 23;
   optional int32 maximumLeaseTerm = 24;
   optional double depositAmount = 25;
   optional bool isPetFriendly = 26;
   optional bool utilitiesIncluded = 27;
   optional string utilitiesDetails = 28;
-  
-  // ===================================================
-  // NEW SALE FIELDS
-  // ===================================================
   optional bool isNegotiable = 29;
   optional bool titleDeedAvailable = 30;
-  
-  // ===================================================
-  // AI TRAINING FIELDS
-  // ===================================================
   optional int32 squareFootage = 31;
   optional int32 yearBuilt = 32;
   optional string propertyType = 33;
 }
 
+// ===================================================
+// SEARCH LISTINGS (WITH CACHE CONTROL)
+// ===================================================
 message SearchHouseListingsRequest {
   optional string city = 1;
   optional string listingType = 2;
@@ -246,21 +266,108 @@ message SearchHouseListingsRequest {
   optional int32 offset = 7;
   optional string categoryId = 8;
   optional string subCategoryId = 9;
-  
-  // ===================================================
-  // NEW SEARCH FILTERS
-  // ===================================================
   optional int32 minSquareFootage = 10;
   optional int32 maxSquareFootage = 11;
   optional string propertyType = 12;
   optional int32 minYearBuilt = 13;
   optional bool isFurnished = 14;
   repeated string amenities = 15;
-  optional int32 minLeaseTerm = 16;        // For rental listings
-  optional bool isPetFriendly = 17;         // For rental listings
-  optional bool utilitiesIncluded = 18;     // For rental listings
-  optional bool isNegotiable = 19;          // For sale listings
-  optional bool titleDeedAvailable = 20;    // For sale listings
+  optional int32 minLeaseTerm = 16;
+  optional bool isPetFriendly = 17;
+  optional bool utilitiesIncluded = 18;
+  optional bool isNegotiable = 19;
+  optional bool titleDeedAvailable = 20;
+  optional string sortBy = 21;  // "recent", "price_asc", "price_desc"
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 22;     // Skip cache entirely (admin only)
+  optional bool skipCache = 23;       // Don't read cache, still write
+  optional bool refreshCache = 24;    // Force refresh cache
+  optional int32 cacheTTL = 25;       // Override TTL (seconds)
+  optional bool readOnly = 26;        // Don't write to cache
+}
+
+// ===================================================
+// GET HOUSE LISTINGS BY CATEGORY (WITH CACHE CONTROL)
+// ===================================================
+message GetHouseListingsByCategoryRequest {
+  string categoryId = 1;
+  optional string city = 2;
+  optional string listingType = 3;
+  optional double minPrice = 4;
+  optional double maxPrice = 5;
+  optional int32 bedrooms = 6;
+  optional string propertyType = 7;
+  optional bool isFurnished = 8;
+  optional int32 limit = 9;
+  optional int32 offset = 10;
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 11;     // Skip cache entirely (admin only)
+  optional bool skipCache = 12;       // Don't read cache, still write
+  optional bool refreshCache = 13;    // Force refresh cache
+  optional int32 cacheTTL = 14;       // Override TTL (seconds)
+  optional bool readOnly = 15;        // Don't write to cache
+}
+
+// ===================================================
+// GET LISTINGS BY OWNER (WITH CACHE CONTROL & PAGINATION)
+// ===================================================
+message GetListingsByOwnerRequest {
+  string ownerId = 1;
+  optional string status = 2;
+  
+  // ========== PAGINATION ==========
+  optional int32 limit = 8;        // Results per page (default: 20, max: 100)
+  optional int32 offset = 9;       // Pagination offset
+  optional string sortBy = 10;     // Sort order: "recent", "price_asc", "price_desc"
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 3;      // Skip cache entirely (admin only)
+  optional bool skipCache = 4;        // Don't read cache, still write
+  optional bool refreshCache = 5;     // Force refresh cache
+  optional int32 cacheTTL = 6;        // Override TTL (seconds)
+  optional bool readOnly = 7;         // Don't write to cache
+}
+
+// ===================================================
+// GET HOUSE LISTING BY ID (WITH CACHE CONTROL)
+// ===================================================
+message GetHouseListingByIdRequest {
+  string id = 1;
+  optional ListingViewContext context = 2;
+  
+  // ========== CACHE CONTROL FIELDS ==========
+  optional bool bypassCache = 3;      // Skip cache entirely (admin only)
+  optional bool refreshCache = 4;     // Force refresh cache
+  optional int32 cacheTTL = 5;        // Override TTL (seconds)
+  optional bool readOnly = 6;         // Don't write to cache
+}
+
+// ===================================================
+// GET ADMIN LISTINGS (WITH PAGINATION)
+// ===================================================
+message GetAdminListingsRequest {
+  optional string status = 1;
+  optional string accountId = 2;
+  optional string creatorId = 3;
+  optional string listingType = 4;
+  optional string propertyType = 5;
+  optional int32 minBedrooms = 6;
+  optional double minPrice = 7;
+  optional double maxPrice = 8;
+  
+  // ========== PAGINATION ==========
+  optional int32 limit = 9;        // Results per page (default: 20, max: 100)
+  optional int32 offset = 10;      // Pagination offset
+  
+  // ========== CACHE CONTROL ==========
+  // (Add if you want cache control for admin endpoints)
+  // optional bool bypassCache = 11;
+  // optional bool skipCache = 12;
+  // optional bool refreshCache = 13;
+  // optional int32 cacheTTL = 14;
+  // optional bool readOnly = 15;
 }
 
 message UpdateHouseListingRequest {
@@ -288,26 +395,14 @@ message UpdateHouseListingData {
   optional double latitude = 14;
   optional double longitude = 15;
   optional string ownerEmail = 16;
-  
-  // ===================================================
-  // NEW RENTAL FIELDS
-  // ===================================================
   optional int32 minimumLeaseTerm = 17;
   optional int32 maximumLeaseTerm = 18;
   optional double depositAmount = 19;
   optional bool isPetFriendly = 20;
   optional bool utilitiesIncluded = 21;
   optional string utilitiesDetails = 22;
-  
-  // ===================================================
-  // NEW SALE FIELDS
-  // ===================================================
   optional bool isNegotiable = 23;
   optional bool titleDeedAvailable = 24;
-  
-  // ===================================================
-  // AI TRAINING FIELDS
-  // ===================================================
   optional int32 squareFootage = 25;
   optional int32 yearBuilt = 26;
   optional string propertyType = 27;
@@ -325,59 +420,31 @@ message ArchiveHouseListingRequest {
 }
 
 // ===================================================
-// USER VIEWING REQUEST (Seeker books for themselves)
+// VIEWING REQUESTS
 // ===================================================
 message ScheduleViewingRequest {
   string houseId = 1;
-  string seekerId = 2;           // The person looking for housing (who will attend)
-  string seekerEmail = 3;        // Email of the seeker
-  string seekerName = 4;         // Name of the seeker
+  string seekerId = 2;
+  string seekerEmail = 3;
+  string seekerName = 4;
   string userRole = 5;
   string viewingDate = 6;
   optional string notes = 7;
   optional ListingViewContext context = 8;
 }
 
-// ===================================================
-// ADMIN VIEWING REQUEST (Admin books for a seeker)
-// ===================================================
 message ScheduleAdminViewingRequest {
   string houseId = 1;
-  string schedulerId = 2;         // Admin who makes the booking
-  string schedulerEmail = 3;      // Email of the admin
-  string schedulerName = 4;       // Name of the admin
+  string schedulerId = 2;
+  string schedulerEmail = 3;
+  string schedulerName = 4;
   string userRole = 5;
   string viewingDate = 6;
-  string seekerId = 7;            // The person looking for housing who will attend
-  string seekerEmail = 8;         // Email of the seeker
-  string seekerName = 9;          // Name of the seeker
+  string seekerId = 7;
+  string seekerEmail = 8;
+  string seekerName = 9;
   optional string notes = 10;
   optional AdminMetadata adminMetadata = 11;
-}
-
-// ===================================================
-// UPDATED REQUEST WITH ANALYTICS CONTEXT
-// ===================================================
-message GetHouseListingByIdRequest { 
-  string id = 1;
-  optional ListingViewContext context = 2;
-}
-
-message GetListingsByOwnerRequest { 
-  string ownerId = 1; 
-  optional string status = 2;
-}
-
-message GetAdminListingsRequest {
-  optional string status = 1;
-  optional string accountId = 2;
-  optional string creatorId = 3;
-  // NEW FILTERS
-  optional string listingType = 4;      // RENT or SALE
-  optional string propertyType = 5;      // APARTMENT, HOUSE, etc.
-  optional int32 minBedrooms = 6;
-  optional double minPrice = 7;
-  optional double maxPrice = 8;
 }
 
 // ===================================================
@@ -411,7 +478,8 @@ message ListHouseListingsResponse {
   string code = 2;
   string message = 3;
   repeated HouseListing data = 4;
-  ErrorPayload error = 5;
+  PaginationInfo pagination = 5;  // ← ADDED
+  ErrorPayload error = 6;
 }
 
 message BaseHouseViewingResponse {

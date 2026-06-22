@@ -30,6 +30,10 @@ import {
   CreateServiceOfferingDto,
   UpdateServiceOfferingDto,
   GetAllOfferingsRequestDto,
+  GetOfferingsByCategoryRequestDto,
+  GetOfferingsByProfessionalRequestDto,
+  GetOfferingsByAccountRequestDto,
+  GetOfferingByIdRequestDto,
 } from '@pivota-api/dtos';
 
 import { JwtAuthGuard } from '../../AuthenticationGatewayModule/jwt.guard';
@@ -65,6 +69,28 @@ export class ContractorsGatewayController {
     const userRole = user.role as RoleType;
     return isPlatformRole(userRole);
   }
+
+  /**
+   * Helper to parse boolean from query params
+   * This fixes the "false" → true issue
+   */
+  private parseBoolean(value: any): boolean {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return !!value;
+  }
+
+  /**
+   * Helper to parse number from query params
+   */
+  private parseNumber(value: any): number | undefined {
+    if (value === undefined || value === null) return undefined;
+    const num = Number(value);
+    return isNaN(num) ? undefined : num;
+  }
  
   // ===========================================================
   // SERVICE OFFERING MANAGEMENT
@@ -98,7 +124,7 @@ export class ContractorsGatewayController {
   }
 
   // ===========================================================
-  // GET MY SERVICE OFFERINGS
+  // GET MY SERVICE OFFERINGS (User-specific - No Cache)
   // ===========================================================
 
   @Get('service-offerings/me')
@@ -110,7 +136,8 @@ export class ContractorsGatewayController {
     @Req() req: JwtRequest,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
     const accountId = req.user.accountId;
-    const response = await this.contractorsService.getOfferingsByAccount(accountId);
+    const dto: GetOfferingsByAccountRequestDto = { accountId };
+    const response = await this.contractorsService.getOfferingsByAccount(dto);
     
     if (!response.success) {
       throw response;
@@ -120,7 +147,7 @@ export class ContractorsGatewayController {
   }
 
   // ===========================================================
-  // GET OFFERINGS BY ACCOUNT (Admin)
+  // GET OFFERINGS BY ACCOUNT (Admin - No Cache)
   // ===========================================================
 
   @Get('service-offerings/account/:accountId')
@@ -134,7 +161,8 @@ export class ContractorsGatewayController {
   async getOfferingsByAccount(
     @Param('accountId') accountId: string,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    const response = await this.contractorsService.getOfferingsByAccount(accountId);
+    const dto: GetOfferingsByAccountRequestDto = { accountId };
+    const response = await this.contractorsService.getOfferingsByAccount(dto);
     
     if (!response.success) {
       throw response;
@@ -144,7 +172,7 @@ export class ContractorsGatewayController {
   }
 
   // ===========================================================
-  // GET OFFERINGS BY PROFESSIONAL (Public)
+  // GET OFFERINGS BY PROFESSIONAL (Public - No Cache)
   // ===========================================================
 
   @Get('service-offerings/professional/:professionalId')
@@ -157,7 +185,8 @@ export class ContractorsGatewayController {
   async getOfferingsByProfessional(
     @Param('professionalId') professionalId: string,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    const response = await this.contractorsService.getOfferingsByProfessional(professionalId);
+    const dto: GetOfferingsByProfessionalRequestDto = { professionalUuid: professionalId };
+    const response = await this.contractorsService.getOfferingsByProfessional(dto);
     
     if (!response.success) {
       throw response;
@@ -167,7 +196,7 @@ export class ContractorsGatewayController {
   }
 
   // ===========================================================
-  // PUBLIC DISCOVERY
+  // PUBLIC DISCOVERY - Get by Vertical (With Cache Control)
   // ===========================================================
 
   @Public()
@@ -175,9 +204,9 @@ export class ContractorsGatewayController {
   @Version('1')
   @ApiOperation({ 
     summary: 'Discover service offerings by vertical',
-    description: 'Public endpoint to search and discover service offerings. The vertical is determined by the category associated with the offering.'
+    description: 'Public endpoint to search and discover service offerings.'
   })
-  @ApiQuery({ name: 'vertical', required: true, enum: ['JOBS', 'HOUSING', 'SOCIAL_SUPPORT', 'PROFESSIONAL_SERVICES'], example: 'HOUSING', description: 'Filter by category vertical (e.g., HOUSING for home services)' })
+  @ApiQuery({ name: 'vertical', required: true, enum: ['JOBS', 'HOUSING', 'SOCIAL_SUPPORT', 'PROFESSIONAL_SERVICES'], example: 'HOUSING' })
   @ApiQuery({ name: 'city', required: false, example: 'Nairobi' })
   @ApiQuery({ name: 'categoryId', required: false, example: 'cmnboid7w006sarihf05x9txr' })
   @ApiQuery({ name: 'minPrice', required: false, type: Number, example: 500 })
@@ -187,12 +216,20 @@ export class ContractorsGatewayController {
   @ApiQuery({ name: 'sortBy', required: false, enum: ['rating', 'price_asc', 'price_desc', 'experience', 'recent'], example: 'rating' })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
   @ApiQuery({ name: 'offset', required: false, type: Number, example: 0 })
+  @ApiQuery({ name: 'bypassCache', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'skipCache', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'refreshCache', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'cacheTTL', required: false, type: Number, example: 300 })
+  @ApiQuery({ name: 'readOnly', required: false, type: Boolean, example: false })
   @ApiResponse({ status: 200, description: 'Offerings retrieved successfully' })
   @ApiResponse({ status: 400, description: 'Invalid parameters' })
   async getOfferingsByVertical(
     @Query() dto: GetOfferingByVerticalRequestDto,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    this.logger.debug(`REST GetOfferingsByVertical: ${dto.vertical} in ${dto.city || 'All Cities'}`);
+    this.logger.debug(
+      `REST GetOfferingsByVertical: ${dto.vertical} in ${dto.city || 'All Cities'}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
+    );
     const response = await this.contractorsService.getOfferingsByVertical(dto);
     
     if (!response.success) {
@@ -203,7 +240,7 @@ export class ContractorsGatewayController {
   }
 
   // ===========================================================
-  // GET OFFERINGS BY CATEGORY (Public)
+  // GET OFFERINGS BY CATEGORY (Public - With Cache Control)
   // ===========================================================
 
   @Get('service-offerings/category/:categoryId')
@@ -218,25 +255,29 @@ export class ContractorsGatewayController {
     description: 'Category ID (must be COMPLIMENTARY type)',
     example: 'cmnboid7w006sarihf05x9txr'
   })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page (default: 20, max: 100)', example: 20 })
-  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset', example: 0 })
-  @ApiQuery({ name: 'city', required: false, type: String, description: 'Filter by city', example: 'Nairobi' })
-  @ApiQuery({ name: 'minPrice', required: false, type: Number, description: 'Minimum price filter', example: 500 })
-  @ApiQuery({ name: 'maxPrice', required: false, type: Number, description: 'Maximum price filter', example: 5000 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
+  @ApiQuery({ name: 'offset', required: false, type: Number, example: 0 })
+  @ApiQuery({ name: 'city', required: false, type: String, example: 'Nairobi' })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number, example: 500 })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number, example: 5000 })
+  @ApiQuery({ name: 'bypassCache', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'skipCache', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'refreshCache', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'cacheTTL', required: false, type: Number, example: 300 })
+  @ApiQuery({ name: 'readOnly', required: false, type: Boolean, example: false })
   @ApiResponse({ status: 200, description: 'Offerings retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Category not found' })
   async getOfferingsByCategory(
     @Param('categoryId') categoryId: string,
-    @Query('limit') limit?: number,
-    @Query('offset') offset?: number,
-    @Query('city') city?: string,
-    @Query('minPrice') minPrice?: number,
-    @Query('maxPrice') maxPrice?: number,
+    @Query() dto: GetOfferingsByCategoryRequestDto,
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    this.logger.debug(`REST GetOfferingsByCategory: ${categoryId}`);
-    const response = await this.contractorsService.getOfferingsByCategory(
-      categoryId, limit, offset, city, minPrice, maxPrice
+    dto.categoryId = categoryId;
+    
+    this.logger.debug(
+      `REST GetOfferingsByCategory: ${categoryId}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}`
     );
+    const response = await this.contractorsService.getOfferingsByCategory(dto);
     
     if (!response.success) {
       throw response;
@@ -246,7 +287,7 @@ export class ContractorsGatewayController {
   }
 
   // ===========================================================
-  // NEW: GET ALL OFFERINGS (Across all categories)
+  // GET ALL OFFERINGS (Public - With Cache Control)
   // IMPORTANT: This must come BEFORE the generic :id route
   // ===========================================================
 
@@ -255,42 +296,59 @@ export class ContractorsGatewayController {
   @Version('1')
   @ApiOperation({ 
     summary: 'Get all service offerings across all categories',
-    description: 'Public endpoint to retrieve all active service offerings with pagination and filtering options.'
+    description: 'Public endpoint to retrieve all active service offerings.'
   })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page (default: 20, max: 100)', example: 20 })
-  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Pagination offset', example: 0 })
-  @ApiQuery({ name: 'city', required: false, type: String, description: 'Filter by city', example: 'Nairobi' })
-  @ApiQuery({ name: 'minPrice', required: false, type: Number, description: 'Minimum price filter', example: 500 })
-  @ApiQuery({ name: 'maxPrice', required: false, type: Number, description: 'Maximum price filter', example: 5000 })
-  @ApiQuery({ name: 'sortBy', required: false, enum: ['recent', 'price_asc', 'price_desc', 'rating'], description: 'Sort by option', example: 'recent' })
-  @ApiQuery({ name: 'minRating', required: false, type: Number, description: 'Minimum rating filter (1-5)', example: 4 })
-  @ApiQuery({ name: 'verifiedOnly', required: false, type: Boolean, description: 'Show only verified professionals', example: true })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
+  @ApiQuery({ name: 'offset', required: false, type: Number, example: 0 })
+  @ApiQuery({ name: 'city', required: false, type: String, example: 'Nairobi' })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number, example: 500 })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number, example: 5000 })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['recent', 'price_asc', 'price_desc', 'rating'], example: 'recent' })
+  @ApiQuery({ name: 'minRating', required: false, type: Number, example: 4 })
+  @ApiQuery({ name: 'verifiedOnly', required: false, type: Boolean, example: true })
+  @ApiQuery({ name: 'bypassCache', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'skipCache', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'refreshCache', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'cacheTTL', required: false, type: Number, example: 300 })
+  @ApiQuery({ name: 'readOnly', required: false, type: Boolean, example: false })
   @ApiResponse({ status: 200, description: 'Offerings retrieved successfully' })
   @ApiResponse({ status: 400, description: 'Invalid parameters' })
   async getAllOfferings(
-    @Query('limit') limit?: number,
-    @Query('offset') offset?: number,
-    @Query('city') city?: string,
-    @Query('minPrice') minPrice?: number,
-    @Query('maxPrice') maxPrice?: number,
-    @Query('sortBy') sortBy?: 'recent' | 'price_asc' | 'price_desc' | 'rating',
-    @Query('minRating') minRating?: number,
-    @Query('verifiedOnly') verifiedOnly?: boolean,
+    @Query() query: any,  // ✅ Use 'any' and manually parse
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto[]>> {
-    this.logger.debug(`REST GetAllOfferings: limit=${limit}, offset=${offset}, sortBy=${sortBy}, minRating=${minRating}`);
-    const response = await this.contractorsService.getAllOfferings(
-      limit, offset, city, minPrice, maxPrice, sortBy, minRating, verifiedOnly
+    // ✅ MANUALLY PARSE ALL VALUES TO FIX THE BOOLEAN ISSUE
+    const dto: GetAllOfferingsRequestDto = {
+      limit: this.parseNumber(query.limit) || 20,
+      offset: this.parseNumber(query.offset) || 0,
+      city: query.city,
+      minPrice: this.parseNumber(query.minPrice),
+      maxPrice: this.parseNumber(query.maxPrice),
+      sortBy: query.sortBy as any,
+      minRating: this.parseNumber(query.minRating),
+      verifiedOnly: this.parseBoolean(query.verifiedOnly),
+      bypassCache: this.parseBoolean(query.bypassCache),
+      skipCache: this.parseBoolean(query.skipCache),
+      refreshCache: this.parseBoolean(query.refreshCache),
+      cacheTTL: this.parseNumber(query.cacheTTL) || 300,
+      readOnly: this.parseBoolean(query.readOnly),
+    };
+
+    this.logger.log(
+      `📥 Incoming request: limit=${dto.limit}, offset=${dto.offset}, ` +
+      `bypassCache=${dto.bypassCache}, skipCache=${dto.skipCache}, refreshCache=${dto.refreshCache}, ` +
+      `readOnly=${dto.readOnly}, verifiedOnly=${dto.verifiedOnly}`
     );
+
+    const response = await this.contractorsService.getAllOfferings(dto);
     
     if (!response.success) {
       throw response;
     }
-    
     return response;
   }
 
   // ===========================================================
-  // GET OFFERING BY ID (Public)
+  // GET OFFERING BY ID (Public - With Cache Control)
   // IMPORTANT: This must come AFTER specific routes like /all, /me, etc.
   // ===========================================================
 
@@ -299,12 +357,31 @@ export class ContractorsGatewayController {
   @Version('1')
   @ApiOperation({ summary: 'Get service offering by ID' })
   @ApiParam({ name: 'id', description: 'Service offering ID', example: 'cmnxxxxx' })
+  @ApiQuery({ name: 'bypassCache', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'refreshCache', required: false, type: Boolean, example: false })
+  @ApiQuery({ name: 'cacheTTL', required: false, type: Number, example: 600 })
+  @ApiQuery({ name: 'readOnly', required: false, type: Boolean, example: false })
   @ApiResponse({ status: 200, description: 'Offering retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Offering not found' })
   async getOfferingById(
     @Param('id') id: string,
+    @Query() query: any,  // ✅ Use 'any' and manually parse
   ): Promise<BaseResponseDto<ServiceOfferingResponseDto>> {
-    const response = await this.contractorsService.getOfferingById(id);
+    // ✅ MANUALLY PARSE ALL VALUES
+    const dto: GetOfferingByIdRequestDto = {
+      id: id,
+      bypassCache: this.parseBoolean(query.bypassCache),
+      refreshCache: this.parseBoolean(query.refreshCache),
+      cacheTTL: this.parseNumber(query.cacheTTL) || 600,
+      readOnly: this.parseBoolean(query.readOnly),
+    };
+
+    this.logger.debug(
+      `REST GetOfferingById: id=${id}, ` +
+      `bypassCache=${dto.bypassCache}, refreshCache=${dto.refreshCache}, readOnly=${dto.readOnly}`
+    );
+
+    const response = await this.contractorsService.getOfferingById(dto);
     
     if (!response.success) {
       throw response;
@@ -368,4 +445,4 @@ export class ContractorsGatewayController {
     
     return response;
   }
-}
+} 
