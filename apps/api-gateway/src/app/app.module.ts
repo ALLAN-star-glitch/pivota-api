@@ -14,6 +14,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { SharedListingsGatewayModule } from '../gateway-modules/SharedListingsGatewayModule/shared-listings-gateway.module';
 import { AuthenticationGatewayModule } from '../gateway-modules/AuthenticationGatewayModule/authentication-gateway.module';
 import { OnboardingGatewayModule } from '../gateway-modules/OnboardingGatewayModule/onboarding-gateway.module';
+import { HealthModule } from '../gateway-modules/HealthGatewayModule/health.module';
 
 
 @Module({
@@ -37,7 +38,8 @@ import { OnboardingGatewayModule } from '../gateway-modules/OnboardingGatewayMod
     OrganisationGatewayModule,
     SharedListingsGatewayModule,
     AuthenticationGatewayModule,
-    OnboardingGatewayModule
+    OnboardingGatewayModule,
+    HealthModule
   ],
   controllers: [],
   providers: [AppService],
